@@ -142,6 +142,14 @@ Para activarlo en una cuenta:
 2. Escríbele cualquier cosa al bot desde tu Instagram y busca tu id en el log (`journalctl -u igbot@nortex | grep "DM de"`). Ponlo en `ADMIN_IG_IDS` del `.env` de la cuenta (el id cambia en cada cuenta del negocio).
 3. Revisa que el `.env` principal tenga `PUBLIC_URL`, y reinicia.
 
+## Reporte semanal
+
+Cada lunes a las 9:00 (hora del negocio) llega un resumen de los últimos 7 días: personas que escribieron (y cuántas nuevas), respuestas del bot, cotizaciones (cuántas personas, monto total y lo más cotizado), conversaciones pasadas a una persona o contestadas a mano, comentarios con palabra clave, publicaciones, y un resumen de Claude de lo que más preguntan y qué oportunidades hay.
+
+- Por correo a `REPORT_EMAIL` (en el `.env` de la cuenta; necesita Google configurado) y, en versión corta, por DM a los administradores. Instagram solo deja mandar DMs dentro de las 24 h desde el último mensaje del administrador; si no, solo llega el correo.
+- Un administrador lo puede pedir cuando quiera: "mándame el reporte".
+- Cambia el día y la hora con `REPORT_DAY` (1=lunes) y `REPORT_HOUR`.
+
 ## Agenda y correo con tu Google
 
 Opcional: sin esto el bot sigue contestando, solo que sin agendar ni mandar correos. Se hace una sola vez.

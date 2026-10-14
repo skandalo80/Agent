@@ -7,6 +7,7 @@ La tabla `messages` también funciona como cola: un DM entra como `pending` y
 pasa a `done` cuando el bot lo contestó. Así, si el proceso se reinicia, los
 mensajes sin contestar no se pierden.
 """
+import json
 import time
 from datetime import datetime
 from pathlib import Path
@@ -115,6 +116,17 @@ CREATE TABLE IF NOT EXISTS posts (
     error       TEXT NOT NULL DEFAULT '',
     created_at  REAL NOT NULL
 );
+
+-- Cosas que pasaron en las conversaciones, para el reporte semanal
+-- ('cotizacion' con sus productos y total, 'humano' cuando se pasó a una persona).
+CREATE TABLE IF NOT EXISTS events (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    TEXT NOT NULL,
+    kind       TEXT NOT NULL,
+    detail     TEXT NOT NULL DEFAULT '{}', -- JSON
+    created_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS events_kind ON events (kind, created_at);
 
 CREATE TABLE IF NOT EXISTS kv (
     key   TEXT PRIMARY KEY,
@@ -445,6 +457,86 @@ class Store:
         cur = await self.db.execute(sql, args)
         await self.db.commit()
         return cur.rowcount == 1
+
+    # --- reporte semanal ---
+
+    async def add_event(self, user_id: str, kind: str, detail: dict) -> None:
+        await self.db.execute(
+            "INSERT INTO events (user_id, kind, detail, created_at) VALUES (?, ?, ?, ?)",
+            (user_id, kind, json.dumps(detail, ensure_ascii=False), time.time()),
+        )
+        await self.db.commit()
+
+    async def events(self, kind: str, since: float, until: float) -> list[tuple[str, dict, float]]:
+        cur = await self.db.execute(
+            "SELECT user_id, detail, created_at FROM events WHERE kind = ? AND created_at >= ?"
+            " AND created_at < ? ORDER BY id",
+            (kind, since, until),
+        )
+        return [(u, json.loads(d), t) for u, d, t in await cur.fetchall()]
+
+    async def week_stats(self, since: float, until: float) -> dict:
+        """Números de las conversaciones con clientes (sin las de los administradores)."""
+        clients = "user_id NOT LIKE 'admin:%'"
+        manual = "[contestó una persona del equipo]%"
+
+        async def one(sql, *args):
+            cur = await self.db.execute(sql, (*args,))
+            return (await cur.fetchone())[0] or 0
+
+        window = "created_at >= ? AND created_at < ?"
+        return {
+            "personas": await one(
+                f"SELECT COUNT(DISTINCT user_id) FROM messages WHERE role = 'user' AND {clients} AND {window}",
+                since, until),
+            "nuevas": await one(
+                f"SELECT COUNT(*) FROM (SELECT user_id, MIN(created_at) AS first FROM messages"
+                f" WHERE role = 'user' AND {clients} GROUP BY user_id) WHERE first >= ? AND first < ?",
+                since, until),
+            "recibidos": await one(
+                f"SELECT COUNT(*) FROM messages WHERE role = 'user' AND {clients} AND {window}", since, until),
+            "respuestas_bot": await one(
+                f"SELECT COUNT(*) FROM messages WHERE role = 'assistant' AND {clients} AND {window}"
+                " AND text NOT LIKE ?", since, until, manual),
+            "manuales": await one(
+                f"SELECT COUNT(DISTINCT user_id) FROM messages WHERE role = 'assistant' AND {window}"
+                " AND text LIKE ?", since, until, manual),
+            "cotizaciones_pdf": await one(f"SELECT COUNT(*) FROM quotes WHERE {window}", since, until),
+            "total_pdf": await one(f"SELECT SUM(total) FROM quotes WHERE {window}", since, until),
+        }
+
+    async def meetings_between(self, start_iso: str, end_iso: str) -> int:
+        """Reuniones activas en ese rango (las fechas van en la zona del negocio, como se guardan)."""
+        cur = await self.db.execute(
+            "SELECT COUNT(*) FROM meetings WHERE status = 'active' AND start >= ? AND start < ?",
+            (start_iso, end_iso),
+        )
+        return (await cur.fetchone())[0]
+
+    async def week_comments(self, since: float, until: float) -> list[tuple[str, int, int]]:
+        cur = await self.db.execute(
+            "SELECT matched, dm_sent, replied FROM comments WHERE created_at >= ? AND created_at < ?",
+            (since, until),
+        )
+        return list(await cur.fetchall())
+
+    async def week_published(self, since: float, until: float) -> list[dict]:
+        cur = await self.db.execute(
+            f"SELECT {self.POST_FIELDS} FROM posts WHERE status = 'publicada'"
+            " AND COALESCE(NULLIF(publish_at, 0), created_at) >= ?"
+            " AND COALESCE(NULLIF(publish_at, 0), created_at) < ? ORDER BY id",
+            (since, until),
+        )
+        return [self._post(r) for r in await cur.fetchall()]
+
+    async def client_messages(self, since: float, until: float, limit: int = 400) -> list[tuple[str, str]]:
+        """Lo que escribieron los clientes en la semana (lo más reciente primero)."""
+        cur = await self.db.execute(
+            "SELECT user_id, text FROM messages WHERE role = 'user' AND user_id NOT LIKE 'admin:%'"
+            " AND created_at >= ? AND created_at < ? ORDER BY id DESC LIMIT ?",
+            (since, until, limit),
+        )
+        return list(await cur.fetchall())
 
     # --- valores sueltos (token de Instagram, etc.) ---
 

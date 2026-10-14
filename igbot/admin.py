@@ -5,7 +5,8 @@ interno que puede:
 - publicar en la cuenta: le mandan una o varias fotos y el texto, el bot
   manda una vista previa y publica (ahora o a la hora que digan) solo después
   de que el administrador confirme en otro mensaje;
-- reactivar conversaciones que están en pausa porque las atendía una persona.
+- reactivar conversaciones que están en pausa porque las atendía una persona;
+- mandar el reporte semanal cuando lo pidan.
 
 Con "modo cliente" el administrador habla con el bot como cualquier cliente
 (para probarlo) y con "modo admin" vuelve. Lo que escribe en modo admin se
@@ -231,7 +232,8 @@ PUBLISH_SCHEMA = {
 }
 
 
-def admin_tools(store: Store, instagram: Instagram, admin_id: str, state: dict) -> list:
+def admin_tools(store: Store, instagram: Instagram, admin_id: str, state: dict,
+                google: Google | None = None) -> list:
     turn_started = state.setdefault("turn_started", time.time())
 
     @tool("ver_pausas", "Lista las conversaciones donde el bot está en pausa porque las atiende una persona.", {})
@@ -348,9 +350,24 @@ def admin_tools(store: Store, instagram: Instagram, admin_id: str, state: dict) 
         state["acted"] = True
         return ok(f"Cancelada la publicación #{post['id']}.")
 
+    @tool(
+        "enviar_reporte",
+        "Manda ahora el reporte de los últimos 7 días (conversaciones, cotizaciones, comentarios,"
+        " publicaciones y lo que más preguntan) por DM y, si está configurado, por correo.",
+        {},
+    )
+    async def enviar_reporte(args):
+        from . import reporte  # import tardío: reporte importa tools
+
+        state["acted"] = True
+        where = await reporte.send(store, instagram, google, admins=[admin_id])
+        if not where:
+            return error("No se pudo mandar el reporte; revisa el log del servidor.")
+        return ok(f"Reporte enviado ({where}). Ya le llegó: no lo repitas, solo confirma en una línea.")
+
     return [
         ver_pausas, reactivar_conversacion, preparar_publicacion,
-        confirmar_publicacion, ver_publicaciones, cancelar_publicacion,
+        confirmar_publicacion, ver_publicaciones, cancelar_publicacion, enviar_reporte,
     ]
 
 
@@ -364,7 +381,7 @@ async def reply(
     from .agent import build_prompt, run_claude  # import tardío: evita el ciclo con agent
 
     state: dict = {}
-    tools = admin_tools(store, instagram, real_id(user_key), state)
+    tools = admin_tools(store, instagram, real_id(user_key), state, google)
     server = create_sdk_mcp_server("admin", tools=tools)
     allowed = [f"mcp__admin__{t.name}" for t in tools]
     prompt = await build_prompt(store, user_key, new_messages)
