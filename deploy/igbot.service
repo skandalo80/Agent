@@ -5,7 +5,7 @@ After=network.target
 [Service]
 User=ubuntu
 WorkingDirectory=/home/ubuntu/ig-bot
-ExecStart=/home/ubuntu/ig-bot/.venv/bin/uvicorn app:app --host 127.0.0.1 --port 8000
+ExecStart=/home/ubuntu/ig-bot/.venv/bin/uvicorn app:app --host 127.0.0.1 --port 8001
 Restart=always
 
 [Install]

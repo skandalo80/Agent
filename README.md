@@ -2,7 +2,7 @@
 
 Un webhook pequeño en Python (FastAPI) que recibe los DMs de tu cuenta profesional de Instagram y contesta "hola". Sirve para probar que Instagram y tu instancia de Oracle están conectados. El agente con Claude viene después.
 
-Cómo funciona: Instagram → `https://bot.skandar.online/webhook` (nginx con HTTPS) → la app en el puerto 8000 → responde con la API de Instagram.
+Cómo funciona: Instagram → `https://bot.skandar.online/webhook` (Caddy con HTTPS) → la app en el puerto 8001 → responde con la API de Instagram.
 
 Dominio del webhook: `bot.skandar.online`. Repo: `skandalo80/Agent`.
 
@@ -27,7 +27,7 @@ Oracle bloquea el tráfico en **dos sitios**, hay que abrir ambos:
 ## 3. Instalar la app en la instancia (por SSH)
 
 ```bash
-sudo apt update && sudo apt install -y python3-venv nginx certbot python3-certbot-nginx git
+sudo apt update && sudo apt install -y python3-venv git
 cd ~ && git clone https://github.com/skandalo80/Agent.git ig-bot && cd ig-bot
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 cp .env.example .env && chmod 600 .env
@@ -42,16 +42,19 @@ sudo cp deploy/igbot.service /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl enable --now igbot
 ```
 
-## 4. nginx + HTTPS
+## 4. Caddy + HTTPS
+
+La instancia usa Caddy, que saca y renueva el certificado HTTPS solo. Añade el bloque de `deploy/Caddyfile` a la config y recarga:
 
 ```bash
-sudo cp deploy/nginx-igbot.conf /etc/nginx/sites-available/igbot
-sudo ln -s /etc/nginx/sites-available/igbot /etc/nginx/sites-enabled/
-sudo nginx -t && sudo systemctl reload nginx
-sudo certbot --nginx -d bot.skandar.online
+cat deploy/Caddyfile | sudo tee -a /etc/caddy/Caddyfile
+sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+sudo systemctl reload caddy
 ```
 
-Comprueba en el navegador: `https://bot.skandar.online/health` debe mostrar `{"ok":true}`.
+Comprueba: `curl https://bot.skandar.online/health` debe mostrar `{"ok":true}`. Si el servidor dice `Could not resolve host` pero `dig +short bot.skandar.online @1.1.1.1` sí da la IP, es caché de DNS local: usa `curl --resolve bot.skandar.online:443:IP_DE_LA_INSTANCIA https://bot.skandar.online/health`.
+
+El bot escucha en el puerto 8001 porque el 8000 ya lo usaba otra app en esta instancia.
 
 ## 5. App de Meta (developers.facebook.com)
 
