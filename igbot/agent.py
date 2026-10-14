@@ -9,7 +9,7 @@ from pathlib import Path
 
 from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query
 
-from . import catalog, config, tools
+from . import catalog, config, tienda, tools
 from .google import Google
 from .instagram import Instagram
 from .store import Store
@@ -78,6 +78,8 @@ def system_prompt() -> str:
     system = Path(config.PROMPT_PATH).read_text(encoding="utf-8")
     if catalog.available():
         system += f"\n\n<catalogo>\n{catalog.prompt_text()}\n</catalogo>"
+    if tienda.available():
+        system += f"\n\n<tienda>\n{tienda.prompt_text()}\n</tienda>"
     return system
 
 

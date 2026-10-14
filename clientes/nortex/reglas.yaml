@@ -1,0 +1,43 @@
+# Reglas de precios de Nortex Uniformes. Los productos, precios por pieza y
+# existencias viven en Google Sheets (SHEET_CATALOG y SHEET_INVENTORY en .env);
+# aquí va lo que no está en las hojas. Edita y reinicia (igbot@nortex).
+negocio:
+  nombre: Nortex Uniformes
+  instagram: "@nortex_uniformes"
+  ciudad: Monterrey
+moneda: MXN
+iva: 0.16
+vigencia_dias: 15
+
+# Rangos por cantidad. Las piezas se cuentan por tipo de prenda (ProductType),
+# sumando colores y tallas. "columna" es la columna de precio en la hoja.
+rangos:
+  - {desde: 12, columna: Price_Tier1_12_49, nombre: "12 a 49 pzas"}
+  - {desde: 50, columna: Price_Tier2_50_99, nombre: "50 a 99 pzas"}
+  - {desde: 100, columna: Price_Tier3_100plus, nombre: "100 pzas o más"}
+# Desde aquí (por tipo de prenda) el precio lo da una persona.
+precio_especial_desde: 300
+
+# Precio por pieza en cada rango (mismo orden que "rangos").
+personalizacion:
+  bordado:
+    nombre: Bordado (logo de hasta 10 cm, pecho o gorra)
+    precios: [45, 38, 30]
+    cargo_unico: {nombre: Ponchado del logo, precio: 350, gratis_desde: 100}
+  dtf:
+    nombre: Estampado DTF a todo color (hasta tamaño carta)
+    precios: [55, 45, 38]
+ubicacion_extra:
+  nombre: Ubicación extra (espalda o manga)
+  precios: [25, 20, 15]
+
+entrega:
+  con_existencias: 5 a 7 días hábiles
+  personalizado: 8 a 10 días hábiles
+  sin_existencias: 15 a 20 días hábiles
+
+condiciones:
+  - Precios en MXN más IVA (16%).
+  - Anticipo del 50% para confirmar el pedido; el resto contra entrega.
+  - Envío gratis en Monterrey; al resto del país se cotiza aparte.
+  - Cotización válida por 15 días.

@@ -21,12 +21,13 @@ Instagram → Caddy (HTTPS) → POST /webhook (app.py, puerto 8001)
 | `igbot/dispatcher.py` | Cola: orden por persona, agrupar mensajes seguidos, límite de conversaciones a la vez, reintentos |
 | `igbot/store.py` | Toda la memoria en SQLite (`data/bot.db`). Es el único archivo a cambiar si algún día se pasa a Postgres |
 | `igbot/agent.py` | Arma el contexto y llama a Claude |
-| `igbot/tools.py` | Herramientas del agente y sus reglas: `recordar`, `olvidar`, `ver_disponibilidad`, `agendar_reunion`, `mis_reuniones`, `cancelar_reunion`, `enviar_correo`, `cotizar`, `enviar_cotizacion`, `pasar_a_humano` |
+| `igbot/tools.py` | Herramientas del agente y sus reglas: `recordar`, `olvidar`, `ver_disponibilidad`, `agendar_reunion`, `mis_reuniones`, `cancelar_reunion`, `enviar_correo`, `cotizar`, `enviar_cotizacion`, `pasar_a_humano`, y en la tienda `ver_productos`, `ver_existencias`, `cotizar_pedido` |
+| `igbot/tienda.py` | Tienda de Nortex: lee catálogo y existencias de Google Sheets y cotiza pedidos por volumen |
 | `igbot/catalog.py` | Lee el catálogo, calcula las cotizaciones y arma el PDF |
 | `negocio/catalogo.yaml` | Paquetes, precios y condiciones. Edítalo y reinicia para cambiar precios |
-| `igbot/google.py` | Llamadas a Google Calendar y Gmail |
+| `igbot/google.py` | Llamadas a Google Calendar, Gmail y Sheets (solo lectura) |
 | `igbot/instagram.py` | Envía DMs (parte los de más de 1000 caracteres) y renueva el token cada semana |
-| `clientes/<nombre>/` | Prompt, catálogo y `.env` de otra cuenta de Instagram (hoy: `nortex`) |
+| `clientes/<nombre>/` | Prompt, reglas y `.env` de otra cuenta de Instagram (hoy: `nortex`) |
 | `prompts/system.md` | Personalidad e instrucciones del bot (hoy: asesor de ventas). Edítalo y reinicia para cambiar cómo habla. El catálogo se le agrega solo |
 
 **Memoria.** Cada persona tiene su historial completo, un resumen de lo viejo y "datos guardados" que el agente anota con `recordar`. En cada respuesta Claude ve: datos + resumen + los últimos `HISTORY_WINDOW` mensajes (20). Cuando sobran 10 mensajes viejos se condensan en el resumen, así el costo por respuesta no crece.
@@ -98,6 +99,13 @@ sudo systemctl restart igbot
 sudo journalctl -u igbot -u igbot@nortex -f   # cada uno dice "Cuenta de Instagram: @..."
 ```
 3. Manda un DM a @nortex_uniformes desde tu cuenta de prueba.
+
+**Catálogo y existencias de Nortex (Google Sheets).** Los productos, precios por pieza y existencias se leen de las hojas `SHEET_CATALOG` y `SHEET_INVENTORY` (en `clientes/nortex/.env`, ya vienen en el ejemplo) y se guardan 5 minutos en memoria, así que un cambio en la hoja se nota en unos minutos sin reiniciar. Las reglas que no están en las hojas (rangos por volumen, bordado y estampado, IVA, entregas y condiciones) están en `clientes/nortex/reglas.yaml`. El agente tiene `ver_productos`, `ver_existencias` y `cotizar_pedido`; las cuentas las hace `igbot/tienda.py`, contando las piezas por tipo de prenda.
+
+Para que el bot pueda leer las hojas (una sola vez):
+1. En Google Cloud, en el mismo proyecto de la agenda: *APIs y servicios* → *Biblioteca* → **Google Sheets API** → *Habilitar*. En *Pantalla de consentimiento* → *Acceso a datos* agrega el permiso `.../auth/spreadsheets.readonly`.
+2. En tu computadora vuelve a correr `python3 scripts/google_auth.py ruta/a/client_secret.json` (ahora pide también ver tus hojas) y reemplaza `GOOGLE_REFRESH_TOKEN` en `~/ig-bot/.env` con el nuevo. Las hojas deben ser de esa misma cuenta de Google o estar compartidas con ella.
+3. `sudo systemctl restart igbot igbot@nortex`.
 
 ## Agenda y correo con tu Google
 
