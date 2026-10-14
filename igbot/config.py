@@ -16,7 +16,7 @@ ACCOUNT_KEYS = {
     "IG_ACCESS_TOKEN", "IG_ACCOUNT_ID", "FORWARD_WEBHOOKS",
     "DB_PATH", "PROMPT_PATH", "CATALOG_PATH", "QUOTES_DIR",
     "SHEET_CATALOG", "SHEET_INVENTORY", "STORE_RULES_PATH", "SHEET_COMMENTS",
-    "ADMIN_IG_IDS",
+    "ADMIN_IG_IDS", "REPORT_EMAIL",
 }
 if CLIENTE:
     load_dotenv(f"{CLIENT_DIR}/.env")
@@ -67,6 +67,12 @@ ADMIN_IG_IDS = {i.strip() for i in os.getenv("ADMIN_IG_IDS", "").split(",") if i
 # PUBLIC_URL/media/<cuenta>/<nombre>.jpg (todos comparten la carpeta data/).
 MEDIA_SLUG = CLIENTE or "principal"
 MEDIA_DIR = f"{DATA_DIR}/media"
+
+# Reporte semanal: se manda por correo a REPORT_EMAIL (si está) y por DM a los
+# administradores, el día (1=lunes) y la hora del negocio indicados.
+REPORT_EMAIL = os.getenv("REPORT_EMAIL", "")
+REPORT_DAY = int(os.getenv("REPORT_DAY", "1"))
+REPORT_HOUR = int(os.getenv("REPORT_HOUR", "9"))
 
 MODEL = os.getenv("CLAUDE_MODEL", "claude-opus-5-5")
 EFFORT = os.getenv("CLAUDE_EFFORT", "low")

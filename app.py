@@ -21,7 +21,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse
 
-from igbot import admin, agent, comentarios, config
+from igbot import admin, agent, comentarios, config, reporte
 from igbot.dispatcher import Dispatcher
 from igbot.google import Google
 from igbot.instagram import Instagram
@@ -87,6 +87,8 @@ async def lifespan(app: FastAPI):
     loops = [asyncio.create_task(instagram.refresh_loop())]
     if config.ADMIN_IG_IDS:
         loops.append(asyncio.create_task(admin.publisher_loop(store, instagram)))
+    if config.ADMIN_IG_IDS or (config.REPORT_EMAIL and google):
+        loops.append(asyncio.create_task(reporte.loop(store, instagram, google)))
     yield
     for task in loops:
         task.cancel()

@@ -108,6 +108,8 @@ class Instagram:
         r.raise_for_status()
         data = r.json()
         log.info("Cuenta de Instagram: @%s (%s)", data.get("username"), data["user_id"])
+        if data.get("username"):
+            await self.store.set("account_username", data["username"])
         return str(data["user_id"])
 
     async def username(self, user_id: str) -> str:

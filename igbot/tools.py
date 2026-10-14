@@ -336,7 +336,7 @@ ORDER_SCHEMA = {
 }
 
 
-def store_tools(google: Google) -> list:
+def store_tools(google: Google, store: Store | None = None, user_id: str = "") -> list:
     """Catálogo, existencias y cotización de la tienda (hojas de Google)."""
 
     async def load(what):
@@ -390,6 +390,12 @@ def store_tools(google: Google) -> list:
             order = tienda.quote(args.get("items", []), args.get("logos", 1), catalogo, existencias, tienda.rules())
         except (ValueError, KeyError, TypeError) as e:
             return error(str(e))
+        if store:  # para el reporte semanal
+            productos = [
+                {"producto": catalogo[str(i["sku"]).strip().upper()]["Name_ES"], "cantidad": int(i["cantidad"])}
+                for i in args.get("items", [])
+            ]
+            await store.add_event(user_id, "cotizacion", {"total": order.total, "productos": productos})
         return ok(order.texto())
 
     return [ver_productos, ver_existencias, cotizar_pedido]
@@ -407,6 +413,7 @@ def human_tools(store: Store, google: Google | None, user_id: str, state: dict |
     )
     async def pasar_a_humano(args):
         await store.pause(user_id, time.time() + config.HUMAN_PAUSE_HOURS * 3600)
+        await store.add_event(user_id, "humano", {"motivo": args["motivo"][:300]})
         state["acted"] = True
         if google and config.OWNER_EMAIL:
             facts = await store.facts(user_id)
@@ -441,6 +448,6 @@ def build(
         if catalog.available():
             tools += quote_tools(store, google, instagram, user_id, state)
         if tienda.available():
-            tools += store_tools(google)
+            tools += store_tools(google, store, user_id)
     server = create_sdk_mcp_server("bot", tools=tools)
     return server, [f"mcp__bot__{t.name}" for t in tools]
