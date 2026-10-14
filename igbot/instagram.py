@@ -48,6 +48,18 @@ class Instagram:
             recipient_id, {"attachment": {"type": "file", "payload": {"url": url}}}
         )
 
+    async def account_id(self) -> str:
+        """Id de la cuenta de este token (el mismo que viene en los avisos de Meta)."""
+        r = await self.http.get(
+            f"{GRAPH}/{config.API_VERSION}/me",
+            params={"fields": "user_id,username"},
+            headers={"Authorization": f"Bearer {await self.token()}"},
+        )
+        r.raise_for_status()
+        data = r.json()
+        log.info("Cuenta de Instagram: @%s (%s)", data.get("username"), data["user_id"])
+        return str(data["user_id"])
+
     async def refresh_token(self) -> None:
         r = await self.http.get(
             f"{GRAPH}/refresh_access_token",

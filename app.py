@@ -17,6 +17,7 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import httpx
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse
 
@@ -73,6 +74,7 @@ dispatcher = Dispatcher(store, handle, config.DEBOUNCE_SECONDS, config.MAX_CONCU
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await store.open()
+    await my_account()
     await dispatcher.resume_pending()
     refresher = asyncio.create_task(instagram.refresh_loop())
     yield
@@ -137,6 +139,39 @@ async def owner_replied(user_id: str, mid: str, text: str) -> None:
 
 
 background: set[asyncio.Task] = set()
+account_id = config.IG_ACCOUNT_ID
+# Con varias cuentas, un proceso que no sabe cuál es la suya no contesta nada
+# (si no, contestaría los DMs de las otras cuentas).
+MULTI_ACCOUNT = bool(config.CLIENTE or config.FORWARD_WEBHOOKS)
+
+
+async def my_account() -> str:
+    global account_id
+    if not account_id:
+        try:
+            account_id = await instagram.account_id()
+        except Exception:
+            log.exception("No se pudo saber el id de la cuenta de Instagram")
+    return account_id
+
+
+def in_background(coro) -> None:
+    task = asyncio.create_task(coro)
+    background.add(task)
+    task.add_done_callback(background.discard)
+
+
+async def forward(body: bytes, signature: str) -> None:
+    """Reenvía el aviso tal cual (con su firma) a los procesos de las otras cuentas."""
+    async with httpx.AsyncClient(timeout=10) as http:
+        for url in config.FORWARD_WEBHOOKS:
+            try:
+                r = await http.post(url, content=body, headers={
+                    "X-Hub-Signature-256": signature, "Content-Type": "application/json",
+                })
+                r.raise_for_status()
+            except Exception:
+                log.exception("No se pudo reenviar el aviso a %s", url)
 
 
 @app.get("/webhook")
@@ -167,9 +202,16 @@ async def receive(request: Request):
     body = await request.body()
     if not signature_ok(body, request.headers.get("X-Hub-Signature-256")):
         raise HTTPException(status_code=403, detail="firma inválida")
+    if config.FORWARD_WEBHOOKS:
+        in_background(forward(body, request.headers["X-Hub-Signature-256"]))
 
     data = await request.json()
+    mine = await my_account() if MULTI_ACCOUNT else account_id
+    if MULTI_ACCOUNT and not mine:
+        return {"ok": True}
     for entry in data.get("entry", []):
+        if mine and str(entry.get("id")) != mine:
+            continue  # es de otra cuenta de la app; lo atiende su propio proceso
         for event in entry.get("messaging", []):
             message = event.get("message")
             if not message or message.get("is_deleted"):
@@ -177,11 +219,9 @@ async def receive(request: Request):
             # Eco = un DM que salió de la cuenta. Nunca se contesta (sería un
             # bucle), pero si lo escribió el dueño a mano, el bot se calla.
             if message.get("is_echo"):
-                task = asyncio.create_task(
+                in_background(
                     owner_replied(event["recipient"]["id"], message["mid"], message_text(message))
                 )
-                background.add(task)
-                task.add_done_callback(background.discard)
                 continue
             user_id = event["sender"]["id"]
             if await store.add_incoming(user_id, message["mid"], message_text(message)):

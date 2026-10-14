@@ -1,0 +1,16 @@
+# Una cuenta extra de Instagram (p. ej. igbot@nortex). Lee clientes/<nombre>/.env,
+# que debe tener PORT (8002, 8003...); lo común sale del .env principal.
+[Unit]
+Description=IG Bot webhook (%i)
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/ig-bot
+Environment=CLIENTE=%i
+EnvironmentFile=/home/ubuntu/ig-bot/clientes/%i/.env
+ExecStart=/home/ubuntu/ig-bot/.venv/bin/uvicorn app:app --host 127.0.0.1 --port ${PORT}
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
