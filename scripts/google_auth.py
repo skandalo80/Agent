@@ -1,4 +1,4 @@
-"""Da permiso al bot sobre tu Google Calendar y Gmail. Se corre UNA vez, en tu computadora.
+"""Da permiso al bot sobre tu Google Calendar, Gmail y Sheets (solo lectura). Se corre UNA vez, en tu computadora.
 
     pip install google-auth-oauthlib
     python3 scripts/google_auth.py ruta/a/client_secret.json
@@ -15,6 +15,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/calendar.events",
     "https://www.googleapis.com/auth/calendar.freebusy",
     "https://www.googleapis.com/auth/gmail.send",
+    "https://www.googleapis.com/auth/spreadsheets.readonly",
 ]
 
 path = sys.argv[1] if len(sys.argv) > 1 else "client_secret.json"

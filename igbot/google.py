@@ -1,4 +1,4 @@
-"""Cliente mínimo de Google Calendar y Gmail.
+"""Cliente mínimo de Google Calendar, Gmail y Sheets (solo lectura).
 
 Actúa como tu cuenta de Gmail con un refresh token OAuth que se obtiene una
 sola vez con scripts/google_auth.py, y solo con los permisos de SCOPES.
@@ -6,6 +6,7 @@ sola vez con scripts/google_auth.py, y solo con los permisos de SCOPES.
 import asyncio
 import base64
 import uuid
+from urllib.parse import quote
 from email.message import EmailMessage
 from email.utils import formataddr
 
@@ -15,9 +16,11 @@ SCOPES = [
     "https://www.googleapis.com/auth/calendar.events",
     "https://www.googleapis.com/auth/calendar.freebusy",
     "https://www.googleapis.com/auth/gmail.send",
+    "https://www.googleapis.com/auth/spreadsheets.readonly",
 ]
 CAL = "https://www.googleapis.com/calendar/v3"
 GMAIL = "https://gmail.googleapis.com/gmail/v1"
+SHEETS = "https://sheets.googleapis.com/v4/spreadsheets"
 
 
 class Google:
@@ -30,7 +33,9 @@ class Google:
             client_id=client_id,
             client_secret=client_secret,
             token_uri="https://oauth2.googleapis.com/token",
-            scopes=SCOPES,
+            # Sin scopes: Google da los que se aceptaron en google_auth.py. Si se
+            # pidieran aquí y alguno faltara (p. ej. Sheets antes de volver a
+            # autorizar), fallaría todo, también la agenda y el correo.
         )
         self.http = httpx.AsyncClient(timeout=20)
         self._lock = asyncio.Lock()
@@ -103,3 +108,31 @@ class Google:
             msg.add_attachment(data, maintype="application", subtype="pdf", filename=filename)
         raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
         await self._call("POST", f"{GMAIL}/users/me/messages/send", json={"raw": raw})
+
+    async def sheet_rows(self, spreadsheet_id: str, gid: int | None = None) -> list[dict[str, str]]:
+        """Filas de una pestaña como diccionarios {encabezado: valor}.
+
+        La pestaña se elige por su gid (el número de #gid= en el link); sin gid, la primera.
+        """
+        meta = await self._call(
+            "GET", f"{SHEETS}/{spreadsheet_id}", params={"fields": "sheets.properties(sheetId,title)"}
+        )
+        tabs = [s["properties"] for s in meta["sheets"]]
+        tab = next((t for t in tabs if t["sheetId"] == gid), tabs[0]) if gid is not None else tabs[0]
+        data = await self._call(
+            "GET", f"{SHEETS}/{spreadsheet_id}/values/{quote(repr_tab(tab['title']), safe='')}"
+        )
+        values = data.get("values", [])
+        if not values:
+            return []
+        header = [h.strip() for h in values[0]]
+        return [
+            {h: (row[i].strip() if i < len(row) else "") for i, h in enumerate(header)}
+            for row in values[1:]
+            if any(c.strip() for c in row)
+        ]
+
+
+def repr_tab(title: str) -> str:
+    """Nombre de pestaña como rango A1 (entre comillas, por si tiene espacios)."""
+    return "'" + title.replace("'", "''") + "'"

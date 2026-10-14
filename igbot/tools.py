@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 
 from claude_agent_sdk import create_sdk_mcp_server, tool
 
-from . import catalog, config
+from . import catalog, config, tienda
 from .google import Google
 from .instagram import Instagram
 from .store import Store
@@ -312,6 +312,89 @@ def quote_tools(
     return [cotizar, enviar_cotizacion]
 
 
+ORDER_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "items": {
+            "type": "array",
+            "description": "Una línea por producto y talla.",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "sku": {"type": "string"},
+                    "talla": {"type": "string"},
+                    "cantidad": {"type": "integer"},
+                    "personalizacion": {"type": "string", "enum": list(tienda.TECNICAS)},
+                    "ubicaciones_extra": {"type": "integer", "description": "0 si solo lleva el logo principal"},
+                },
+                "required": ["sku", "talla", "cantidad", "personalizacion", "ubicaciones_extra"],
+            },
+        },
+        "logos": {"type": "integer", "description": "Diseños de logo distintos (1 si no dijo)"},
+    },
+    "required": ["items", "logos"],
+}
+
+
+def store_tools(google: Google) -> list:
+    """Catálogo, existencias y cotización de la tienda (hojas de Google)."""
+
+    async def load(what):
+        try:
+            return await what(google), None
+        except Exception:
+            log.exception("No se pudieron leer las hojas de la tienda")
+            return None, error(
+                "No se pudo consultar el catálogo en este momento. Di que lo confirmas en un rato"
+                " u ofrece pasar con una persona."
+            )
+
+    @tool(
+        "ver_productos",
+        "Lista los productos con material, precio por pieza en cada rango, mínimo y si se pueden"
+        " personalizar. tipo: filtro opcional (p. ej. 'polo', 'hoodie', 'gorra'; cadena vacía = todos).",
+        {"tipo": str},
+    )
+    async def ver_productos(args):
+        catalogo, err = await load(tienda.products)
+        return err or ok(tienda.catalog_text(catalogo, tienda.rules(), args.get("tipo", "")))
+
+    @tool(
+        "ver_existencias",
+        "Tallas y piezas disponibles de un producto (por SKU).",
+        {"sku": str},
+    )
+    async def ver_existencias(args):
+        existencias, err = await load(tienda.stock)
+        if err:
+            return err
+        tallas = existencias.get(args["sku"].strip().upper())
+        if not tallas:
+            return error("No hay existencias registradas de ese SKU; revisa con ver_productos.")
+        return ok(", ".join(f"{t}: {n} disponibles" for t, n in tallas.items()))
+
+    @tool(
+        "cotizar_pedido",
+        "Calcula el precio exacto de un pedido (prendas, personalización, IVA, total y tiempo de"
+        " entrega) con los precios por volumen. Usa SIEMPRE esto para dar precios o totales.",
+        ORDER_SCHEMA,
+    )
+    async def cotizar_pedido(args):
+        catalogo, err = await load(tienda.products)
+        if err:
+            return err
+        existencias, err = await load(tienda.stock)
+        if err:
+            return err
+        try:
+            order = tienda.quote(args.get("items", []), args.get("logos", 1), catalogo, existencias, tienda.rules())
+        except (ValueError, KeyError, TypeError) as e:
+            return error(str(e))
+        return ok(order.texto())
+
+    return [ver_productos, ver_existencias, cotizar_pedido]
+
+
 def human_tools(store: Store, google: Google | None, user_id: str, state: dict | None = None) -> list:
     state = state if state is not None else {}
 
@@ -357,5 +440,7 @@ def build(
         tools += workspace_tools(store, google, user_id, state)
         if catalog.available():
             tools += quote_tools(store, google, instagram, user_id, state)
+        if tienda.available():
+            tools += store_tools(google)
     server = create_sdk_mcp_server("bot", tools=tools)
     return server, [f"mcp__bot__{t.name}" for t in tools]

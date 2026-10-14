@@ -15,6 +15,7 @@ CLIENT_DIR = f"clientes/{CLIENTE}" if CLIENTE else ""
 ACCOUNT_KEYS = {
     "IG_ACCESS_TOKEN", "IG_ACCOUNT_ID", "FORWARD_WEBHOOKS",
     "DB_PATH", "PROMPT_PATH", "CATALOG_PATH", "QUOTES_DIR",
+    "SHEET_CATALOG", "SHEET_INVENTORY", "STORE_RULES_PATH",
 }
 if CLIENTE:
     load_dotenv(f"{CLIENT_DIR}/.env")
@@ -43,6 +44,13 @@ PROMPT_PATH = os.getenv("PROMPT_PATH", f"{CLIENT_DIR}/system.md" if CLIENTE else
 # Paquetes y precios de las cotizaciones (si no existe, no hay cotizaciones).
 CATALOG_PATH = os.getenv("CATALOG_PATH", f"{CLIENT_DIR}/catalogo.yaml" if CLIENTE else "negocio/catalogo.yaml")
 QUOTES_DIR = os.getenv("QUOTES_DIR", f"{DATA_DIR}/cotizaciones")
+# Tienda de productos (Nortex): catálogo y existencias en Google Sheets (el link
+# de cada hoja, con su #gid=) y las reglas de precios por cantidad en YAML.
+SHEET_CATALOG = os.getenv("SHEET_CATALOG", "")
+SHEET_INVENTORY = os.getenv("SHEET_INVENTORY", "")
+STORE_RULES_PATH = os.getenv("STORE_RULES_PATH", f"{CLIENT_DIR}/reglas.yaml" if CLIENTE else "negocio/reglas.yaml")
+# Segundos que se reutiliza lo leído de las hojas antes de volver a pedirlo.
+SHEETS_CACHE_SECONDS = float(os.getenv("SHEETS_CACHE_SECONDS", "300"))
 # Dirección pública del bot, para mandar el PDF por DM (Instagram lo descarga de ahí).
 PUBLIC_URL = os.getenv("PUBLIC_URL", "").rstrip("/")
 
