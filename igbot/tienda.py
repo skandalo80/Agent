@@ -16,6 +16,14 @@ from . import config
 from .google import Google
 
 TECNICAS = ("ninguna", "bordado", "dtf")
+# Tallas como se dicen en México -> como vienen en la hoja.
+TALLAS = {
+    "ch": "S", "chica": "S", "chico": "S", "small": "S",
+    "m": "M", "med": "M", "mediana": "M", "mediano": "M", "medium": "M",
+    "g": "L", "grande": "L", "large": "L",
+    "xg": "XL", "extra grande": "XL",
+    "unitalla": "Ajustable", "única": "Ajustable", "unica": "Ajustable",
+}
 
 
 @lru_cache
@@ -122,7 +130,8 @@ def quote(items: list[dict], logos: int, catalogo: dict, existencias: dict, regl
             raise ValueError(f"La cantidad de {sku} debe ser mayor que cero.")
         tallas = existencias.get(sku, {})
         talla = str(it.get("talla", "")).strip()
-        match = next((t for t in tallas if t.lower() == talla.lower()), None)
+        buscada = TALLAS.get(talla.lower(), talla).lower()
+        match = next((t for t in tallas if t.lower() == buscada), None)
         if match is None:
             raise ValueError(f"{p['Name_ES']} no se maneja en talla '{talla}'. Tallas: {', '.join(tallas) or 'ninguna'}.")
         tec = str(it.get("personalizacion", "ninguna")).strip().lower() or "ninguna"

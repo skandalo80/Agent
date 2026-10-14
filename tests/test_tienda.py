@@ -50,6 +50,11 @@ def test_ejemplo_de_la_propuesta_60_polos_bordadas():
     assert o.entrega == "8 a 10 días hábiles"
 
 
+def test_tallas_como_se_dicen_en_mexico():
+    o = cotiza([item("NX-POL-BLK", "G", 30), item("NX-POL-BLK", "chica", 30)])
+    assert "talla L" in o.texto() and "talla S" in o.texto()
+
+
 def test_el_rango_se_cuenta_por_tipo_mezclando_colores():
     o = cotiza([item("NX-POL-NVY", "S", 30), item("NX-POL-BLK", "S", 30)])
     assert o.subtotal == 60 * 165
