@@ -21,10 +21,12 @@ Instagram → Caddy (HTTPS) → POST /webhook (app.py, puerto 8001)
 | `igbot/dispatcher.py` | Cola: orden por persona, agrupar mensajes seguidos, límite de conversaciones a la vez, reintentos |
 | `igbot/store.py` | Toda la memoria en SQLite (`data/bot.db`). Es el único archivo a cambiar si algún día se pasa a Postgres |
 | `igbot/agent.py` | Arma el contexto y llama a Claude |
-| `igbot/tools.py` | Herramientas del agente y sus reglas: `recordar`, `olvidar`, `ver_disponibilidad`, `agendar_reunion`, `mis_reuniones`, `cancelar_reunion`, `enviar_correo` |
+| `igbot/tools.py` | Herramientas del agente y sus reglas: `recordar`, `olvidar`, `ver_disponibilidad`, `agendar_reunion`, `mis_reuniones`, `cancelar_reunion`, `enviar_correo`, `cotizar`, `enviar_cotizacion`, `pasar_a_humano` |
+| `igbot/catalog.py` | Lee el catálogo, calcula las cotizaciones y arma el PDF |
+| `negocio/catalogo.yaml` | Paquetes, precios y condiciones. Edítalo y reinicia para cambiar precios |
 | `igbot/google.py` | Llamadas a Google Calendar y Gmail |
 | `igbot/instagram.py` | Envía DMs (parte los de más de 1000 caracteres) y renueva el token cada semana |
-| `prompts/system.md` | Personalidad e instrucciones del bot. Edítalo y reinicia para cambiar cómo habla |
+| `prompts/system.md` | Personalidad e instrucciones del bot (hoy: asesor de ventas). Edítalo y reinicia para cambiar cómo habla. El catálogo se le agrega solo |
 
 **Memoria.** Cada persona tiene su historial completo, un resumen de lo viejo y "datos guardados" que el agente anota con `recordar`. En cada respuesta Claude ve: datos + resumen + los últimos `HISTORY_WINDOW` mensajes (20). Cuando sobran 10 mensajes viejos se condensan en el resumen, así el costo por respuesta no crece.
 
@@ -32,7 +34,8 @@ Instagram → Caddy (HTTPS) → POST /webhook (app.py, puerto 8001)
 - Solo invita o escribe a un correo que la persona escribió en el chat (nadie puede usar el bot para mandar correos a terceros).
 - Solo agenda dentro del horario de atención, con anticipación mínima, en huecos libres y con un máximo de reuniones por persona.
 - Solo puede ver y cancelar las reuniones que agendó esa misma persona. De tu calendario solo ve libre/ocupado, nunca el contenido de tus eventos.
-- Máximo de correos por persona al día.
+- Máximo de correos por persona al día (las cotizaciones cuentan como correo).
+- Los precios los calcula el código desde `negocio/catalogo.yaml`; Claude solo elige paquete y opciones. Los PDFs se sirven con un nombre aleatorio que no se puede adivinar.
 
 **Si se reinicia.** Los DMs sin contestar quedan como pendientes en la base y se contestan al arrancar. Si Meta reenvía un DM, se ignora (se reconoce por su id).
 
@@ -57,6 +60,22 @@ Respaldo diario de la memoria (opcional, `crontab -e`):
 (necesita `sudo apt install sqlite3`; guarda una copia por día de la semana)
 
 Pruebas locales: `pip install pytest && python -m pytest -q`
+
+## Ventas: cotizaciones y pasar a humano
+
+**Cotizaciones.** El agente pregunta por el negocio del cliente, recomienda un paquete y da precios con `cotizar`. Si el cliente quiere la cotización formal, `enviar_cotizacion` genera un PDF con folio (`COT-0001`, `COT-0002`...), se lo manda por correo con copia a `MAIL_CC` y también por DM. Los PDFs quedan en `data/cotizaciones/` y el registro en la tabla `quotes`. Necesita Google configurado (sección siguiente) y `PUBLIC_URL` en `.env` para el DM.
+
+**Pasar a humano.** Si el cliente pide hablar con alguien, quiere descuento o algo fuera del catálogo, el agente usa `pasar_a_humano`: te llega un correo (a `OWNER_EMAIL`, por defecto tu Gmail) con el motivo y los últimos mensajes, y el bot se calla en esa conversación durante `HUMAN_PAUSE_HOURS` (12 h).
+
+**Si contestas tú desde Instagram**, el bot lo detecta (Meta le avisa de cada DM que sale de la cuenta) y también se calla en esa conversación durante `HUMAN_PAUSE_HOURS`. Lo que escribiste queda en su memoria, así que al volver sigue desde ahí.
+
+**Actualizar el servidor:**
+```bash
+cd ~/ig-bot && git pull
+.venv/bin/pip install -r requirements.txt
+echo "PUBLIC_URL=https://bot.skandar.online" >> .env
+sudo systemctl restart igbot
+```
 
 ## Agenda y correo con tu Google
 

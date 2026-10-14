@@ -84,9 +84,13 @@ class Google:
         )
 
     async def send_email(
-        self, sender: str, sender_name: str, to: str, cc: str, subject: str, body: str
+        self, sender: str, sender_name: str, to: str, cc: str, subject: str, body: str,
+        attachments: list[tuple[str, bytes]] = (),
     ) -> None:
-        """Envía desde tu Gmail. `sender` debe ser tu dirección (o un alias suyo)."""
+        """Envía desde tu Gmail. `sender` debe ser tu dirección (o un alias suyo).
+
+        `attachments`: lista de (nombre, bytes) de PDFs.
+        """
         msg = EmailMessage()
         if sender:
             msg["From"] = formataddr((sender_name, sender)) if sender_name else sender
@@ -95,5 +99,7 @@ class Google:
             msg["Cc"] = cc
         msg["Subject"] = subject
         msg.set_content(body)
+        for filename, data in attachments:
+            msg.add_attachment(data, maintype="application", subtype="pdf", filename=filename)
         raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
         await self._call("POST", f"{GMAIL}/users/me/messages/send", json={"raw": raw})

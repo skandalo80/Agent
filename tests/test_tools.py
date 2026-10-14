@@ -29,8 +29,9 @@ class FakeGoogle:
     async def cancel_meeting(self, event_id):
         self.cancelled.append(event_id)
 
-    async def send_email(self, sender, name, to, cc, subject, body):
+    async def send_email(self, sender, name, to, cc, subject, body, attachments=()):
         self.sent.append((sender, to, cc, subject))
+        self.attachments = list(attachments)
 
 
 @pytest.fixture

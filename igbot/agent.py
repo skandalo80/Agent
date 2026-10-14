@@ -9,8 +9,9 @@ from pathlib import Path
 
 from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query
 
-from . import config, tools
+from . import catalog, config, tools
 from .google import Google
+from .instagram import Instagram
 from .store import Store
 
 log = logging.getLogger("igbot.agent")
@@ -72,13 +73,25 @@ async def build_prompt(store: Store, user_id: str, new_messages: list[str]) -> s
     return "\n\n".join(parts)
 
 
+def system_prompt() -> str:
+    """Las instrucciones del bot más el catálogo del negocio, si hay."""
+    system = Path(config.PROMPT_PATH).read_text(encoding="utf-8")
+    if catalog.available():
+        system += f"\n\n<catalogo>\n{catalog.prompt_text()}\n</catalogo>"
+    return system
+
+
 async def reply(
-    store: Store, google: Google | None, user_id: str, new_messages: list[str]
+    store: Store,
+    google: Google | None,
+    user_id: str,
+    new_messages: list[str],
+    instagram: Instagram | None = None,
 ) -> tuple[str, bool]:
     """Devuelve (respuesta, si alguna herramienta hizo algo fuera del chat)."""
-    system = Path(config.PROMPT_PATH).read_text(encoding="utf-8")
+    system = system_prompt()
     state: dict = {}
-    server, allowed = tools.build(store, google, user_id, state)
+    server, allowed = tools.build(store, google, user_id, state, instagram)
     prompt = await build_prompt(store, user_id, new_messages)
     text = await run_claude(prompt, system, {"bot": server}, allowed, max_turns=10)
     return text, state.get("acted", False)
