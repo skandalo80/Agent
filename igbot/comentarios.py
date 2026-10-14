@@ -133,11 +133,14 @@ async def handle(value: dict, store: Store, instagram: Instagram, google: Google
     if not await store.add_comment(comment_id, author, media_id, text):
         return  # Meta reintentó un aviso que ya se atendió
 
-    rules = for_post(await load_rules(google), shortcode(await instagram.permalink(media_id)))
+    code = shortcode(await instagram.permalink(media_id))
+    rules = for_post(await load_rules(google), code)
     if not rules:
+        log.info("La publicación %s no tiene reglas en la hoja; se ignora el comentario", code or media_id)
         return
     matched = literal_matches(rules, text) or await classify(rules, text)
     if not matched:
+        log.info("El comentario %s no coincide con ninguna palabra clave de %s", comment_id, code)
         await store.comment_result(comment_id, "", False, False)
         return
 
