@@ -1,0 +1,12 @@
+[Unit]
+Description=IG Bot webhook
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/ig-bot
+ExecStart=/home/ubuntu/ig-bot/.venv/bin/uvicorn app:app --host 127.0.0.1 --port 8000
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
