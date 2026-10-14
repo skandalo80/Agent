@@ -17,6 +17,7 @@ ACCOUNT_KEYS = {
     "DB_PATH", "PROMPT_PATH", "CATALOG_PATH", "QUOTES_DIR",
     "SHEET_CATALOG", "SHEET_INVENTORY", "STORE_RULES_PATH", "SHEET_COMMENTS",
     "ADMIN_IG_IDS", "REPORT_EMAIL", "BUTTONS_PATH", "HIDE_SPAM",
+    "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET",
 }
 if CLIENTE:
     load_dotenv(f"{CLIENT_DIR}/.env")
@@ -78,6 +79,16 @@ MEDIA_DIR = f"{DATA_DIR}/media"
 REPORT_EMAIL = os.getenv("REPORT_EMAIL", "")
 REPORT_DAY = int(os.getenv("REPORT_DAY", "1"))
 REPORT_HOUR = int(os.getenv("REPORT_HOUR", "9"))
+
+# Cobros con Stripe (opcional): llave secreta (sk_test_... para pruebas) y el
+# secreto del webhook (whsec_...) que da Stripe al registrar
+# PUBLIC_URL/stripe/webhook. Los métodos de pago (tarjeta, OXXO, transferencia)
+# se activan en el panel de Stripe.
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+# Horas que sirve un link de pago (Stripe acepta de 0.5 a 24).
+PAYMENT_LINK_HOURS = float(os.getenv("PAYMENT_LINK_HOURS", "23"))
+MAX_PAYMENT_LINKS_PER_USER_PER_DAY = int(os.getenv("MAX_PAYMENT_LINKS_PER_USER_PER_DAY", "3"))
 
 MODEL = os.getenv("CLAUDE_MODEL", "claude-opus-5-5")
 EFFORT = os.getenv("CLAUDE_EFFORT", "low")

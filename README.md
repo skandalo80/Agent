@@ -107,6 +107,17 @@ Para que el bot pueda leer las hojas (una sola vez):
 2. En tu computadora vuelve a correr `python3 scripts/google_auth.py ruta/a/client_secret.json` (ahora pide también ver tus hojas) y reemplaza `GOOGLE_REFRESH_TOKEN` en `~/ig-bot/.env` con el nuevo. Las hojas deben ser de esa misma cuenta de Google o estar compartidas con ella.
 3. `sudo systemctl restart igbot igbot@nortex`.
 
+## Cobros con Stripe
+
+Con `cobrar_pedido` el agente de Nortex manda un link de pago de Stripe Checkout por el total exacto del pedido (lo calcula `igbot/tienda.py`, igual que la cotización). Se paga con lo que esté activo en el panel de Stripe: tarjeta, OXXO o transferencia. Cuando Stripe confirma el pago, el bot le avisa a la persona por DM, a los administradores por DM y al dueño por correo, y el pago sale en el reporte semanal. Con `estado_pago` el agente contesta "¿ya les llegó mi pago?".
+
+Para activarlo:
+1. En Stripe (modo prueba primero), copia la llave secreta `sk_test_...` y activa OXXO en Configuración > Métodos de pago.
+2. En Desarrolladores > Webhooks agrega `https://bot.skandar.online/stripe/webhook` con los eventos `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed` y `checkout.session.expired`, y copia su secreto `whsec_...`.
+3. En `clientes/nortex/.env` pon `STRIPE_SECRET_KEY=` y `STRIPE_WEBHOOK_SECRET=`, y reinicia `igbot igbot@nortex`. El proceso principal recibe el aviso y se lo reenvía a Nortex (`FORWARD_WEBHOOKS`).
+
+Opcional: `PAYMENT_LINK_HOURS` (23 por defecto; Stripe acepta hasta 24) y `MAX_PAYMENT_LINKS_PER_USER_PER_DAY` (3). Fuera de la ventana de 24 h Instagram no deja escribirle a la persona, así que si paga en OXXO días después solo se entera el dueño.
+
 ## Comentarios: palabra clave → DM
 
 Cuando alguien comenta una publicación con una palabra clave (p. ej. PRECIO), el bot le manda un DM privado con el mensaje que tú definas, y opcionalmente responde en público. Las reglas viven en una hoja de Google Sheets (`SHEET_COMMENTS` en el `.env` de la cuenta) con tres columnas, en este orden:

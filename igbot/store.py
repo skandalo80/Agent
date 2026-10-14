@@ -128,6 +128,21 @@ CREATE TABLE IF NOT EXISTS events (
 );
 CREATE INDEX IF NOT EXISTS events_kind ON events (kind, created_at);
 
+-- Links de pago de Stripe que mandó el bot.
+CREATE TABLE IF NOT EXISTS payments (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT, -- el folio (PED-0001)
+    user_id    TEXT NOT NULL,
+    session_id TEXT NOT NULL DEFAULT '',  -- sesión de Stripe Checkout
+    url        TEXT NOT NULL DEFAULT '',
+    total      REAL NOT NULL,             -- MXN con IVA
+    detalle    TEXT NOT NULL,             -- el pedido en texto
+    email      TEXT NOT NULL DEFAULT '',
+    status     TEXT NOT NULL,             -- creando | pendiente | esperando (OXXO) | pagado | fallido | vencido
+    created_at REAL NOT NULL,
+    paid_at    REAL NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS payments_session ON payments (session_id);
+
 CREATE TABLE IF NOT EXISTS kv (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -537,6 +552,63 @@ class Store:
             (since, until, limit),
         )
         return list(await cur.fetchall())
+
+    # --- pagos (Stripe) ---
+
+    PAYMENT_FIELDS = "id, user_id, session_id, url, total, detalle, email, status, created_at, paid_at"
+
+    def _payment(self, row) -> dict | None:
+        if not row:
+            return None
+        d = dict(zip(self.PAYMENT_FIELDS.split(", "), row))
+        d["folio"] = f"PED-{d['id']:04d}"
+        return d
+
+    async def add_payment(self, user_id: str, total: float, detalle: str, email: str) -> int:
+        cur = await self.db.execute(
+            "INSERT INTO payments (user_id, total, detalle, email, status, created_at)"
+            " VALUES (?, ?, ?, ?, 'creando', ?)",
+            (user_id, total, detalle, email, time.time()),
+        )
+        await self.db.commit()
+        return cur.lastrowid
+
+    async def set_payment_session(self, payment_id: int, session_id: str, url: str) -> None:
+        await self.db.execute(
+            "UPDATE payments SET session_id = ?, url = ?, status = 'pendiente' WHERE id = ?",
+            (session_id, url, payment_id),
+        )
+        await self.db.commit()
+
+    async def set_payment_status(self, payment_id: int, status: str) -> None:
+        await self.db.execute(
+            "UPDATE payments SET status = ?, paid_at = CASE WHEN ? = 'pagado' THEN ? ELSE paid_at END"
+            " WHERE id = ?",
+            (status, status, time.time(), payment_id),
+        )
+        await self.db.commit()
+
+    async def payment_by_session(self, session_id: str) -> dict | None:
+        if not session_id:
+            return None
+        cur = await self.db.execute(
+            f"SELECT {self.PAYMENT_FIELDS} FROM payments WHERE session_id = ?", (session_id,)
+        )
+        return self._payment(await cur.fetchone())
+
+    async def payments(self, user_id: str, limit: int = 5) -> list[dict]:
+        cur = await self.db.execute(
+            f"SELECT {self.PAYMENT_FIELDS} FROM payments WHERE user_id = ? AND status != 'creando'"
+            " ORDER BY id DESC LIMIT ?",
+            (user_id, limit),
+        )
+        return [self._payment(r) for r in await cur.fetchall()]
+
+    async def payments_since(self, user_id: str, since: float) -> int:
+        cur = await self.db.execute(
+            "SELECT COUNT(*) FROM payments WHERE user_id = ? AND created_at > ?", (user_id, since)
+        )
+        return (await cur.fetchone())[0]
 
     # --- valores sueltos (token de Instagram, etc.) ---
 

@@ -64,6 +64,7 @@ async def build(store: Store, instagram: Instagram | None = None, until: float |
     s = await store.week_stats(since, until)
     quotes = last_per_user(await store.events("cotizacion", since, until))
     handoffs = await store.events("humano", since, until)
+    payments = await store.events("pago", since, until)
     comments = await store.week_comments(since, until)
     published = await store.week_published(since, until)
     scheduled = await store.posts(("programada",))
@@ -82,7 +83,7 @@ async def build(store: Store, instagram: Instagram | None = None, until: float |
         f"- {s['personas']} personas escribieron ({s['nuevas']} nuevas) y mandaron {s['recibidos']} mensajes.",
         f"- El bot contestó {s['respuestas_bot']} veces.",
     ]
-    if quotes or s["cotizaciones_pdf"]:
+    if quotes or s["cotizaciones_pdf"] or payments:
         out += ["", "VENTAS"]
         if quotes:
             total = sum(q["total"] for q in quotes.values())
@@ -95,6 +96,8 @@ async def build(store: Store, instagram: Instagram | None = None, until: float |
                 out.append("- Lo más cotizado: " + ", ".join(f"{p} ({n} pzas)" for p, n in pieces.most_common(3)) + ".")
         if s["cotizaciones_pdf"]:
             out.append(f"- {s['cotizaciones_pdf']} cotizaciones formales en PDF, por {money(s['total_pdf'])}.")
+        if payments:
+            out.append(f"- {len(payments)} pagos recibidos por Stripe, por {money(sum(p['total'] for _, p, _ in payments))}.")
     if meetings:
         out.append(f"- {meetings} reuniones agendadas para los próximos 7 días.")
     out += ["", "ATENCIÓN HUMANA",
