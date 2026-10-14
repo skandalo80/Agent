@@ -20,11 +20,13 @@ log = logging.getLogger("igbot.agent")
 WORKDIR = Path(config.DB_PATH).parent / "agent-cwd"
 
 
-async def run_claude(prompt: str, system: str, mcp=None, allowed=(), max_turns=5) -> str:
+async def run_claude(
+    prompt: str, system: str, mcp=None, allowed=(), max_turns=5, model: str | None = None
+) -> str:
     WORKDIR.mkdir(parents=True, exist_ok=True)
     options = ClaudeAgentOptions(
         system_prompt=system,
-        model=config.MODEL,
+        model=model or config.MODEL,
         effort=config.EFFORT,
         tools=[],  # sin herramientas de Claude Code
         mcp_servers=mcp or {},

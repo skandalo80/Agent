@@ -107,6 +107,26 @@ Para que el bot pueda leer las hojas (una sola vez):
 2. En tu computadora vuelve a correr `python3 scripts/google_auth.py ruta/a/client_secret.json` (ahora pide también ver tus hojas) y reemplaza `GOOGLE_REFRESH_TOKEN` en `~/ig-bot/.env` con el nuevo. Las hojas deben ser de esa misma cuenta de Google o estar compartidas con ella.
 3. `sudo systemctl restart igbot igbot@nortex`.
 
+## Comentarios: palabra clave → DM
+
+Cuando alguien comenta una publicación con una palabra clave (p. ej. PRECIO), el bot le manda un DM privado con el mensaje que tú definas, y opcionalmente responde en público. Las reglas viven en una hoja de Google Sheets (`SHEET_COMMENTS` en el `.env` de la cuenta) con tres columnas, en este orden:
+
+| Link de la publicación | Palabra clave | Mensaje por DM |
+|---|---|---|
+| https://www.instagram.com/p/ABC123/ | PRECIO | Hola! Nuestros precios... |
+| https://www.instagram.com/p/ABC123/ | catálogo, catalogo | Aquí está el catálogo... |
+
+- Solo reaccionan las publicaciones que estén en la hoja. Para varias palabras en una publicación, una fila por cada una (o varias palabras separadas por comas en la misma celda).
+- No importan mayúsculas, acentos ni plurales. Si el comentario no trae la palabra exacta, Claude decide si se refiere a ella ("¿cuánto cuestan?" → PRECIO).
+- Si un comentario pide varias cosas, se manda un solo DM con todos los mensajes (Instagram permite un DM por comentario, dentro de 7 días).
+- Una cuarta columna opcional es una respuesta pública al comentario.
+- Los cambios en la hoja se notan en unos 5 minutos, sin reiniciar. Los comentarios quedan en la tabla `comments` (para el reporte semanal).
+
+Para activarlo en una cuenta:
+1. En la app de Meta → *API de Instagram con inicio de sesión de Instagram*: en **Webhooks** suscribe el campo `comments`, y revisa que la app tenga el permiso `instagram_business_manage_comments` (si no lo tenía, genera de nuevo el token de esa cuenta y reemplázalo en su `.env`).
+2. Crea la hoja (de tu misma cuenta de Google) y pon su link en `SHEET_COMMENTS` del `.env` de la cuenta.
+3. Reinicia (`sudo systemctl restart igbot@nortex`). Al arrancar, el bot suscribe la cuenta a mensajes y comentarios.
+
 ## Agenda y correo con tu Google
 
 Opcional: sin esto el bot sigue contestando, solo que sin agendar ni mandar correos. Se hace una sola vez.
