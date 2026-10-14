@@ -1,12 +1,60 @@
-# IG Bot · Etapa 1: responder "hola" a cada DM
+# IG Bot: agente de Instagram con Claude
 
-Un webhook pequeño en Python (FastAPI) que recibe los DMs de tu cuenta profesional de Instagram y contesta "hola". Sirve para probar que Instagram y tu instancia de Oracle están conectados. El agente con Claude viene después.
-
-Cómo funciona: Instagram → `https://bot.skandar.online/webhook` (Caddy con HTTPS) → la app en el puerto 8001 → responde con la API de Instagram.
+Contesta los DMs de la cuenta de Instagram con un agente hecho con el **Claude Agent SDK**, con memoria por persona.
 
 Dominio del webhook: `bot.skandar.online`. Repo: `skandalo80/Agent`.
 
+## Cómo funciona
+
+```
+Instagram → Caddy (HTTPS) → POST /webhook (app.py, puerto 8001)
+   1. valida la firma, guarda el DM como "pendiente" en SQLite y responde 200 al instante
+   2. Dispatcher: una sola tarea por persona → espera 3 s por si escribe más,
+      junta los mensajes seguidos y los contesta en orden
+   3. Agente: datos guardados + resumen + últimos 20 mensajes → Claude → respuesta
+   4. Envía la respuesta por la API de Instagram y marca los DMs como contestados
+```
+
+| Archivo | Qué hace |
+|---|---|
+| `app.py` | Webhook, arranque y apagado |
+| `igbot/dispatcher.py` | Cola: orden por persona, agrupar mensajes seguidos, límite de conversaciones a la vez, reintentos |
+| `igbot/store.py` | Toda la memoria en SQLite (`data/bot.db`). Es el único archivo a cambiar si algún día se pasa a Postgres |
+| `igbot/agent.py` | Arma el contexto y llama a Claude. Herramientas del agente: `recordar` y `olvidar` |
+| `igbot/instagram.py` | Envía DMs (parte los de más de 1000 caracteres) y renueva el token cada semana |
+| `prompts/system.md` | Personalidad e instrucciones del bot. Edítalo y reinicia para cambiar cómo habla |
+
+**Memoria.** Cada persona tiene su historial completo, un resumen de lo viejo y "datos guardados" que el agente anota con `recordar`. En cada respuesta Claude ve: datos + resumen + los últimos `HISTORY_WINDOW` mensajes (20). Cuando sobran 10 mensajes viejos se condensan en el resumen, así el costo por respuesta no crece.
+
+**Seguridad.** El agente no tiene ninguna herramienta de Claude Code (ni Bash ni archivos): solo `recordar`/`olvidar`, y atadas a la persona que escribe.
+
+**Si se reinicia.** Los DMs sin contestar quedan como pendientes en la base y se contestan al arrancar. Si Meta reenvía un DM, se ignora (se reconoce por su id).
+
+**Escalar.** Se ajusta con `MAX_CONCURRENT` (conversaciones a la vez). Corre con un solo proceso de uvicorn: no subas `--workers`, la cola vive dentro del proceso. Para varios servidores habría que pasar la cola a Redis y la memoria a Postgres.
+
+## Actualizar el servidor a la etapa 2
+
+```bash
+cd ~/ig-bot && git pull
+.venv/bin/pip install -r requirements.txt
+nano .env   # añade ANTHROPIC_API_KEY=... (ver .env.example)
+sudo systemctl restart igbot
+sudo journalctl -u igbot -f
+```
+
+Manda un DM desde la cuenta de prueba; en los logs aparece `Claude: N turnos, US$...` con el costo de cada respuesta.
+
+Respaldo diario de la memoria (opcional, `crontab -e`):
+```
+0 4 * * * sqlite3 ~/ig-bot/data/bot.db ".backup ~/ig-bot/data/bot-$(date +\%a).db"
+```
+(necesita `sudo apt install sqlite3`; guarda una copia por día de la semana)
+
+Pruebas locales: `pip install pytest && python -m pytest -q`
+
 ---
+
+# Instalación desde cero (etapa 1)
 
 ## 1. DNS (en el panel de tu dominio)
 
@@ -71,7 +119,7 @@ El bot escucha en el puerto 8001 porque el 8000 ya lo usaba otra app en esta ins
 
 ## 6. Probar
 
-Desde **otra** cuenta de Instagram, manda un DM a tu cuenta profesional. Debería llegar "hola".
+Desde **otra** cuenta de Instagram, manda un DM a tu cuenta profesional. Debería contestar el agente.
 
 Ver lo que pasa en vivo:
 ```bash
@@ -80,6 +128,6 @@ sudo journalctl -u igbot -f
 
 ### Si no responde
 
-- **No aparece "Evento recibido" en los logs**: con la app en modo *Desarrollo*, Meta solo entrega mensajes de cuentas con rol en la app. Añade la cuenta que envía como **Instagram Tester** (Roles de la app → Roles) y acepta la invitación desde Instagram (Configuración → Apps y sitios web → Invitaciones de tester). También revisa en la app de Instagram de tu cuenta profesional: Configuración → Mensajes → *Permitir acceso a los mensajes* (herramientas conectadas).
-- **"Evento recibido" sale pero hay "Error enviando mensaje"**: el error de Meta aparece justo en esa línea. Casi siempre es el token (caducado o copiado mal).
+- **No aparece nada en los logs al mandar un DM**: con la app en modo *Desarrollo*, Meta solo entrega mensajes de cuentas con rol en la app. Añade la cuenta que envía como **Instagram Tester** (Roles de la app → Roles) y acepta la invitación desde Instagram (Configuración → Apps y sitios web → Invitaciones de tester). También revisa en la app de Instagram de tu cuenta profesional: Configuración → Mensajes → *Permitir acceso a los mensajes* (herramientas conectadas).
+- **Aparece "Fallo contestando a ..."**: el error viene debajo. Si es de Instagram (401/400) casi siempre es el token; si es de Claude, revisa `ANTHROPIC_API_KEY`.
 - **La verificación del webhook falla**: comprueba que `/health` abre con HTTPS y que el token de verificación coincide exactamente.

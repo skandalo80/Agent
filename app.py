@@ -1,26 +1,61 @@
-"""Etapa 1: webhook de Instagram que responde "hola" a cada DM."""
+"""Webhook de Instagram + agente de Claude.
+
+Flujo de un DM:
+1. Meta llama a POST /webhook. Se valida la firma, se guarda el mensaje como
+   pendiente y se responde 200 al instante (si tardamos, Meta reintenta).
+2. El Dispatcher despierta la conversación de ese usuario: espera unos
+   segundos por si manda más mensajes y luego los contesta juntos y en orden.
+3. El agente arma el contexto (datos guardados + resumen + últimos mensajes),
+   le pide la respuesta a Claude y se envía por la API de Instagram.
+"""
+import asyncio
 import hashlib
 import hmac
 import logging
-import os
+from contextlib import asynccontextmanager
 
-import httpx
-from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
 
-load_dotenv()
-
-VERIFY_TOKEN = os.environ["IG_VERIFY_TOKEN"]
-APP_SECRET = os.environ["IG_APP_SECRET"]
-ACCESS_TOKEN = os.environ["IG_ACCESS_TOKEN"]
-API_VERSION = os.getenv("IG_API_VERSION", "v23.0")
-REPLY_TEXT = os.getenv("REPLY_TEXT", "hola")
+from igbot import agent, config
+from igbot.dispatcher import Dispatcher
+from igbot.instagram import Instagram
+from igbot.store import Store
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("igbot")
 
-app = FastAPI()
+store = Store(config.DB_PATH)
+instagram = Instagram(store)
+
+
+async def handle(user_id: str, rows: list[tuple[int, str]]) -> None:
+    """Contesta todos los mensajes pendientes de un usuario de una sola vez."""
+    text = await agent.reply(store, user_id, [t for _, t in rows])
+    await instagram.send_text(user_id, text)
+    await store.mark_answered(user_id, [i for i, _ in rows], text)
+    try:
+        await agent.summarize_if_needed(store, user_id)
+    except Exception:
+        log.exception("No se pudo actualizar el resumen de %s", user_id)
+
+
+dispatcher = Dispatcher(store, handle, config.DEBOUNCE_SECONDS, config.MAX_CONCURRENT)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await store.open()
+    await dispatcher.resume_pending()
+    refresher = asyncio.create_task(instagram.refresh_loop())
+    yield
+    refresher.cancel()
+    await dispatcher.stop()
+    await instagram.close()
+    await store.close()
+
+
+app = FastAPI(lifespan=lifespan)
 
 
 @app.get("/health")
@@ -48,7 +83,7 @@ def privacy():
 def verify(request: Request):
     """Meta llama aquí una vez para confirmar que el webhook es nuestro."""
     p = request.query_params
-    if p.get("hub.mode") == "subscribe" and p.get("hub.verify_token") == VERIFY_TOKEN:
+    if p.get("hub.mode") == "subscribe" and p.get("hub.verify_token") == config.VERIFY_TOKEN:
         return Response(content=p.get("hub.challenge", ""), media_type="text/plain")
     raise HTTPException(status_code=403, detail="verify token incorrecto")
 
@@ -56,22 +91,15 @@ def verify(request: Request):
 def signature_ok(body: bytes, header: str | None) -> bool:
     if not header or not header.startswith("sha256="):
         return False
-    expected = hmac.new(APP_SECRET.encode(), body, hashlib.sha256).hexdigest()
+    expected = hmac.new(config.APP_SECRET.encode(), body, hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected, header.removeprefix("sha256="))
 
 
-async def send_text(recipient_id: str, text: str) -> None:
-    url = f"https://graph.instagram.com/{API_VERSION}/me/messages"
-    async with httpx.AsyncClient(timeout=10) as client:
-        r = await client.post(
-            url,
-            headers={"Authorization": f"Bearer {ACCESS_TOKEN}"},
-            json={"recipient": {"id": recipient_id}, "message": {"text": text}},
-        )
-    if r.is_error:
-        log.error("Error enviando mensaje: %s %s", r.status_code, r.text)
-    else:
-        log.info("Respondido a %s", recipient_id)
+def message_text(message: dict) -> str:
+    if message.get("text"):
+        return message["text"]
+    kinds = {a.get("type", "archivo") for a in message.get("attachments", [])}
+    return f"[envió: {', '.join(sorted(kinds)) or 'algo que no es texto'}]"
 
 
 @app.post("/webhook")
@@ -81,15 +109,15 @@ async def receive(request: Request):
         raise HTTPException(status_code=403, detail="firma inválida")
 
     data = await request.json()
-    log.info("Evento recibido: %s", data)
-
     for entry in data.get("entry", []):
         for event in entry.get("messaging", []):
             message = event.get("message")
             # Ignorar lo que no sea un mensaje y nuestros propios envíos (eco),
             # si no el bot se respondería a sí mismo en bucle.
-            if not message or message.get("is_echo"):
+            if not message or message.get("is_echo") or message.get("is_deleted"):
                 continue
-            await send_text(event["sender"]["id"], REPLY_TEXT)
+            user_id = event["sender"]["id"]
+            if await store.add_incoming(user_id, message["mid"], message_text(message)):
+                dispatcher.notify(user_id)
 
     return {"ok": True}
