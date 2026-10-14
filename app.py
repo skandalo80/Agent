@@ -7,6 +7,7 @@ import os
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.responses import HTMLResponse
 
 load_dotenv()
 
@@ -25,6 +26,22 @@ app = FastAPI()
 @app.get("/health")
 def health():
     return {"ok": True}
+
+
+PRIVACY_HTML = """<!doctype html><html lang="es"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Política de privacidad</title>
+<body style="font-family:sans-serif;max-width:40rem;margin:2rem auto;padding:0 1rem;line-height:1.5">
+<h1>Política de privacidad</h1>
+<p>Este servicio responde automáticamente a los mensajes directos que recibe la cuenta de Instagram asociada.</p>
+<p>Solo se procesan el identificador de Instagram de quien escribe y el contenido del mensaje, únicamente para generar la respuesta. No se venden ni se comparten estos datos con terceros.</p>
+<p>Para pedir que se borre cualquier dato, escribe un mensaje directo a la cuenta de Instagram indicándolo.</p>
+</body></html>"""
+
+
+@app.get("/privacy", response_class=HTMLResponse)
+def privacy():
+    return PRIVACY_HTML
 
 
 @app.get("/webhook")
