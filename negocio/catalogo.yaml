@@ -49,6 +49,7 @@ paquetes:
       - Cotizaciones en PDF por correo y DM
       - "Comentarios: respuesta pública, \"comenta X y te mando DM\" y filtro de spam"
       - Conexión a Google Sheets (inventario, precios)
+      - Publica en tu Instagram mandándole la foto por DM (al momento o programado)
       - Reporte semanal por correo
 
 extras:
