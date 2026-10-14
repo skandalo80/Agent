@@ -74,6 +74,22 @@ class Instagram:
         )
         r.raise_for_status()
 
+    async def hide_comment(self, comment_id: str) -> None:
+        await self._graph("POST", comment_id, hide="true")
+
+    async def set_ice_breakers(self, questions: list[str]) -> None:
+        """Botones de inicio: preguntas que salen al abrir un chat nuevo (máximo 4)."""
+        r = await self.http.post(
+            f"{GRAPH}/{config.API_VERSION}/me/messenger_profile",
+            headers={"Authorization": f"Bearer {await self.token()}"},
+            json={"platform": "instagram", "ice_breakers": [{
+                "locale": "default",
+                "call_to_actions": [{"question": q, "payload": f"boton_{i}"} for i, q in enumerate(questions, 1)],
+            }]},
+        )
+        if r.is_error:
+            raise RuntimeError(f"Instagram respondió {r.status_code}: {r.text[:300]}")
+
     async def permalink(self, media_id: str) -> str:
         key = f"permalink:{media_id}"
         if cached := await self.store.get(key):

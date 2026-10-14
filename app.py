@@ -21,7 +21,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse
 
-from igbot import admin, agent, comentarios, config, reporte
+from igbot import admin, agent, botones, comentarios, config, reporte
 from igbot.dispatcher import Dispatcher
 from igbot.google import Google
 from igbot.instagram import Instagram
@@ -78,11 +78,15 @@ dispatcher = Dispatcher(store, handle, config.DEBOUNCE_SECONDS, config.MAX_CONCU
 async def lifespan(app: FastAPI):
     await store.open()
     await my_account()
-    if google and comentarios.available():
-        try:
-            await instagram.subscribe("messages,comments")
-        except Exception:
-            log.exception("No se pudo suscribir la cuenta a los comentarios")
+    # Mensajes, toques a los botones de inicio y, si hay reglas, comentarios.
+    fields = "messages,messaging_postbacks"
+    if google and comentarios.available() or config.HIDE_SPAM:
+        fields += ",comments"
+    try:
+        await instagram.subscribe(fields)
+    except Exception:
+        log.exception("No se pudo suscribir la cuenta a los avisos")
+    await botones.sync(store, instagram)
     await dispatcher.resume_pending()
     loops = [asyncio.create_task(instagram.refresh_loop())]
     if config.ADMIN_IG_IDS:
@@ -257,12 +261,16 @@ async def receive(request: Request):
                 continue
             value = change.get("value") or {}
             log.info("Comentario de %s: %r", (value.get("from") or {}).get("username"), value.get("text", "")[:80])
-            if google and comentarios.available():
+            if google and comentarios.available() or config.HIDE_SPAM:
                 in_background(handle_comment(value))
             else:
                 log.info("Comentarios sin configurar (falta SHEET_COMMENTS o Google); se ignora")
         for event in entry.get("messaging", []):
             message = event.get("message")
+            if postback := event.get("postback"):
+                # Tocaron un botón de inicio: se contesta como si hubiera escrito la pregunta.
+                message = {"mid": postback.get("mid") or f"pb-{event.get('timestamp')}",
+                           "text": postback.get("title", "")}
             if not message or message.get("is_deleted"):
                 continue
             # Eco = un DM que salió de la cuenta. Nunca se contesta (sería un

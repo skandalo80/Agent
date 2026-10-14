@@ -1,0 +1,8 @@
+# Botones de inicio: preguntas que salen al abrir un chat nuevo con la cuenta
+# (máximo 4, de hasta 80 caracteres). Al tocar una, el bot la contesta como
+# cualquier mensaje. Edita y reinicia (igbot@nortex).
+preguntas:
+  - ¿Qué productos manejan?
+  - Quiero cotizar uniformes con mi logo
+  - ¿Cuánto tardan en entregar?
+  - ¿Tienen existencias en mi talla?
