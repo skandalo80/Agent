@@ -101,8 +101,9 @@ def prompt_text() -> str:
     ]
     if demo := neg.get("demo_instagram"):
         out.append(
-            f"Demo: el negocio de demostración {demo} tiene funcionando las funciones avanzadas."
-            f" Si alguien quiere verlas, invítalo a escribirle a {demo}."
+            f"Demo: {demo} es {neg.get('demo_descripcion', 'nuestro negocio de demostración')}."
+            f" Si alguien quiere ver al bot funcionando, invítalo a escribirle a {demo} como si"
+            " fuera un cliente. Lo que aún no está en la demo, ofrece mostrarlo en la llamada con Skandar."
         )
     else:
         out.append(

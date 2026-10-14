@@ -45,7 +45,7 @@ def test_precios_salen_del_catalogo():
 
 def test_el_prompt_lleva_el_catalogo(monkeypatch):
     prompt = bot.agent.system_prompt()
-    assert "US$149 al mes" in prompt and "aún no hay cuenta de demostración" in prompt
+    assert "US$149 al mes" in prompt and "escribirle a @nortex_uniformes" in prompt
     cat = {**catalog.load(), "negocio": {**catalog.load()["negocio"], "demo_instagram": "@demo"}}
     monkeypatch.setattr(catalog, "load", lambda: cat)
     assert "escribirle a @demo" in bot.agent.system_prompt()
