@@ -5,16 +5,22 @@ Instagram: no pueden leer ni tocar datos de otra persona. Las reglas de
 negocio (horario, límites, a quién se puede escribir) se validan aquí en
 código, no en el prompt, para que nadie pueda saltárselas con un DM.
 """
+import logging
 import re
+import secrets
 import time
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from claude_agent_sdk import create_sdk_mcp_server, tool
 
-from . import config
+from . import catalog, config
 from .google import Google
+from .instagram import Instagram
 from .store import Store
+
+log = logging.getLogger("igbot.tools")
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 DAYS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
@@ -95,21 +101,25 @@ def memory_tools(store: Store, user_id: str) -> list:
     return [recordar, olvidar]
 
 
+async def check_client_email(store: Store, user_id: str, email: str) -> str | None:
+    """Solo se puede escribir/invitar a un correo que la persona dio en el chat."""
+    if not EMAIL_RE.match(email):
+        return "Ese correo no parece válido."
+    if not await store.user_wrote(user_id, email):
+        return (
+            "Ese correo no lo escribió la persona en el chat. Pídele que te escriba"
+            " su correo en un mensaje antes de usarlo."
+        )
+    return None
+
+
 def workspace_tools(store: Store, google: Google, user_id: str, state: dict | None = None) -> list:
     # Se marca cuando una herramienta hace algo fuera del chat (agendar,
     # cancelar, enviar correo): esa respuesta ya no se puede descartar.
     state = state if state is not None else {}
 
     async def check_email(email: str) -> str | None:
-        """Solo se puede escribir/invitar a un correo que la persona dio en el chat."""
-        if not EMAIL_RE.match(email):
-            return "Ese correo no parece válido."
-        if not await store.user_wrote(user_id, email):
-            return (
-                "Ese correo no lo escribió la persona en el chat. Pídele que te escriba"
-                " su correo en un mensaje antes de usarlo."
-            )
-        return None
+        return await check_client_email(store, user_id, email)
 
     @tool(
         "ver_disponibilidad",
@@ -225,10 +235,127 @@ def workspace_tools(store: Store, google: Google, user_id: str, state: dict | No
     return [ver_disponibilidad, agendar_reunion, mis_reuniones, cancelar_reunion, enviar_correo]
 
 
-def build(store: Store, google: Google | None, user_id: str, state: dict):
+QUOTE_ARGS = {"paquete": str, "pago": str, "bloques_extra": int}
+
+
+def quote_tools(
+    store: Store, google: Google, instagram: Instagram | None, user_id: str, state: dict | None = None
+) -> list:
+    state = state if state is not None else {}
+
+    @tool(
+        "cotizar",
+        "Calcula el precio exacto de un paquete del catálogo para mostrárselo a la persona. paquete:"
+        " la clave del catálogo; pago: 'mensual' o 'anual'; bloques_extra: bloques de respuestas"
+        " extra (0 si no pidió más). Usa SIEMPRE esto para dar precios; nunca hagas cuentas tú.",
+        QUOTE_ARGS,
+    )
+    async def cotizar(args):
+        try:
+            q = catalog.quote(args["paquete"], args["pago"], int(args["bloques_extra"]))
+        except ValueError as e:
+            return error(str(e))
+        return ok(q.texto())
+
+    @tool(
+        "enviar_cotizacion",
+        "Genera la cotización formal en PDF (con folio) y se la manda a la persona por correo y"
+        " por este DM, con copia al dueño. Antes confirma con ella el paquete, la forma de pago y"
+        " su correo. nombre y empresa son opcionales (cadena vacía si no los dio).",
+        {**QUOTE_ARGS, "email": str, "nombre": str, "empresa": str},
+    )
+    async def enviar_cotizacion(args):
+        email = args["email"].strip()
+        if problem := await check_client_email(store, user_id, email):
+            return error(problem)
+        try:
+            q = catalog.quote(args["paquete"], args["pago"], int(args["bloques_extra"]))
+        except ValueError as e:
+            return error(str(e))
+        if await store.emails_since(user_id, time.time() - 86400) >= config.MAX_EMAILS_PER_USER_PER_DAY:
+            return error("Ya se le enviaron los correos permitidos hoy. Ofrece seguir por aquí.")
+
+        nombre, empresa = args["nombre"].strip()[:80], args["empresa"].strip()[:80]
+        token = secrets.token_urlsafe(16)
+        number = await store.add_quote(user_id, token, q.paquete, q.pago, q.bloques_extra, q.primer_pago, email)
+        folio = f"COT-{number:04d}"
+        data = catalog.pdf(q, folio, nombre, empresa, email, now().date())
+        folder = Path(config.QUOTES_DIR)
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / f"{token}.pdf").write_bytes(data)
+
+        neg = catalog.load()["negocio"]
+        subject = f"Cotización {folio} · {neg['nombre']}"
+        body = (
+            f"Hola{' ' + nombre if nombre else ''}:\n\n"
+            f"Te comparto la cotización {folio} que platicamos por Instagram (va en el PDF adjunto).\n\n"
+            f"{q.texto()}\n\n"
+            f"Es válida por {catalog.load()['vigencia_dias']} días. Si tienes dudas, contesta este"
+            f" correo o escríbenos a {neg['instagram']}.\n\nSaludos,\n{neg['nombre']}"
+        )
+        await google.send_email(
+            config.MAIL_FROM, config.MAIL_FROM_NAME, email, config.MAIL_CC, subject, body,
+            attachments=[(f"Cotizacion-{folio}.pdf", data)],
+        )
+        await store.log_email(user_id, email, subject)
+        state["acted"] = True
+
+        by_dm = ""
+        if instagram and config.PUBLIC_URL:
+            try:
+                await instagram.send_file(user_id, f"{config.PUBLIC_URL}/cotizaciones/{token}.pdf")
+                by_dm = " y el PDF ya va en este chat"
+            except Exception:
+                log.exception("No se pudo mandar el PDF por DM a %s", user_id)
+        return ok(f"Cotización {folio} enviada a {email}{by_dm}.\n{q.texto()}")
+
+    return [cotizar, enviar_cotizacion]
+
+
+def human_tools(store: Store, google: Google | None, user_id: str, state: dict | None = None) -> list:
+    state = state if state is not None else {}
+
+    @tool(
+        "pasar_a_humano",
+        "Avisa al dueño para que una persona continúe esta conversación y deja de contestar aquí"
+        " por unas horas. Úsalo si la persona lo pide, si quiere negociar precio o algo fuera del"
+        " catálogo, o si está molesta. motivo: una línea con qué necesita.",
+        {"motivo": str},
+    )
+    async def pasar_a_humano(args):
+        await store.pause(user_id, time.time() + config.HUMAN_PAUSE_HOURS * 3600)
+        state["acted"] = True
+        if google and config.OWNER_EMAIL:
+            facts = await store.facts(user_id)
+            recent = await store.recent(user_id, 10)
+            body = (
+                f"Alguien en Instagram pidió hablar con una persona.\n\nMotivo: {args['motivo'][:500]}\n\n"
+                + ("Datos guardados:\n" + "\n".join(f"- {k}: {v}" for k, v in facts.items()) + "\n\n" if facts else "")
+                + "Últimos mensajes:\n"
+                + "\n".join(f"{'Cliente' if r == 'user' else 'Bot'}: {t}" for r, t in recent)
+                + f"\n\nEl bot no contestará en esa conversación durante {config.HUMAN_PAUSE_HOURS:g} horas."
+                " Contéstale desde Instagram."
+            )
+            try:
+                await google.send_email(
+                    config.MAIL_FROM, config.MAIL_FROM_NAME, config.OWNER_EMAIL, "",
+                    "Instagram: un cliente quiere hablar contigo", body,
+                )
+            except Exception:
+                log.exception("No se pudo avisar al dueño de %s", user_id)
+        return ok("Listo: el dueño fue avisado y continuará la conversación. Despídete por ahora.")
+
+    return [pasar_a_humano]
+
+
+def build(
+    store: Store, google: Google | None, user_id: str, state: dict, instagram: Instagram | None = None
+):
     """Servidor MCP con las herramientas de este usuario y la lista de permitidas."""
-    tools = memory_tools(store, user_id)
+    tools = memory_tools(store, user_id) + human_tools(store, google, user_id, state)
     if google:
         tools += workspace_tools(store, google, user_id, state)
+        if catalog.available():
+            tools += quote_tools(store, google, instagram, user_id, state)
     server = create_sdk_mcp_server("bot", tools=tools)
     return server, [f"mcp__bot__{t.name}" for t in tools]

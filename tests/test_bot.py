@@ -109,7 +109,7 @@ def test_split_text():
 def test_webhook_de_punta_a_punta(monkeypatch):
     sent = []
 
-    async def fake_reply(store, google, user_id, new_messages):
+    async def fake_reply(store, google, user_id, new_messages, instagram=None):
         if new_messages == ["hola"]:  # mientras "piensa" llega otro mensaje
             await store.add_incoming("123", "m2", "info?")
         return "respuesta a: " + " / ".join(new_messages), False
@@ -124,6 +124,12 @@ def test_webhook_de_punta_a_punta(monkeypatch):
     monkeypatch.setattr(bot.agent, "summarize_if_needed", fake_summary)
     monkeypatch.setattr(bot.instagram, "send_text", fake_send)
     monkeypatch.setattr(bot.instagram, "refresh_loop", lambda: asyncio.sleep(0))
+    monkeypatch.setattr(bot, "ECHO_WAIT", 0)
+
+    async def ours(mid):  # el eco de esta prueba es de un DM que mandó el bot
+        return True
+
+    monkeypatch.setattr(bot.store, "was_sent", ours)
 
     def post(payload):
         body = json.dumps(payload).encode()
@@ -134,8 +140,10 @@ def test_webhook_de_punta_a_punta(monkeypatch):
         )
 
     def dm(mid, text, echo=False):
+        # En un eco el remitente es la cuenta del negocio y el destinatario, el cliente.
+        ids = ("negocio", "123") if echo else ("123", "negocio")
         return {"entry": [{"messaging": [{
-            "sender": {"id": "123"},
+            "sender": {"id": ids[0]}, "recipient": {"id": ids[1]},
             "message": {"mid": mid, "text": text, **({"is_echo": True} if echo else {})},
         }]}]}
 

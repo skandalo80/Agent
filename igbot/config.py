@@ -13,6 +13,11 @@ API_VERSION = os.getenv("IG_API_VERSION", "v23.0")
 
 DB_PATH = os.getenv("DB_PATH", "data/bot.db")
 PROMPT_PATH = os.getenv("PROMPT_PATH", "prompts/system.md")
+# Paquetes y precios de las cotizaciones (si no existe, no hay cotizaciones).
+CATALOG_PATH = os.getenv("CATALOG_PATH", "negocio/catalogo.yaml")
+QUOTES_DIR = os.getenv("QUOTES_DIR", "data/cotizaciones")
+# Dirección pública del bot, para mandar el PDF por DM (Instagram lo descarga de ahí).
+PUBLIC_URL = os.getenv("PUBLIC_URL", "").rstrip("/")
 
 MODEL = os.getenv("CLAUDE_MODEL", "claude-opus-5-5")
 EFFORT = os.getenv("CLAUDE_EFFORT", "low")
@@ -40,3 +45,9 @@ MEETING_MINUTES = int(os.getenv("MEETING_MINUTES", "30"))
 MIN_NOTICE_HOURS = float(os.getenv("MIN_NOTICE_HOURS", "2"))
 MAX_MEETINGS_PER_USER = int(os.getenv("MAX_MEETINGS_PER_USER", "2"))
 MAX_EMAILS_PER_USER_PER_DAY = int(os.getenv("MAX_EMAILS_PER_USER_PER_DAY", "3"))
+# A quién avisar cuando alguien pide hablar con una persona (por defecto, tu Gmail).
+OWNER_EMAIL = os.getenv("OWNER_EMAIL", "") or MAIL_FROM
+
+# Horas que el bot se queda callado en una conversación cuando la toma una
+# persona (porque se pidió o porque contestaste tú desde Instagram).
+HUMAN_PAUSE_HOURS = float(os.getenv("HUMAN_PAUSE_HOURS", "12"))

@@ -12,10 +12,13 @@ import asyncio
 import hashlib
 import hmac
 import logging
+import re
+import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 
 from igbot import agent, config
 from igbot.dispatcher import Dispatcher
@@ -43,8 +46,12 @@ async def handle(user_id: str, rows: list[tuple[int, str]]) -> None:
     respuesta se descarta y se vuelve a generar con todos, para mandar una
     sola. No se descarta si ya agendó, canceló o mandó un correo.
     """
+    if await store.paused_until(user_id) > time.time():
+        # La conversación la lleva una persona: se guarda pero no se contesta.
+        await store.mark_seen([i for i, _ in rows])
+        return
     for attempt in range(MAX_REDRAFTS + 1):
-        text, acted = await agent.reply(store, google, user_id, [t for _, t in rows])
+        text, acted = await agent.reply(store, google, user_id, [t for _, t in rows], instagram)
         latest = await store.pending(user_id)
         if acted or len(latest) == len(rows) or attempt == MAX_REDRAFTS:
             break
@@ -99,6 +106,39 @@ def privacy():
     return PRIVACY_HTML
 
 
+QUOTE_NAME = re.compile(r"^[A-Za-z0-9_-]{20,40}$")
+
+
+@app.get("/cotizaciones/{token}.pdf")
+def quote_pdf(token: str):
+    """PDF de una cotización; el nombre es secreto y aleatorio, así nadie adivina otras."""
+    path = Path(config.QUOTES_DIR) / f"{token}.pdf"
+    if not QUOTE_NAME.match(token) or not path.is_file():
+        raise HTTPException(status_code=404)
+    return FileResponse(path, media_type="application/pdf", filename="cotizacion.pdf")
+
+
+ECHO_WAIT = 5  # segundos para que el bot termine de anotar sus propios envíos
+
+
+async def owner_replied(user_id: str, mid: str, text: str) -> None:
+    """Eco de un DM: si no lo mandó el bot, lo escribió el dueño desde Instagram.
+
+    En ese caso el bot se calla en esa conversación por HUMAN_PAUSE_HOURS.
+    """
+    await asyncio.sleep(ECHO_WAIT)
+    if await store.was_sent(mid) or (
+        text and await store.bot_said(user_id, text, time.time() - 600)
+    ):
+        return
+    log.info("El dueño contestó a %s; el bot se pausa en esa conversación", user_id)
+    await store.pause(user_id, time.time() + config.HUMAN_PAUSE_HOURS * 3600)
+    await store.add_owner_message(user_id, mid, text)
+
+
+background: set[asyncio.Task] = set()
+
+
 @app.get("/webhook")
 def verify(request: Request):
     """Meta llama aquí una vez para confirmar que el webhook es nuestro."""
@@ -132,9 +172,16 @@ async def receive(request: Request):
     for entry in data.get("entry", []):
         for event in entry.get("messaging", []):
             message = event.get("message")
-            # Ignorar lo que no sea un mensaje y nuestros propios envíos (eco),
-            # si no el bot se respondería a sí mismo en bucle.
-            if not message or message.get("is_echo") or message.get("is_deleted"):
+            if not message or message.get("is_deleted"):
+                continue
+            # Eco = un DM que salió de la cuenta. Nunca se contesta (sería un
+            # bucle), pero si lo escribió el dueño a mano, el bot se calla.
+            if message.get("is_echo"):
+                task = asyncio.create_task(
+                    owner_replied(event["recipient"]["id"], message["mid"], message_text(message))
+                )
+                background.add(task)
+                task.add_done_callback(background.discard)
                 continue
             user_id = event["sender"]["id"]
             if await store.add_incoming(user_id, message["mid"], message_text(message)):

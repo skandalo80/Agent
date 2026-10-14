@@ -26,16 +26,27 @@ class Instagram:
     async def token(self) -> str:
         return await self.store.get("ig_token") or config.ACCESS_TOKEN
 
+    async def _send(self, recipient_id: str, message: dict) -> None:
+        r = await self.http.post(
+            f"{GRAPH}/{config.API_VERSION}/me/messages",
+            headers={"Authorization": f"Bearer {await self.token()}"},
+            json={"recipient": {"id": recipient_id}, "message": message},
+        )
+        r.raise_for_status()
+        # Se anota el id para reconocer el eco y no confundirlo con el dueño.
+        if mid := r.json().get("message_id"):
+            await self.store.add_sent(mid)
+
     async def send_text(self, recipient_id: str, text: str) -> None:
-        token = await self.token()
         for chunk in split_text(text):
-            r = await self.http.post(
-                f"{GRAPH}/{config.API_VERSION}/me/messages",
-                headers={"Authorization": f"Bearer {token}"},
-                json={"recipient": {"id": recipient_id}, "message": {"text": chunk}},
-            )
-            r.raise_for_status()
+            await self._send(recipient_id, {"text": chunk})
         log.info("Respondido a %s", recipient_id)
+
+    async def send_file(self, recipient_id: str, url: str) -> None:
+        """Manda un PDF (u otro archivo) que Instagram descarga de `url`."""
+        await self._send(
+            recipient_id, {"attachment": {"type": "file", "payload": {"url": url}}}
+        )
 
     async def refresh_token(self) -> None:
         r = await self.http.get(

@@ -1,0 +1,65 @@
+# Catálogo del negocio: de aquí salen los precios de las cotizaciones.
+# Claude NUNCA calcula precios: el código los toma de este archivo.
+# Después de editarlo, reinicia el bot (sudo systemctl restart igbot).
+
+negocio:
+  nombre: Agentes IA by Skandar
+  instagram: "@carmachskandar"
+  correo: skandar.carmach@gmail.com
+  # Cuenta de Instagram del negocio de demostración, donde se ven funcionando
+  # las funciones avanzadas. Déjalo vacío mientras no exista.
+  demo_instagram: ""
+  descripcion: >-
+    Instalamos y operamos agentes de inteligencia artificial que atienden el
+    Instagram de tu negocio 24/7: contestan DMs, agendan citas, mandan
+    cotizaciones y avisan cuando hay un cliente listo para comprar.
+
+moneda: USD
+vigencia_dias: 15
+# El pago anual cobra este número de mensualidades (12 - 2 meses gratis).
+meses_pagados_en_anual: 10
+
+paquetes:
+  basico:
+    nombre: Básico
+    instalacion: 99
+    mensualidad: 49
+    respuestas_mes: 1000
+    incluye:
+      - Responde DMs 24/7 con IA, con el tono y la información de tu negocio
+      - Recuerda a cada cliente (memoria por persona)
+      - Preguntas frecuentes y botones de inicio
+  pro:
+    nombre: Pro
+    instalacion: 199
+    mensualidad: 129
+    respuestas_mes: 2500
+    incluye:
+      - Todo lo del Básico
+      - Agenda citas en Google Calendar con link de Meet
+      - Manda correos y te avisa de prospectos
+      - Pasar a humano (el bot se calla cuando tú contestas)
+  premium:
+    nombre: Premium
+    instalacion: 349
+    mensualidad: 149
+    respuestas_mes: 5000
+    incluye:
+      - Todo lo del Pro
+      - Cotizaciones en PDF por correo y DM
+      - "Comentarios: respuesta pública, \"comenta X y te mando DM\" y filtro de spam"
+      - Conexión a Google Sheets (inventario, precios)
+      - Reporte semanal por correo
+
+extras:
+  respuestas:
+    descripcion: Bloque de 500 respuestas adicionales al mes
+    bloque: 500
+    precio: 15
+    max_bloques: 20
+
+condiciones:
+  - La instalación se paga una sola vez, al contratar.
+  - La mensualidad se cobra por adelantado; se puede cancelar en cualquier momento.
+  - Con pago anual pagas 10 mensualidades y recibes 12 meses de servicio.
+  - Las respuestas no usadas no se acumulan al mes siguiente.
