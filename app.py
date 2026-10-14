@@ -47,8 +47,9 @@ async def handle(user_id: str, rows: list[tuple[int, str]]) -> None:
     respuesta se descarta y se vuelve a generar con todos, para mandar una
     sola. No se descarta si ya agendó, canceló o mandó un correo.
     """
-    if await store.paused_until(user_id) > time.time():
+    if (until := await store.paused_until(user_id)) > time.time():
         # La conversación la lleva una persona: se guarda pero no se contesta.
+        log.info("Conversación con %s en pausa %.1f h más; no se contesta", user_id, (until - time.time()) / 3600)
         await store.mark_seen([i for i, _ in rows])
         return
     for attempt in range(MAX_REDRAFTS + 1):
@@ -223,10 +224,17 @@ async def receive(request: Request):
         return {"ok": True}
     for entry in data.get("entry", []):
         if mine and str(entry.get("id")) != mine:
-            continue  # es de otra cuenta de la app; lo atiende su propio proceso
+            log.debug("Aviso de otra cuenta (%s); lo atiende su proceso", entry.get("id"))
+            continue
         for change in entry.get("changes", []):
-            if change.get("field") == "comments" and google and comentarios.available():
-                in_background(handle_comment(change.get("value") or {}))
+            if change.get("field") != "comments":
+                continue
+            value = change.get("value") or {}
+            log.info("Comentario de %s: %r", (value.get("from") or {}).get("username"), value.get("text", "")[:80])
+            if google and comentarios.available():
+                in_background(handle_comment(value))
+            else:
+                log.info("Comentarios sin configurar (falta SHEET_COMMENTS o Google); se ignora")
         for event in entry.get("messaging", []):
             message = event.get("message")
             if not message or message.get("is_deleted"):
@@ -239,6 +247,7 @@ async def receive(request: Request):
                 )
                 continue
             user_id = event["sender"]["id"]
+            log.info("DM de %s", user_id)
             if await store.add_incoming(user_id, message["mid"], message_text(message)):
                 dispatcher.notify(user_id)
 
