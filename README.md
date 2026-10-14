@@ -120,12 +120,19 @@ Cuando alguien comenta una publicación con una palabra clave (p. ej. PRECIO), e
 - No importan mayúsculas, acentos ni plurales. Si el comentario no trae la palabra exacta, Claude decide si se refiere a ella ("¿cuánto cuestan?" → PRECIO).
 - Si un comentario pide varias cosas, se manda un solo DM con todos los mensajes (Instagram permite un DM por comentario, dentro de 7 días).
 - Una cuarta columna opcional es una respuesta pública al comentario.
+- **Filtro de spam** (opcional, `HIDE_SPAM=1` en el `.env` de la cuenta): en todas las publicaciones, Claude revisa cada comentario que no trae una palabra clave y oculta el spam (publicidad ajena, "sígueme", estafas, links sospechosos, contenido sexual, insultos). Las quejas y críticas nunca se ocultan. Oculto no es borrado: lo sigue viendo quien lo escribió y tú lo puedes mostrar desde Instagram. Funciona aunque no haya hoja de reglas.
 - Los cambios en la hoja se notan en unos 5 minutos, sin reiniciar. Los comentarios quedan en la tabla `comments` (para el reporte semanal).
 
 Para activarlo en una cuenta:
 1. En la app de Meta → *API de Instagram con inicio de sesión de Instagram*: en **Webhooks** suscribe el campo `comments`, y revisa que la app tenga el permiso `instagram_business_manage_comments` (si no lo tenía, genera de nuevo el token de esa cuenta y reemplázalo en su `.env`).
 2. Crea la hoja (de tu misma cuenta de Google) y pon su link en `SHEET_COMMENTS` del `.env` de la cuenta.
 3. Reinicia (`sudo systemctl restart igbot@nortex`). Al arrancar, el bot suscribe la cuenta a mensajes y comentarios.
+
+## Botones de inicio
+
+Las preguntas que Instagram muestra cuando alguien abre un chat nuevo con la cuenta (máximo 4, de hasta 80 caracteres) viven en `negocio/botones.yaml` (vendedor) y `clientes/<cuenta>/botones.yaml`. Al reiniciar, el bot se las manda a Instagram si cambiaron. Cuando alguien toca una, el bot la contesta como cualquier mensaje.
+
+Para que lleguen los toques, en la app de Meta → *Webhooks* suscribe también el campo `messaging_postbacks`.
 
 ## Administradores: publicar por DM y reactivar chats
 

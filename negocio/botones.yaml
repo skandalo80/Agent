@@ -1,0 +1,8 @@
+# Botones de inicio: preguntas que salen al abrir un chat nuevo con la cuenta
+# (máximo 4, de hasta 80 caracteres). Al tocar una, el bot la contesta como
+# cualquier mensaje. Edita y reinicia (igbot).
+preguntas:
+  - ¿Qué hace un agente de IA en mi Instagram?
+  - ¿Cuánto cuestan los paquetes?
+  - Quiero ver una demo
+  - Agendar una llamada

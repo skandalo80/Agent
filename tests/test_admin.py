@@ -276,3 +276,37 @@ def test_el_asistente_del_admin_arma_sus_herramientas(monkeypatch):
     assert run(main()) == ("listo", False)
     assert "mcp__admin__preparar_publicacion" in seen["allowed"] and "[foto 1] publica" in seen["prompt"]
     assert "confirmar_publicacion" in seen["system"] and "enviar_reporte" in seen["system"]
+
+
+def test_tocar_un_boton_de_inicio_se_contesta_como_mensaje(monkeypatch):
+    calls = []
+
+    async def fake_reply(store, google, user_id, new_messages, instagram=None):
+        calls.append(new_messages)
+        return "ok", False
+
+    async def nothing(*a):
+        pass
+
+    monkeypatch.setattr(bot.agent, "reply", fake_reply)
+    monkeypatch.setattr(bot.agent, "summarize_if_needed", nothing)
+    monkeypatch.setattr(bot.instagram, "send_text", nothing)
+    monkeypatch.setattr(bot.instagram, "close", nothing)
+    monkeypatch.setattr(bot.instagram, "subscribe", nothing)
+    monkeypatch.setattr(bot.botones, "sync", nothing)
+    monkeypatch.setattr(bot.instagram, "refresh_loop", lambda: asyncio.sleep(0))
+    monkeypatch.setattr(bot, "account_id", "negocio")
+    monkeypatch.setattr(bot, "MULTI_ACCOUNT", False)
+
+    body = json.dumps({"entry": [{"id": "negocio", "messaging": [{
+        "sender": {"id": "ana"}, "recipient": {"id": "negocio"}, "timestamp": 1,
+        "postback": {"mid": "pb1", "title": "¿Qué productos manejan?", "payload": "boton_1"},
+    }]}]}).encode()
+    sig = hmac.new(b"secreto", body, hashlib.sha256).hexdigest()
+    with TestClient(bot.app) as client:
+        client.post("/webhook", content=body,
+                    headers={"X-Hub-Signature-256": f"sha256={sig}", "Content-Type": "application/json"})
+        deadline = time.time() + 3
+        while not calls and time.time() < deadline:
+            time.sleep(0.05)
+    assert calls == [["¿Qué productos manejan?"]]

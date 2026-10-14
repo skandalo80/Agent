@@ -16,7 +16,7 @@ ACCOUNT_KEYS = {
     "IG_ACCESS_TOKEN", "IG_ACCOUNT_ID", "FORWARD_WEBHOOKS",
     "DB_PATH", "PROMPT_PATH", "CATALOG_PATH", "QUOTES_DIR",
     "SHEET_CATALOG", "SHEET_INVENTORY", "STORE_RULES_PATH", "SHEET_COMMENTS",
-    "ADMIN_IG_IDS", "REPORT_EMAIL",
+    "ADMIN_IG_IDS", "REPORT_EMAIL", "BUTTONS_PATH", "HIDE_SPAM",
 }
 if CLIENTE:
     load_dotenv(f"{CLIENT_DIR}/.env")
@@ -52,6 +52,11 @@ SHEET_INVENTORY = os.getenv("SHEET_INVENTORY", "")
 STORE_RULES_PATH = os.getenv("STORE_RULES_PATH", f"{CLIENT_DIR}/reglas.yaml" if CLIENTE else "negocio/reglas.yaml")
 # Reglas de comentarios (palabra clave -> DM): link de la pestaña de la hoja.
 SHEET_COMMENTS = os.getenv("SHEET_COMMENTS", "")
+# Ocultar comentarios que son spam (estafas, "sígueme", links, groserías) en
+# todas las publicaciones. Las quejas y críticas reales nunca se ocultan.
+HIDE_SPAM = os.getenv("HIDE_SPAM", "") in ("1", "true", "si", "sí")
+# Botones de inicio (preguntas que salen al abrir un chat nuevo con la cuenta).
+BUTTONS_PATH = os.getenv("BUTTONS_PATH", f"{CLIENT_DIR}/botones.yaml" if CLIENTE else "negocio/botones.yaml")
 # Modelo barato para reconocer variantes de las palabras clave en comentarios.
 COMMENTS_MODEL = os.getenv("COMMENTS_MODEL", "claude-haiku-5-5")
 # Segundos que se reutiliza lo leído de las hojas antes de volver a pedirlo.

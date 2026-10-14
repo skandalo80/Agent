@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 
 from . import config
 from .google import Google
+from .comentarios import SPAM
 from .instagram import Instagram
 from .store import Store
 from .tienda import money
@@ -101,10 +102,14 @@ async def build(store: Store, instagram: Instagram | None = None, until: float |
     if paused:
         names = [await instagram.username(u) if instagram else u for u, *_ in paused]
         out.append(f"- En pausa ahora: {', '.join(names)}.")
+    hidden = sum(1 for m, _, _ in comments if m == SPAM)
+    comments = [c for c in comments if c[0] != SPAM]
+    if hidden:
+        out += ["", "SPAM", f"- Se ocultaron {hidden} comentarios de spam."]
     if comments:
         words = Counter(w for m, _, _ in comments for w in m.split("; ") if w)
         out += ["", "COMENTARIOS",
-                f"- Llegaron {len(comments)} comentarios en publicaciones con palabra clave;"
+                f"- Llegaron {len(comments)} comentarios;"
                 f" se mandaron {sum(d for _, d, _ in comments)} DMs y {sum(r for _, _, r in comments)} respuestas públicas."]
         if words:
             out.append("- Palabras clave: " + ", ".join(f"{w} ({n})" for w, n in words.most_common(5)) + ".")
