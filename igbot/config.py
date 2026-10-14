@@ -16,6 +16,7 @@ ACCOUNT_KEYS = {
     "IG_ACCESS_TOKEN", "IG_ACCOUNT_ID", "FORWARD_WEBHOOKS",
     "DB_PATH", "PROMPT_PATH", "CATALOG_PATH", "QUOTES_DIR",
     "SHEET_CATALOG", "SHEET_INVENTORY", "STORE_RULES_PATH", "SHEET_COMMENTS",
+    "ADMIN_IG_IDS",
 }
 if CLIENTE:
     load_dotenv(f"{CLIENT_DIR}/.env")
@@ -57,6 +58,15 @@ COMMENTS_MODEL = os.getenv("COMMENTS_MODEL", "claude-haiku-5-5")
 SHEETS_CACHE_SECONDS = float(os.getenv("SHEETS_CACHE_SECONDS", "300"))
 # Dirección pública del bot, para mandar el PDF por DM (Instagram lo descarga de ahí).
 PUBLIC_URL = os.getenv("PUBLIC_URL", "").rstrip("/")
+
+# Administradores: ids de Instagram (los que salen en el log como "DM de <id>")
+# que, al escribirle al bot, pueden publicar en la cuenta y reactivar
+# conversaciones en pausa. El id es distinto en cada cuenta del negocio.
+ADMIN_IG_IDS = {i.strip() for i in os.getenv("ADMIN_IG_IDS", "").split(",") if i.strip()}
+# Fotos que mandan los administradores; las sirve cualquier proceso en
+# PUBLIC_URL/media/<cuenta>/<nombre>.jpg (todos comparten la carpeta data/).
+MEDIA_SLUG = CLIENTE or "principal"
+MEDIA_DIR = f"{DATA_DIR}/media"
 
 MODEL = os.getenv("CLAUDE_MODEL", "claude-opus-5-5")
 EFFORT = os.getenv("CLAUDE_EFFORT", "low")
