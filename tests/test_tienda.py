@@ -117,3 +117,66 @@ def test_prompt_de_la_tienda(monkeypatch):
     monkeypatch.setattr(tienda.config, "STORE_RULES_PATH", "clientes/nortex/reglas.yaml")
     text = tienda.prompt_text()
     assert "Nortex Uniformes" in text and "cotizar_pedido" in text and "$45.00" in text
+
+
+def test_cotizacion_formal_en_pdf_por_correo_y_dm(monkeypatch, tmp_path):
+    from fastapi.testclient import TestClient
+    from test_tools import NOW, FakeGoogle
+
+    import app as bot
+    from igbot import config, tools
+    from igbot.store import Store
+
+    monkeypatch.setattr(config, "STORE_RULES_PATH", "clientes/nortex/reglas.yaml")
+    monkeypatch.setattr(config, "CLIENTE", "nortex")
+    monkeypatch.setattr(config, "QUOTES_DIR", str(tmp_path / "data/nortex/cotizaciones"))
+    monkeypatch.setattr(config, "PUBLIC_URL", "https://bot.ejemplo.com")
+    monkeypatch.setattr(config, "MAIL_CC", "copia@gmail.com")
+    monkeypatch.setattr(tools, "now", lambda: NOW)
+
+    async def catalogo(google):
+        return CATALOGO
+
+    async def existencias(google):
+        return EXISTENCIAS
+
+    monkeypatch.setattr(tienda, "products", catalogo)
+    monkeypatch.setattr(tienda, "stock", existencias)
+
+    class FakeIG:
+        files = []
+
+        async def send_file(self, user_id, url):
+            self.files.append((user_id, url))
+
+    async def main():
+        store = Store(":memory:")
+        await store.open()
+        await store.add_incoming("ana", "m1", "ana@empresa.com")
+        google, ig, state = FakeGoogle(), FakeIG(), {}
+        t = {x.name: x.handler for x in tienda_tools(google, store, ig, state)}
+        args = {"items": [item("NX-POL-NVY", "M", 30, "bordado"), item("NX-POL-NVY", "L", 30, "bordado")],
+                "logos": 1, "nombre": "Ana", "empresa": "Taller Ana"}
+        assert (await t["enviar_cotizacion_pedido"]({**args, "email": "otra@x.com"})).get("is_error")
+        r = await t["enviar_cotizacion_pedido"]({**args, "email": "ana@empresa.com"})
+        quotes = await store.events("cotizacion", 0, 2e9)
+        await store.close()
+        return r, google, ig, state, quotes
+
+    def tienda_tools(google, store, ig, state):
+        return tools.store_tools(google, store, "ana", ig, state)
+
+    r, google, ig, state, quotes = asyncio.run(main())
+    assert "COT-0001" in r["content"][0]["text"] and "$14,534.80" in r["content"][0]["text"]
+    assert google.sent[0][1:3] == ("ana@empresa.com", "copia@gmail.com")
+    name, pdf = google.attachments[0]
+    assert name == "Cotizacion-COT-0001.pdf" and pdf.startswith(b"%PDF")
+    assert state["acted"] and quotes[0][1]["total"] == 14534.8
+    user, url = ig.files[0]
+    assert user == "ana" and url.startswith("https://bot.ejemplo.com/cotizaciones/nortex/")
+
+    # El dominio llega al proceso principal, que sirve el PDF de la carpeta de Nortex.
+    monkeypatch.chdir(tmp_path)
+    client = TestClient(bot.app)
+    assert client.get(url.removeprefix("https://bot.ejemplo.com")).content == pdf
+    assert client.get("/cotizaciones/..%2Fx/" + "a" * 22 + ".pdf").status_code == 404

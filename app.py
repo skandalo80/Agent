@@ -133,6 +133,15 @@ def quote_pdf(token: str):
     return FileResponse(path, media_type="application/pdf", filename="cotizacion.pdf")
 
 
+@app.get("/cotizaciones/{slug}/{token}.pdf")
+def client_quote_pdf(slug: str, token: str):
+    """PDF de otra cuenta (p. ej. Nortex): Instagram lo pide al dominio, que llega al proceso principal."""
+    path = Path("data") / slug / "cotizaciones" / f"{token}.pdf"
+    if not admin.SLUG.match(slug) or not QUOTE_NAME.match(token) or not path.is_file():
+        raise HTTPException(status_code=404)
+    return FileResponse(path, media_type="application/pdf", filename="cotizacion.pdf")
+
+
 @app.get("/media/{slug}/{token}.jpg")
 def media(slug: str, token: str):
     """Fotos que mandan los administradores para publicar (Instagram las descarga de aquí)."""

@@ -58,7 +58,9 @@ def env(monkeypatch, tmp_path):
         await store.open()
         return store
 
-    return asyncio.run(setup()), FakeIG()
+    store = asyncio.run(setup())
+    yield store, FakeIG()
+    asyncio.run(store.close())
 
 
 def run(coro):
@@ -244,6 +246,7 @@ def test_publicar_en_la_api_de_instagram(monkeypatch):
         ig.http = httpx.AsyncClient(transport=httpx.MockTransport(answer))
         link = await ig.publish(["https://x/1.jpg", "https://x/2.jpg"], "Hola #nortex")
         await ig.close()
+        await store.close()
         return link
 
     assert run(main()) == "https://www.instagram.com/p/OK/"
@@ -254,15 +257,22 @@ def test_publicar_en_la_api_de_instagram(monkeypatch):
     assert posts[3][1] == "me/media_publish"
 
 
-def test_el_asistente_del_admin_arma_sus_herramientas(monkeypatch, env):
-    store, ig = env
+def test_el_asistente_del_admin_arma_sus_herramientas(monkeypatch):
     seen = {}
 
     async def fake_claude(prompt, system, mcp=None, allowed=(), max_turns=5, model=None):
         seen.update(prompt=prompt, system=system, allowed=allowed)
         return "listo"
 
+    async def main():
+        store = Store(":memory:")
+        await store.open()
+        try:
+            return await admin.reply(store, None, "admin:jefe", ["[foto 1] publica"], FakeIG())
+        finally:
+            await store.close()
+
     monkeypatch.setattr("igbot.agent.run_claude", fake_claude)
-    assert run(admin.reply(store, None, "admin:jefe", ["[foto 1] publica"], ig)) == ("listo", False)
+    assert run(main()) == ("listo", False)
     assert "mcp__admin__preparar_publicacion" in seen["allowed"] and "[foto 1] publica" in seen["prompt"]
-    assert "confirmar_publicacion" in seen["system"]
+    assert "confirmar_publicacion" in seen["system"] and "enviar_reporte" in seen["system"]

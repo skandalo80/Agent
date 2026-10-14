@@ -238,6 +238,12 @@ def workspace_tools(store: Store, google: Google, user_id: str, state: dict | No
 QUOTE_ARGS = {"paquete": str, "pago": str, "bloques_extra": int}
 
 
+def quote_url(token: str) -> str:
+    """Link público del PDF; lo sirve cualquier proceso (todas las cuentas comparten data/)."""
+    slug = f"{config.CLIENTE}/" if config.CLIENTE else ""
+    return f"{config.PUBLIC_URL}/cotizaciones/{slug}{token}.pdf"
+
+
 def quote_tools(
     store: Store, google: Google, instagram: Instagram | None, user_id: str, state: dict | None = None
 ) -> list:
@@ -303,7 +309,7 @@ def quote_tools(
         by_dm = ""
         if instagram and config.PUBLIC_URL:
             try:
-                await instagram.send_file(user_id, f"{config.PUBLIC_URL}/cotizaciones/{token}.pdf")
+                await instagram.send_file(user_id, quote_url(token))
                 by_dm = " y el PDF ya va en este chat"
             except Exception:
                 log.exception("No se pudo mandar el PDF por DM a %s", user_id)
@@ -336,8 +342,24 @@ ORDER_SCHEMA = {
 }
 
 
-def store_tools(google: Google, store: Store | None = None, user_id: str = "") -> list:
+SEND_ORDER_SCHEMA = {
+    "type": "object",
+    "properties": {
+        **ORDER_SCHEMA["properties"],
+        "email": {"type": "string", "description": "El correo que la persona escribió en el chat."},
+        "nombre": {"type": "string", "description": "Su nombre, o cadena vacía."},
+        "empresa": {"type": "string", "description": "Su empresa, o cadena vacía."},
+    },
+    "required": ORDER_SCHEMA["required"] + ["email", "nombre", "empresa"],
+}
+
+
+def store_tools(
+    google: Google, store: Store | None = None, user_id: str = "",
+    instagram: Instagram | None = None, state: dict | None = None,
+) -> list:
     """Catálogo, existencias y cotización de la tienda (hojas de Google)."""
+    state = state if state is not None else {}
 
     async def load(what):
         try:
@@ -390,15 +412,83 @@ def store_tools(google: Google, store: Store | None = None, user_id: str = "") -
             order = tienda.quote(args.get("items", []), args.get("logos", 1), catalogo, existencias, tienda.rules())
         except (ValueError, KeyError, TypeError) as e:
             return error(str(e))
+        await log_quote(order, catalogo, args)
+        return ok(order.texto())
+
+    async def log_quote(order, catalogo, args):
         if store:  # para el reporte semanal
             productos = [
                 {"producto": catalogo[str(i["sku"]).strip().upper()]["Name_ES"], "cantidad": int(i["cantidad"])}
                 for i in args.get("items", [])
             ]
             await store.add_event(user_id, "cotizacion", {"total": order.total, "productos": productos})
-        return ok(order.texto())
 
-    return [ver_productos, ver_existencias, cotizar_pedido]
+    @tool(
+        "enviar_cotizacion_pedido",
+        "Genera la cotización formal del pedido en PDF (con folio) y se la manda a la persona por"
+        " correo y por este DM, con copia al negocio. Antes confirma con ella el pedido exacto"
+        " (prendas, tallas, cantidades, personalización) y su correo.",
+        SEND_ORDER_SCHEMA,
+    )
+    async def enviar_cotizacion_pedido(args):
+        email = args.get("email", "").strip()
+        if problem := await check_client_email(store, user_id, email):
+            return error(problem)
+        if await store.emails_since(user_id, time.time() - 86400) >= config.MAX_EMAILS_PER_USER_PER_DAY:
+            return error("Ya se le enviaron los correos permitidos hoy. Ofrece seguir por aquí.")
+        catalogo, err = await load(tienda.products)
+        if err:
+            return err
+        existencias, err = await load(tienda.stock)
+        if err:
+            return err
+        try:
+            order = tienda.quote(args.get("items", []), args.get("logos", 1), catalogo, existencias, tienda.rules())
+        except (ValueError, KeyError, TypeError) as e:
+            return error(str(e))
+
+        nombre, empresa = args.get("nombre", "").strip()[:80], args.get("empresa", "").strip()[:80]
+        token = secrets.token_urlsafe(16)
+        number = await store.add_quote(user_id, token, "pedido", "", 0, order.total, email)
+        folio = f"COT-{number:04d}"
+        data = tienda.pdf(order, folio, nombre, empresa, email, now().date())
+        folder = Path(config.QUOTES_DIR)
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / f"{token}.pdf").write_bytes(data)
+
+        reglas = tienda.rules()
+        neg = reglas["negocio"]
+        subject = f"Cotización {folio} · {neg['nombre']}"
+        body = (
+            f"Hola{' ' + nombre if nombre else ''}:\n\n"
+            f"Te comparto la cotización {folio} que platicamos por Instagram (va en el PDF adjunto).\n\n"
+            f"{order.texto()}\n\n"
+            f"Es válida por {reglas['vigencia_dias']} días. Para confirmar el pedido o cualquier duda,"
+            f" contesta este correo o escríbenos a {neg['instagram']}.\n\nSaludos,\n{neg['nombre']}"
+        )
+        try:
+            await google.send_email(
+                config.MAIL_FROM, config.MAIL_FROM_NAME or neg["nombre"], email, config.MAIL_CC, subject, body,
+                attachments=[(f"Cotizacion-{folio}.pdf", data)],
+            )
+        except Exception:
+            log.exception("No se pudo mandar la cotización %s", folio)
+            return error("No se pudo mandar el correo en este momento. Ofrece intentarlo en un rato.")
+        await store.log_email(user_id, email, subject)
+        await log_quote(order, catalogo, args)
+        state["acted"] = True
+
+        by_dm = ""
+        if instagram and config.PUBLIC_URL:
+            try:
+                await instagram.send_file(user_id, quote_url(token))
+                by_dm = " y el PDF ya va en este chat"
+            except Exception:
+                log.exception("No se pudo mandar el PDF por DM a %s", user_id)
+        return ok(f"Cotización {folio} enviada a {email}{by_dm}.\n{order.texto()}")
+
+    tools = [ver_productos, ver_existencias, cotizar_pedido]
+    return tools + [enviar_cotizacion_pedido] if store else tools
 
 
 def human_tools(store: Store, google: Google | None, user_id: str, state: dict | None = None) -> list:
@@ -448,6 +538,6 @@ def build(
         if catalog.available():
             tools += quote_tools(store, google, instagram, user_id, state)
         if tienda.available():
-            tools += store_tools(google, store, user_id)
+            tools += store_tools(google, store, user_id, instagram, state)
     server = create_sdk_mcp_server("bot", tools=tools)
     return server, [f"mcp__bot__{t.name}" for t in tools]
