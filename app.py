@@ -21,7 +21,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse
 
-from igbot import agent, config
+from igbot import agent, comentarios, config
 from igbot.dispatcher import Dispatcher
 from igbot.google import Google
 from igbot.instagram import Instagram
@@ -75,6 +75,11 @@ dispatcher = Dispatcher(store, handle, config.DEBOUNCE_SECONDS, config.MAX_CONCU
 async def lifespan(app: FastAPI):
     await store.open()
     await my_account()
+    if google and comentarios.available():
+        try:
+            await instagram.subscribe("messages,comments")
+        except Exception:
+            log.exception("No se pudo suscribir la cuenta a los comentarios")
     await dispatcher.resume_pending()
     refresher = asyncio.create_task(instagram.refresh_loop())
     yield
@@ -174,6 +179,13 @@ async def forward(body: bytes, signature: str) -> None:
                 log.exception("No se pudo reenviar el aviso a %s", url)
 
 
+async def handle_comment(value: dict) -> None:
+    try:
+        await comentarios.handle(value, store, instagram, google, account_id)
+    except Exception:
+        log.exception("Falló el comentario %s", value.get("id"))
+
+
 @app.get("/webhook")
 def verify(request: Request):
     """Meta llama aquí una vez para confirmar que el webhook es nuestro."""
@@ -212,6 +224,9 @@ async def receive(request: Request):
     for entry in data.get("entry", []):
         if mine and str(entry.get("id")) != mine:
             continue  # es de otra cuenta de la app; lo atiende su propio proceso
+        for change in entry.get("changes", []):
+            if change.get("field") == "comments" and google and comentarios.available():
+                in_background(handle_comment(change.get("value") or {}))
         for event in entry.get("messaging", []):
             message = event.get("message")
             if not message or message.get("is_deleted"):

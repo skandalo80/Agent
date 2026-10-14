@@ -1,5 +1,6 @@
 """Envío de DMs y renovación automática del token de Instagram."""
 import asyncio
+import hashlib
 import logging
 import time
 
@@ -24,13 +25,23 @@ class Instagram:
         await self.http.aclose()
 
     async def token(self) -> str:
+        # Si en .env se pegó un token distinto al de la última vez (p. ej. uno
+        # nuevo con más permisos), manda ese y deja atrás el renovado viejo.
+        env_hash = hashlib.sha256(config.ACCESS_TOKEN.encode()).hexdigest()
+        if await self.store.get("ig_token_env") != env_hash:
+            await self.store.set("ig_token", config.ACCESS_TOKEN)
+            await self.store.set("ig_token_env", env_hash)
+            await self.store.set("ig_token_refreshed_at", str(time.time()))
         return await self.store.get("ig_token") or config.ACCESS_TOKEN
 
     async def _send(self, recipient_id: str, message: dict) -> None:
+        await self._send_to({"id": recipient_id}, message)
+
+    async def _send_to(self, recipient: dict, message: dict) -> None:
         r = await self.http.post(
             f"{GRAPH}/{config.API_VERSION}/me/messages",
             headers={"Authorization": f"Bearer {await self.token()}"},
-            json={"recipient": {"id": recipient_id}, "message": message},
+            json={"recipient": recipient, "message": message},
         )
         r.raise_for_status()
         # Se anota el id para reconocer el eco y no confundirlo con el dueño.
@@ -47,6 +58,42 @@ class Instagram:
         await self._send(
             recipient_id, {"attachment": {"type": "file", "payload": {"url": url}}}
         )
+
+    async def private_reply(self, comment_id: str, text: str) -> None:
+        """DM a quien comentó (Instagram permite uno por comentario, dentro de 7 días)."""
+        await self._send_to({"comment_id": comment_id}, {"text": split_text(text)[0]})
+
+    async def public_reply(self, comment_id: str, text: str) -> None:
+        r = await self.http.post(
+            f"{GRAPH}/{config.API_VERSION}/{comment_id}/replies",
+            headers={"Authorization": f"Bearer {await self.token()}"},
+            json={"message": text[:2000]},
+        )
+        r.raise_for_status()
+
+    async def permalink(self, media_id: str) -> str:
+        key = f"permalink:{media_id}"
+        if cached := await self.store.get(key):
+            return cached
+        r = await self.http.get(
+            f"{GRAPH}/{config.API_VERSION}/{media_id}",
+            params={"fields": "permalink"},
+            headers={"Authorization": f"Bearer {await self.token()}"},
+        )
+        r.raise_for_status()
+        link = r.json().get("permalink", "")
+        await self.store.set(key, link)
+        return link
+
+    async def subscribe(self, fields: str) -> None:
+        """Suscribe esta cuenta a los avisos del webhook (p. ej. 'messages,comments')."""
+        r = await self.http.post(
+            f"{GRAPH}/{config.API_VERSION}/me/subscribed_apps",
+            params={"subscribed_fields": fields},
+            headers={"Authorization": f"Bearer {await self.token()}"},
+        )
+        r.raise_for_status()
+        log.info("Cuenta suscrita a: %s", fields)
 
     async def account_id(self) -> str:
         """Id de la cuenta de este token (el mismo que viene en los avisos de Meta)."""

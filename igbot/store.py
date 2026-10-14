@@ -81,6 +81,18 @@ CREATE TABLE IF NOT EXISTS paused (
     until   REAL NOT NULL
 );
 
+-- Comentarios de las publicaciones que ya se procesaron (y qué se hizo).
+CREATE TABLE IF NOT EXISTS comments (
+    comment_id TEXT PRIMARY KEY,
+    user_id    TEXT NOT NULL,
+    media_id   TEXT NOT NULL,
+    text       TEXT NOT NULL,
+    matched    TEXT NOT NULL DEFAULT '',   -- palabras clave de las reglas que aplicaron
+    dm_sent    INTEGER NOT NULL DEFAULT 0,
+    replied    INTEGER NOT NULL DEFAULT 0, -- respuesta pública
+    created_at REAL NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS kv (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -154,6 +166,31 @@ class Store:
             "INSERT OR IGNORE INTO messages (user_id, role, text, mid, created_at)"
             " VALUES (?, 'assistant', ?, ?, ?)",
             (user_id, f"[contestó una persona del equipo] {text}", mid, time.time()),
+        )
+        await self.db.commit()
+
+    async def add_bot_message(self, user_id: str, text: str) -> None:
+        """Guarda un mensaje que el bot mandó por su cuenta (p. ej. por un comentario)."""
+        await self.db.execute(
+            "INSERT INTO messages (user_id, role, text, created_at) VALUES (?, 'assistant', ?, ?)",
+            (user_id, text, time.time()),
+        )
+        await self.db.commit()
+
+    async def add_comment(self, comment_id: str, user_id: str, media_id: str, text: str) -> bool:
+        """Anota un comentario. False si ya se había procesado (Meta reintenta)."""
+        cur = await self.db.execute(
+            "INSERT OR IGNORE INTO comments (comment_id, user_id, media_id, text, created_at)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (comment_id, user_id, media_id, text, time.time()),
+        )
+        await self.db.commit()
+        return cur.rowcount == 1
+
+    async def comment_result(self, comment_id: str, matched: str, dm_sent: bool, replied: bool) -> None:
+        await self.db.execute(
+            "UPDATE comments SET matched = ?, dm_sent = ?, replied = ? WHERE comment_id = ?",
+            (matched, int(dm_sent), int(replied), comment_id),
         )
         await self.db.commit()
 
