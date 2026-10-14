@@ -127,6 +127,21 @@ Para activarlo en una cuenta:
 2. Crea la hoja (de tu misma cuenta de Google) y pon su link en `SHEET_COMMENTS` del `.env` de la cuenta.
 3. Reinicia (`sudo systemctl restart igbot@nortex`). Al arrancar, el bot suscribe la cuenta a mensajes y comentarios.
 
+## Administradores: publicar por DM y reactivar chats
+
+Si tu id de Instagram está en `ADMIN_IG_IDS` (en el `.env` de la cuenta), cuando le escribes al bot no te atiende el vendedor, sino un asistente interno:
+
+- **Publicar:** mándale una o varias fotos (varias = carrusel) y el texto. Te regresa las fotos como vista previa y el texto tal cual saldrá, y publica solo cuando le confirmas en otro mensaje. Puedes decir cuándo ("mañana a las 10"): queda programada y te avisa por DM cuando sale. También puedes pedirle lo programado o cancelarlo. Por ahora solo fotos, no videos.
+- **Reactivar chats:** "¿qué conversaciones están en pausa?" y "reactiva a @usuario". El bot vuelve a contestarle desde su siguiente mensaje.
+- **Probar como cliente:** escribe `modo cliente` para hablar con el bot como cualquier cliente y `modo admin` para volver.
+
+Las fotos se descargan al llegar (los links de Instagram caducan), se convierten a JPG y, si son más verticales que 4:5 o más horizontales que 1.91:1, se recortan al centro porque Instagram no las acepta. Se sirven en `PUBLIC_URL/media/<cuenta>/...` para que Instagram las descargue; el proceso principal las sirve para todas las cuentas, así que no hay que tocar Caddy.
+
+Para activarlo en una cuenta:
+1. En la app de Meta, agrega el permiso `instagram_business_content_publish`, genera de nuevo el token de esa cuenta y reemplázalo en su `.env`.
+2. Escríbele cualquier cosa al bot desde tu Instagram y busca tu id en el log (`journalctl -u igbot@nortex | grep "DM de"`). Ponlo en `ADMIN_IG_IDS` del `.env` de la cuenta (el id cambia en cada cuenta del negocio).
+3. Revisa que el `.env` principal tenga `PUBLIC_URL`, y reinicia.
+
 ## Agenda y correo con tu Google
 
 Opcional: sin esto el bot sigue contestando, solo que sin agendar ni mandar correos. Se hace una sola vez.

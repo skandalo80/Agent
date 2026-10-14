@@ -93,6 +93,29 @@ CREATE TABLE IF NOT EXISTS comments (
     created_at REAL NOT NULL
 );
 
+-- Fotos que mandó un administrador por DM (el archivo está en MEDIA_DIR/<token>.jpg).
+CREATE TABLE IF NOT EXISTS media (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT, -- "foto 3" en el chat
+    user_id    TEXT NOT NULL,
+    token      TEXT NOT NULL UNIQUE,       -- nombre secreto del archivo
+    url        TEXT NOT NULL,              -- de dónde se descargó (Instagram)
+    note       TEXT NOT NULL DEFAULT '',   -- p. ej. "recortada a 4:5"
+    created_at REAL NOT NULL
+);
+
+-- Publicaciones que pidió un administrador.
+CREATE TABLE IF NOT EXISTS posts (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     TEXT NOT NULL,             -- administrador que la pidió
+    media_ids   TEXT NOT NULL,             -- ids de la tabla media, separados por comas
+    caption     TEXT NOT NULL,
+    publish_at  REAL NOT NULL,             -- 0 = en cuanto se confirme
+    status      TEXT NOT NULL,             -- borrador | programada | publicando | publicada | fallida | cancelada
+    permalink   TEXT NOT NULL DEFAULT '',
+    error       TEXT NOT NULL DEFAULT '',
+    created_at  REAL NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS kv (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -345,6 +368,83 @@ class Store:
         cur = await self.db.execute("SELECT until FROM paused WHERE user_id = ?", (user_id,))
         row = await cur.fetchone()
         return row[0] if row else 0.0
+
+    async def paused_list(self, now: float) -> list[tuple[str, float, str]]:
+        """Conversaciones en pausa: (usuario, hasta, último mensaje del cliente)."""
+        cur = await self.db.execute(
+            "SELECT p.user_id, p.until, COALESCE((SELECT text FROM messages m WHERE m.user_id = p.user_id"
+            " AND m.role = 'user' ORDER BY m.id DESC LIMIT 1), '')"
+            " FROM paused p WHERE p.until > ? ORDER BY p.until",
+            (now,),
+        )
+        return list(await cur.fetchall())
+
+    async def unpause(self, user_id: str) -> None:
+        await self.db.execute("DELETE FROM paused WHERE user_id = ?", (user_id,))
+        await self.db.commit()
+
+    # --- publicaciones de los administradores ---
+
+    async def add_media(self, user_id: str, token: str, url: str) -> int:
+        cur = await self.db.execute(
+            "INSERT INTO media (user_id, token, url, created_at) VALUES (?, ?, ?, ?)",
+            (user_id, token, url, time.time()),
+        )
+        await self.db.commit()
+        return cur.lastrowid
+
+    async def media(self, media_id: int) -> tuple[str, str, str] | None:
+        """(token, url, nota) de una foto."""
+        cur = await self.db.execute("SELECT token, url, note FROM media WHERE id = ?", (media_id,))
+        return await cur.fetchone()
+
+    async def set_media_note(self, media_id: int, note: str) -> None:
+        await self.db.execute("UPDATE media SET note = ? WHERE id = ?", (note, media_id))
+        await self.db.commit()
+
+    async def add_post(self, user_id: str, media_ids: list[int], caption: str, publish_at: float) -> int:
+        cur = await self.db.execute(
+            "INSERT INTO posts (user_id, media_ids, caption, publish_at, status, created_at)"
+            " VALUES (?, ?, ?, ?, 'borrador', ?)",
+            (user_id, ",".join(map(str, media_ids)), caption, publish_at, time.time()),
+        )
+        await self.db.commit()
+        return cur.lastrowid
+
+    POST_FIELDS = "id, user_id, media_ids, caption, publish_at, status, permalink, error, created_at"
+
+    def _post(self, row) -> dict | None:
+        if not row:
+            return None
+        post = dict(zip(self.POST_FIELDS.split(", "), row))
+        post["media_ids"] = [int(i) for i in post["media_ids"].split(",") if i]
+        return post
+
+    async def post(self, post_id: int) -> dict | None:
+        cur = await self.db.execute(f"SELECT {self.POST_FIELDS} FROM posts WHERE id = ?", (post_id,))
+        return self._post(await cur.fetchone())
+
+    async def posts(self, statuses: tuple[str, ...], due_before: float | None = None) -> list[dict]:
+        marks = ",".join("?" * len(statuses))
+        sql = f"SELECT {self.POST_FIELDS} FROM posts WHERE status IN ({marks})"
+        args: list = list(statuses)
+        if due_before is not None:
+            sql += " AND publish_at <= ?"
+            args.append(due_before)
+        cur = await self.db.execute(sql + " ORDER BY publish_at, id", args)
+        return [self._post(r) for r in await cur.fetchall()]
+
+    async def set_post(self, post_id: int, status: str, permalink: str = "", error: str = "",
+                       only_if: str | None = None) -> bool:
+        """Cambia el estado; con only_if, solo si estaba en ese estado (evita publicar dos veces)."""
+        sql = "UPDATE posts SET status = ?, permalink = ?, error = ? WHERE id = ?"
+        args = [status, permalink, error, post_id]
+        if only_if:
+            sql += " AND status = ?"
+            args.append(only_if)
+        cur = await self.db.execute(sql, args)
+        await self.db.commit()
+        return cur.rowcount == 1
 
     # --- valores sueltos (token de Instagram, etc.) ---
 

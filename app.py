@@ -21,7 +21,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse
 
-from igbot import agent, comentarios, config
+from igbot import admin, agent, comentarios, config
 from igbot.dispatcher import Dispatcher
 from igbot.google import Google
 from igbot.instagram import Instagram
@@ -52,14 +52,16 @@ async def handle(user_id: str, rows: list[tuple[int, str]]) -> None:
         log.info("Conversación con %s en pausa %.1f h más; no se contesta", user_id, (until - time.time()) / 3600)
         await store.mark_seen([i for i, _ in rows])
         return
+    # Un administrador habla con su propio asistente (publicar, reactivar chats).
+    respond = admin.reply if admin.is_key(user_id) else agent.reply
     for attempt in range(MAX_REDRAFTS + 1):
-        text, acted = await agent.reply(store, google, user_id, [t for _, t in rows], instagram)
+        text, acted = await respond(store, google, user_id, [t for _, t in rows], instagram)
         latest = await store.pending(user_id)
         if acted or len(latest) == len(rows) or attempt == MAX_REDRAFTS:
             break
         log.info("Llegaron más mensajes de %s; se rehace la respuesta", user_id)
         rows = latest
-    await instagram.send_text(user_id, text)
+    await instagram.send_text(admin.real_id(user_id), text)
     await store.mark_answered(user_id, [i for i, _ in rows], text)
     try:
         await agent.summarize_if_needed(store, user_id)
@@ -82,9 +84,12 @@ async def lifespan(app: FastAPI):
         except Exception:
             log.exception("No se pudo suscribir la cuenta a los comentarios")
     await dispatcher.resume_pending()
-    refresher = asyncio.create_task(instagram.refresh_loop())
+    loops = [asyncio.create_task(instagram.refresh_loop())]
+    if config.ADMIN_IG_IDS:
+        loops.append(asyncio.create_task(admin.publisher_loop(store, instagram)))
     yield
-    refresher.cancel()
+    for task in loops:
+        task.cancel()
     await dispatcher.stop()
     await instagram.close()
     await store.close()
@@ -126,6 +131,15 @@ def quote_pdf(token: str):
     return FileResponse(path, media_type="application/pdf", filename="cotizacion.pdf")
 
 
+@app.get("/media/{slug}/{token}.jpg")
+def media(slug: str, token: str):
+    """Fotos que mandan los administradores para publicar (Instagram las descarga de aquí)."""
+    path = admin.media_path(slug, token)
+    if not path or not path.is_file():
+        raise HTTPException(status_code=404)
+    return FileResponse(path, media_type="image/jpeg")
+
+
 ECHO_WAIT = 5  # segundos para que el bot termine de anotar sus propios envíos
 
 
@@ -135,9 +149,10 @@ async def owner_replied(user_id: str, mid: str, text: str) -> None:
     En ese caso el bot se calla en esa conversación por HUMAN_PAUSE_HOURS.
     """
     await asyncio.sleep(ECHO_WAIT)
-    if await store.was_sent(mid) or (
-        text and await store.bot_said(user_id, text, time.time() - 600)
-    ):
+    since = time.time() - 600
+    if await store.was_sent(mid) or (text and (
+        await store.bot_said(user_id, text, since) or await store.bot_said(admin.key(user_id), text, since)
+    )):
         return
     log.info("El dueño contestó a %s; el bot se pausa en esa conversación", user_id)
     await store.pause(user_id, time.time() + config.HUMAN_PAUSE_HOURS * 3600)
@@ -248,7 +263,17 @@ async def receive(request: Request):
                 continue
             user_id = event["sender"]["id"]
             log.info("DM de %s", user_id)
-            if await store.add_incoming(user_id, message["mid"], message_text(message)):
+            text = message_text(message)
+            if admin.is_admin(user_id):
+                if new_mode := admin.command(message.get("text", "")):
+                    in_background(admin.set_mode(store, instagram, user_id, new_mode))
+                    continue
+                if await admin.mode(store, user_id) == "admin":
+                    text, photos = await admin.incoming_text(store, user_id, message)
+                    for photo in photos:
+                        in_background(admin.save_photo_quietly(store, instagram, photo))
+                    user_id = admin.key(user_id)
+            if await store.add_incoming(user_id, message["mid"], text):
                 dispatcher.notify(user_id)
 
     return {"ok": True}

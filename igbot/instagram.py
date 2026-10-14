@@ -59,6 +59,9 @@ class Instagram:
             recipient_id, {"attachment": {"type": "file", "payload": {"url": url}}}
         )
 
+    async def send_image(self, recipient_id: str, url: str) -> None:
+        await self._send(recipient_id, {"attachment": {"type": "image", "payload": {"url": url}}})
+
     async def private_reply(self, comment_id: str, text: str) -> None:
         """DM a quien comentó (Instagram permite uno por comentario, dentro de 7 días)."""
         await self._send_to({"comment_id": comment_id}, {"text": split_text(text)[0]})
@@ -106,6 +109,82 @@ class Instagram:
         data = r.json()
         log.info("Cuenta de Instagram: @%s (%s)", data.get("username"), data["user_id"])
         return str(data["user_id"])
+
+    async def username(self, user_id: str) -> str:
+        """@usuario de alguien que le escribió a la cuenta (o su id si no se puede saber)."""
+        key = f"username:{user_id}"
+        if cached := await self.store.get(key):
+            return cached
+        try:
+            r = await self.http.get(
+                f"{GRAPH}/{config.API_VERSION}/{user_id}",
+                params={"fields": "username"},
+                headers={"Authorization": f"Bearer {await self.token()}"},
+            )
+            r.raise_for_status()
+            name = "@" + r.json()["username"]
+        except Exception:
+            log.warning("No se pudo saber el usuario de %s", user_id)
+            return user_id
+        await self.store.set(key, name)
+        return name
+
+    async def download(self, url: str) -> bytes:
+        """Descarga un adjunto de un DM (los links de Instagram caducan en horas)."""
+        r = await self.http.get(url, follow_redirects=True, timeout=60)
+        r.raise_for_status()
+        return r.content
+
+    # --- publicar en la cuenta (permiso instagram_business_content_publish) ---
+
+    async def _graph(self, method: str, path: str, **data) -> dict:
+        r = await self.http.request(
+            method, f"{GRAPH}/{config.API_VERSION}/{path}",
+            headers={"Authorization": f"Bearer {await self.token()}"},
+            **({"data": data} if method == "POST" else {"params": data}),
+        )
+        if r.is_error:
+            try:
+                message = r.json()["error"]["message"]
+            except Exception:
+                message = r.text[:300]
+            raise RuntimeError(f"Instagram respondió {r.status_code}: {message}")
+        return r.json()
+
+    async def publish(self, image_urls: list[str], caption: str) -> str:
+        """Publica una foto (o un carrusel de hasta 10) y devuelve el link de la publicación.
+
+        Instagram descarga cada foto de su URL, así que tienen que ser públicas y JPG.
+        """
+        if len(image_urls) == 1:
+            container = await self._graph("POST", "me/media", image_url=image_urls[0], caption=caption)
+        else:
+            children = []
+            for url in image_urls:
+                child = await self._graph("POST", "me/media", image_url=url, is_carousel_item="true")
+                children.append(child["id"])
+            for child in children:
+                await self._wait_ready(child)
+            container = await self._graph(
+                "POST", "me/media", media_type="CAROUSEL", children=",".join(children), caption=caption
+            )
+        await self._wait_ready(container["id"])
+        media = await self._graph("POST", "me/media_publish", creation_id=container["id"])
+        try:
+            return await self.permalink(media["id"])
+        except Exception:
+            log.exception("Publicado (%s), pero no se pudo obtener el link", media["id"])
+            return ""
+
+    async def _wait_ready(self, container_id: str, tries: int = 20, every: float = 3) -> None:
+        for _ in range(tries):
+            status = (await self._graph("GET", container_id, fields="status_code")).get("status_code")
+            if status in (None, "FINISHED"):
+                return
+            if status in ("ERROR", "EXPIRED"):
+                raise RuntimeError(f"Instagram no pudo procesar la foto (estado {status})")
+            await asyncio.sleep(every)
+        raise RuntimeError("Instagram tardó demasiado en procesar la foto")
 
     async def refresh_token(self) -> None:
         r = await self.http.get(
