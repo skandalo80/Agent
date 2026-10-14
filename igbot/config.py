@@ -23,3 +23,20 @@ HISTORY_WINDOW = int(os.getenv("HISTORY_WINDOW", "20"))
 DEBOUNCE_SECONDS = float(os.getenv("DEBOUNCE_SECONDS", "3"))
 # Conversaciones que se atienden a la vez (cada una abre un proceso del Agent SDK).
 MAX_CONCURRENT = int(os.getenv("MAX_CONCURRENT", "4"))
+
+# --- Google (opcional: sin esto el bot no agenda ni manda correos) ---
+# Credenciales OAuth de tu cuenta de Gmail; ver "Agenda y correo" en el README.
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+GOOGLE_REFRESH_TOKEN = os.getenv("GOOGLE_REFRESH_TOKEN", "")
+MAIL_FROM = os.getenv("MAIL_FROM", "")  # tu dirección de Gmail
+MAIL_FROM_NAME = os.getenv("MAIL_FROM_NAME", "")  # nombre que ve el cliente
+MAIL_CC = os.getenv("MAIL_CC", "")  # copia extra de cada correo (opcional)
+
+TIMEZONE = os.getenv("TIMEZONE", "America/Mexico_City")
+BUSINESS_HOURS = os.getenv("BUSINESS_HOURS", "09:00-18:00")
+BUSINESS_DAYS = [int(d) for d in os.getenv("BUSINESS_DAYS", "1,2,3,4,5").split(",")]  # 1=lunes
+MEETING_MINUTES = int(os.getenv("MEETING_MINUTES", "30"))
+MIN_NOTICE_HOURS = float(os.getenv("MIN_NOTICE_HOURS", "2"))
+MAX_MEETINGS_PER_USER = int(os.getenv("MAX_MEETINGS_PER_USER", "2"))
+MAX_EMAILS_PER_USER_PER_DAY = int(os.getenv("MAX_EMAILS_PER_USER_PER_DAY", "3"))

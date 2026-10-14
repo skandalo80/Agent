@@ -20,13 +20,19 @@ Instagram → Caddy (HTTPS) → POST /webhook (app.py, puerto 8001)
 | `app.py` | Webhook, arranque y apagado |
 | `igbot/dispatcher.py` | Cola: orden por persona, agrupar mensajes seguidos, límite de conversaciones a la vez, reintentos |
 | `igbot/store.py` | Toda la memoria en SQLite (`data/bot.db`). Es el único archivo a cambiar si algún día se pasa a Postgres |
-| `igbot/agent.py` | Arma el contexto y llama a Claude. Herramientas del agente: `recordar` y `olvidar` |
+| `igbot/agent.py` | Arma el contexto y llama a Claude |
+| `igbot/tools.py` | Herramientas del agente y sus reglas: `recordar`, `olvidar`, `ver_disponibilidad`, `agendar_reunion`, `mis_reuniones`, `cancelar_reunion`, `enviar_correo` |
+| `igbot/google.py` | Llamadas a Google Calendar y Gmail |
 | `igbot/instagram.py` | Envía DMs (parte los de más de 1000 caracteres) y renueva el token cada semana |
 | `prompts/system.md` | Personalidad e instrucciones del bot. Edítalo y reinicia para cambiar cómo habla |
 
 **Memoria.** Cada persona tiene su historial completo, un resumen de lo viejo y "datos guardados" que el agente anota con `recordar`. En cada respuesta Claude ve: datos + resumen + los últimos `HISTORY_WINDOW` mensajes (20). Cuando sobran 10 mensajes viejos se condensan en el resumen, así el costo por respuesta no crece.
 
-**Seguridad.** El agente no tiene ninguna herramienta de Claude Code (ni Bash ni archivos): solo `recordar`/`olvidar`, y atadas a la persona que escribe.
+**Seguridad.** El agente no tiene ninguna herramienta de Claude Code (ni Bash ni archivos): solo las de `igbot/tools.py`, atadas a la persona que escribe. Las reglas están en el código, no en el prompt, así que un DM no puede saltárselas:
+- Solo invita o escribe a un correo que la persona escribió en el chat (nadie puede usar el bot para mandar correos a terceros).
+- Solo agenda dentro del horario de atención, con anticipación mínima, en huecos libres y con un máximo de reuniones por persona.
+- Solo puede ver y cancelar las reuniones que agendó esa misma persona. De tu calendario solo ve libre/ocupado, nunca el contenido de tus eventos.
+- Máximo de correos por persona al día.
 
 **Si se reinicia.** Los DMs sin contestar quedan como pendientes en la base y se contestan al arrancar. Si Meta reenvía un DM, se ignora (se reconoce por su id).
 
@@ -51,6 +57,37 @@ Respaldo diario de la memoria (opcional, `crontab -e`):
 (necesita `sudo apt install sqlite3`; guarda una copia por día de la semana)
 
 Pruebas locales: `pip install pytest && python -m pytest -q`
+
+## Agenda y correo con tu Google
+
+Opcional: sin esto el bot sigue contestando, solo que sin agendar ni mandar correos. Se hace una sola vez.
+
+**1. Proyecto en Google Cloud** (gratis): entra a [console.cloud.google.com](https://console.cloud.google.com) con tu Gmail y crea un proyecto, por ejemplo `ig-bot`.
+
+**2. Activar las APIs:** menú → *APIs y servicios* → *Biblioteca*. Busca y habilita **Google Calendar API** y **Gmail API**.
+
+**3. Pantalla de consentimiento:** menú → *Google Auth Platform* (o *Pantalla de consentimiento de OAuth*).
+- Tipo de usuario: **Externo**. Nombre de la app: `ig-bot`; correo de asistencia: el tuyo.
+- En *Público*, agrega tu Gmail como usuario de prueba y luego pulsa **Publicar app** (estado *En producción*). Si se queda en *Prueba*, Google corta el permiso cada 7 días.
+
+**4. Credencial:** *Google Auth Platform* → *Clientes* → *Crear cliente* → tipo **App de escritorio**. Descarga el JSON y guárdalo como `client_secret.json` en tu computadora (no lo subas a GitHub ni lo pegues en el chat).
+
+**5. Dar el permiso** (en tu computadora, porque abre el navegador):
+```bash
+git clone https://github.com/skandalo80/Agent.git && cd Agent
+python3 -m pip install google-auth-oauthlib
+python3 scripts/google_auth.py ~/Downloads/client_secret.json
+```
+Elige tu cuenta. Google va a decir *"Google no verificó esta app"*: es normal porque la app es tuya. Pulsa *Configuración avanzada* → *Ir a ig-bot*, y acepta los permisos (calendario y enviar correos). Al terminar, la terminal imprime tres líneas `GOOGLE_...`.
+
+**6. En el servidor:** pega esas tres líneas en `~/ig-bot/.env`, y además:
+```
+MAIL_FROM=tu-correo@gmail.com
+MAIL_FROM_NAME=Nombre que verán tus clientes
+```
+Revisa también horario, zona y límites (están en `.env.example`) y reinicia con `sudo systemctl restart igbot`.
+
+**Probar:** desde la cuenta de prueba escribe algo como "quiero agendar una llamada mañana" y dale tu correo cuando lo pida. Te debe llegar la invitación con link de Meet.
 
 ---
 

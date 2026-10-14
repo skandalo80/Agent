@@ -19,6 +19,7 @@ from fastapi.responses import HTMLResponse
 
 from igbot import agent, config
 from igbot.dispatcher import Dispatcher
+from igbot.google import Google
 from igbot.instagram import Instagram
 from igbot.store import Store
 
@@ -27,11 +28,17 @@ log = logging.getLogger("igbot")
 
 store = Store(config.DB_PATH)
 instagram = Instagram(store)
+# Agenda y correo solo si Google está configurado en .env.
+google = (
+    Google(config.GOOGLE_CLIENT_ID, config.GOOGLE_CLIENT_SECRET, config.GOOGLE_REFRESH_TOKEN)
+    if config.GOOGLE_REFRESH_TOKEN
+    else None
+)
 
 
 async def handle(user_id: str, rows: list[tuple[int, str]]) -> None:
     """Contesta todos los mensajes pendientes de un usuario de una sola vez."""
-    text = await agent.reply(store, user_id, [t for _, t in rows])
+    text = await agent.reply(store, google, user_id, [t for _, t in rows])
     await instagram.send_text(user_id, text)
     await store.mark_answered(user_id, [i for i, _ in rows], text)
     try:

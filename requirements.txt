@@ -4,3 +4,5 @@ httpx==0.28.1
 python-dotenv==1.1.0
 aiosqlite==0.22.1
 claude-agent-sdk==0.2.165
+google-auth==2.62.0
+requests==2.34.2
