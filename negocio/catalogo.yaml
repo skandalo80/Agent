@@ -6,6 +6,9 @@ negocio:
   nombre: Agentes IA by Skandar
   instagram: "@carmachskandar"
   correo: skandar.carmach@gmail.com
+  # Cuenta de Instagram del negocio de demostración, donde se ven funcionando
+  # las funciones avanzadas. Déjalo vacío mientras no exista.
+  demo_instagram: ""
   descripcion: >-
     Instalamos y operamos agentes de inteligencia artificial que atienden el
     Instagram de tu negocio 24/7: contestan DMs, agendan citas, mandan

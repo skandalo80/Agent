@@ -99,6 +99,16 @@ def prompt_text() -> str:
         f"- Las cotizaciones valen {cat['vigencia_dias']} días.",
         "Condiciones: " + " ".join(cat["condiciones"]),
     ]
+    if demo := neg.get("demo_instagram"):
+        out.append(
+            f"Demo: el negocio de demostración {demo} tiene funcionando las funciones avanzadas."
+            f" Si alguien quiere verlas, invítalo a escribirle a {demo}."
+        )
+    else:
+        out.append(
+            "Demo: aún no hay cuenta de demostración; si quieren ver funciones avanzadas en vivo,"
+            " ofrece mostrarlas en la llamada con Skandar."
+        )
     return "\n".join(out)
 
 

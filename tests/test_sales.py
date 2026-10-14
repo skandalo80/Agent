@@ -43,8 +43,12 @@ def test_precios_salen_del_catalogo():
         catalog.quote("pro", "mensual", 99)
 
 
-def test_el_prompt_lleva_el_catalogo():
-    assert "US$149 al mes" in bot.agent.system_prompt()
+def test_el_prompt_lleva_el_catalogo(monkeypatch):
+    prompt = bot.agent.system_prompt()
+    assert "US$149 al mes" in prompt and "aún no hay cuenta de demostración" in prompt
+    cat = {**catalog.load(), "negocio": {**catalog.load()["negocio"], "demo_instagram": "@demo"}}
+    monkeypatch.setattr(catalog, "load", lambda: cat)
+    assert "escribirle a @demo" in bot.agent.system_prompt()
 
 
 @pytest.fixture
