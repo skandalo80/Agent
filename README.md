@@ -9,7 +9,7 @@ Dominio del webhook: `bot.skandar.online`. Repo: `skandalo80/Agent`.
 ```
 Instagram → Caddy (HTTPS) → POST /webhook (app.py, puerto 8001)
    1. valida la firma, guarda el DM como "pendiente" en SQLite y responde 200 al instante
-   2. Dispatcher: una sola tarea por persona → espera 3 s por si escribe más,
+   2. Dispatcher: una sola tarea por persona → espera 5 s por si escribe más,
       junta los mensajes seguidos y los contesta en orden
    3. Agente: datos guardados + resumen + últimos 20 mensajes → Claude → respuesta
    4. Envía la respuesta por la API de Instagram y marca los DMs como contestados

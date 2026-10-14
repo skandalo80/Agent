@@ -95,7 +95,11 @@ def memory_tools(store: Store, user_id: str) -> list:
     return [recordar, olvidar]
 
 
-def workspace_tools(store: Store, google: Google, user_id: str) -> list:
+def workspace_tools(store: Store, google: Google, user_id: str, state: dict | None = None) -> list:
+    # Se marca cuando una herramienta hace algo fuera del chat (agendar,
+    # cancelar, enviar correo): esa respuesta ya no se puede descartar.
+    state = state if state is not None else {}
+
     async def check_email(email: str) -> str | None:
         """Solo se puede escribir/invitar a un correo que la persona dio en el chat."""
         if not EMAIL_RE.match(email):
@@ -166,6 +170,7 @@ def workspace_tools(store: Store, google: Google, user_id: str) -> list:
             description=f"Agendada por el asistente de Instagram.\nMotivo: {args['motivo'][:500]}",
         )
         await store.add_meeting(event_id, user_id, start.isoformat(), email, link)
+        state["acted"] = True
         return ok(
             f"Agendada para el {fmt(start)} (hora de {config.TIMEZONE}). Invitación enviada a"
             f" {email}. Link de Meet: {link or 'viene en la invitación'}. id: {event_id}"
@@ -192,6 +197,7 @@ def workspace_tools(store: Store, google: Google, user_id: str) -> list:
             return error("No encontré esa reunión entre las de esta persona.")
         await google.cancel_meeting(args["id"])
         await store.cancel_meeting(args["id"])
+        state["acted"] = True
         return ok("Reunión cancelada; la persona recibe el aviso por correo.")
 
     @tool(
@@ -213,15 +219,16 @@ def workspace_tools(store: Store, google: Google, user_id: str) -> list:
             subject, args["cuerpo"][:5000],
         )
         await store.log_email(user_id, email, subject)
+        state["acted"] = True
         return ok(f"Correo enviado a {email}.")
 
     return [ver_disponibilidad, agendar_reunion, mis_reuniones, cancelar_reunion, enviar_correo]
 
 
-def build(store: Store, google: Google | None, user_id: str):
+def build(store: Store, google: Google | None, user_id: str, state: dict):
     """Servidor MCP con las herramientas de este usuario y la lista de permitidas."""
     tools = memory_tools(store, user_id)
     if google:
-        tools += workspace_tools(store, google, user_id)
+        tools += workspace_tools(store, google, user_id, state)
     server = create_sdk_mcp_server("bot", tools=tools)
     return server, [f"mcp__bot__{t.name}" for t in tools]

@@ -20,7 +20,7 @@ EFFORT = os.getenv("CLAUDE_EFFORT", "low")
 # Mensajes recientes que el modelo ve tal cual; lo anterior va al resumen.
 HISTORY_WINDOW = int(os.getenv("HISTORY_WINDOW", "20"))
 # Segundos que se espera a que el usuario termine de escribir antes de contestar.
-DEBOUNCE_SECONDS = float(os.getenv("DEBOUNCE_SECONDS", "3"))
+DEBOUNCE_SECONDS = float(os.getenv("DEBOUNCE_SECONDS", "5"))
 # Conversaciones que se atienden a la vez (cada una abre un proceso del Agent SDK).
 MAX_CONCURRENT = int(os.getenv("MAX_CONCURRENT", "4"))
 

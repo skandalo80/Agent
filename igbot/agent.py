@@ -74,11 +74,14 @@ async def build_prompt(store: Store, user_id: str, new_messages: list[str]) -> s
 
 async def reply(
     store: Store, google: Google | None, user_id: str, new_messages: list[str]
-) -> str:
+) -> tuple[str, bool]:
+    """Devuelve (respuesta, si alguna herramienta hizo algo fuera del chat)."""
     system = Path(config.PROMPT_PATH).read_text(encoding="utf-8")
-    server, allowed = tools.build(store, google, user_id)
+    state: dict = {}
+    server, allowed = tools.build(store, google, user_id, state)
     prompt = await build_prompt(store, user_id, new_messages)
-    return await run_claude(prompt, system, {"bot": server}, allowed, max_turns=10)
+    text = await run_claude(prompt, system, {"bot": server}, allowed, max_turns=10)
+    return text, state.get("acted", False)
 
 
 SUMMARY_SYSTEM = (
