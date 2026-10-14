@@ -192,3 +192,22 @@ def test_reenvia_los_avisos_a_las_otras_cuentas(monkeypatch):
 
     asyncio.run(main())
     assert forwarded == [("http://127.0.0.1:8002/webhook", b'{"entry": []}', "sha256=abc")]
+
+
+def test_token_nuevo_en_env_reemplaza_al_renovado(monkeypatch):
+    from igbot import instagram as ig_mod
+
+    async def main():
+        store = Store(":memory:")
+        await store.open()
+        ig = ig_mod.Instagram(store)
+        monkeypatch.setattr(ig_mod.config, "ACCESS_TOKEN", "viejo")
+        assert await ig.token() == "viejo"
+        await store.set("ig_token", "viejo-renovado")  # lo que hace la renovación semanal
+        assert await ig.token() == "viejo-renovado"
+        monkeypatch.setattr(ig_mod.config, "ACCESS_TOKEN", "nuevo")  # se pegó otro en .env
+        assert await ig.token() == "nuevo"
+        await ig.close()
+        await store.close()
+
+    asyncio.run(main())
