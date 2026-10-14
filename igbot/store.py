@@ -8,6 +8,7 @@ pasa a `done` cuando el bot lo contestó. Así, si el proceso se reinicia, los
 mensajes sin contestar no se pierden.
 """
 import time
+from datetime import datetime
 from pathlib import Path
 
 import aiosqlite
@@ -36,6 +37,23 @@ CREATE TABLE IF NOT EXISTS facts (
     key     TEXT NOT NULL,
     value   TEXT NOT NULL,
     PRIMARY KEY (user_id, key)
+);
+
+CREATE TABLE IF NOT EXISTS meetings (
+    event_id   TEXT PRIMARY KEY,           -- id del evento en Google Calendar
+    user_id    TEXT NOT NULL,
+    start      TEXT NOT NULL,              -- ISO 8601 con zona horaria
+    email      TEXT NOT NULL,
+    meet_link  TEXT,
+    status     TEXT NOT NULL DEFAULT 'active' -- 'active' | 'cancelled'
+);
+
+CREATE TABLE IF NOT EXISTS emails (
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    to_addr TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    sent_at REAL NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS kv (
@@ -162,6 +180,51 @@ class Store:
     async def delete_fact(self, user_id: str, key: str) -> None:
         await self.db.execute("DELETE FROM facts WHERE user_id = ? AND key = ?", (user_id, key))
         await self.db.commit()
+
+    async def user_wrote(self, user_id: str, fragment: str) -> bool:
+        """True si la persona escribió `fragment` en algún DM (sin distinguir mayúsculas)."""
+        cur = await self.db.execute(
+            "SELECT 1 FROM messages WHERE user_id = ? AND role = 'user'"
+            " AND instr(lower(text), lower(?)) > 0 LIMIT 1",
+            (user_id, fragment),
+        )
+        return await cur.fetchone() is not None
+
+    # --- reuniones y correos que hace el agente ---
+
+    async def add_meeting(self, event_id, user_id, start, email, meet_link) -> None:
+        await self.db.execute(
+            "INSERT INTO meetings (event_id, user_id, start, email, meet_link) VALUES (?, ?, ?, ?, ?)",
+            (event_id, user_id, start, email, meet_link),
+        )
+        await self.db.commit()
+
+    async def meetings(self, user_id: str, after_iso: str) -> list[tuple[str, str, str, str]]:
+        """Reuniones activas de la persona que empiezan después de `after_iso` (UTC)."""
+        cur = await self.db.execute(
+            "SELECT event_id, start, email, meet_link FROM meetings"
+            " WHERE user_id = ? AND status = 'active' ORDER BY start",
+            (user_id,),
+        )
+        after = datetime.fromisoformat(after_iso)
+        return [r for r in await cur.fetchall() if datetime.fromisoformat(r[1]) > after]
+
+    async def cancel_meeting(self, event_id: str) -> None:
+        await self.db.execute("UPDATE meetings SET status = 'cancelled' WHERE event_id = ?", (event_id,))
+        await self.db.commit()
+
+    async def log_email(self, user_id: str, to_addr: str, subject: str) -> None:
+        await self.db.execute(
+            "INSERT INTO emails (user_id, to_addr, subject, sent_at) VALUES (?, ?, ?, ?)",
+            (user_id, to_addr, subject, time.time()),
+        )
+        await self.db.commit()
+
+    async def emails_since(self, user_id: str, since: float) -> int:
+        cur = await self.db.execute(
+            "SELECT COUNT(*) FROM emails WHERE user_id = ? AND sent_at > ?", (user_id, since)
+        )
+        return (await cur.fetchone())[0]
 
     # --- valores sueltos (token de Instagram, etc.) ---
 

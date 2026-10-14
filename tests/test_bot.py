@@ -109,8 +109,10 @@ def test_split_text():
 def test_webhook_de_punta_a_punta(monkeypatch):
     sent = []
 
-    async def fake_reply(store, user_id, new_messages):
-        return "respuesta a: " + " / ".join(new_messages)
+    async def fake_reply(store, google, user_id, new_messages):
+        if new_messages == ["hola"]:  # mientras "piensa" llega otro mensaje
+            await store.add_incoming("123", "m2", "info?")
+        return "respuesta a: " + " / ".join(new_messages), False
 
     async def fake_summary(store, user_id):
         pass
@@ -141,10 +143,10 @@ def test_webhook_de_punta_a_punta(monkeypatch):
         assert client.post("/webhook", content=b"{}").status_code == 403
         assert post(dm("m1", "hola")).status_code == 200
         post(dm("m1", "hola"))  # reintento de Meta
-        post(dm("m2", "info?"))
         post(dm("m3", "eco", echo=True))
         deadline = time.time() + 3
         while not sent and time.time() < deadline:
             time.sleep(0.05)
 
+    # "info?" llegó mientras se generaba la respuesta a "hola": se manda una sola.
     assert sent == [("123", "respuesta a: hola / info?")]

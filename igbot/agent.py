@@ -2,48 +2,21 @@
 
 Usa el Claude Agent SDK con todas las herramientas de Claude Code apagadas
 (nada de Bash ni archivos: lo que escribe un desconocido por DM nunca debe
-poder tocar el servidor). Solo tiene las herramientas que definimos aquí.
+poder tocar el servidor). Solo tiene las herramientas de tools.py.
 """
 import logging
 from pathlib import Path
 
-from claude_agent_sdk import (
-    ClaudeAgentOptions,
-    ResultMessage,
-    create_sdk_mcp_server,
-    query,
-    tool,
-)
+from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query
 
-from . import config
+from . import config, tools
+from .google import Google
 from .store import Store
 
 log = logging.getLogger("igbot.agent")
 
 # Carpeta vacía como directorio de trabajo del SDK.
 WORKDIR = Path(config.DB_PATH).parent / "agent-cwd"
-
-
-def memory_tools(store: Store, user_id: str):
-    """Herramientas de memoria atadas a UN usuario: no puede tocar las de otro."""
-
-    @tool(
-        "recordar",
-        "Guarda un dato duradero sobre esta persona (nombre, interés, pedido, preferencia)"
-        " para recordarlo en futuras conversaciones. Usa claves cortas en minúsculas.",
-        {"clave": str, "valor": str},
-    )
-    async def recordar(args):
-        await store.set_fact(user_id, args["clave"][:50], args["valor"][:500])
-        return {"content": [{"type": "text", "text": "Guardado."}]}
-
-    @tool("olvidar", "Borra un dato guardado de esta persona.", {"clave": str})
-    async def olvidar(args):
-        await store.delete_fact(user_id, args["clave"])
-        return {"content": [{"type": "text", "text": "Borrado."}]}
-
-    server = create_sdk_mcp_server("memoria", tools=[recordar, olvidar])
-    return server, ["mcp__memoria__recordar", "mcp__memoria__olvidar"]
 
 
 async def run_claude(prompt: str, system: str, mcp=None, allowed=(), max_turns=5) -> str:
@@ -91,6 +64,7 @@ async def build_prompt(store: Store, user_id: str, new_messages: list[str]) -> s
         parts.append(f"<resumen_de_antes>\n{summary}\n</resumen_de_antes>")
     if history:
         parts.append(f"<conversacion_reciente>\n{render(history)}\n</conversacion_reciente>")
+    parts.append(f"<ahora>{tools.fmt(tools.now())} ({config.TIMEZONE}), {tools.now():%Y-%m-%d}</ahora>")
     parts.append(
         "<mensajes_nuevos>\n" + "\n".join(new_messages) + "\n</mensajes_nuevos>\n\n"
         "Escribe la respuesta que se enviará por DM (solo el texto del mensaje)."
@@ -98,11 +72,16 @@ async def build_prompt(store: Store, user_id: str, new_messages: list[str]) -> s
     return "\n\n".join(parts)
 
 
-async def reply(store: Store, user_id: str, new_messages: list[str]) -> str:
+async def reply(
+    store: Store, google: Google | None, user_id: str, new_messages: list[str]
+) -> tuple[str, bool]:
+    """Devuelve (respuesta, si alguna herramienta hizo algo fuera del chat)."""
     system = Path(config.PROMPT_PATH).read_text(encoding="utf-8")
-    server, allowed = memory_tools(store, user_id)
+    state: dict = {}
+    server, allowed = tools.build(store, google, user_id, state)
     prompt = await build_prompt(store, user_id, new_messages)
-    return await run_claude(prompt, system, {"memoria": server}, allowed)
+    text = await run_claude(prompt, system, {"bot": server}, allowed, max_turns=10)
+    return text, state.get("acted", False)
 
 
 SUMMARY_SYSTEM = (

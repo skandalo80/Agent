@@ -19,6 +19,7 @@ from fastapi.responses import HTMLResponse
 
 from igbot import agent, config
 from igbot.dispatcher import Dispatcher
+from igbot.google import Google
 from igbot.instagram import Instagram
 from igbot.store import Store
 
@@ -27,11 +28,28 @@ log = logging.getLogger("igbot")
 
 store = Store(config.DB_PATH)
 instagram = Instagram(store)
+# Agenda y correo solo si Google está configurado en .env.
+google = (
+    Google(config.GOOGLE_CLIENT_ID, config.GOOGLE_CLIENT_SECRET, config.GOOGLE_REFRESH_TOKEN)
+    if config.GOOGLE_REFRESH_TOKEN
+    else None
+)
 
 
 async def handle(user_id: str, rows: list[tuple[int, str]]) -> None:
-    """Contesta todos los mensajes pendientes de un usuario de una sola vez."""
-    text = await agent.reply(store, user_id, [t for _, t in rows])
+    """Contesta todos los mensajes pendientes de un usuario de una sola vez.
+
+    Si mientras Claude pensaba llegaron más mensajes de la misma persona, la
+    respuesta se descarta y se vuelve a generar con todos, para mandar una
+    sola. No se descarta si ya agendó, canceló o mandó un correo.
+    """
+    for attempt in range(MAX_REDRAFTS + 1):
+        text, acted = await agent.reply(store, google, user_id, [t for _, t in rows])
+        latest = await store.pending(user_id)
+        if acted or len(latest) == len(rows) or attempt == MAX_REDRAFTS:
+            break
+        log.info("Llegaron más mensajes de %s; se rehace la respuesta", user_id)
+        rows = latest
     await instagram.send_text(user_id, text)
     await store.mark_answered(user_id, [i for i, _ in rows], text)
     try:
@@ -39,6 +57,8 @@ async def handle(user_id: str, rows: list[tuple[int, str]]) -> None:
     except Exception:
         log.exception("No se pudo actualizar el resumen de %s", user_id)
 
+
+MAX_REDRAFTS = 2
 
 dispatcher = Dispatcher(store, handle, config.DEBOUNCE_SECONDS, config.MAX_CONCURRENT)
 
