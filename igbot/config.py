@@ -1,21 +1,48 @@
 """Configuración leída de .env (ver .env.example)."""
 import os
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 
-load_dotenv()
+# Cada cuenta de Instagram corre como un proceso aparte. La cuenta principal
+# (el vendedor) usa solo .env; otra cuenta usa CLIENTE=<nombre>, que lee
+# primero clientes/<nombre>/.env y completa lo que falte con el .env común
+# (llaves de Meta y de Claude). Sus datos quedan en data/<nombre>/.
+CLIENTE = os.getenv("CLIENTE", "")
+CLIENT_DIR = f"clientes/{CLIENTE}" if CLIENTE else ""
+# Lo que es de cada cuenta nunca se toma del .env común: si a Nortex le faltara
+# su token, contestaría como el vendedor (y con FORWARD_WEBHOOKS se reenviaría
+# los avisos a sí mismo).
+ACCOUNT_KEYS = {
+    "IG_ACCESS_TOKEN", "IG_ACCOUNT_ID", "FORWARD_WEBHOOKS",
+    "DB_PATH", "PROMPT_PATH", "CATALOG_PATH", "QUOTES_DIR",
+}
+if CLIENTE:
+    load_dotenv(f"{CLIENT_DIR}/.env")
+    for key, value in dotenv_values(".env").items():
+        if key not in ACCOUNT_KEYS and value is not None:
+            os.environ.setdefault(key, value)
+else:
+    load_dotenv()
+DATA_DIR = f"data/{CLIENTE}" if CLIENTE else "data"
 
 VERIFY_TOKEN = os.environ["IG_VERIFY_TOKEN"]
 APP_SECRET = os.environ["IG_APP_SECRET"]
 # Token inicial. Después la app lo renueva sola y guarda el nuevo en la base.
 ACCESS_TOKEN = os.environ["IG_ACCESS_TOKEN"]
 API_VERSION = os.getenv("IG_API_VERSION", "v23.0")
+# Id de la cuenta de Instagram de este proceso (si se deja vacío se pregunta a
+# la API al arrancar). Con él se ignoran los avisos de Meta de otras cuentas.
+IG_ACCOUNT_ID = os.getenv("IG_ACCOUNT_ID", "")
+# Meta manda los avisos de todas las cuentas de la app al mismo webhook. El
+# proceso que los recibe se los reenvía tal cual a los de las otras cuentas
+# (lista separada por comas, p. ej. http://127.0.0.1:8002/webhook).
+FORWARD_WEBHOOKS = [u.strip() for u in os.getenv("FORWARD_WEBHOOKS", "").split(",") if u.strip()]
 
-DB_PATH = os.getenv("DB_PATH", "data/bot.db")
-PROMPT_PATH = os.getenv("PROMPT_PATH", "prompts/system.md")
+DB_PATH = os.getenv("DB_PATH", f"{DATA_DIR}/bot.db")
+PROMPT_PATH = os.getenv("PROMPT_PATH", f"{CLIENT_DIR}/system.md" if CLIENTE else "prompts/system.md")
 # Paquetes y precios de las cotizaciones (si no existe, no hay cotizaciones).
-CATALOG_PATH = os.getenv("CATALOG_PATH", "negocio/catalogo.yaml")
-QUOTES_DIR = os.getenv("QUOTES_DIR", "data/cotizaciones")
+CATALOG_PATH = os.getenv("CATALOG_PATH", f"{CLIENT_DIR}/catalogo.yaml" if CLIENTE else "negocio/catalogo.yaml")
+QUOTES_DIR = os.getenv("QUOTES_DIR", f"{DATA_DIR}/cotizaciones")
 # Dirección pública del bot, para mandar el PDF por DM (Instagram lo descarga de ahí).
 PUBLIC_URL = os.getenv("PUBLIC_URL", "").rstrip("/")
 

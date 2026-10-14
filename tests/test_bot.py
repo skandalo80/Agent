@@ -126,6 +126,12 @@ def test_webhook_de_punta_a_punta(monkeypatch):
     monkeypatch.setattr(bot.instagram, "refresh_loop", lambda: asyncio.sleep(0))
     monkeypatch.setattr(bot, "ECHO_WAIT", 0)
 
+    async def my_account():
+        return "negocio"
+
+    monkeypatch.setattr(bot.instagram, "account_id", my_account)
+    monkeypatch.setattr(bot, "account_id", "")  # se vuelve a vaciar al terminar la prueba
+
     async def ours(mid):  # el eco de esta prueba es de un DM que mandó el bot
         return True
 
@@ -139,10 +145,10 @@ def test_webhook_de_punta_a_punta(monkeypatch):
             headers={"X-Hub-Signature-256": f"sha256={sig}", "Content-Type": "application/json"},
         )
 
-    def dm(mid, text, echo=False):
+    def dm(mid, text, echo=False, account="negocio"):
         # En un eco el remitente es la cuenta del negocio y el destinatario, el cliente.
-        ids = ("negocio", "123") if echo else ("123", "negocio")
-        return {"entry": [{"messaging": [{
+        ids = (account, "123") if echo else ("123", account)
+        return {"entry": [{"id": account, "messaging": [{
             "sender": {"id": ids[0]}, "recipient": {"id": ids[1]},
             "message": {"mid": mid, "text": text, **({"is_echo": True} if echo else {})},
         }]}]}
@@ -152,9 +158,37 @@ def test_webhook_de_punta_a_punta(monkeypatch):
         assert post(dm("m1", "hola")).status_code == 200
         post(dm("m1", "hola"))  # reintento de Meta
         post(dm("m3", "eco", echo=True))
+        post(dm("x1", "hola nortex", account="otra"))  # de otra cuenta: no se contesta
         deadline = time.time() + 3
         while not sent and time.time() < deadline:
             time.sleep(0.05)
 
     # "info?" llegó mientras se generaba la respuesta a "hola": se manda una sola.
     assert sent == [("123", "respuesta a: hola / info?")]
+
+
+def test_reenvia_los_avisos_a_las_otras_cuentas(monkeypatch):
+    forwarded = []
+
+    class FakeClient:
+        def __init__(self, **kw):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            pass
+
+        async def post(self, url, content, headers):
+            forwarded.append((url, content, headers["X-Hub-Signature-256"]))
+            return bot.httpx.Response(200, request=bot.httpx.Request("POST", url))
+
+    monkeypatch.setattr(bot.httpx, "AsyncClient", FakeClient)
+    monkeypatch.setattr(bot.config, "FORWARD_WEBHOOKS", ["http://127.0.0.1:8002/webhook"])
+
+    async def main():
+        await bot.forward(b'{"entry": []}', "sha256=abc")
+
+    asyncio.run(main())
+    assert forwarded == [("http://127.0.0.1:8002/webhook", b'{"entry": []}', "sha256=abc")]
