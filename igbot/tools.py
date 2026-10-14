@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 
 from claude_agent_sdk import create_sdk_mcp_server, tool
 
-from . import catalog, config, tienda
+from . import catalog, config, pagos, tienda
 from .google import Google
 from .instagram import Instagram
 from .store import Store
@@ -354,6 +354,24 @@ SEND_ORDER_SCHEMA = {
 }
 
 
+PAY_ORDER_SCHEMA = {
+    "type": "object",
+    "properties": {
+        **ORDER_SCHEMA["properties"],
+        "email": {"type": "string", "description": "Su correo si lo escribió en el chat (para el recibo), o cadena vacía."},
+    },
+    "required": ORDER_SCHEMA["required"] + ["email"],
+}
+
+PAY_STATUS = {
+    "pendiente": "sin pagar todavía",
+    "esperando": "eligió pagar en OXXO; falta que pague la ficha",
+    "pagado": "pagado",
+    "fallido": "el pago no se completó",
+    "vencido": "el link venció sin pago",
+}
+
+
 def store_tools(
     google: Google, store: Store | None = None, user_id: str = "",
     instagram: Instagram | None = None, state: dict | None = None,
@@ -487,8 +505,64 @@ def store_tools(
                 log.exception("No se pudo mandar el PDF por DM a %s", user_id)
         return ok(f"Cotización {folio} enviada a {email}{by_dm}.\n{order.texto()}")
 
+    @tool(
+        "cobrar_pedido",
+        "Genera un link de pago seguro (Stripe: tarjeta, OXXO o transferencia) por el total exacto"
+        " del pedido. Úsalo solo cuando la persona ya confirmó el pedido exacto y quiere pagar."
+        " Comparte el link tal cual en tu respuesta.",
+        PAY_ORDER_SCHEMA,
+    )
+    async def cobrar_pedido(args):
+        email = args.get("email", "").strip()
+        if email and (problem := await check_client_email(store, user_id, email)):
+            return error(problem)
+        since = time.time() - 86400
+        if await store.payments_since(user_id, since) >= config.MAX_PAYMENT_LINKS_PER_USER_PER_DAY:
+            return error("Ya se generaron los links de pago permitidos hoy. Comparte el último o pasa con una persona.")
+        catalogo, err = await load(tienda.products)
+        if err:
+            return err
+        existencias, err = await load(tienda.stock)
+        if err:
+            return err
+        try:
+            order = tienda.quote(args.get("items", []), args.get("logos", 1), catalogo, existencias, tienda.rules())
+        except (ValueError, KeyError, TypeError) as e:
+            return error(str(e))
+        neg = tienda.rules()["negocio"]
+        payment_id = await store.add_payment(user_id, order.total, order.texto(), email)
+        folio = pagos.folio(payment_id)
+        try:
+            session_id, url = await pagos.checkout(
+                folio, order.total, f"Pedido {folio} · {neg['nombre']}",
+                "; ".join(c for c, _ in order.lineas), user_id, email,
+            )
+        except Exception:
+            log.exception("No se pudo crear el link de pago %s", folio)
+            return error("No se pudo generar el link de pago en este momento. Ofrece intentarlo en un rato.")
+        await store.set_payment_session(payment_id, session_id, url)
+        await log_quote(order, catalogo, args)
+        state["acted"] = True
+        return ok(
+            f"Link de pago del pedido {folio} por {tienda.money(order.total)} MXN (vence en"
+            f" {config.PAYMENT_LINK_HOURS:g} horas): {url}\n{order.texto()}\n"
+            "Cuando pague, el sistema le confirma por aquí automáticamente."
+        )
+
+    @tool("estado_pago", "Dice si esta persona ya pagó sus links de pago (los más recientes primero).", {})
+    async def estado_pago(args):
+        rows = await store.payments(user_id)
+        if not rows:
+            return ok("Esta persona no tiene links de pago.")
+        return ok("\n".join(
+            f"{p['folio']}: {tienda.money(p['total'])} MXN, {PAY_STATUS.get(p['status'], p['status'])}" for p in rows
+        ))
+
     tools = [ver_productos, ver_existencias, cotizar_pedido]
-    return tools + [enviar_cotizacion_pedido] if store else tools
+    if not store:
+        return tools
+    tools.append(enviar_cotizacion_pedido)
+    return tools + [cobrar_pedido, estado_pago] if pagos.available() else tools
 
 
 def human_tools(store: Store, google: Google | None, user_id: str, state: dict | None = None) -> list:

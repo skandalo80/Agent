@@ -21,7 +21,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse
 
-from igbot import admin, agent, botones, comentarios, config, reporte
+from igbot import admin, agent, botones, comentarios, config, pagos, reporte
 from igbot.dispatcher import Dispatcher
 from igbot.google import Google
 from igbot.instagram import Instagram
@@ -153,6 +153,59 @@ def media(slug: str, token: str):
     if not path or not path.is_file():
         raise HTTPException(status_code=404)
     return FileResponse(path, media_type="image/jpeg")
+
+
+PAGE = """<!doctype html><html lang="es"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>{title}</title>
+<body style="font-family:sans-serif;max-width:30rem;margin:3rem auto;padding:0 1rem;line-height:1.5;text-align:center">
+<h1>{title}</h1><p>{text}</p></body></html>"""
+
+
+@app.get("/pago/listo", response_class=HTMLResponse)
+def paid_page():
+    return PAGE.format(title="¡Gracias!", text="Recibimos tu pago (si elegiste OXXO, en cuanto pagues la ficha)."
+                       " Te confirmamos por Instagram; ya puedes cerrar esta página.")
+
+
+@app.get("/pago/cancelado", response_class=HTMLResponse)
+def cancelled_page():
+    return PAGE.format(title="Pago no realizado", text="No se hizo ningún cargo. Si quieres, pídenos otro link por Instagram.")
+
+
+async def forward_stripe(body: bytes, signature: str) -> None:
+    """Los avisos de Stripe llegan al dominio (proceso principal); se reenvían a las otras cuentas."""
+    async with httpx.AsyncClient(timeout=10) as http:
+        for url in config.FORWARD_WEBHOOKS:
+            target = url.rsplit("/webhook", 1)[0] + "/stripe/webhook"
+            try:
+                r = await http.post(target, content=body, headers={
+                    "Stripe-Signature": signature, "Content-Type": "application/json",
+                })
+                r.raise_for_status()
+            except Exception:
+                log.exception("No se pudo reenviar el aviso de Stripe a %s", target)
+
+
+async def handle_payment(event: dict) -> None:
+    try:
+        await pagos.handle(event, store, instagram, google)
+    except Exception:
+        log.exception("Falló el aviso de Stripe %s", event.get("id"))
+
+
+@app.post("/stripe/webhook")
+async def stripe_webhook(request: Request):
+    body = await request.body()
+    signature = request.headers.get("Stripe-Signature", "")
+    if config.FORWARD_WEBHOOKS and signature:
+        in_background(forward_stripe(body, signature))
+    if not pagos.signature_ok(body, signature, config.STRIPE_WEBHOOK_SECRET):
+        # Puede ser de la cuenta de Stripe de otro proceso (ya se le reenvió).
+        if config.FORWARD_WEBHOOKS:
+            return {"ok": True}
+        raise HTTPException(status_code=400, detail="firma de Stripe inválida")
+    in_background(handle_payment(await request.json()))
+    return {"ok": True}
 
 
 ECHO_WAIT = 5  # segundos para que el bot termine de anotar sus propios envíos
