@@ -152,3 +152,8 @@ def test_si_el_duenio_contesta_el_bot_se_calla(monkeypatch):
         history = run_(bot.store.recent, "ana", 10)
         assert ("assistant", "[contestó una persona del equipo] Hola Ana, soy Skandar") in history
         assert ("user", "gracias!") in history
+
+
+def test_el_prompt_lleva_el_estilo():
+    prompt = bot.agent.system_prompt()
+    assert "<estilo>" in prompt and "Una sola pregunta" in prompt and "<temas>" in prompt

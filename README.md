@@ -71,6 +71,8 @@ Pruebas locales: `pip install pytest && python -m pytest -q`
 
 **Si contestas tú desde Instagram**, el bot lo detecta (Meta le avisa de cada DM que sale de la cuenta) y también se calla en esa conversación durante `HUMAN_PAUSE_HOURS`. Lo que escribiste queda en su memoria, así que al volver sigue desde ahí.
 
+**Límites contra abuso.** El bot solo habla del negocio: si le piden tareas, código, traducciones o cualquier cosa ajena, contesta en una frase que eso no lo ve y regresa al tema (reglas en `prompts/comun.md`, junto con el estilo de escritura). Además, cada DM se corta a `MAX_MESSAGE_CHARS` (1000), cada persona recibe como mucho `MAX_REPLIES_PER_USER_PER_DAY` respuestas al día (30; al llegar se le avisa una vez y el bot se calla hasta mañana) y la cuenta gasta como mucho `DAILY_BUDGET_USD` al día en Claude (US$5; al pasarlo deja de contestar hasta mañana y te avisa por correo). Los administradores no tienen tope.
+
 **Actualizar el servidor:**
 ```bash
 cd ~/ig-bot && git pull
