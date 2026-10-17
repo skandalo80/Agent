@@ -9,7 +9,7 @@ from pathlib import Path
 
 from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query
 
-from . import catalog, config, tienda, tools
+from . import catalog, config, limites, tienda, tools
 from .google import Google
 from .instagram import Instagram
 from .store import Store
@@ -45,6 +45,7 @@ async def run_claude(
     if result is None or result.is_error or not result.result:
         raise RuntimeError(f"Claude no devolvió respuesta: {result}")
     log.info("Claude: %d turnos, US$%.4f", result.num_turns, result.total_cost_usd or 0)
+    await limites.add_cost(result.total_cost_usd or 0)
     return result.result.strip()
 
 
@@ -75,8 +76,8 @@ async def build_prompt(store: Store, user_id: str, new_messages: list[str]) -> s
     return "\n\n".join(parts)
 
 
-# Estilo de escritura común a todos los bots que hablan con clientes.
-STYLE_PATH = Path("prompts/estilo.md")
+# Estilo y temas permitidos, comunes a todos los bots que hablan con clientes.
+STYLE_PATH = Path("prompts/comun.md")
 
 
 def system_prompt() -> str:

@@ -189,6 +189,15 @@ class Store:
         )
         await self.db.commit()
 
+    async def bot_replies_since(self, user_id: str, since: float) -> int:
+        """Respuestas del bot (no las que el dueño escribió a mano, que llevan mid)."""
+        cur = await self.db.execute(
+            "SELECT COUNT(*) FROM messages WHERE user_id = ? AND role = 'assistant'"
+            " AND mid IS NULL AND created_at >= ?",
+            (user_id, since),
+        )
+        return (await cur.fetchone())[0]
+
     async def mark_seen(self, ids: list[int]) -> None:
         """Saca DMs de la cola sin contestarlos (la conversación la lleva una persona)."""
         marks = ",".join("?" * len(ids))

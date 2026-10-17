@@ -108,6 +108,15 @@ MAX_EMAILS_PER_USER_PER_DAY = int(os.getenv("MAX_EMAILS_PER_USER_PER_DAY", "3"))
 # A quién avisar cuando alguien pide hablar con una persona (por defecto, tu Gmail).
 OWNER_EMAIL = os.getenv("OWNER_EMAIL", "") or MAIL_FROM
 
+# --- Límites contra abuso (spam o usar el bot como ChatGPT gratis) ---
+# Respuestas del bot por persona al día; al llegar, se le avisa una vez y se calla hasta mañana.
+MAX_REPLIES_PER_USER_PER_DAY = int(os.getenv("MAX_REPLIES_PER_USER_PER_DAY", "30"))
+# Caracteres que se le pasan a Claude de cada DM; lo demás se corta.
+MAX_MESSAGE_CHARS = int(os.getenv("MAX_MESSAGE_CHARS", "1000"))
+# Gasto máximo en Claude por día y por cuenta (US$); al pasarlo el bot deja de
+# contestar hasta mañana y avisa al dueño por correo. 0 = sin límite.
+DAILY_BUDGET_USD = float(os.getenv("DAILY_BUDGET_USD", "5"))
+
 # Horas que el bot se queda callado en una conversación cuando la toma una
 # persona (porque se pidió o porque contestaste tú desde Instagram).
 HUMAN_PAUSE_HOURS = float(os.getenv("HUMAN_PAUSE_HOURS", "12"))

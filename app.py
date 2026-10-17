@@ -21,7 +21,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse
 
-from igbot import admin, agent, botones, comentarios, config, reporte
+from igbot import admin, agent, botones, comentarios, config, limites, reporte
 from igbot.dispatcher import Dispatcher
 from igbot.google import Google
 from igbot.instagram import Instagram
@@ -53,7 +53,10 @@ async def handle(user_id: str, rows: list[tuple[int, str]]) -> None:
         await store.mark_seen([i for i, _ in rows])
         return
     # Un administrador habla con su propio asistente (publicar, reactivar chats).
-    respond = admin.reply if admin.is_key(user_id) else agent.reply
+    is_admin = admin.is_key(user_id)
+    if not is_admin and await over_limits(user_id, rows):
+        return
+    respond = admin.reply if is_admin else agent.reply
     for attempt in range(MAX_REDRAFTS + 1):
         text, acted = await respond(store, google, user_id, [t for _, t in rows], instagram)
         latest = await store.pending(user_id)
@@ -71,12 +74,42 @@ async def handle(user_id: str, rows: list[tuple[int, str]]) -> None:
 
 MAX_REDRAFTS = 2
 
+
+async def over_limits(user_id: str, rows: list[tuple[int, str]]) -> bool:
+    """Si la persona o la cuenta ya pasaron su tope del día, no se llama a Claude."""
+    if await limites.over_budget(store):
+        log.warning("Presupuesto diario de Claude agotado; no se contesta a %s", user_id)
+        await store.mark_seen([i for i, _ in rows])
+        if await limites.first_budget_alert(store) and google and config.OWNER_EMAIL:
+            try:
+                await google.send_email(
+                    config.MAIL_FROM, config.MAIL_FROM_NAME, config.OWNER_EMAIL, "",
+                    "Instagram: el bot llegó a su gasto máximo de hoy",
+                    f"El bot ya gastó US${config.DAILY_BUDGET_USD:g} en Claude hoy y dejó de contestar"
+                    " hasta mañana. Si fue un pico normal, sube DAILY_BUDGET_USD en el .env y reinicia.",
+                )
+            except Exception:
+                log.exception("No se pudo avisar al dueño del presupuesto")
+        return True
+    used = await limites.replies_today(store, user_id)
+    if used < config.MAX_REPLIES_PER_USER_PER_DAY:
+        return False
+    log.warning("%s llegó a %d respuestas hoy; no se contesta", user_id, used)
+    if used == config.MAX_REPLIES_PER_USER_PER_DAY:
+        # Se avisa una sola vez; el aviso cuenta como respuesta y los siguientes se ignoran.
+        await instagram.send_text(user_id, limites.LIMIT_NOTICE)
+        await store.mark_answered(user_id, [i for i, _ in rows], limites.LIMIT_NOTICE)
+    else:
+        await store.mark_seen([i for i, _ in rows])
+    return True
+
 dispatcher = Dispatcher(store, handle, config.DEBOUNCE_SECONDS, config.MAX_CONCURRENT)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await store.open()
+    limites.store = store
     await my_account()
     # Mensajes, toques a los botones de inicio y, si hay reglas, comentarios.
     fields = "messages,messaging_postbacks"
@@ -283,7 +316,9 @@ async def receive(request: Request):
             user_id = event["sender"]["id"]
             log.info("DM de %s", user_id)
             text = message_text(message)
-            if admin.is_admin(user_id):
+            if not admin.is_admin(user_id):
+                text = limites.trim(text)
+            else:
                 if new_mode := admin.command(message.get("text", "")):
                     in_background(admin.set_mode(store, instagram, user_id, new_mode))
                     continue

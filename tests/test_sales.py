@@ -156,4 +156,4 @@ def test_si_el_duenio_contesta_el_bot_se_calla(monkeypatch):
 
 def test_el_prompt_lleva_el_estilo():
     prompt = bot.agent.system_prompt()
-    assert "<estilo>" in prompt and "Un solo párrafo" in prompt
+    assert "<estilo>" in prompt and "Una sola pregunta" in prompt and "<temas>" in prompt
