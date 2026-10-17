@@ -75,9 +75,14 @@ async def build_prompt(store: Store, user_id: str, new_messages: list[str]) -> s
     return "\n\n".join(parts)
 
 
+# Estilo de escritura común a todos los bots que hablan con clientes.
+STYLE_PATH = Path("prompts/estilo.md")
+
+
 def system_prompt() -> str:
     """Las instrucciones del bot más el catálogo del negocio, si hay."""
     system = Path(config.PROMPT_PATH).read_text(encoding="utf-8")
+    system += "\n\n" + STYLE_PATH.read_text(encoding="utf-8")
     if catalog.available():
         system += f"\n\n<catalogo>\n{catalog.prompt_text()}\n</catalogo>"
     if tienda.available():
