@@ -102,6 +102,8 @@ sudo journalctl -u igbot -u igbot@nortex -f   # cada uno dice "Cuenta de Instagr
 ```
 3. Manda un DM a @nortex_uniformes desde tu cuenta de prueba.
 
+**Modelo por cuenta.** Cada cuenta puede usar otro modelo con `CLAUDE_MODEL` en su `clientes/<nombre>/.env`. Para un cliente del paquete Básico (solo contesta con la información del negocio) usa el más barato: `CLAUDE_MODEL=claude-haiku-5-5`.
+
 **Catálogo y existencias de Nortex (Google Sheets).** Los productos, precios por pieza y existencias se leen de las hojas `SHEET_CATALOG` y `SHEET_INVENTORY` (en `clientes/nortex/.env`, ya vienen en el ejemplo) y se guardan 5 minutos en memoria, así que un cambio en la hoja se nota en unos minutos sin reiniciar. Las reglas que no están en las hojas (rangos por volumen, bordado y estampado, IVA, entregas y condiciones) están en `clientes/nortex/reglas.yaml`. El agente tiene `ver_productos`, `ver_existencias` y `cotizar_pedido`; las cuentas las hace `igbot/tienda.py`, contando las piezas por tipo de prenda. Con `enviar_cotizacion_pedido` manda la cotización formal en PDF (con folio y vigencia) al correo que la persona escribió y por DM, con copia a `MAIL_CC`; el PDF lo sirve el proceso principal en `PUBLIC_URL/cotizaciones/nortex/...`.
 
 Para que el bot pueda leer las hojas (una sola vez):
@@ -148,7 +150,7 @@ Las fotos se descargan al llegar (los links de Instagram caducan), se convierten
 
 Para activarlo en una cuenta:
 1. En la app de Meta, agrega el permiso `instagram_business_content_publish`, genera de nuevo el token de esa cuenta y reemplázalo en su `.env`.
-2. Escríbele cualquier cosa al bot desde tu Instagram y busca tu id en el log (`journalctl -u igbot@nortex | grep "DM de"`). Ponlo en `ADMIN_IG_IDS` del `.env` de la cuenta (el id cambia en cada cuenta del negocio).
+2. Escríbele cualquier cosa al bot desde tu Instagram y busca tu id en el log (`journalctl -u igbot@nortex | grep "DM de"` para Nortex, `journalctl -u igbot | grep "DM de"` para el vendedor). Ponlo en `ADMIN_IG_IDS` del `.env` de la cuenta (el id cambia en cada cuenta del negocio).
 3. Revisa que el `.env` principal tenga `PUBLIC_URL`, y reinicia.
 
 ## Reporte semanal

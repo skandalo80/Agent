@@ -30,34 +30,41 @@ meses_pagados_en_anual: 10
 paquetes:
   basico:
     nombre: Básico
-    instalacion: 99
-    mensualidad: 49
+    resumen: solo contesta DMs con la información de tu negocio
+    instalacion: 49
+    mensualidad: 29
     respuestas_mes: 1000
     incluye:
       - Responde DMs 24/7 con IA, con el tono y la información de tu negocio
       - Recuerda a cada cliente (memoria por persona)
       - Preguntas frecuentes y botones de inicio
-  pro:
-    nombre: Pro
-    instalacion: 199
-    mensualidad: 129
+      - Se calla en la conversación cuando tú contestas a mano
+  community:
+    nombre: Community Manager
+    resumen: además de contestar, cuida tus comentarios y te ayuda con el contenido, sin conectar nada fuera de Instagram
+    instalacion: 99
+    mensualidad: 79
     respuestas_mes: 2500
     incluye:
       - Todo lo del Básico
-      - Agenda citas en Google Calendar con link de Meet
-      - Manda correos y te avisa de prospectos
-      - Pasar a humano (el bot se calla cuando tú contestas)
-  premium:
-    nombre: Premium
-    instalacion: 349
-    mensualidad: 149
+      - "Comentarios: respuesta pública, \"comenta X y te mando DM\" y filtro de spam"
+      - Te escribe el texto de tus publicaciones (por ejemplo "comenta PRECIO y te mando la info")
+      - Publica en tu Instagram mandándole la foto por DM (al momento o programado)
+      - Pasar a humano (pausa la conversación cuando el cliente pide una persona)
+      - Reporte semanal por DM
+  pro_crm:
+    nombre: Pro CRM
+    resumen: completo y a la medida, enfocado en captar leads y conectado a tus sistemas
+    instalacion: 249
+    mensualidad: 179
     respuestas_mes: 5000
     incluye:
-      - Todo lo del Pro
+      - Todo lo del Community Manager
+      - Captura de leads y conexión con tu CRM
+      - Conexión a tu inventario, precios o base de datos (Google Sheets u otro sistema)
       - Cotizaciones en PDF por correo y DM
-      - "Comentarios: respuesta pública, \"comenta X y te mando DM\" y filtro de spam"
-      - Conexión a Google Sheets (inventario, precios)
-      - Publica en tu Instagram mandándole la foto por DM (al momento o programado)
+      - Agenda citas en Google Calendar con link de Meet
+      - Manda correos y te avisa de prospectos listos para comprar
       - Reporte semanal por correo
 
 extras:
@@ -72,3 +79,4 @@ condiciones:
   - La mensualidad se cobra por adelantado; se puede cancelar en cualquier momento.
   - Con pago anual pagas 10 mensualidades y recibes 12 meses de servicio.
   - Las respuestas no usadas no se acumulan al mes siguiente.
+  - En Pro CRM, las integraciones con sistemas fuera de lo común se cotizan aparte después de revisarlas.
