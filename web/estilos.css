@@ -95,7 +95,9 @@ p { margin: 0; }
 
 /* Demo */
 .sugerencias { display: flex; flex-wrap: wrap; gap: .6rem; justify-content: center; margin-top: 2.5rem; }
-.sugerencia { border: 1px solid var(--linea-oscura); border-radius: 999px; padding: .5rem 1rem; font-size: .9rem; color: var(--claro); background: rgba(255,255,255,.03); }
+.sugerencia { border: 1px solid var(--linea-oscura); border-radius: 999px; padding: .5rem 1rem; font-size: .9rem; color: var(--claro); background: rgba(255,255,255,.03); text-decoration: none; transition: border-color .2s, background .2s; }
+.sugerencia:hover { border-color: var(--gris); background: rgba(255,255,255,.08); }
+.aviso-copia { color: var(--gris); font-size: .85rem; margin-top: 1rem; }
 
 /* Planes */
 .planes { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 1.25rem; margin-top: 4rem; text-align: left; }
