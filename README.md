@@ -83,7 +83,7 @@ sudo systemctl restart igbot
 
 ## Varias cuentas de Instagram (Nortex Uniformes)
 
-Cada cuenta corre como un proceso aparte con su propio prompt, datos y token, sobre el mismo código. La principal (@carmachskandar, el vendedor) es `igbot` en el puerto 8001; otra cuenta es `igbot@<nombre>`, con su carpeta `clientes/<nombre>/` (prompt `system.md`, `catalogo.yaml` opcional y `.env`) y sus datos en `data/<nombre>/`.
+Cada cuenta corre como un proceso aparte con su propio prompt, datos y token, sobre el mismo código. La principal (@skandar.online, el vendedor) es `igbot` en el puerto 8001; otra cuenta es `igbot@<nombre>`, con su carpeta `clientes/<nombre>/` (prompt `system.md`, `catalogo.yaml` opcional y `.env`) y sus datos en `data/<nombre>/`.
 
 Meta manda los avisos de todas las cuentas de la app al mismo webhook (`bot.skandar.online/webhook`). El proceso principal se los reenvía tal cual, con su firma, a los demás (`FORWARD_WEBHOOKS`), y cada proceso solo atiende los de su cuenta (la reconoce al arrancar con su token).
 
