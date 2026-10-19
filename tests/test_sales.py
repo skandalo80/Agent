@@ -29,23 +29,26 @@ class FakeInstagram:
 
 
 def test_precios_salen_del_catalogo():
-    q = catalog.quote("premium", "anual", 2)
-    # 349 de instalación + 10 mensualidades de 149 + 2 bloques x 15 x 10 meses
-    assert q.primer_pago == 349 + 1490 + 300
-    assert q.recurrente == 1490 + 300
+    q = catalog.quote("pro_crm", "anual", 2)
+    # 249 de instalación + 10 mensualidades de 179 + 2 bloques x 15 x 10 meses
+    assert q.primer_pago == 249 + 1790 + 300
+    assert q.recurrente == 1790 + 300
     q = catalog.quote("Básico")
-    assert (q.primer_pago, q.recurrente) == (99 + 49, 49)
+    assert (q.primer_pago, q.recurrente) == (49 + 29, 29)
+    # También por nombre
+    assert catalog.quote("Community Manager").paquete == "community"
+    assert catalog.quote("Pro CRM").paquete == "pro_crm"
     with pytest.raises(ValueError):
         catalog.quote("platino")
     with pytest.raises(ValueError):
-        catalog.quote("pro", "semanal")
+        catalog.quote("community", "semanal")
     with pytest.raises(ValueError):
-        catalog.quote("pro", "mensual", 99)
+        catalog.quote("community", "mensual", 99)
 
 
 def test_el_prompt_lleva_el_catalogo(monkeypatch):
     prompt = bot.agent.system_prompt()
-    assert "US$149 al mes" in prompt and "escribirle a @nortex_uniformes" in prompt
+    assert "US$179 al mes" in prompt and "escribirle a @nortex_uniformes" in prompt
     cat = {**catalog.load(), "negocio": {**catalog.load()["negocio"], "demo_instagram": "@demo"}}
     monkeypatch.setattr(catalog, "load", lambda: cat)
     assert "escribirle a @demo" in bot.agent.system_prompt()
@@ -76,13 +79,13 @@ def sales(monkeypatch, tmp_path):
 def test_cotizacion_por_correo_y_dm(sales, tmp_path):
     async def main():
         store, google, ig, state, t = await sales()
-        args = {"paquete": "pro", "pago": "mensual", "bloques_extra": 0, "nombre": "Ana", "empresa": ""}
+        args = {"paquete": "community", "pago": "mensual", "bloques_extra": 0, "nombre": "Ana", "empresa": ""}
 
         r = await t["enviar_cotizacion"]({**args, "email": "otra@mail.com"})
         assert r.get("is_error") and not google.sent  # correo que no escribió
 
         r = await t["enviar_cotizacion"]({**args, "email": "ana@mail.com"})
-        assert "COT-0001" in text(r) and "US$328" in text(r)
+        assert "COT-0001" in text(r) and "US$178" in text(r)
         assert google.sent == [("yo@gmail.com", "ana@mail.com", "copia@gmail.com", google.sent[0][3])]
         name, pdf = google.attachments[0]
         assert name == "Cotizacion-COT-0001.pdf" and pdf.startswith(b"%PDF")

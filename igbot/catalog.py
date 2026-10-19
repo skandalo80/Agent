@@ -46,10 +46,17 @@ class Quote:
         return "\n".join(out)
 
 
+def _norm(text: str) -> str:
+    return "_".join(text.strip().lower().replace("á", "a").replace("-", " ").split())
+
+
 def quote(paquete: str, pago: str = "mensual", bloques_extra: int = 0) -> Quote:
-    """Calcula una cotización. Lanza ValueError si las opciones no existen."""
+    """Calcula una cotización. Lanza ValueError si las opciones no existen.
+
+    paquete puede ser la clave ("pro_crm") o el nombre ("Pro CRM")."""
     cat = load()
-    key = paquete.strip().lower().replace("á", "a")
+    key = _norm(paquete)
+    key = next((k for k, p in cat["paquetes"].items() if key in (k, _norm(p["nombre"]))), key)
     if key not in cat["paquetes"]:
         raise ValueError(f"No existe el paquete '{paquete}'. Opciones: {', '.join(cat['paquetes'])}.")
     pago = pago.strip().lower()
@@ -88,8 +95,9 @@ def prompt_text() -> str:
     neg = cat["negocio"]
     out = [f"Negocio: {neg['nombre']} ({neg['instagram']}). {neg['descripcion']}", "", "Paquetes:"]
     for key, p in cat["paquetes"].items():
+        resumen = f" ({p['resumen']})" if p.get("resumen") else ""
         out.append(
-            f"- {p['nombre']} (clave: {key}): instalación {m(p['instalacion'])}, {m(p['mensualidad'])} al mes,"
+            f"- {p['nombre']} (clave: {key}){resumen}: instalación {m(p['instalacion'])}, {m(p['mensualidad'])} al mes,"
             f" {p['respuestas_mes']:,} respuestas al mes. Incluye: {'; '.join(p['incluye'])}."
         )
     e = cat["extras"]["respuestas"]
