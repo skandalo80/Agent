@@ -244,6 +244,56 @@ def quote_url(token: str) -> str:
     return f"{config.PUBLIC_URL}/cotizaciones/{slug}{token}.pdf"
 
 
+CANALES = ("chat", "correo", "ambos")
+CANAL_DOC = (
+    "canal: por dónde la quiere la persona: 'chat' (solo por este DM), 'correo' o 'ambos'."
+    " email: su correo, o cadena vacía si la quiere solo por este chat."
+)
+
+
+async def check_quote_delivery(
+    store: Store, instagram: Instagram | None, user_id: str, canal: str, email: str
+) -> str | None:
+    """Revisa que se pueda entregar la cotización por el canal que eligió la persona."""
+    if canal not in CANALES:
+        return "canal debe ser 'chat', 'correo' o 'ambos'. Pregúntale si la quiere por aquí o por correo."
+    if canal != "correo" and not (instagram and config.PUBLIC_URL):
+        return "Ahora no se puede mandar el PDF por este chat. Ofrece mandárselo por correo."
+    if canal != "chat":
+        if not email:
+            return "Para mandarla por correo pídele su correo; si prefiere no darlo, mándala solo por este chat."
+        if problem := await check_client_email(store, user_id, email):
+            return problem
+        if await store.emails_since(user_id, time.time() - 86400) >= config.MAX_EMAILS_PER_USER_PER_DAY:
+            return "Ya se le enviaron los correos permitidos hoy. Ofrece mandarla por este chat."
+    return None
+
+
+async def deliver_quote(
+    store: Store, google: Google, instagram: Instagram | None, user_id: str, canal: str, email: str,
+    folio: str, token: str, data: bytes, subject: str, body: str, sender: str,
+) -> str:
+    """Manda el PDF por correo y/o por este DM. Devuelve por dónde llegó ('' si no llegó)."""
+    sent = []
+    if canal != "chat":
+        try:
+            await google.send_email(
+                config.MAIL_FROM, sender, email, config.MAIL_CC, subject, body,
+                attachments=[(f"Cotizacion-{folio}.pdf", data)],
+            )
+            await store.log_email(user_id, email, subject)
+            sent.append(f"por correo a {email}")
+        except Exception:
+            log.exception("No se pudo mandar la cotización %s por correo", folio)
+    if canal != "correo":
+        try:
+            await instagram.send_file(user_id, quote_url(token))
+            sent.append("por este chat")
+        except Exception:
+            log.exception("No se pudo mandar el PDF por DM a %s", user_id)
+    return " y ".join(sent)
+
+
 def quote_tools(
     store: Store, google: Google, instagram: Instagram | None, user_id: str, state: dict | None = None
 ) -> list:
@@ -265,21 +315,20 @@ def quote_tools(
 
     @tool(
         "enviar_cotizacion",
-        "Genera la cotización formal en PDF (con folio) y se la manda a la persona por correo y"
-        " por este DM, con copia al dueño. Antes confirma con ella el paquete, la forma de pago y"
-        " su correo. nombre y empresa son opcionales (cadena vacía si no los dio).",
-        {**QUOTE_ARGS, "email": str, "nombre": str, "empresa": str},
+        "Genera la cotización formal en PDF (con folio) y se la manda a la persona por este DM,"
+        " por correo (con copia al dueño) o por ambos, según lo que ella eligió. Antes confirma"
+        " con ella el paquete y la forma de pago. " + CANAL_DOC + " nombre y empresa son"
+        " opcionales (cadena vacía si no los dio).",
+        {**QUOTE_ARGS, "canal": str, "email": str, "nombre": str, "empresa": str},
     )
     async def enviar_cotizacion(args):
-        email = args["email"].strip()
-        if problem := await check_client_email(store, user_id, email):
+        canal, email = args.get("canal", "").strip().lower(), args.get("email", "").strip()
+        if problem := await check_quote_delivery(store, instagram, user_id, canal, email):
             return error(problem)
         try:
             q = catalog.quote(args["paquete"], args["pago"], int(args["bloques_extra"]))
         except ValueError as e:
             return error(str(e))
-        if await store.emails_since(user_id, time.time() - 86400) >= config.MAX_EMAILS_PER_USER_PER_DAY:
-            return error("Ya se le enviaron los correos permitidos hoy. Ofrece seguir por aquí.")
 
         nombre, empresa = args["nombre"].strip()[:80], args["empresa"].strip()[:80]
         token = secrets.token_urlsafe(16)
@@ -299,21 +348,14 @@ def quote_tools(
             f"Es válida por {catalog.load()['vigencia_dias']} días. Si tienes dudas, contesta este"
             f" correo o escríbenos a {neg['instagram']}.\n\nSaludos,\n{neg['nombre']}"
         )
-        await google.send_email(
-            config.MAIL_FROM, config.MAIL_FROM_NAME, email, config.MAIL_CC, subject, body,
-            attachments=[(f"Cotizacion-{folio}.pdf", data)],
+        sent = await deliver_quote(
+            store, google, instagram, user_id, canal, email, folio, token, data, subject, body,
+            config.MAIL_FROM_NAME,
         )
-        await store.log_email(user_id, email, subject)
+        if not sent:
+            return error("No se pudo mandar la cotización en este momento. Ofrece intentarlo en un rato.")
         state["acted"] = True
-
-        by_dm = ""
-        if instagram and config.PUBLIC_URL:
-            try:
-                await instagram.send_file(user_id, quote_url(token))
-                by_dm = " y el PDF ya va en este chat"
-            except Exception:
-                log.exception("No se pudo mandar el PDF por DM a %s", user_id)
-        return ok(f"Cotización {folio} enviada a {email}{by_dm}.\n{q.texto()}")
+        return ok(f"Cotización {folio} enviada {sent}.\n{q.texto()}")
 
     return [cotizar, enviar_cotizacion]
 
@@ -346,11 +388,14 @@ SEND_ORDER_SCHEMA = {
     "type": "object",
     "properties": {
         **ORDER_SCHEMA["properties"],
-        "email": {"type": "string", "description": "El correo que la persona escribió en el chat."},
+        "canal": {"type": "string", "enum": list(CANALES),
+                  "description": "Por dónde la quiere: solo este chat, correo o ambos."},
+        "email": {"type": "string",
+                  "description": "El correo que la persona escribió en el chat, o cadena vacía si la quiere solo por aquí."},
         "nombre": {"type": "string", "description": "Su nombre, o cadena vacía."},
         "empresa": {"type": "string", "description": "Su empresa, o cadena vacía."},
     },
-    "required": ORDER_SCHEMA["required"] + ["email", "nombre", "empresa"],
+    "required": ORDER_SCHEMA["required"] + ["canal", "email", "nombre", "empresa"],
 }
 
 
@@ -426,16 +471,14 @@ def store_tools(
     @tool(
         "enviar_cotizacion_pedido",
         "Genera la cotización formal del pedido en PDF (con folio) y se la manda a la persona por"
-        " correo y por este DM, con copia al negocio. Antes confirma con ella el pedido exacto"
-        " (prendas, tallas, cantidades, personalización) y su correo.",
+        " este DM, por correo (con copia al negocio) o por ambos, según lo que ella eligió. Antes"
+        " confirma con ella el pedido exacto (prendas, tallas, cantidades, personalización).",
         SEND_ORDER_SCHEMA,
     )
     async def enviar_cotizacion_pedido(args):
-        email = args.get("email", "").strip()
-        if problem := await check_client_email(store, user_id, email):
+        canal, email = args.get("canal", "").strip().lower(), args.get("email", "").strip()
+        if problem := await check_quote_delivery(store, instagram, user_id, canal, email):
             return error(problem)
-        if await store.emails_since(user_id, time.time() - 86400) >= config.MAX_EMAILS_PER_USER_PER_DAY:
-            return error("Ya se le enviaron los correos permitidos hoy. Ofrece seguir por aquí.")
         catalogo, err = await load(tienda.products)
         if err:
             return err
@@ -466,26 +509,15 @@ def store_tools(
             f"Es válida por {reglas['vigencia_dias']} días. Para confirmar el pedido o cualquier duda,"
             f" contesta este correo o escríbenos a {neg['instagram']}.\n\nSaludos,\n{neg['nombre']}"
         )
-        try:
-            await google.send_email(
-                config.MAIL_FROM, config.MAIL_FROM_NAME or neg["nombre"], email, config.MAIL_CC, subject, body,
-                attachments=[(f"Cotizacion-{folio}.pdf", data)],
-            )
-        except Exception:
-            log.exception("No se pudo mandar la cotización %s", folio)
-            return error("No se pudo mandar el correo en este momento. Ofrece intentarlo en un rato.")
-        await store.log_email(user_id, email, subject)
+        sent = await deliver_quote(
+            store, google, instagram, user_id, canal, email, folio, token, data, subject, body,
+            config.MAIL_FROM_NAME or neg["nombre"],
+        )
+        if not sent:
+            return error("No se pudo mandar la cotización en este momento. Ofrece intentarlo en un rato.")
         await log_quote(order, catalogo, args)
         state["acted"] = True
-
-        by_dm = ""
-        if instagram and config.PUBLIC_URL:
-            try:
-                await instagram.send_file(user_id, quote_url(token))
-                by_dm = " y el PDF ya va en este chat"
-            except Exception:
-                log.exception("No se pudo mandar el PDF por DM a %s", user_id)
-        return ok(f"Cotización {folio} enviada a {email}{by_dm}.\n{order.texto()}")
+        return ok(f"Cotización {folio} enviada {sent}.\n{order.texto()}")
 
     tools = [ver_productos, ver_existencias, cotizar_pedido]
     return tools + [enviar_cotizacion_pedido] if store else tools

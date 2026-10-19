@@ -12,10 +12,10 @@ from functools import lru_cache
 from pathlib import Path
 
 import yaml
-from fpdf import FPDF
 
 from . import config
 from .google import Google
+from .pdf_marca import Cotizacion
 
 TECNICAS = ("ninguna", "bordado", "dtf")
 # Tallas como se dicen en México -> como vienen en la hoja.
@@ -246,65 +246,21 @@ def prompt_text() -> str:
 
 def pdf(order: Order, folio: str, cliente: str, empresa: str, email: str, today: date) -> bytes:
     """Cotización formal del pedido en PDF (lo mismo que texto(), con folio y condiciones)."""
-    from .catalog import _latin1
-
     r = rules()
     neg = r["negocio"]
-    t = lambda s: _latin1(str(s))  # noqa: E731
-    doc = FPDF(format="Letter")
-    doc.set_margins(20, 20, 20)
-    doc.add_page()
-    w = doc.epw
+    doc = Cotizacion(neg["nombre"], f"{neg['instagram']}  ·  {neg['ciudad']}", folio, neg.get("color_acento", ""))
 
-    doc.set_font("Helvetica", "B", 18)
-    doc.cell(w, 10, t(neg["nombre"]), new_x="LMARGIN", new_y="NEXT")
-    doc.set_font("Helvetica", "", 10)
-    doc.set_text_color(90)
-    doc.cell(w, 5, t(f"{neg['instagram']}  ·  {neg['ciudad']}"), new_x="LMARGIN", new_y="NEXT")
-    doc.ln(8)
-
-    doc.set_text_color(0)
-    doc.set_font("Helvetica", "B", 14)
-    doc.cell(w / 2, 8, t(f"Cotización {folio}"))
-    doc.set_font("Helvetica", "", 10)
+    doc.titulo("Cotización", "Pedido de uniformes", f"Tiempo de entrega: {order.entrega}.")
     vence = today + timedelta(days=r["vigencia_dias"])
-    doc.cell(w / 2, 8, t(f"Fecha: {today:%d/%m/%Y}   Válida hasta: {vence:%d/%m/%Y}"), align="R",
-             new_x="LMARGIN", new_y="NEXT")
-    doc.ln(2)
     para = ", ".join(x for x in (cliente, empresa) if x) or "Cliente"
-    doc.cell(w, 6, t(f"Para: {para}  ({email})"), new_x="LMARGIN", new_y="NEXT")
-    doc.ln(6)
+    doc.datos([("Para", "\n".join(x for x in (para, email) if x)),
+               ("Fecha", f"{today:%d/%m/%Y}"), ("Válida hasta", f"{vence:%d/%m/%Y}")])
 
-    doc.set_fill_color(235)
-    doc.set_font("Helvetica", "B", 10)
-    doc.cell(w * 0.75, 8, t("Concepto"), fill=True)
-    doc.cell(w * 0.25, 8, t("Importe"), fill=True, align="R", new_x="LMARGIN", new_y="NEXT")
-    doc.set_font("Helvetica", "", 10)
-    for concepto, importe in order.lineas:
-        y = doc.get_y()
-        doc.multi_cell(w * 0.75, 7, t(concepto), border="B", new_x="RIGHT", new_y="TOP")
-        height = doc.get_y() - y if doc.get_y() > y else 7
-        doc.cell(w * 0.25, max(height, 7), t(money(importe)), border="B", align="R",
-                 new_x="LMARGIN", new_y="NEXT")
-    for label, amount, bold in (("Subtotal", order.subtotal, False),
-                                (f"IVA ({r['iva']:.0%})", order.iva, False),
-                                (f"Total {r['moneda']}", order.total, True)):
-        doc.set_font("Helvetica", "B" if bold else "", 11 if bold else 10)
-        doc.cell(w * 0.75, 8, t(label), align="R")
-        doc.cell(w * 0.25, 8, t(money(amount)), align="R", new_x="LMARGIN", new_y="NEXT")
-    doc.ln(4)
+    doc.tabla([(concepto, money(importe)) for concepto, importe in order.lineas])
+    doc.totales([("Subtotal", money(order.subtotal)), (f"IVA ({r['iva']:.0%})", money(order.iva))],
+                (f"Total {r['moneda']}", money(order.total)))
 
-    doc.set_font("Helvetica", "B", 10)
-    doc.cell(w, 6, t(f"Tiempo de entrega: {order.entrega}"), new_x="LMARGIN", new_y="NEXT")
-    doc.set_font("Helvetica", "", 10)
-    for aviso in order.avisos:
-        doc.multi_cell(w, 6, t(aviso), new_x="LMARGIN", new_y="NEXT")
-    doc.ln(4)
-
-    doc.set_font("Helvetica", "B", 11)
-    doc.cell(w, 7, t("Condiciones"), new_x="LMARGIN", new_y="NEXT")
-    doc.set_font("Helvetica", "", 9)
-    doc.set_text_color(70)
-    for c in r["condiciones"]:
-        doc.multi_cell(w, 5, t(f"-  {c}"), new_x="LMARGIN", new_y="NEXT")
-    return bytes(doc.output())
+    if order.avisos:
+        doc.seccion("Avisos", order.avisos)
+    doc.seccion("Condiciones", r["condiciones"], chica=True)
+    return doc.bytes()

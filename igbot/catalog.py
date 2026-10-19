@@ -9,9 +9,9 @@ from functools import lru_cache
 from pathlib import Path
 
 import yaml
-from fpdf import FPDF
 
 from . import config
+from .pdf_marca import Cotizacion
 
 
 @lru_cache
@@ -121,70 +121,25 @@ def prompt_text() -> str:
     return "\n".join(out)
 
 
-def _latin1(text: str) -> str:
-    # Las fuentes base del PDF solo tienen latin-1 (incluye acentos y ñ).
-    return text.encode("latin-1", "replace").decode("latin-1")
-
-
 def pdf(q: Quote, folio: str, cliente: str, empresa: str, email: str, today: date) -> bytes:
     cat = load()
     neg = cat["negocio"]
     p = cat["paquetes"][q.paquete]
     m = lambda x: money(x, q.moneda)  # noqa: E731
-    doc = FPDF(format="Letter")
-    doc.set_margins(20, 20, 20)
-    doc.add_page()
-    w = doc.epw
-    t = lambda s: _latin1(str(s))  # noqa: E731
+    doc = Cotizacion(neg["nombre"], f"{neg['instagram']}  ·  {neg['correo']}", folio, neg.get("color_acento", ""))
 
-    doc.set_font("Helvetica", "B", 18)
-    doc.cell(w, 10, t(neg["nombre"]), new_x="LMARGIN", new_y="NEXT")
-    doc.set_font("Helvetica", "", 10)
-    doc.set_text_color(90)
-    doc.cell(w, 5, t(f"{neg['instagram']}  ·  {neg['correo']}"), new_x="LMARGIN", new_y="NEXT")
-    doc.ln(8)
-
-    doc.set_text_color(0)
-    doc.set_font("Helvetica", "B", 14)
-    doc.cell(w / 2, 8, t(f"Cotización {folio}"))
-    doc.set_font("Helvetica", "", 10)
+    resumen = p.get("resumen", "").strip()
+    doc.titulo("Propuesta", f"Paquete {p['nombre']}", resumen[:1].upper() + resumen[1:] + "." if resumen else "")
     vence = today + timedelta(days=cat["vigencia_dias"])
-    doc.cell(w / 2, 8, t(f"Fecha: {today:%d/%m/%Y}   Válida hasta: {vence:%d/%m/%Y}"), align="R",
-             new_x="LMARGIN", new_y="NEXT")
-    doc.ln(2)
     para = ", ".join(x for x in (cliente, empresa) if x) or "Cliente"
-    doc.cell(w, 6, t(f"Para: {para}  ({email})"), new_x="LMARGIN", new_y="NEXT")
-    doc.ln(6)
+    doc.datos([("Para", "\n".join(x for x in (para, email) if x)),
+               ("Fecha", f"{today:%d/%m/%Y}"), ("Válida hasta", f"{vence:%d/%m/%Y}")])
 
-    doc.set_fill_color(235)
-    doc.set_font("Helvetica", "B", 10)
-    doc.cell(w * 0.75, 8, t("Concepto"), fill=True)
-    doc.cell(w * 0.25, 8, t("Importe"), fill=True, align="R", new_x="LMARGIN", new_y="NEXT")
-    doc.set_font("Helvetica", "", 10)
-    for concepto, importe in q.lineas:
-        doc.cell(w * 0.75, 8, t(concepto), border="B")
-        doc.cell(w * 0.25, 8, t(m(importe)), border="B", align="R", new_x="LMARGIN", new_y="NEXT")
-    doc.set_font("Helvetica", "B", 11)
-    doc.cell(w * 0.75, 9, t("Primer pago"))
-    doc.cell(w * 0.25, 9, t(m(q.primer_pago)), align="R", new_x="LMARGIN", new_y="NEXT")
-    doc.set_font("Helvetica", "", 10)
+    doc.tabla([(concepto, m(importe)) for concepto, importe in q.lineas])
     periodo = "cada año" if q.pago == "anual" else "cada mes"
-    doc.cell(w * 0.75, 7, t(f"Después, {periodo}"))
-    doc.cell(w * 0.25, 7, t(m(q.recurrente)), align="R", new_x="LMARGIN", new_y="NEXT")
-    doc.ln(6)
+    doc.totales([], ("Primer pago", m(q.primer_pago)), f"Después, {m(q.recurrente)} {periodo}")
 
     extra = q.bloques_extra * cat["extras"]["respuestas"]["bloque"]
-    doc.set_font("Helvetica", "B", 11)
-    doc.cell(w, 7, t(f"Qué incluye el paquete {p['nombre']}"), new_x="LMARGIN", new_y="NEXT")
-    doc.set_font("Helvetica", "", 10)
-    for item in p["incluye"] + [f"{p['respuestas_mes'] + extra:,} respuestas del bot al mes"]:
-        doc.multi_cell(w, 6, t(f"-  {item}"), new_x="LMARGIN", new_y="NEXT")
-    doc.ln(4)
-
-    doc.set_font("Helvetica", "B", 11)
-    doc.cell(w, 7, t("Condiciones"), new_x="LMARGIN", new_y="NEXT")
-    doc.set_font("Helvetica", "", 9)
-    doc.set_text_color(70)
-    for c in cat["condiciones"] + [f"Precios en {q.moneda}."]:
-        doc.multi_cell(w, 5, t(f"-  {c}"), new_x="LMARGIN", new_y="NEXT")
-    return bytes(doc.output())
+    doc.seccion("Qué incluye", p["incluye"] + [f"{p['respuestas_mes'] + extra:,} respuestas del bot al mes"])
+    doc.seccion("Condiciones", cat["condiciones"] + [f"Precios en {q.moneda}."], chica=True)
+    return doc.bytes()

@@ -5,6 +5,8 @@ negocio:
   nombre: Nortex Uniformes
   instagram: "@nortex_uniformes"
   ciudad: Monterrey
+  # Color del único detalle de acento en el PDF de cotización.
+  color_acento: "#1F3A5F"
 moneda: MXN
 iva: 0.16
 vigencia_dias: 15
