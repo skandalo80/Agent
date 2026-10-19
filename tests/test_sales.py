@@ -48,10 +48,11 @@ def test_precios_salen_del_catalogo():
 
 def test_el_prompt_lleva_el_catalogo(monkeypatch):
     prompt = bot.agent.system_prompt()
-    assert "US$179 al mes" in prompt and "escribirle a @nortex_uniformes" in prompt
-    cat = {**catalog.load(), "negocio": {**catalog.load()["negocio"], "demo_instagram": "@demo"}}
+    assert "US$179 al mes" in prompt and "antro, bar o restaurante:" in prompt
+    assert "nortex" not in prompt.lower()  # el vendedor no manda a nadie a la cuenta de Nortex
+    cat = {**catalog.load(), "demo": {"giros": {"gimnasio": "horarios y membresías"}}}
     monkeypatch.setattr(catalog, "load", lambda: cat)
-    assert "escribirle a @demo" in bot.agent.system_prompt()
+    assert "gimnasio: horarios y membresías" in bot.agent.system_prompt()
 
 
 @pytest.fixture
