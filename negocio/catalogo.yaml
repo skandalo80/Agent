@@ -29,6 +29,8 @@ vigencia_dias: 15
 meses_pagados_en_anual: 10
 # El primer mes de servicio no se cobra: al contratar solo se paga la instalación.
 primer_mes_gratis: true
+# Los precios no incluyen IVA: se muestran como "US$29 + IVA".
+precios_mas_iva: true
 
 paquetes:
   basico:
@@ -78,6 +80,7 @@ extras:
     max_bloques: 20
 
 condiciones:
+  - Los precios no incluyen IVA (16% para clientes en México).
   - La instalación se paga una sola vez, al contratar.
   - El primer mes de servicio es gratis; la mensualidad (o el pago anual) se empieza a cobrar en el segundo mes.
   - La mensualidad se cobra por adelantado; se puede cancelar en cualquier momento.
