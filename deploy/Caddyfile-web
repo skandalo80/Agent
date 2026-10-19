@@ -1,0 +1,9 @@
+skandar.online {
+    root * /var/www/skandar.online
+    try_files {path} {path}.html
+    file_server
+}
+
+www.skandar.online {
+    redir https://skandar.online{uri} permanent
+}

@@ -269,3 +269,21 @@ sudo journalctl -u igbot -f
 - **No aparece nada en los logs al mandar un DM**: con la app en modo *Desarrollo*, Meta solo entrega mensajes de cuentas con rol en la app. Añade la cuenta que envía como **Instagram Tester** (Roles de la app → Roles) y acepta la invitación desde Instagram (Configuración → Apps y sitios web → Invitaciones de tester). También revisa en la app de Instagram de tu cuenta profesional: Configuración → Mensajes → *Permitir acceso a los mensajes* (herramientas conectadas).
 - **Aparece "Fallo contestando a ..."**: el error viene debajo. Si es de Instagram (401/400) casi siempre es el token; si es de Claude, revisa `ANTHROPIC_API_KEY`.
 - **La verificación del webhook falla**: comprueba que `/health` abre con HTTPS y que el token de verificación coincide exactamente.
+
+## Página web (skandar.online)
+
+La página del negocio está en `web/` (HTML estático, sin build): `index.html` y `privacidad.html` (aviso de privacidad completo, sirve para Meta). Caddy la sirve desde `/var/www/skandar.online`, porque el usuario `caddy` no puede leer tu carpeta personal.
+
+1. DNS: registros A de `skandar.online` (`@`) y `www` apuntando a la IP de la instancia.
+2. Revisa que nadie use ya esos nombres: `grep -n "skandar.online" /etc/caddy/Caddyfile` (solo debe salir `bot.skandar.online`).
+3. Copia los archivos y añade el bloque:
+
+```bash
+sudo mkdir -p /var/www/skandar.online
+sudo cp ~/ig-bot/web/* /var/www/skandar.online/
+cat ~/ig-bot/deploy/Caddyfile-web | sudo tee -a /etc/caddy/Caddyfile
+sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+sudo systemctl reload caddy
+```
+
+Para actualizarla después: `git pull` y repetir el `cp`. No hace falta recargar Caddy.
