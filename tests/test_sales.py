@@ -30,11 +30,13 @@ class FakeInstagram:
 
 def test_precios_salen_del_catalogo():
     q = catalog.quote("pro_crm", "anual", 2)
-    # 249 de instalación + 10 mensualidades de 179 + 2 bloques x 15 x 10 meses
-    assert q.primer_pago == 249 + 1790 + 300
-    assert q.recurrente == 1790 + 300
+    # Primer mes gratis: al contratar solo la instalación (199); desde el segundo mes,
+    # 10 mensualidades de 129 + 2 bloques x 15 x 10 meses
+    assert q.primer_pago == 199
+    assert q.recurrente == 1290 + 300
+    assert "Desde el segundo mes: US$1,590 + IVA al año" in q.texto()
     q = catalog.quote("Básico")
-    assert (q.primer_pago, q.recurrente) == (49 + 29, 29)
+    assert (q.primer_pago, q.recurrente) == (49, 29)
     # También por nombre
     assert catalog.quote("Community Manager").paquete == "community"
     assert catalog.quote("Pro CRM").paquete == "pro_crm"
@@ -48,7 +50,7 @@ def test_precios_salen_del_catalogo():
 
 def test_el_prompt_lleva_el_catalogo(monkeypatch):
     prompt = bot.agent.system_prompt()
-    assert "US$179 al mes" in prompt and "antro, bar o restaurante:" in prompt
+    assert "US$129 + IVA al mes" in prompt and "Primer mes gratis" in prompt and "antro, bar o restaurante:" in prompt
     assert "nortex" not in prompt.lower()  # el vendedor no manda a nadie a la cuenta de Nortex
     cat = {**catalog.load(), "demo": {"giros": {"gimnasio": "horarios y membresías"}}}
     monkeypatch.setattr(catalog, "load", lambda: cat)
@@ -87,7 +89,7 @@ def test_cotizacion_por_correo_y_dm(sales, tmp_path):
         assert r.get("is_error") and not google.sent  # correo que no escribió
 
         r = await t["enviar_cotizacion"]({**args, "email": "ana@mail.com"})
-        assert "COT-0001" in text(r) and "US$178" in text(r)
+        assert "COT-0001" in text(r) and "Primer pago: US$99 + IVA" in text(r)
         assert google.sent == [("yo@gmail.com", "ana@mail.com", "copia@gmail.com", google.sent[0][3])]
         name, pdf = google.attachments[0]
         assert name == "Cotizacion-COT-0001.pdf" and pdf.startswith(b"%PDF")

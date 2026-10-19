@@ -27,6 +27,10 @@ moneda: USD
 vigencia_dias: 15
 # El pago anual cobra este número de mensualidades (12 - 2 meses gratis).
 meses_pagados_en_anual: 10
+# El primer mes de servicio no se cobra: al contratar solo se paga la instalación.
+primer_mes_gratis: true
+# Los precios no incluyen IVA: se muestran como "US$29 + IVA".
+precios_mas_iva: true
 
 paquetes:
   basico:
@@ -56,8 +60,8 @@ paquetes:
   pro_crm:
     nombre: Pro CRM
     resumen: completo y a la medida, enfocado en captar leads y conectado a tus sistemas
-    instalacion: 249
-    mensualidad: 179
+    instalacion: 199
+    mensualidad: 129
     respuestas_mes: 5000
     incluye:
       - Todo lo del Community Manager
@@ -76,7 +80,9 @@ extras:
     max_bloques: 20
 
 condiciones:
+  - Los precios no incluyen IVA (16% para clientes en México).
   - La instalación se paga una sola vez, al contratar.
+  - El primer mes de servicio es gratis; la mensualidad (o el pago anual) se empieza a cobrar en el segundo mes.
   - La mensualidad se cobra por adelantado; se puede cancelar en cualquier momento.
   - Con pago anual pagas 10 mensualidades y recibes 12 meses de servicio.
   - Las respuestas no usadas no se acumulan al mes siguiente.

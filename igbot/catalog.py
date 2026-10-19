@@ -36,13 +36,16 @@ class Quote:
     primer_pago: float
     recurrente: float  # lo que se paga cada mes o cada año después
     moneda: str
+    desde_segundo_mes: bool = False  # el recurrente se empieza a cobrar en el segundo mes
+    iva: str = ""  # " + IVA" si los precios no lo incluyen
 
     def texto(self) -> str:
         m = lambda x: money(x, self.moneda)  # noqa: E731
         periodo = "al año" if self.pago == "anual" else "al mes"
         out = [f"{c}: {m(v)}" for c, v in self.lineas]
-        out.append(f"Primer pago: {m(self.primer_pago)}")
-        out.append(f"Después: {m(self.recurrente)} {periodo}")
+        out.append(f"Primer pago: {m(self.primer_pago)}{self.iva}")
+        cuando = "Desde el segundo mes" if self.desde_segundo_mes else "Después"
+        out.append(f"{cuando}: {m(self.recurrente)}{self.iva} {periodo}")
         return "\n".join(out)
 
 
@@ -70,28 +73,36 @@ def quote(paquete: str, pago: str = "mensual", bloques_extra: int = 0) -> Quote:
     meses = cat["meses_pagados_en_anual"] if pago == "anual" else 1
     servicio = p["mensualidad"] * meses
     extras = bloques_extra * extra["precio"] * meses
-    lineas = [
-        (f"Instalación paquete {p['nombre']} (pago único)", p["instalacion"]),
-        (
+    lineas = [(f"Instalación paquete {p['nombre']} (pago único)", p["instalacion"])]
+    gratis = bool(cat.get("primer_mes_gratis"))
+    if gratis:
+        # El primer mes no se cobra; el servicio (y los extras) se pagan desde el segundo.
+        lineas.append((f"Primer mes del paquete {p['nombre']} (gratis)", 0))
+    else:
+        lineas.append((
             f"Paquete {p['nombre']}, pago anual (12 meses por {meses})"
             if pago == "anual"
             else f"Paquete {p['nombre']}, primera mensualidad",
             servicio,
-        ),
-    ]
-    if bloques_extra:
-        total_extra = bloques_extra * extra["bloque"]
-        lineas.append((f"{total_extra:,} respuestas extra al mes ({bloques_extra} x {extra['bloque']})", extras))
+        ))
+        if bloques_extra:
+            total_extra = bloques_extra * extra["bloque"]
+            lineas.append((f"{total_extra:,} respuestas extra al mes ({bloques_extra} x {extra['bloque']})", extras))
     return Quote(
         paquete=key, pago=pago, bloques_extra=bloques_extra, lineas=lineas,
         primer_pago=sum(v for _, v in lineas), recurrente=servicio + extras, moneda=cat["moneda"],
+        desde_segundo_mes=gratis, iva=iva_suffix(cat),
     )
+
+
+def iva_suffix(cat: dict) -> str:
+    return " + IVA" if cat.get("precios_mas_iva") else ""
 
 
 def prompt_text() -> str:
     """El catálogo en texto, para que el agente sepa qué ofrece (sin hacer cuentas)."""
     cat = load()
-    m = lambda x: money(x, cat["moneda"])  # noqa: E731
+    m = lambda x: money(x, cat["moneda"]) + iva_suffix(cat)  # noqa: E731
     neg = cat["negocio"]
     out = [f"Negocio: {neg['nombre']} ({neg['instagram']}). {neg['descripcion']}", "", "Paquetes:"]
     for key, p in cat["paquetes"].items():
@@ -104,6 +115,8 @@ def prompt_text() -> str:
     out += [
         f"- Extra: {e['descripcion']}, {m(e['precio'])} al mes cada uno.",
         f"- Pago anual: se pagan {cat['meses_pagados_en_anual']} mensualidades por 12 meses.",
+        *(["- Primer mes gratis: al contratar solo se paga la instalación; la mensualidad empieza el segundo mes."]
+          if cat.get("primer_mes_gratis") else []),
         f"- Las cotizaciones valen {cat['vigencia_dias']} días.",
         "Condiciones: " + " ".join(cat["condiciones"]),
     ]
@@ -131,7 +144,8 @@ def pdf(q: Quote, folio: str, cliente: str, empresa: str, email: str, today: dat
 
     doc.tabla([(concepto, m(importe)) for concepto, importe in q.lineas])
     periodo = "cada año" if q.pago == "anual" else "cada mes"
-    doc.totales([], ("Primer pago", m(q.primer_pago)), f"Después, {m(q.recurrente)} {periodo}")
+    cuando = "Desde el segundo mes" if q.desde_segundo_mes else "Después"
+    doc.totales([], ("Primer pago", m(q.primer_pago) + q.iva), f"{cuando}, {m(q.recurrente)}{q.iva} {periodo}")
 
     extra = q.bloques_extra * cat["extras"]["respuestas"]["bloque"]
     doc.seccion("Qué incluye", p["incluye"] + [f"{p['respuestas_mes'] + extra:,} respuestas del bot al mes"])
