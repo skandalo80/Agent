@@ -107,16 +107,10 @@ def prompt_text() -> str:
         f"- Las cotizaciones valen {cat['vigencia_dias']} días.",
         "Condiciones: " + " ".join(cat["condiciones"]),
     ]
-    if demo := neg.get("demo_instagram"):
+    if giros := cat.get("demo", {}).get("giros"):
         out.append(
-            f"Demo: {demo} es {neg.get('demo_descripcion', 'nuestro negocio de demostración')}."
-            f" Si alguien quiere ver al bot funcionando, invítalo a escribirle a {demo} como si"
-            " fuera un cliente. Lo que aún no está en la demo, ofrece mostrarlo en la llamada con Skandar."
-        )
-    else:
-        out.append(
-            "Demo: aún no hay cuenta de demostración; si quieren ver funciones avanzadas en vivo,"
-            " ofrece mostrarlas en la llamada con Skandar."
+            "Demo en vivo (giros de ejemplo y qué contestaría su agente): "
+            + "; ".join(f"{giro}: {que}" for giro, que in giros.items()) + "."
         )
     return "\n".join(out)
 

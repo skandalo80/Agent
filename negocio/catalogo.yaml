@@ -8,21 +8,20 @@ negocio:
   correo: skandar.carmach@gmail.com
   # Color del único detalle de acento en el PDF de cotización (el naranja de la marca).
   color_acento: "#C2410C"
-  # Cuenta de Instagram del negocio de demostración, donde se ven funcionando
-  # las funciones avanzadas. Déjalo vacío mientras no exista.
-  demo_instagram: "@nortex_uniformes"
-  # Qué puede ver ahí un prospecto (actualízalo cuando la demo tenga más funciones).
-  demo_descripcion: >-
-    una tienda de uniformes ficticia que contesta con su catálogo y existencias
-    tomados de Google Sheets, cotiza pedidos por volumen al instante, te manda la
-    cotización formal en PDF por correo y por DM, y te escribe por DM cuando comentas
-    una palabra clave en sus publicaciones. Lo que ve el dueño (publicar mandándole
-    la foto al bot, reactivar chats en pausa y el reporte semanal) se muestra en la
-    llamada
   descripcion: >-
     Instalamos y operamos agentes de inteligencia artificial que atienden el
     Instagram de tu negocio 24/7: contestan DMs, agendan citas, mandan
     cotizaciones y avisan cuando hay un cliente listo para comprar.
+
+# Demo en vivo dentro del mismo DM: el asesor pregunta a qué se dedica el negocio
+# y contesta unos mensajes como lo haría su agente, con datos de ejemplo.
+# Estos giros son una guía para el ejemplo, no un guion; agrega o quita los que quieras.
+demo:
+  giros:
+    antro, bar o restaurante: reservaciones y listas, cover, horarios, menú y promociones del día
+    tienda que vende por Instagram: precios, tallas o modelos, existencias, envíos y mandar la cotización
+    distribuidora o negocio con CRM: cotización por volumen, registrar al cliente con sus datos y agendar una llamada con ventas
+    consultorio, estética o servicios con cita: precios de servicios, horarios disponibles y apartar la cita
 
 moneda: USD
 vigencia_dias: 15
