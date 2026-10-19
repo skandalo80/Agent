@@ -24,6 +24,7 @@ Instagram → Caddy (HTTPS) → POST /webhook (app.py, puerto 8001)
 | `igbot/tools.py` | Herramientas del agente y sus reglas: `recordar`, `olvidar`, `ver_disponibilidad`, `agendar_reunion`, `mis_reuniones`, `cancelar_reunion`, `enviar_correo`, `cotizar`, `enviar_cotizacion`, `pasar_a_humano`, y en la tienda `ver_productos`, `ver_existencias`, `cotizar_pedido` |
 | `igbot/tienda.py` | Tienda de Nortex: lee catálogo y existencias de Google Sheets y cotiza pedidos por volumen |
 | `igbot/catalog.py` | Lee el catálogo, calcula las cotizaciones y arma el PDF |
+| `igbot/pdf_marca.py` | Diseño de los PDFs de cotización (Inter, negro y grafito, un acento en `negocio.color_acento`); las fuentes están en `fonts/` |
 | `negocio/catalogo.yaml` | Paquetes, precios y condiciones. Edítalo y reinicia para cambiar precios |
 | `igbot/google.py` | Llamadas a Google Calendar, Gmail y Sheets (solo lectura) |
 | `igbot/instagram.py` | Envía DMs (parte los de más de 1000 caracteres) y renueva el token cada semana |
@@ -65,7 +66,7 @@ Pruebas locales: `pip install pytest && python -m pytest -q`
 
 ## Ventas: cotizaciones y pasar a humano
 
-**Cotizaciones.** El agente pregunta por el negocio del cliente, recomienda un paquete y da precios con `cotizar`. Si el cliente quiere la cotización formal, `enviar_cotizacion` genera un PDF con folio (`COT-0001`, `COT-0002`...), se lo manda por correo con copia a `MAIL_CC` y también por DM. Los PDFs quedan en `data/cotizaciones/` y el registro en la tabla `quotes`. Necesita Google configurado (sección siguiente) y `PUBLIC_URL` en `.env` para el DM.
+**Cotizaciones.** El agente pregunta por el negocio del cliente, recomienda un paquete y da precios con `cotizar`. Si el cliente quiere la cotización formal, el agente le pregunta si la quiere por aquí o por correo (el correo no es obligatorio) y `enviar_cotizacion` genera un PDF con folio (`COT-0001`, `COT-0002`...) y lo manda por DM, por correo con copia a `MAIL_CC`, o por ambos. Los PDFs quedan en `data/cotizaciones/` y el registro en la tabla `quotes`. Necesita Google configurado (sección siguiente) y `PUBLIC_URL` en `.env` para el DM.
 
 **Pasar a humano.** Si el cliente pide hablar con alguien, quiere descuento o algo fuera del catálogo, el agente usa `pasar_a_humano`: te llega un correo (a `OWNER_EMAIL`, por defecto tu Gmail) con el motivo y los últimos mensajes, y el bot se calla en esa conversación durante `HUMAN_PAUSE_HOURS` (12 h).
 
@@ -104,7 +105,7 @@ sudo journalctl -u igbot -u igbot@nortex -f   # cada uno dice "Cuenta de Instagr
 
 **Modelo por cuenta.** Cada cuenta puede usar otro modelo con `CLAUDE_MODEL` en su `clientes/<nombre>/.env`. Para un cliente del paquete Básico (solo contesta con la información del negocio) usa el más barato: `CLAUDE_MODEL=claude-haiku-5-5`.
 
-**Catálogo y existencias de Nortex (Google Sheets).** Los productos, precios por pieza y existencias se leen de las hojas `SHEET_CATALOG` y `SHEET_INVENTORY` (en `clientes/nortex/.env`, ya vienen en el ejemplo) y se guardan 5 minutos en memoria, así que un cambio en la hoja se nota en unos minutos sin reiniciar. Las reglas que no están en las hojas (rangos por volumen, bordado y estampado, IVA, entregas y condiciones) están en `clientes/nortex/reglas.yaml`. El agente tiene `ver_productos`, `ver_existencias` y `cotizar_pedido`; las cuentas las hace `igbot/tienda.py`, contando las piezas por tipo de prenda. Con `enviar_cotizacion_pedido` manda la cotización formal en PDF (con folio y vigencia) al correo que la persona escribió y por DM, con copia a `MAIL_CC`; el PDF lo sirve el proceso principal en `PUBLIC_URL/cotizaciones/nortex/...`.
+**Catálogo y existencias de Nortex (Google Sheets).** Los productos, precios por pieza y existencias se leen de las hojas `SHEET_CATALOG` y `SHEET_INVENTORY` (en `clientes/nortex/.env`, ya vienen en el ejemplo) y se guardan 5 minutos en memoria, así que un cambio en la hoja se nota en unos minutos sin reiniciar. Las reglas que no están en las hojas (rangos por volumen, bordado y estampado, IVA, entregas y condiciones) están en `clientes/nortex/reglas.yaml`. El agente tiene `ver_productos`, `ver_existencias` y `cotizar_pedido`; las cuentas las hace `igbot/tienda.py`, contando las piezas por tipo de prenda. Con `enviar_cotizacion_pedido` manda la cotización formal en PDF (con folio y vigencia) por DM, al correo que la persona escribió (con copia a `MAIL_CC`) o por ambos, según lo que ella elija; el PDF lo sirve el proceso principal en `PUBLIC_URL/cotizaciones/nortex/...`.
 
 Para que el bot pueda leer las hojas (una sola vez):
 1. En Google Cloud, en el mismo proyecto de la agenda: *APIs y servicios* → *Biblioteca* → **Google Sheets API** → *Habilitar*. En *Pantalla de consentimiento* → *Acceso a datos* agrega el permiso `.../auth/spreadsheets.readonly`.

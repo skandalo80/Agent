@@ -6,6 +6,8 @@ negocio:
   nombre: Agentes IA by Skandar
   instagram: "@skandar.online"
   correo: skandar.carmach@gmail.com
+  # Color del único detalle de acento en el PDF de cotización (el naranja de la marca).
+  color_acento: "#C2410C"
   # Cuenta de Instagram del negocio de demostración, donde se ven funcionando
   # las funciones avanzadas. Déjalo vacío mientras no exista.
   demo_instagram: "@nortex_uniformes"
@@ -62,7 +64,7 @@ paquetes:
       - Todo lo del Community Manager
       - Captura de leads y conexión con tu CRM
       - Conexión a tu inventario, precios o base de datos (Google Sheets u otro sistema)
-      - Cotizaciones en PDF por correo y DM
+      - Cotizaciones en PDF con tu marca, por DM o por correo
       - Agenda citas en Google Calendar con link de Meet
       - Manda correos y te avisa de prospectos listos para comprar
       - Reporte semanal por correo

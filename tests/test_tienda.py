@@ -156,9 +156,12 @@ def test_cotizacion_formal_en_pdf_por_correo_y_dm(monkeypatch, tmp_path):
         google, ig, state = FakeGoogle(), FakeIG(), {}
         t = {x.name: x.handler for x in tienda_tools(google, store, ig, state)}
         args = {"items": [item("NX-POL-NVY", "M", 30, "bordado"), item("NX-POL-NVY", "L", 30, "bordado")],
-                "logos": 1, "nombre": "Ana", "empresa": "Taller Ana"}
+                "logos": 1, "nombre": "Ana", "empresa": "Taller Ana", "canal": "ambos"}
         assert (await t["enviar_cotizacion_pedido"]({**args, "email": "otra@x.com"})).get("is_error")
         r = await t["enviar_cotizacion_pedido"]({**args, "email": "ana@empresa.com"})
+        # Si la quiere solo por aquí, no hace falta correo y no se manda ninguno.
+        solo_chat = await t["enviar_cotizacion_pedido"]({**args, "canal": "chat", "email": ""})
+        assert "COT-0002" in solo_chat["content"][0]["text"] and len(google.sent) == 1 and len(ig.files) == 2
         quotes = await store.events("cotizacion", 0, 2e9)
         await store.close()
         return r, google, ig, state, quotes

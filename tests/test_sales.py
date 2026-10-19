@@ -79,7 +79,8 @@ def sales(monkeypatch, tmp_path):
 def test_cotizacion_por_correo_y_dm(sales, tmp_path):
     async def main():
         store, google, ig, state, t = await sales()
-        args = {"paquete": "community", "pago": "mensual", "bloques_extra": 0, "nombre": "Ana", "empresa": ""}
+        args = {"paquete": "community", "pago": "mensual", "bloques_extra": 0, "nombre": "Ana", "empresa": "",
+                "canal": "ambos"}
 
         r = await t["enviar_cotizacion"]({**args, "email": "otra@mail.com"})
         assert r.get("is_error") and not google.sent  # correo que no escribió
@@ -101,6 +102,27 @@ def test_cotizacion_por_correo_y_dm(sales, tmp_path):
         assert client.get(f"/cotizaciones/{token}.pdf").content.startswith(b"%PDF")
         assert client.get("/cotizaciones/no-existe-este-archivo-xx.pdf").status_code == 404
         assert client.get("/cotizaciones/..%2F..%2Fbot.pdf").status_code == 404
+
+
+def test_cotizacion_solo_por_el_chat_sin_correo(sales, tmp_path):
+    async def main():
+        store, google, ig, state, t = await sales()
+        args = {"paquete": "basico", "pago": "anual", "bloques_extra": 0, "nombre": "", "empresa": ""}
+
+        r = await t["enviar_cotizacion"]({**args, "canal": "correo", "email": ""})
+        assert r.get("is_error") and "correo" in text(r)  # por correo sin correo: lo pide
+        r = await t["enviar_cotizacion"]({**args, "canal": "whatsapp", "email": ""})
+        assert r.get("is_error")
+
+        r = await t["enviar_cotizacion"]({**args, "canal": "chat", "email": ""})
+        assert "COT-0001" in text(r) and "por este chat" in text(r)
+        assert not google.sent and len(ig.files) == 1
+        token = ig.files[0][1].rsplit("/", 1)[1].removesuffix(".pdf")
+        assert (tmp_path / f"{token}.pdf").read_bytes().startswith(b"%PDF")
+        assert state["acted"]
+        await store.close()
+
+    run(main())
 
 
 def test_pasar_a_humano_pausa_y_avisa(sales):
