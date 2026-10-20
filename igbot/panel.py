@@ -7,6 +7,7 @@ contraseñas) y desde ahí:
 - elige un tono (amigable, profesional o formal) y con eso se arman las
   instrucciones de su asistente, que puede revisar y editar antes de guardar,
 - enciende o pausa su asistente.
+- ve los chats en pausa (los atiende una persona) y los reactiva o les da más tiempo.
 
 /panel lleva a Resultados cuando el asistente ya está encendido y con mensajes
 de clientes; si no, a Tu asistente (/panel/asistente) para configurarlo.
@@ -343,6 +344,7 @@ label.check input{width:auto;margin:0}
 .si-precio{display:none}
 form:has(#con_precio:checked) .si-precio{display:block}
 .js .sin-js{display:none}
+.acciones-fila{display:flex;gap:.5rem;flex:none}
 .antiguos .fila img{opacity:.85}
 .antiguos .datos b{font-weight:500}
 .dos{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:.6rem}
@@ -462,9 +464,36 @@ async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt
         "</div></section>"
         '<main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
+        + await pausas(c)
         + (PRINCIPAL if not c.slug else formulario)
         + "</div></main>"
     )
+
+
+async def pausas(c: Cuenta) -> str:
+    """Los chats donde el asistente no contesta porque los atiende una persona (te lo pidió el
+    cliente o le contestaste tú desde Instagram). Se reactivan solos al acabar la pausa."""
+    ahora = time.time()
+    filas = []
+    for user_id, hasta, ultimo in await c.store.paused_list(ahora):
+        with usar(c):
+            nombre = await c.instagram.username(user_id)
+        horas = max(1, round((hasta - ahora) / 3600))
+        filas.append(
+            '<div class="fila"><div class="datos">'
+            f"<b>{escape(nombre)}</b><span>Vuelve a contestar solo en {horas} h"
+            + (f" · «{escape(ultimo[:80])}»" if ultimo else "") + "</span></div>"
+            '<form method="post" action="/panel/pausas" class="acciones-fila">'
+            f'<input type="hidden" name="usuario" value="{escape(user_id)}">'
+            f'<button class="boton secundario chico" name="accion" value="extender">+{c.human_pause_hours:g} h</button>'
+            '<button class="boton chico" name="accion" value="reactivar">Reactivar</button></form></div>')
+    detalle = ("".join(filas) if filas else
+               '<p class="ayuda" style="margin-bottom:0">Ninguno: tu asistente está contestando en todos tus chats.</p>')
+    return ('<div class="tarjeta" id="pausas"><span class="num">Chats en pausa</span>'
+            + (f'<p class="ayuda">Aquí el asistente no contesta porque los atiende una persona (el cliente pidió'
+               f" hablar con alguien o le contestaste tú desde Instagram). Se reactivan solos a las"
+               f" {c.human_pause_hours:g} h.</p>" if filas else "")
+            + detalle + "</div>")
 
 
 # La cuenta principal (la vendedora, la del .env) usa prompts/system.md, que vive en
@@ -597,6 +626,28 @@ async def estado(request: Request):
     await c.store.set("bot_activo", "1" if encender else "0")
     log.info("@%s %s su asistente desde el panel", await usuario(c), "encendió" if encender else "pausó")
     return await panel_de(c, "Tu asistente ya está contestando." if encender else "Tu asistente quedó en pausa.")
+
+
+@router.post("/pausas")
+async def cambiar_pausa(request: Request):
+    """Reactiva un chat en pausa o le da más tiempo a la persona que lo atiende."""
+    de_aqui(request)
+    if not (c := cuenta_de_sesion(request)):
+        return RedirectResponse("/panel", status_code=303)
+    f = await form(request)
+    usuario_chat, accion = f.get("usuario", ""), f.get("accion")
+    if usuario_chat not in {u for u, *_ in await c.store.paused_list(time.time())}:
+        return await panel_de(c, "Ese chat ya no estaba en pausa.")
+    with usar(c):
+        nombre = await c.instagram.username(usuario_chat)
+    if accion == "reactivar":
+        await c.store.unpause(usuario_chat)
+        aviso = f"Listo: tu asistente vuelve a contestarle a {nombre}."
+    else:
+        await c.store.pause(usuario_chat, time.time() + c.human_pause_hours * 3600)
+        aviso = f"Listo: {nombre} sigue en pausa {c.human_pause_hours:g} h más."
+    log.info("@%s cambió la pausa de %s desde el panel (%s)", await usuario(c), usuario_chat, accion)
+    return await panel_de(c, aviso)
 
 
 # --- probar el asistente antes de encenderlo ---

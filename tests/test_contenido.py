@@ -30,6 +30,9 @@ POST = {"titulo": "Cartera Atelier", "subtitulo": "Piel italiana, hecha a mano."
 class ConPosts(FakeInstagram):
     """Lo que ya hay en el Instagram del cliente: uno subido desde la app y el que publicó el panel."""
 
+    async def username(self, user_id):
+        return f"@{user_id}"
+
     async def recent_media(self, limit=12):
         return [{"id": "1", "caption": "Desde la app\nSegunda línea", "media_url": "https://scontent.cdninstagram.com/a.jpg",
                  "permalink": "https://www.instagram.com/p/DESDEAPP/", "timestamp": "2099-01-01T10:00:00+0000"},
@@ -253,3 +256,20 @@ def test_script_y_fuentes(cliente):
     assert r.status_code == 200 and "javascript" in r.headers["content-type"]
     assert client.get("/panel/static/fuentes/Lora-Bold.ttf").headers["content-type"] == "font/ttf"
     assert client.get("/panel/static/fuentes/..%2F.env").status_code == 404
+
+
+def test_chats_en_pausa(cliente):
+    client, c, *_ = cliente
+    import time
+    assert "Ninguno: tu asistente está contestando" in client.get("/panel/asistente").text
+    client.portal.call(c.store.pause, "ana", time.time() + 3600)
+    r = client.get("/panel/asistente")
+    assert "@ana" in r.text and "Vuelve a contestar solo en 1 h" in r.text and "Reactivar" in r.text
+    assert client.post("/panel/pausas", data={"usuario": "ana", "accion": "reactivar"}).status_code == 403  # sin Origin
+    r = client.post("/panel/pausas", headers=ORIGEN, data={"usuario": "ana", "accion": "extender"})
+    assert "sigue en pausa 12 h más" in r.text
+    assert client.portal.call(c.store.paused_until, "ana") > time.time() + 11 * 3600
+    r = client.post("/panel/pausas", headers=ORIGEN, data={"usuario": "ana", "accion": "reactivar"})
+    assert "vuelve a contestarle a @ana" in r.text and client.portal.call(c.store.paused_until, "ana") == 0
+    assert "ya no estaba en pausa" in client.post("/panel/pausas", headers=ORIGEN,
+                                                  data={"usuario": "beto", "accion": "reactivar"}).text
