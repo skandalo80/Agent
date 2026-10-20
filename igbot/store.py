@@ -128,6 +128,24 @@ CREATE TABLE IF NOT EXISTS events (
 );
 CREATE INDEX IF NOT EXISTS events_kind ON events (kind, created_at);
 
+-- Página skandar.online/conectar: negocios que piden conectar su Instagram
+-- (para invitarlos como tester) y cuentas que ya lo conectaron con su token.
+CREATE TABLE IF NOT EXISTS solicitudes (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    usuario    TEXT NOT NULL,              -- @ de Instagram, sin la arroba
+    nombre     TEXT NOT NULL,
+    correo     TEXT NOT NULL,
+    created_at REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS conexiones (
+    ig_id      TEXT PRIMARY KEY,           -- id de la cuenta (el de los webhooks)
+    usuario    TEXT NOT NULL,
+    token      TEXT NOT NULL,              -- token de larga duración (60 días)
+    expires_at REAL NOT NULL,
+    created_at REAL NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS kv (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -546,6 +564,29 @@ class Store:
             (since, until, limit),
         )
         return list(await cur.fetchall())
+
+    # --- conexión de cuentas de clientes ---
+
+    async def add_solicitud(self, usuario: str, nombre: str, correo: str) -> None:
+        await self.db.execute(
+            "INSERT INTO solicitudes (usuario, nombre, correo, created_at) VALUES (?, ?, ?, ?)",
+            (usuario, nombre, correo, time.time()),
+        )
+        await self.db.commit()
+
+    async def solicitudes_since(self, since: float) -> int:
+        cur = await self.db.execute("SELECT COUNT(*) FROM solicitudes WHERE created_at >= ?", (since,))
+        return (await cur.fetchone())[0]
+
+    async def save_conexion(self, ig_id: str, usuario: str, token: str, expires_at: float) -> None:
+        """Si la cuenta se vuelve a conectar, se queda el token nuevo."""
+        await self.db.execute(
+            "INSERT INTO conexiones (ig_id, usuario, token, expires_at, created_at) VALUES (?, ?, ?, ?, ?)"
+            " ON CONFLICT (ig_id) DO UPDATE SET usuario = excluded.usuario, token = excluded.token,"
+            " expires_at = excluded.expires_at, created_at = excluded.created_at",
+            (ig_id, usuario, token, expires_at, time.time()),
+        )
+        await self.db.commit()
 
     # --- valores sueltos (token de Instagram, etc.) ---
 

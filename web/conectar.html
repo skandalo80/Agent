@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Conecta tu Instagram · Agentes IA by Skandar</title>
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" href="/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#0a0a0a">
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/estilos.css">
+</head>
+<body>
+<header>
+  <div class="contenedor">
+    <a class="marca" href="/">Agentes IA by Skandar</a>
+    <nav><a href="/">Inicio</a></nav>
+  </div>
+</header>
+
+<main>
+  <section class="oscuro portada centro conectar-portada">
+    <div class="contenedor">
+      <p class="antetitulo">Alta de tu cuenta</p>
+      <h1>Conecta tu Instagram<span class="punto">.</span></h1>
+      <p class="bajada angosto">Tres pasos y unos minutos. Al terminar, tu agente queda listo para atender tu cuenta.</p>
+    </div>
+  </section>
+
+  <section class="claro">
+    <div class="contenedor angosto">
+      <p class="requisito">Antes de empezar: tu cuenta debe ser profesional (Empresa o Creador). Puedes cambiarla en Instagram, en Configuración › Tipo de cuenta y herramientas.</p>
+
+      <div class="paso" id="paso-1">
+        <span class="num">01</span>
+        <h3>Déjanos tu cuenta.</h3>
+        <p>Con tu usuario te enviamos una invitación de acceso desde nuestra app. Te avisamos por correo en cuanto esté lista.</p>
+        <p class="aviso-form error-form" id="aviso-error" hidden>Revisa tu usuario de Instagram y tu correo, e inténtalo de nuevo.</p>
+        <form class="formulario" method="post" action="https://bot.skandar.online/conectar/solicitud">
+          <label>Usuario de Instagram
+            <input name="usuario" required maxlength="80" placeholder="@tu_negocio" autocomplete="off" autocapitalize="none" spellcheck="false">
+          </label>
+          <label>Tu nombre
+            <input name="nombre" required maxlength="80" autocomplete="name">
+          </label>
+          <label>Correo
+            <input name="correo" type="email" required maxlength="254" autocomplete="email">
+          </label>
+          <label class="oculto" aria-hidden="true">Sitio web
+            <input name="sitio_web" tabindex="-1" autocomplete="off">
+          </label>
+          <button class="boton" type="submit">Enviar</button>
+        </form>
+      </div>
+
+      <div class="paso" id="paso-2">
+        <span class="num">02</span>
+        <h3>Acepta la invitación.</h3>
+        <p class="aviso-form" id="aviso-enviado" hidden>Recibimos tus datos. Te escribimos en cuanto la invitación esté lista, normalmente el mismo día.</p>
+        <p>Cuando te avisemos, entra a Instagram desde el navegador, con la cuenta de tu negocio, y acepta la invitación de prueba de <strong>Agentes IA by Skandar</strong>.</p>
+        <p class="ruta">Configuración › Apps y sitios web › Invitaciones de prueba › Aceptar</p>
+        <div class="acciones izquierda-acciones">
+          <a class="enlace" href="https://www.instagram.com/accounts/manage_access/" target="_blank" rel="noopener">Abrir invitaciones en Instagram ›</a>
+        </div>
+      </div>
+
+      <div class="paso" id="paso-3">
+        <span class="num">03</span>
+        <h3>Conecta tu cuenta.</h3>
+        <p>Inicia sesión con Instagram y autoriza a tu agente para leer y responder tus mensajes y comentarios y para publicar contenido. No vemos ni guardamos tu contraseña, y puedes quitar el acceso cuando quieras desde la misma sección de Instagram.</p>
+        <p>Revisa también que en Configuración › Mensajes y respuestas a historias › Herramientas de mensajes esté activado <em>Permitir acceso a los mensajes</em>.</p>
+        <div class="acciones izquierda-acciones">
+          <a class="boton" href="https://bot.skandar.online/conectar/instagram">Conectar tu Instagram</a>
+        </div>
+      </div>
+
+      <p class="nota">¿Dudas? Escríbenos a <a class="enlace" href="https://ig.me/m/skandar.online">@skandar.online</a>.</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="contenedor">
+    <span>© 2026 Agentes IA by Skandar · México</span>
+    <a href="/privacidad">Aviso de privacidad</a>
+  </div>
+</footer>
+
+<script src="/sitio.js"></script>
+</body>
+</html>

@@ -117,6 +117,13 @@ MAX_MESSAGE_CHARS = int(os.getenv("MAX_MESSAGE_CHARS", "1000"))
 # contestar hasta mañana y avisa al dueño por correo. 0 = sin límite.
 DAILY_BUDGET_USD = float(os.getenv("DAILY_BUDGET_USD", "5"))
 
+# --- Conectar cuentas de clientes (skandar.online/conectar) ---
+# Instagram app ID y secreto de "API de Instagram con inicio de sesión de
+# Instagram" en el panel de Meta. Sin IG_APP_ID, /conectar no se activa.
+IG_APP_ID = os.getenv("IG_APP_ID", "")
+IG_OAUTH_SECRET = os.getenv("IG_OAUTH_SECRET", "") or APP_SECRET
+SITE_URL = os.getenv("SITE_URL", "https://skandar.online").rstrip("/")
+
 # Horas que el bot se queda callado en una conversación cuando la toma una
 # persona (porque se pidió o porque contestaste tú desde Instagram).
 HUMAN_PAUSE_HOURS = float(os.getenv("HUMAN_PAUSE_HOURS", "12"))

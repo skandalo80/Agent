@@ -21,7 +21,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse
 
-from igbot import admin, agent, botones, comentarios, config, limites, reporte
+from igbot import admin, agent, botones, comentarios, conectar, config, limites, reporte
 from igbot.dispatcher import Dispatcher
 from igbot.google import Google
 from igbot.instagram import Instagram
@@ -110,6 +110,7 @@ dispatcher = Dispatcher(store, handle, config.DEBOUNCE_SECONDS, config.MAX_CONCU
 async def lifespan(app: FastAPI):
     await store.open()
     limites.store = store
+    conectar.store, conectar.instagram, conectar.google = store, instagram, google
     await my_account()
     # Mensajes, toques a los botones de inicio y, si hay reglas, comentarios.
     fields = "messages,messaging_postbacks"
@@ -136,6 +137,9 @@ async def lifespan(app: FastAPI):
 
 # Sin /docs ni /openapi.json: no hace falta publicar la lista de rutas.
 app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+if not config.CLIENTE:
+    # La página de conectar clientes la atiende solo el proceso principal.
+    app.include_router(conectar.router)
 
 
 @app.get("/health")

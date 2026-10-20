@@ -10,3 +10,8 @@ document.querySelectorAll('.sugerencia[data-texto]').forEach(function (a) {
     }, ir);
   });
 });
+
+// Página /conectar: avisos según cómo volvió del formulario.
+var params = new URLSearchParams(window.location.search);
+if (params.get('enviado')) document.getElementById('aviso-enviado').hidden = false;
+if (params.get('error')) document.getElementById('aviso-error').hidden = false;
