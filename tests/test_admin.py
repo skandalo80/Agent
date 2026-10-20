@@ -187,6 +187,8 @@ def test_webhook_manda_al_admin_con_su_asistente(monkeypatch):
     monkeypatch.setattr(bot.instagram, "close", nothing)  # otras pruebas siguen usando su cliente
     monkeypatch.setattr(bot.instagram, "refresh_loop", lambda: asyncio.sleep(0))
     monkeypatch.setattr(bot.admin, "publisher_loop", lambda *a: asyncio.sleep(0))
+    # Si se corre en lunes después de las 9, el reporte semanal llegaría primero.
+    monkeypatch.setattr(bot.reporte, "loop", lambda *a: asyncio.sleep(0))
     monkeypatch.setattr(bot.config, "ADMIN_IG_IDS", {"jefe"})
     monkeypatch.setattr(bot, "account_id", "negocio")
     monkeypatch.setattr(bot, "MULTI_ACCOUNT", False)
