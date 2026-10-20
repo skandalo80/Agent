@@ -4,6 +4,7 @@ import os
 
 os.environ.update(IG_VERIFY_TOKEN="vt", IG_APP_SECRET="secreto", IG_ACCESS_TOKEN="tok", DB_PATH=":memory:")
 
+from igbot.cuenta import cuenta  # noqa: E402
 from igbot import comentarios as c  # noqa: E402
 from igbot.store import Store  # noqa: E402
 
@@ -117,7 +118,7 @@ def test_variantes_las_decide_claude():
 
 
 def test_oculta_spam_en_cualquier_publicacion(monkeypatch):
-    monkeypatch.setattr(c.config, "HIDE_SPAM", True)
+    monkeypatch.setattr(cuenta(), "hide_spam", True)
 
     async def is_spam(text):
         return "sigueme" in text

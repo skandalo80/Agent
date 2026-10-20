@@ -7,6 +7,7 @@ import time
 import httpx
 
 from . import config
+from .cuenta import cuenta
 from .store import Store
 
 log = logging.getLogger("igbot.instagram")
@@ -27,12 +28,12 @@ class Instagram:
     async def token(self) -> str:
         # Si en .env se pegó un token distinto al de la última vez (p. ej. uno
         # nuevo con más permisos), manda ese y deja atrás el renovado viejo.
-        env_hash = hashlib.sha256(config.ACCESS_TOKEN.encode()).hexdigest()
+        env_hash = hashlib.sha256(cuenta().access_token.encode()).hexdigest()
         if await self.store.get("ig_token_env") != env_hash:
-            await self.store.set("ig_token", config.ACCESS_TOKEN)
+            await self.store.set("ig_token", cuenta().access_token)
             await self.store.set("ig_token_env", env_hash)
             await self.store.set("ig_token_refreshed_at", str(time.time()))
-        return await self.store.get("ig_token") or config.ACCESS_TOKEN
+        return await self.store.get("ig_token") or cuenta().access_token
 
     async def _send(self, recipient_id: str, message: dict) -> None:
         await self._send_to({"id": recipient_id}, message)

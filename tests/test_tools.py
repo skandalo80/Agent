@@ -7,6 +7,7 @@ os.environ.update(IG_VERIFY_TOKEN="vt", IG_APP_SECRET="s", IG_ACCESS_TOKEN="t")
 
 import pytest  # noqa: E402
 
+from igbot.cuenta import cuenta  # noqa: E402
 from igbot import config, tools  # noqa: E402
 from igbot.store import Store  # noqa: E402
 
@@ -38,7 +39,7 @@ class FakeGoogle:
 def env(monkeypatch):
     monkeypatch.setattr(tools, "now", lambda: NOW)
     monkeypatch.setattr(config, "MAIL_FROM", "info@negocio.com")
-    monkeypatch.setattr(config, "MAIL_CC", "copia@negocio.com")
+    monkeypatch.setattr(cuenta(), "mail_cc", "copia@negocio.com")
 
     async def make(busy=()):
         store = Store(":memory:")
@@ -134,7 +135,7 @@ def test_correo_solo_al_cliente_con_copia_y_limite(env):
     async def main():
         store, google, t = await env()
         assert (await t["enviar_correo"]({"email": "x@y.com", "asunto": "a", "cuerpo": "b"}))["is_error"]
-        for _ in range(config.MAX_EMAILS_PER_USER_PER_DAY):
+        for _ in range(cuenta().max_emails_per_user_per_day):
             r = await t["enviar_correo"]({"email": "ana@mail.com", "asunto": "Info", "cuerpo": "hola"})
             assert not r.get("is_error")
         assert google.sent[0] == ("info@negocio.com", "ana@mail.com", "copia@negocio.com", "Info")

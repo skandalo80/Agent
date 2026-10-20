@@ -16,6 +16,7 @@ os.environ.update(
 
 from fastapi.testclient import TestClient  # noqa: E402
 
+from igbot.cuenta import cuenta  # noqa: E402
 import app as bot  # noqa: E402
 from igbot.dispatcher import Dispatcher  # noqa: E402
 from igbot.instagram import split_text  # noqa: E402
@@ -203,11 +204,11 @@ def test_token_nuevo_en_env_reemplaza_al_renovado(monkeypatch):
         store = Store(":memory:")
         await store.open()
         ig = ig_mod.Instagram(store)
-        monkeypatch.setattr(ig_mod.config, "ACCESS_TOKEN", "viejo")
+        monkeypatch.setattr(cuenta(), "access_token", "viejo")
         assert await ig.token() == "viejo"
         await store.set("ig_token", "viejo-renovado")  # lo que hace la renovación semanal
         assert await ig.token() == "viejo-renovado"
-        monkeypatch.setattr(ig_mod.config, "ACCESS_TOKEN", "nuevo")  # se pegó otro en .env
+        monkeypatch.setattr(cuenta(), "access_token", "nuevo")  # se pegó otro en .env
         assert await ig.token() == "nuevo"
         await ig.close()
         await store.close()

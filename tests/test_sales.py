@@ -14,6 +14,7 @@ os.environ.update(
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
+from igbot.cuenta import cuenta  # noqa: E402
 import app as bot  # noqa: E402
 from igbot import catalog, config, tools  # noqa: E402
 from igbot.store import Store  # noqa: E402
@@ -61,9 +62,9 @@ def test_el_prompt_lleva_el_catalogo(monkeypatch):
 def sales(monkeypatch, tmp_path):
     monkeypatch.setattr(tools, "now", lambda: NOW)
     monkeypatch.setattr(config, "MAIL_FROM", "yo@gmail.com")
-    monkeypatch.setattr(config, "MAIL_CC", "copia@gmail.com")
-    monkeypatch.setattr(config, "OWNER_EMAIL", "yo@gmail.com")
-    monkeypatch.setattr(config, "QUOTES_DIR", str(tmp_path))
+    monkeypatch.setattr(cuenta(), "mail_cc", "copia@gmail.com")
+    monkeypatch.setattr(cuenta(), "owner_email", "yo@gmail.com")
+    monkeypatch.setattr(cuenta(), "quotes_dir", str(tmp_path))
     monkeypatch.setattr(config, "PUBLIC_URL", "https://bot.ejemplo.com")
 
     async def make():

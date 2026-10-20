@@ -6,7 +6,8 @@ from datetime import datetime
 
 os.environ.update(IG_VERIFY_TOKEN="vt", IG_APP_SECRET="secreto", IG_ACCESS_TOKEN="tok", DB_PATH=":memory:")
 
-from igbot import config, reporte, tools  # noqa: E402
+from igbot.cuenta import cuenta  # noqa: E402
+from igbot import reporte, tools  # noqa: E402
 from igbot.store import Store  # noqa: E402
 
 
@@ -98,8 +99,8 @@ def test_semana_vacia_no_truena():
 
 
 def test_manda_por_correo_y_dm(monkeypatch):
-    monkeypatch.setattr(config, "REPORT_EMAIL", "dueno@correo.com")
-    monkeypatch.setattr(config, "ADMIN_IG_IDS", {"jefe"})
+    monkeypatch.setattr(cuenta(), "report_email", "dueno@correo.com")
+    monkeypatch.setattr(cuenta(), "admin_ig_ids", {"jefe"})
     monkeypatch.setattr(reporte, "topics", no_ai)
 
     async def main():

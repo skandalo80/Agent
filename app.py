@@ -22,6 +22,7 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse
 
 from igbot import admin, agent, botones, comentarios, conectar, config, limites, reporte
+from igbot.cuenta import cuenta
 from igbot.dispatcher import Dispatcher
 from igbot.google import Google
 from igbot.instagram import Instagram
@@ -30,7 +31,7 @@ from igbot.store import Store
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("igbot")
 
-store = Store(config.DB_PATH)
+store = Store(cuenta().db_path)
 instagram = Instagram(store)
 # Agenda y correo solo si Google está configurado en .env.
 google = (
@@ -80,22 +81,22 @@ async def over_limits(user_id: str, rows: list[tuple[int, str]]) -> bool:
     if await limites.over_budget(store):
         log.warning("Presupuesto diario de Claude agotado; no se contesta a %s", user_id)
         await store.mark_seen([i for i, _ in rows])
-        if await limites.first_budget_alert(store) and google and config.OWNER_EMAIL:
+        if await limites.first_budget_alert(store) and google and cuenta().owner_email:
             try:
                 await google.send_email(
-                    config.MAIL_FROM, config.MAIL_FROM_NAME, config.OWNER_EMAIL, "",
+                    config.MAIL_FROM, cuenta().mail_from_name, cuenta().owner_email, "",
                     "Instagram: el bot llegó a su gasto máximo de hoy",
-                    f"El bot ya gastó US${config.DAILY_BUDGET_USD:g} en Claude hoy y dejó de contestar"
+                    f"El bot ya gastó US${cuenta().daily_budget_usd:g} en Claude hoy y dejó de contestar"
                     " hasta mañana. Si fue un pico normal, sube DAILY_BUDGET_USD en el .env y reinicia.",
                 )
             except Exception:
                 log.exception("No se pudo avisar al dueño del presupuesto")
         return True
     used = await limites.replies_today(store, user_id)
-    if used < config.MAX_REPLIES_PER_USER_PER_DAY:
+    if used < cuenta().max_replies_per_user_per_day:
         return False
     log.warning("%s llegó a %d respuestas hoy; no se contesta", user_id, used)
-    if used == config.MAX_REPLIES_PER_USER_PER_DAY:
+    if used == cuenta().max_replies_per_user_per_day:
         # Se avisa una sola vez; el aviso cuenta como respuesta y los siguientes se ignoran.
         await instagram.send_text(user_id, limites.LIMIT_NOTICE)
         await store.mark_answered(user_id, [i for i, _ in rows], limites.LIMIT_NOTICE)
@@ -114,7 +115,7 @@ async def lifespan(app: FastAPI):
     await my_account()
     # Mensajes, toques a los botones de inicio y, si hay reglas, comentarios.
     fields = "messages,messaging_postbacks"
-    if google and comentarios.available() or config.HIDE_SPAM:
+    if google and comentarios.available() or cuenta().hide_spam:
         fields += ",comments"
     try:
         await instagram.subscribe(fields)
@@ -123,9 +124,9 @@ async def lifespan(app: FastAPI):
     await botones.sync(store, instagram)
     await dispatcher.resume_pending()
     loops = [asyncio.create_task(instagram.refresh_loop())]
-    if config.ADMIN_IG_IDS:
+    if cuenta().admin_ig_ids:
         loops.append(asyncio.create_task(admin.publisher_loop(store, instagram)))
-    if config.ADMIN_IG_IDS or (config.REPORT_EMAIL and google):
+    if cuenta().admin_ig_ids or (cuenta().report_email and google):
         loops.append(asyncio.create_task(reporte.loop(store, instagram, google)))
     yield
     for task in loops:
@@ -169,7 +170,7 @@ QUOTE_NAME = re.compile(r"^[A-Za-z0-9_-]{20,40}$")
 @app.get("/cotizaciones/{token}.pdf")
 def quote_pdf(token: str):
     """PDF de una cotización; el nombre es secreto y aleatorio, así nadie adivina otras."""
-    path = Path(config.QUOTES_DIR) / f"{token}.pdf"
+    path = Path(cuenta().quotes_dir) / f"{token}.pdf"
     if not QUOTE_NAME.match(token) or not path.is_file():
         raise HTTPException(status_code=404)
     return FileResponse(path, media_type="application/pdf", filename="cotizacion.pdf")
@@ -208,12 +209,12 @@ async def owner_replied(user_id: str, mid: str, text: str) -> None:
     )):
         return
     log.info("El dueño contestó a %s; el bot se pausa en esa conversación", user_id)
-    await store.pause(user_id, time.time() + config.HUMAN_PAUSE_HOURS * 3600)
+    await store.pause(user_id, time.time() + cuenta().human_pause_hours * 3600)
     await store.add_owner_message(user_id, mid, text)
 
 
 background: set[asyncio.Task] = set()
-account_id = config.IG_ACCOUNT_ID
+account_id = cuenta().ig_account_id
 # Con varias cuentas, un proceso que no sabe cuál es la suya no contesta nada
 # (si no, contestaría los DMs de las otras cuentas).
 MULTI_ACCOUNT = bool(config.CLIENTE or config.FORWARD_WEBHOOKS)
@@ -299,7 +300,7 @@ async def receive(request: Request):
                 continue
             value = change.get("value") or {}
             log.info("Comentario de %s: %r", (value.get("from") or {}).get("username"), value.get("text", "")[:80])
-            if google and comentarios.available() or config.HIDE_SPAM:
+            if google and comentarios.available() or cuenta().hide_spam:
                 in_background(handle_comment(value))
             else:
                 log.info("Comentarios sin configurar (falta SHEET_COMMENTS o Google); se ignora")

@@ -22,6 +22,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
 from . import config
+from .cuenta import cuenta
 from .google import Google
 from .instagram import GRAPH, Instagram
 from .store import Store
@@ -64,14 +65,14 @@ def back(path: str) -> RedirectResponse:
 
 async def avisar(asunto: str, texto: str) -> None:
     """Al dueño por DM (si escribió hace menos de 24 h) y por correo."""
-    for admin_id in config.ADMIN_IG_IDS:
+    for admin_id in cuenta().admin_ig_ids:
         try:
             await instagram.send_text(admin_id, texto)
         except Exception:
             log.warning("No se pudo avisar por DM a %s (¿pasaron 24 h sin escribirle al bot?)", admin_id)
-    if google and config.OWNER_EMAIL:
+    if google and cuenta().owner_email:
         try:
-            await google.send_email(config.MAIL_FROM, config.MAIL_FROM_NAME, config.OWNER_EMAIL, "", asunto, texto)
+            await google.send_email(config.MAIL_FROM, cuenta().mail_from_name, cuenta().owner_email, "", asunto, texto)
         except Exception:
             log.exception("No se pudo avisar por correo")
 

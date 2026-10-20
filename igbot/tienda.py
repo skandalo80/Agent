@@ -14,6 +14,7 @@ from pathlib import Path
 import yaml
 
 from . import config
+from .cuenta import cuenta
 from .google import Google
 from .pdf_marca import Cotizacion
 
@@ -28,13 +29,17 @@ TALLAS = {
 }
 
 
-@lru_cache
 def rules(path: str | None = None) -> dict:
-    return yaml.safe_load(Path(path or config.STORE_RULES_PATH).read_text(encoding="utf-8"))
+    return _rules(path or cuenta().store_rules_path)
+
+
+@lru_cache
+def _rules(path: str) -> dict:
+    return yaml.safe_load(Path(path).read_text(encoding="utf-8"))
 
 
 def available() -> bool:
-    return bool(config.SHEET_CATALOG and config.SHEET_INVENTORY) and Path(config.STORE_RULES_PATH).exists()
+    return bool(cuenta().sheet_catalog and cuenta().sheet_inventory) and Path(cuenta().store_rules_path).exists()
 
 
 def parse_sheet(url: str) -> tuple[str, int | None]:
@@ -69,7 +74,7 @@ async def _rows(google: Google, url: str) -> list[dict]:
 
 async def products(google: Google) -> dict[str, dict]:
     """Productos activos por SKU."""
-    rows = await _rows(google, config.SHEET_CATALOG)
+    rows = await _rows(google, cuenta().sheet_catalog)
     return {
         r["SKU"].upper(): r for r in rows
         if r.get("SKU") and r.get("Active", "Y").strip().upper() != "N"
@@ -79,7 +84,7 @@ async def products(google: Google) -> dict[str, dict]:
 async def stock(google: Google) -> dict[str, dict[str, int]]:
     """{SKU: {talla: disponibles}}."""
     out: dict[str, dict[str, int]] = {}
-    for r in await _rows(google, config.SHEET_INVENTORY):
+    for r in await _rows(google, cuenta().sheet_inventory):
         if r.get("SKU"):
             out.setdefault(r["SKU"].upper(), {})[r.get("Variant", "")] = int(number(r.get("Available_Qty", "")))
     return out

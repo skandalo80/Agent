@@ -10,7 +10,8 @@ Los días son de la zona horaria del negocio. Los administradores no tienen tope
 """
 import logging
 
-from . import config, tools
+from . import tools
+from .cuenta import cuenta
 from .store import Store
 
 log = logging.getLogger("igbot.limites")
@@ -24,9 +25,9 @@ LIMIT_NOTICE = (
 
 
 def trim(text: str) -> str:
-    if len(text) <= config.MAX_MESSAGE_CHARS:
+    if len(text) <= cuenta().max_message_chars:
         return text
-    return text[: config.MAX_MESSAGE_CHARS] + " […mensaje recortado]"
+    return text[: cuenta().max_message_chars] + " […mensaje recortado]"
 
 
 def today_start() -> float:
@@ -53,7 +54,7 @@ async def spent_today(db: Store) -> float:
 
 
 async def over_budget(db: Store) -> bool:
-    return config.DAILY_BUDGET_USD > 0 and await spent_today(db) >= config.DAILY_BUDGET_USD
+    return cuenta().daily_budget_usd > 0 and await spent_today(db) >= cuenta().daily_budget_usd
 
 
 async def first_budget_alert(db: Store) -> bool:

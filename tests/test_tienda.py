@@ -6,6 +6,7 @@ os.environ.update(IG_VERIFY_TOKEN="vt", IG_APP_SECRET="secreto", IG_ACCESS_TOKEN
 
 import pytest  # noqa: E402
 
+from igbot.cuenta import cuenta  # noqa: E402
 from igbot import tienda  # noqa: E402
 from igbot.google import Google  # noqa: E402
 
@@ -114,7 +115,7 @@ def test_lee_la_pestania_por_gid():
 
 
 def test_prompt_de_la_tienda(monkeypatch):
-    monkeypatch.setattr(tienda.config, "STORE_RULES_PATH", "clientes/nortex/reglas.yaml")
+    monkeypatch.setattr(cuenta(), "store_rules_path", "clientes/nortex/reglas.yaml")
     text = tienda.prompt_text()
     assert "Nortex Uniformes" in text and "cotizar_pedido" in text and "$45.00" in text
 
@@ -127,11 +128,11 @@ def test_cotizacion_formal_en_pdf_por_correo_y_dm(monkeypatch, tmp_path):
     from igbot import config, tools
     from igbot.store import Store
 
-    monkeypatch.setattr(config, "STORE_RULES_PATH", "clientes/nortex/reglas.yaml")
-    monkeypatch.setattr(config, "CLIENTE", "nortex")
-    monkeypatch.setattr(config, "QUOTES_DIR", str(tmp_path / "data/nortex/cotizaciones"))
+    monkeypatch.setattr(cuenta(), "store_rules_path", "clientes/nortex/reglas.yaml")
+    monkeypatch.setattr(cuenta(), "slug", "nortex")
+    monkeypatch.setattr(cuenta(), "quotes_dir", str(tmp_path / "data/nortex/cotizaciones"))
     monkeypatch.setattr(config, "PUBLIC_URL", "https://bot.ejemplo.com")
-    monkeypatch.setattr(config, "MAIL_CC", "copia@gmail.com")
+    monkeypatch.setattr(cuenta(), "mail_cc", "copia@gmail.com")
     monkeypatch.setattr(tools, "now", lambda: NOW)
 
     async def catalogo(google):

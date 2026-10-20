@@ -6,7 +6,8 @@ os.environ.update(IG_VERIFY_TOKEN="vt", IG_APP_SECRET="secreto", IG_ACCESS_TOKEN
 
 import pytest  # noqa: E402
 
-from igbot import botones, config  # noqa: E402
+from igbot.cuenta import cuenta  # noqa: E402
+from igbot import botones  # noqa: E402
 from igbot.store import Store  # noqa: E402
 
 
@@ -25,7 +26,7 @@ def test_los_botones_de_cada_cuenta_son_validos():
 
 def test_se_mandan_solo_si_cambiaron(monkeypatch, tmp_path):
     file = tmp_path / "botones.yaml"
-    monkeypatch.setattr(config, "BUTTONS_PATH", str(file))
+    monkeypatch.setattr(cuenta(), "buttons_path", str(file))
 
     async def main():
         store = Store(":memory:")

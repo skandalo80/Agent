@@ -24,6 +24,7 @@ from pathlib import Path
 from claude_agent_sdk import create_sdk_mcp_server, tool
 
 from . import config
+from .cuenta import cuenta
 from .google import Google
 from .instagram import Instagram
 from .store import Store
@@ -36,7 +37,7 @@ MODES = {"modo cliente": "cliente", "modo admin": "admin"}
 
 
 def is_admin(user_id: str) -> bool:
-    return user_id in config.ADMIN_IG_IDS
+    return user_id in cuenta().admin_ig_ids
 
 
 def key(user_id: str) -> str:
@@ -115,12 +116,12 @@ def media_path(slug: str, token: str) -> Path | None:
 
 
 def public_url(token: str) -> str:
-    return f"{config.PUBLIC_URL}/media/{config.MEDIA_SLUG}/{token}.jpg"
+    return f"{config.PUBLIC_URL}/media/{cuenta().media_slug}/{token}.jpg"
 
 
 async def save_photo(store: Store, instagram: Instagram, media_id: int) -> None:
     token, url, _ = await store.media(media_id)
-    path = Path(config.MEDIA_DIR) / f"{token}.jpg"
+    path = Path(cuenta().media_dir) / f"{token}.jpg"
     if path.exists():
         return
     jpg, note = fit_image(await instagram.download(url))

@@ -6,6 +6,7 @@ os.environ.update(IG_VERIFY_TOKEN="vt", IG_APP_SECRET="secreto", IG_ACCESS_TOKEN
 
 from fastapi.testclient import TestClient  # noqa: E402
 
+from igbot.cuenta import cuenta  # noqa: E402
 import app as bot  # noqa: E402
 from igbot import conectar  # noqa: E402
 
@@ -47,7 +48,7 @@ class FakeHTTP:
 def setup(monkeypatch):
     monkeypatch.setattr(bot.config, "IG_APP_ID", "123")
     monkeypatch.setattr(bot.config, "PUBLIC_URL", "https://bot.skandar.online")
-    monkeypatch.setattr(bot.config, "ADMIN_IG_IDS", {"jefe"})
+    monkeypatch.setattr(cuenta(), "admin_ig_ids", {"jefe"})
     monkeypatch.setattr(conectar.httpx, "AsyncClient", FakeHTTP)
     avisos = []
 

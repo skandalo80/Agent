@@ -11,7 +11,7 @@ from pathlib import Path
 
 import yaml
 
-from . import config
+from .cuenta import cuenta
 from .instagram import Instagram
 from .store import Store
 
@@ -21,7 +21,7 @@ MAX_BUTTONS, MAX_CHARS = 4, 80
 
 
 def load(path: str | None = None) -> list[str]:
-    file = Path(path or config.BUTTONS_PATH)
+    file = Path(path or cuenta().buttons_path)
     if not file.is_file():
         return []
     questions = [str(q).strip() for q in (yaml.safe_load(file.read_text(encoding="utf-8")) or {}).get("preguntas", [])]
