@@ -264,7 +264,7 @@ def test_chats_en_pausa(cliente):
     import time
     r = client.get("/panel/asistente")
     assert "Conversaciones recientes" in r.text and "Aún no te escribe nadie" in r.text
-    assert "Contestados hoy" in r.text and "Mensajes este mes" in r.text and "Gasto de hoy" not in r.text
+    assert "Contestados hoy" in r.text and "Mensajes restantes" in r.text and "Gasto de hoy" not in r.text
     client.portal.call(c.store.pause, "ana", time.time() + 3600)
     r = client.get("/panel/asistente?ver=pausa")
     assert "@ana" in r.text and "vuelve a contestar solo en 1 h" in r.text and "Reactivar" in r.text
@@ -290,7 +290,7 @@ def test_conversaciones_recientes_y_tomar_un_chat(cliente):
     assert "@beto" in r.text and "«¿Tienen lugar mañana?»" in r.text and "Asistente" in r.text
     assert "@caro" in r.text and "Sin contestar" in r.text and r.text.index("@caro") < r.text.index("@beto")
     assert "Tomar este chat" in r.text and "Sin contestar (1)" in r.text
-    assert '<b>1</b><small>en 1 chat</small>' in r.text and "Mensajes este mes</span><b>2</b>" in r.text
+    assert '<b>1</b><small>en 1 chat</small>' in r.text and "Mensajes restantes</span><b>999</b>" in r.text  # PLAN=basico: 1,000
     r = client.get("/panel/asistente?ver=sin")
     assert "@caro" in r.text and "@beto" not in r.text
 

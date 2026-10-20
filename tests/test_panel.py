@@ -76,7 +76,7 @@ def test_cliente_se_conecta_configura_y_enciende(monkeypatch, tmp_path):
         # Se dio de alta sola: Básico (Haiku, sin tu Google) y avisos al correo del formulario.
         env = Path("clientes/cafe_lunar/.env").read_text()
         assert "IG_ACCOUNT_ID=1784" in env and "CLAUDE_MODEL=claude-haiku-5-5" in env
-        assert "GOOGLE_TOOLS=0" in env and "OWNER_EMAIL=ana@cafe.mx" in env
+        assert "GOOGLE_TOOLS=0" in env and "PLAN=basico" in env and "OWNER_EMAIL=ana@cafe.mx" in env
         c = bot.buscar("1784")
         assert c and not c.google_tools
 

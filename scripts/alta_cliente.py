@@ -60,7 +60,8 @@ def main(args: list[str]) -> int:
     print(f"""
 Falta:
 1. Escribe el prompt del negocio en clientes/{slug}/system.md
-   (y CLAUDE_MODEL=claude-haiku-5-5 en su .env si es paquete Básico).
+   y su plan en su .env: PLAN=basico, community o pro_crm
+   (y CLAUDE_MODEL=claude-haiku-5-5 si es paquete Básico).
 2. Agrega {slug} a CUENTAS en ~/ig-bot/.env (separado por comas si ya hay otras).
 3. sudo systemctl restart igbot
 4. sudo journalctl -u igbot -f   # debe decir "Cuenta de Instagram: @{usuario}"
