@@ -255,6 +255,7 @@ label{display:block;font-weight:600;font-size:.95rem;margin-top:1.25rem}
 textarea,input[type=text]{width:100%;font:inherit;font-size:1rem;color:var(--negro);background:var(--claro);border:1px solid var(--linea-clara);border-radius:.85rem;padding:.7rem .9rem}
 textarea:focus,input[type=text]:focus{outline:2px solid var(--acento-claro);outline-offset:1px;border-color:transparent}
 textarea.prompt{font:14px/1.5 ui-monospace,Menlo,monospace;min-height:20rem}
+.tarjeta .aviso{background:var(--claro);margin:1rem 0 0}
 .par{border:1px solid var(--linea-clara);border-radius:1rem;padding:1rem;margin-top:1rem}
 .par label{margin-top:0}
 .par textarea{margin-top:.4rem}
@@ -304,7 +305,9 @@ def caja(nombre: str, etiqueta: str, ayuda: str, valor: str, filas: int = 2) -> 
 
 
 async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt: str | None = None,
-                   pares_minimos: int = MIN_PREGUNTAS) -> HTMLResponse:
+                   pares_minimos: int = MIN_PREGUNTAS, nota: str = "") -> HTMLResponse:
+    """La página del panel. `aviso` sale arriba; `nota`, junto a las instrucciones
+    (ahí deja la página "Generar instrucciones", con #instrucciones)."""
     datos = datos if datos is not None else await perfil(c)
     prompt = prompt_actual(c) if prompt is None else prompt
     encendido = await activo(c)
@@ -318,7 +321,7 @@ async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt
         f' placeholder="{EJEMPLOS[i % len(EJEMPLOS)][0]}">'
         f'<textarea name="faq_r_{i}" rows="2" maxlength="{MAX_CAMPO}" placeholder="{EJEMPLOS[i % len(EJEMPLOS)][1]}">'
         f'{escape(q["r"])}</textarea>'
-        f'<button class="quitar" name="accion" value="quitar_{i}">Quitar</button></div>'
+        f'<button class="quitar" name="accion" value="quitar_{i}" formaction="/panel/guardar#preguntas">Quitar</button></div>'
         for i, q in enumerate(pares)
     )
     pol = "".join(caja(k, etq, ayuda, temas.get(k, "")) for k, etq, ayuda in POLITICAS)
@@ -343,17 +346,18 @@ async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt
         # Enter en un campo no debe quitar una pregunta: el primer botón del formulario solo recarga.
         '<button class="oculto" name="accion" value="vista" tabindex="-1" aria-hidden="true">Actualizar</button>'
         f'<div class="tarjeta"><span class="num">01</span><h2>Tu negocio</h2>{negocio}</div>'
-        f'<div class="tarjeta"><span class="num">02</span><h2>Preguntas frecuentes</h2>'
+        f'<div class="tarjeta" id="preguntas"><span class="num">02</span><h2>Preguntas frecuentes</h2>'
         f'<p class="ayuda">Lo que más te preguntan, con la respuesta que darías tú.</p>'
         f'<input type="hidden" name="faq_n" value="{len(pares)}">{faq}'
-        f'<div class="acciones"><button class="boton secundario" name="accion" value="agregar">+ Agregar pregunta</button></div></div>'
+        f'<div class="acciones"><button class="boton secundario" name="accion" value="agregar" formaction="/panel/guardar#preguntas">+ Agregar pregunta</button></div></div>'
         f'<div class="tarjeta"><span class="num">03</span><h2>Políticas</h2>'
         f'<p class="ayuda">Llena solo las que apliquen a tu negocio.</p>{pol}</div>'
         f'<div class="tarjeta"><span class="num">04</span><h2>Cómo habla</h2>'
         f'{caja(HUMANO[0], HUMANO[1], HUMANO[2], datos.get(HUMANO[0], ""), HUMANO[3])}'
         f'<label>Tono</label><div class="tonos">{tonos}</div>'
-        f'<div class="acciones"><button class="boton secundario" name="accion" value="generar">Generar instrucciones</button></div></div>'
-        f'<div class="tarjeta"><span class="num">05</span><h2>Instrucciones de tu asistente</h2>'
+        f'<div class="acciones"><button class="boton secundario" name="accion" value="generar" formaction="/panel/guardar#instrucciones">Generar instrucciones</button></div></div>'
+        f'<div class="tarjeta" id="instrucciones"><span class="num">05</span><h2>Instrucciones de tu asistente</h2>'
+        + (f'<div class="aviso">{escape(nota)}</div>' if nota else "") +
         f'<p class="ayuda">Se arman con tus datos y el tono. Puedes editarlas antes de guardar.</p>'
         f'<textarea class="prompt" name="prompt" maxlength="{MAX_PROMPT}">{escape(prompt)}</textarea>'
         f'<div class="acciones"><button class="boton" name="accion" value="guardar">Guardar</button></div></div>'
@@ -402,8 +406,8 @@ async def guardar(request: Request):
         await c.store.set("perfil", json.dumps(datos, ensure_ascii=False))
         nombre = await usuario(c)
         if accion == "generar":
-            return await panel_de(c, "Revisa las instrucciones y pulsa Guardar para que tu asistente las use.",
-                                  datos, generar(nombre, datos))
+            return await panel_de(c, nota="Listo: revísalas y pulsa Guardar para que tu asistente las use.",
+                                  datos=datos, prompt=generar(nombre, datos))
         prompt = prompt.strip() or generar(nombre, datos)
         Path(c.prompt_path).parent.mkdir(parents=True, exist_ok=True)
         Path(c.prompt_path).write_text(prompt + "\n", encoding="utf-8")
