@@ -35,6 +35,8 @@ header .contenedor { display: flex; justify-content: space-between; align-items:
 .marca { font-weight: 600; font-size: .95rem; text-decoration: none; letter-spacing: -.01em; }
 nav a { color: var(--gris); text-decoration: none; margin-left: 1.5rem; font-size: .85rem; transition: color .2s; }
 nav a:hover { color: var(--claro); }
+nav a.nav-entrar { color: var(--claro); border: 1px solid #48484a; border-radius: 999px; padding: .35rem .9rem; }
+nav a.nav-entrar:hover { border-color: var(--claro); }
 
 /* Secciones */
 section { padding: 7rem 0; }

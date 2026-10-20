@@ -33,7 +33,7 @@ from pathlib import Path
 from urllib.parse import parse_qs
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
 
 from . import config
 from .cuenta import Cuenta, usar
@@ -324,9 +324,25 @@ header form{display:flex;margin:0}
 .chip{display:inline-block;font-size:.75rem;font-weight:600;padding:.2rem .65rem;border-radius:999px;background:var(--claro);color:#3a3a3c;border:1px solid var(--linea-clara);white-space:nowrap}
 .chip.verde{background:#e8f5ec;color:#1d6b37;border-color:transparent}
 .chip.rojo{background:#fdecea;color:#a1260d;border-color:transparent}
-.color{display:flex;gap:.75rem;align-items:flex-end;margin-top:1.25rem}
+.color{display:flex;gap:1rem;align-items:flex-start;margin-top:1.25rem}
+.color>div{flex:1;min-width:0}
 .color label{margin-top:0}
+.color .ayuda{margin:.1rem 0 .4rem}
 .muestra{width:2.9rem;height:2.9rem;border-radius:.75rem;flex:none;box-shadow:inset 0 0 0 1px rgba(0,0,0,.12)}
+input[type=color].muestra{padding:0;border:0;background:none;cursor:pointer;-webkit-appearance:none;appearance:none}
+input[type=color].muestra::-webkit-color-swatch-wrapper{padding:0}
+input[type=color].muestra::-webkit-color-swatch{border:0;border-radius:.75rem}
+input[type=color].muestra::-moz-color-swatch{border:0;border-radius:.75rem}
+.hex{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.85rem;font-weight:400;color:#6e6e73;margin-left:.35rem}
+label.pantone{font-size:.8rem;font-weight:500;color:#6e6e73;margin-top:.2rem}
+label.pantone span{font-weight:400}
+input.chico{max-width:9rem;padding:.4rem .7rem;font-size:.85rem}
+.opcion img.ejemplo{width:100%;aspect-ratio:4/5;object-fit:cover;border-radius:.7rem;display:block;margin-bottom:.6rem}
+label.check{display:flex;gap:.5rem;align-items:center;font-weight:500;cursor:pointer}
+label.check input{width:auto;margin:0}
+.si-precio{display:none}
+form:has(#con_precio:checked) .si-precio{display:block}
+.js .sin-js{display:none}
 .dos{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:.6rem}
 .dos .ayuda{margin:0 0 .3rem}
 .fotos{display:flex;gap:.75rem;flex-wrap:wrap;margin-top:.75rem}
@@ -358,13 +374,26 @@ input[type=file]{font:inherit;font-size:.9rem;margin-top:.75rem;max-width:100%}
 """
 
 
+# Las tipografías de los posts (fonts/), para que los botones de letra se vean con la suya.
+FONTS = Path(__file__).resolve().parent.parent / "fonts"
+STATIC = Path(__file__).resolve().parent / "static"
+FUENTES_CSS = "".join(
+    f"@font-face{{font-family:'{familia}';src:url(/panel/static/fuentes/{archivo}-{peso_nombre}.ttf);"
+    f"font-weight:{peso};font-display:swap}}"
+    for familia, archivo in (("Montserrat", "Montserrat"), ("Poppins", "Poppins"),
+                             ("Playfair Display", "PlayfairDisplay"), ("Lora", "Lora"), ("Inter", "Inter"))
+    for peso, peso_nombre in ((400, "Regular"), (600, "SemiBold"), (700, "Bold"))
+)
+
 PRINCIPIO = (
     '<!doctype html><html lang="es"><head><meta charset="utf-8">'
     '<meta name="viewport" content="width=device-width, initial-scale=1">'
     '<meta name="robots" content="noindex"><meta name="referrer" content="same-origin">'
     '<meta name="theme-color" content="#0a0a0a">'
     '<title>Tu asistente · Agentes IA by Skandar</title>'
-    f"<style>{ESTILO}</style></head><body>"
+    f"<style>{ESTILO}{FUENTES_CSS}</style>"
+    # Solo JavaScript propio (CSP script-src 'self'): la vista previa al momento en Contenido.
+    '<script src="/panel/static/panel.js" defer></script></head><body>'
 )
 FINAL = "</body></html>"
 
@@ -385,7 +414,9 @@ def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None) 
     enlaces = "".join(f'<a href="{href}"{ACTIVA if k == menu else ""}>{nombre}</a>'
                       for k, (nombre, href) in MENU.items()
                       if k != "contenido" or cuenta is None or cuenta.imagenes_mes > 0)
-    return (f'<header><div class="contenedor"><a class="marca" href="{config.SITE_URL}">Agentes IA by Skandar</a>'
+    # Con sesión, el logo lleva al inicio del panel; sin sesión, a la página principal.
+    inicio_marca = "/panel" if salir else config.SITE_URL
+    return (f'<header><div class="contenedor"><a class="marca" href="{inicio_marca}">Agentes IA by Skandar</a>'
             + (f'<nav class="menu">{enlaces}</nav>' if menu else "")
             + f"{boton}</div></header>")
 
@@ -693,6 +724,22 @@ async def probar(request: Request):
                + await prueba_fin(c, ancla=False))
 
     return StreamingResponse(pagina_en_partes(), media_type="text/html; charset=utf-8")
+
+
+ARCHIVO_FUENTE = re.compile(r"^(Inter|Montserrat|Poppins|PlayfairDisplay|Lora)-(Regular|SemiBold|Bold)\.ttf$")
+
+
+@router.get("/static/panel.js")
+def script():
+    return FileResponse(STATIC / "panel.js", media_type="text/javascript",
+                        headers={"Cache-Control": "public, max-age=3600"})
+
+
+@router.get("/static/fuentes/{archivo}")
+def fuente(archivo: str):
+    if not ARCHIVO_FUENTE.match(archivo):
+        raise HTTPException(status_code=404)
+    return FileResponse(FONTS / archivo, media_type="font/ttf", headers={"Cache-Control": "public, max-age=86400"})
 
 
 @router.post("/salir")

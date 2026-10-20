@@ -190,8 +190,15 @@ estilo de fotos, fotos de producto), crear un post a partir de un objetivo
 calendario. Los posts aprobados los publica el bucle de publicaciones y su palabra
 clave contesta comentarios igual que la hoja de `SHEET_COMMENTS`. Pasado el cupo,
 el cliente confirma la imagen extra (`EXTRA_IMAGE_USD`) y queda anotada en
-`events` ('imagen', tipo 'extra') para cobrarla. El CSP del bot necesita
-`img-src 'self'` (ver `deploy/Caddyfile`).
+`events` ('imagen', tipo 'extra') para cobrarla. La vista previa cambia al
+momento con `igbot/static/panel.js` (único JavaScript del panel), y Publicados
+muestra también los posts subidos desde la app de Instagram. El CSP del bot
+necesita `script-src 'self'; font-src 'self'; img-src 'self' https://*.cdninstagram.com
+https://*.fbcdn.net` (ver `deploy/Caddyfile`).
+
+Las fotos de ejemplo de cada estilo (Tu marca > Estilo de tus fotos) se generan una
+vez para todos los clientes (4 imágenes, ~US$0.16) y quedan en `data/estilos/`:
+`.venv/bin/python scripts/ejemplos_estilo.py`.
 
 ```bash
 .venv/bin/python scripts/probar_imagen.py --foto producto.jpg     # sin gastar
