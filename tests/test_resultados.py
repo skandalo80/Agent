@@ -87,7 +87,7 @@ def test_sin_sesion_va_al_panel():
 
 def test_basico_sin_mensajes_y_con_mensajes(cliente, monkeypatch):
     client, c = cliente
-    assert 'href="/panel/resultados">Resultados</a>' in client.get("/panel").text  # todos los planes
+    assert 'href="/panel/resultados">Resultados</a>' in client.get("/panel/asistente").text  # todos los planes
     assert "Contenido</a>" not in client.get("/panel").text
     assert "Aún no hay mensajes" in client.get("/panel/resultados").text
 
@@ -112,7 +112,10 @@ def test_basico_sin_mensajes_y_con_mensajes(cliente, monkeypatch):
 
 def test_inicio_del_panel(cliente):
     client, c = cliente
-    # Recién conectada (en pausa y sin mensajes): a configurar su asistente.
+    # Recién conectada: la bienvenida, solo la primera vez (Básico: un solo camino).
+    r = client.get("/panel", follow_redirects=True)
+    assert "Hola, @" in r.text and "Tu plan Básico" in r.text and "Tu marca" not in r.text
+    # Después (en pausa y sin mensajes): a configurar su asistente.
     r = client.get("/panel", follow_redirects=False)
     assert r.status_code == 303 and r.headers["location"] == "/panel/asistente"
     client.post("/panel/estado", headers={"Origin": "https://bot.skandar.online"}, data={"activo": "1"})

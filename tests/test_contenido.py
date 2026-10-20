@@ -96,7 +96,7 @@ def test_sin_contenido_en_el_plan(cliente):
 def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     client, c, llamadas, proveedor = cliente
     monkeypatch.setattr(c, "imagenes_mes", 2)
-    assert 'href="/panel/contenido">Contenido</a>' in client.get("/panel").text
+    assert 'href="/panel/contenido">Contenido</a>' in client.get("/panel/asistente").text
     r = client.get("/panel/contenido")
     assert "Aún no tienes posts" in r.text and "DESDEAPP" in r.text  # lo de la app sale aunque no haya del panel
     assert "Este post lleva precio" in client.get("/panel/contenido/nuevo").text
@@ -509,3 +509,21 @@ def test_conexion_avisa_si_falta_el_permiso_de_estadisticas(cliente, monkeypatch
     monkeypatch.setattr(c.instagram, "media_insights", sin_permiso, raising=False)
     r = client.get("/panel/asistente")
     assert "Estadísticas: falta" in r.text and 'href="/conectar/instagram"' in r.text and "Hay algo que revisar" in r.text
+
+
+def test_bienvenida_con_contenido_y_lo_que_falta(cliente, monkeypatch):
+    client, c, *_ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 5)
+    r = client.get("/panel")
+    assert "Configurar mi asistente" in r.text and "Configurar mi marca" in r.text and "Tu plan Básico" not in r.text
+    assert client.get("/panel", follow_redirects=False).headers["location"] != "/panel/bienvenida"  # solo una vez
+    client.portal.call(c.store.set, "perfil", "")
+    client.portal.call(c.store.set, "asistente_listo", "0")
+    assert "Te falta configurar <b>Tu asistente</b>" in client.get("/panel/contenido/nuevo").text
+    client.post("/panel/guardar", headers=ORIGEN, data={"negocio": "Café", "accion": "guardar", "prompt": "Hola"})
+    assert "Te falta configurar <b>Tu marca</b>" in client.get("/panel/asistente").text
+    assert "Te falta configurar <b>Tu marca</b>" in client.get("/panel/contenido").text
+    assert "Te falta configurar" not in client.get("/panel/contenido/marca").text  # ya está ahí
+    client.post("/panel/contenido/marca", headers=ORIGEN, data={"principal": "#111111", "accion": "guardar"})
+    assert "Te falta configurar" not in client.get("/panel/asistente").text
+    assert "Te falta configurar" not in client.get("/panel/contenido").text
