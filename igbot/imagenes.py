@@ -239,7 +239,8 @@ def _precio(m: Marca) -> ImageFont.FreeTypeFont:
     return _fuente(44, max(m.peso, 600), m.fuente)
 
 
-def _textos(d, x, y, ancho, texto: Texto, m: Marca, color, secundario, acento, tam_titulo=96) -> int:
+def _textos(d, x, y, ancho, texto: Texto, m: Marca, color, secundario, acento, tam_titulo=96,
+            color_precio=None) -> int:
     fuente, lineas = _titulo(texto.titulo, ancho, tam_titulo, m)
     y = _bloque(d, x, y, lineas, fuente, color)
     if texto.subtitulo:
@@ -248,7 +249,7 @@ def _textos(d, x, y, ancho, texto: Texto, m: Marca, color, secundario, acento, t
     if texto.precio:
         y += 30
         d.rectangle((x, y, x + 44, y + 4), fill=acento)
-        y = _bloque(d, x, y + 22, [texto.precio], _precio(m), color)
+        y = _bloque(d, x, y + 22, [texto.precio], _precio(m), color_precio or color)
     return y
 
 
@@ -287,7 +288,10 @@ def rotular(imagen: bytes, plantilla: str, texto: Texto, marca: Marca | None = N
         y = ALTO - MARGEN - 40 - _alto_textos(ancho_texto, texto, m)
         _degradado(img, min(0.5, max(0.2, (y - 220) / ALTO)), 225)  # empieza arriba del texto
         d = ImageDraw.Draw(img)
-        _textos(d, MARGEN, y, ancho_texto, texto, m, (255, 255, 255), (225, 225, 228), acento)
+        # El detalle (precio) va en el acento si se lee sobre el degradado oscuro.
+        claro = 0.299 * acento[0] + 0.587 * acento[1] + 0.114 * acento[2] > 90
+        _textos(d, MARGEN, y, ancho_texto, texto, m, (255, 255, 255), (225, 225, 228), acento,
+                color_precio=acento if claro else None)
         _firma(d, texto, m, (200, 200, 205))
 
     elif plantilla == "minimal":
@@ -366,6 +370,8 @@ async def devolver(store: Store, tipo: str) -> None:
 
 # De una en una: cada imagen ocupa memoria al decodificarla y rotularla.
 _turno = asyncio.Semaphore(1)
+# Las llamadas a Gemini (esperan red, no ocupan memoria): dos a la vez como mucho.
+_generando = asyncio.Semaphore(2)
 
 
 def _archivos(token: str) -> tuple[Path, Path]:
@@ -387,14 +393,14 @@ async def crear_pieza(store: Store, user_id: str, idea: str, plantilla: str, tex
         raise ErrorImagen(f"Plantilla desconocida: {plantilla}")
     tipo = await reservar(store, permitir_extra)
     try:
+        # La espera a Gemini va aparte: mientras tanto, las vistas previas siguen rotulando.
+        async with _generando:
+            prompt = prompt_libre(idea, texto, marca) if plantilla == LIBRE else prompt_final(idea, plantilla)
+            crudo = await proveedor.generar(prompt, list(fotos))
         async with _turno:
-            if plantilla == LIBRE:  # el texto ya viene en el diseño: no se rotula
-                crudo = await proveedor.generar(prompt_libre(idea, texto, marca), list(fotos))
-                base = final = await asyncio.to_thread(_jpg, crudo)
-            else:
-                crudo = await proveedor.generar(prompt_final(idea, plantilla), list(fotos))
-                base = await asyncio.to_thread(_jpg, crudo)
-                final = await asyncio.to_thread(rotular, base, plantilla, texto, marca)
+            base = await asyncio.to_thread(_jpg, crudo)
+            # En diseño libre el texto ya viene en el diseño: no se rotula.
+            final = base if plantilla == LIBRE else await asyncio.to_thread(rotular, base, plantilla, texto, marca)
     except Exception:
         await devolver(store, tipo)
         raise

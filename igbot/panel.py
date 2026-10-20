@@ -322,6 +322,7 @@ header form{display:flex;margin:0}
 .fila .datos{flex:1;min-width:0}
 .fila .datos b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .fila .datos span{display:block;color:#6e6e73;font-size:.9rem}
+@media(max-width:560px){.fila{flex-wrap:wrap;gap:.6rem 1rem}.fila .datos{flex-basis:calc(100% - 5.5rem)}.fila img+.datos+.chip,.fila .pieza+.datos+.chip{margin-left:5.5rem}}
 .chip{display:inline-block;font-size:.75rem;font-weight:600;padding:.2rem .65rem;border-radius:999px;background:var(--claro);color:#3a3a3c;border:1px solid var(--linea-clara);white-space:nowrap}
 .chip.verde{background:#e8f5ec;color:#1d6b37;border-color:transparent}
 .chip.rojo{background:#fdecea;color:#a1260d;border-color:transparent}
@@ -344,6 +345,10 @@ label.check input{width:auto;margin:0}
 .si-precio{display:none}
 form:has(#con_precio:checked) .si-precio{display:block}
 form:has(input[name=modo][value=libre]:checked) .si-plantilla{display:none}
+.si-propio{display:none}form:has(#propio:checked) .si-propio{display:block}form:has(#propio:checked) .no-propio{display:none}
+.minis{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-top:.75rem}
+.minis figure{margin:0}.minis figcaption{color:#6e6e73;font-size:.8rem;margin-top:.35rem;line-height:1.3}
+.pieza.cargando{opacity:.45;transition:opacity .2s}
 .js .sin-js{display:none}
 .propuestas{display:grid;grid-template-columns:repeat(auto-fill,minmax(15.5rem,1fr));gap:1rem}
 .propuesta{background:var(--blanco);border-radius:1.25rem;overflow:hidden;display:flex;flex-direction:column}

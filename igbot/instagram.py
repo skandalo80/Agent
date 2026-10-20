@@ -105,6 +105,13 @@ class Instagram:
         await self.store.set(key, link)
         return link
 
+    async def media_insights(self, media_id: str) -> dict[str, int]:
+        """Alcance, vistas, likes, comentarios, guardados y compartidos de un post propio.
+        Necesita el permiso instagram_business_manage_insights."""
+        data = await self._graph("GET", f"{media_id}/insights",
+                                 metric="reach,views,likes,comments,saved,shares,total_interactions")
+        return {m["name"]: (m.get("values") or [{}])[0].get("value", 0) for m in data.get("data", [])}
+
     async def recent_media(self, limit: int = 12) -> list[dict]:
         """Las últimas publicaciones de la cuenta (las suba quien las suba)."""
         data = await self._graph("GET", "me/media", limit=limit,
