@@ -32,6 +32,7 @@ from .tools import error, fmt, ok, tz
 log = logging.getLogger("igbot.admin")
 
 PREFIX = "admin:"
+PANEL = "panel"  # user_id de las publicaciones que arma el cliente en su panel (igbot/contenido.py)
 MODES = {"modo cliente": "cliente", "modo admin": "admin"}
 
 
@@ -195,6 +196,8 @@ async def publish_due(store: Store, instagram: Instagram) -> None:
     """Publica las programadas a las que ya les tocó y le avisa a quien las pidió."""
     for post in await store.posts(("programada",), due_before=time.time()):
         link, err = await publish_post(store, instagram, post)
+        if post["user_id"] == PANEL:
+            continue  # la armó el cliente en su panel: ahí ve si salió
         text = (
             f"Ya salió la publicación #{post['id']}: {link}" if not err
             else f"No se pudo publicar la #{post['id']} que estaba programada: {err}"

@@ -270,8 +270,8 @@ main{padding:3rem 0 5rem}
 .num{display:block;font-size:.85rem;font-weight:600;color:var(--acento);margin-bottom:1rem}
 .ayuda{color:#6e6e73;font-size:.9rem;margin:.1rem 0 .5rem}
 label{display:block;font-weight:600;font-size:.95rem;margin-top:1.25rem}
-textarea,input[type=text]{width:100%;font:inherit;font-size:1rem;color:var(--negro);background:var(--claro);border:1px solid var(--linea-clara);border-radius:.85rem;padding:.7rem .9rem}
-textarea:focus,input[type=text]:focus{outline:2px solid var(--acento-claro);outline-offset:1px;border-color:transparent}
+textarea,input[type=text],input[type=datetime-local]{width:100%;font:inherit;font-size:1rem;color:var(--negro);background:var(--claro);border:1px solid var(--linea-clara);border-radius:.85rem;padding:.7rem .9rem}
+textarea:focus,input[type=text]:focus,input[type=datetime-local]:focus{outline:2px solid var(--acento-claro);outline-offset:1px;border-color:transparent}
 textarea.prompt{font:14px/1.5 ui-monospace,Menlo,monospace;min-height:20rem}
 .tarjeta .aviso{background:var(--claro);margin:1rem 0 0}
 .par{border:1px solid var(--linea-clara);border-radius:1rem;padding:1rem;margin-top:1rem}
@@ -283,6 +283,57 @@ textarea.prompt{font:14px/1.5 ui-monospace,Menlo,monospace;min-height:20rem}
 .tonos label{margin:0;font-weight:500;border:1px solid var(--linea-clara);border-radius:999px;padding:.45rem 1rem;cursor:pointer}
 .tonos input{accent-color:var(--acento)}
 .oculto{position:absolute;left:-9999px}
+header form{display:flex;margin:0}
+.ancho .contenedor{max-width:64rem}
+.menu a,.marca{white-space:nowrap}
+@media(max-width:560px){header .marca{font-size:0}header .marca::after{content:"Skandar";font-size:.95rem}.menu{gap:.9rem;margin-right:1rem}}
+.menu{display:flex;gap:1.25rem;font-size:.85rem;margin-left:auto;margin-right:1.5rem}
+.menu a{color:var(--gris);text-decoration:none}
+.menu a.on,.menu a:hover{color:var(--claro)}
+.pestanas{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:1.5rem}
+.pestanas a{padding:.5rem 1rem;border-radius:999px;color:#a1a1a6;text-decoration:none;font-size:.95rem;font-weight:500;border:1px solid transparent}
+.pestanas a.on{background:var(--grafito);color:var(--claro);border-color:var(--linea-oscura)}
+.pestanas a.crear{background:var(--claro);color:var(--negro);font-weight:600}
+.contador{color:var(--gris);font-size:.85rem;margin:1rem 0 0}
+.opciones{display:grid;grid-template-columns:repeat(auto-fill,minmax(13rem,1fr));gap:.75rem;margin-top:.75rem}
+.opcion{position:relative;margin:0;font-weight:400;border:1px solid var(--linea-clara);border-radius:1.1rem;padding:1rem 1.1rem;cursor:pointer;background:var(--blanco)}
+.opcion b{display:block;font-weight:600}
+.opcion span{display:block;color:#6e6e73;font-size:.9rem;line-height:1.4;margin-top:.2rem}
+.opcion small{display:inline-block;margin-top:.5rem;font-size:.75rem;font-weight:600;color:var(--acento)}
+.opcion:has(input:checked){border-color:var(--acento);box-shadow:inset 0 0 0 1px var(--acento);background:#fff4ed}
+.opcion input,.chips input,.foto input{position:absolute;opacity:0;pointer-events:none}
+.chips{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.6rem}
+.chips label{position:relative;margin:0;font-weight:500;font-size:.95rem;border:1px solid var(--linea-clara);border-radius:999px;padding:.45rem 1rem;cursor:pointer;background:var(--blanco)}
+.chips label:has(input:checked){background:var(--negro);color:var(--claro);border-color:var(--negro)}
+.chips label:has(input:focus-visible),.opcion:has(input:focus-visible),.foto:has(input:focus-visible){outline:2px solid var(--acento-claro);outline-offset:2px}
+.pieza{width:100%;aspect-ratio:4/5;object-fit:cover;border-radius:1rem;display:block;background:var(--claro)}
+.editor{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:1.25rem;align-items:start}
+.editor .fija{position:sticky;top:1rem}
+@media(max-width:760px){.editor{grid-template-columns:1fr}.editor .fija{position:static}}
+.fila{display:flex;gap:1rem;align-items:center;padding:1rem 0;border-top:1px solid var(--linea-clara)}
+.fila:first-of-type{border-top:0}
+.fila img{width:4.5rem;aspect-ratio:4/5;object-fit:cover;border-radius:.6rem;flex:none}
+.fila .datos{flex:1;min-width:0}
+.fila .datos b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fila .datos span{display:block;color:#6e6e73;font-size:.9rem}
+.chip{display:inline-block;font-size:.75rem;font-weight:600;padding:.2rem .65rem;border-radius:999px;background:var(--claro);color:#3a3a3c;border:1px solid var(--linea-clara);white-space:nowrap}
+.chip.verde{background:#e8f5ec;color:#1d6b37;border-color:transparent}
+.chip.rojo{background:#fdecea;color:#a1260d;border-color:transparent}
+.color{display:flex;gap:.75rem;align-items:flex-end;margin-top:1.25rem}
+.color label{margin-top:0}
+.muestra{width:2.9rem;height:2.9rem;border-radius:.75rem;flex:none;box-shadow:inset 0 0 0 1px rgba(0,0,0,.12)}
+.dos{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:.6rem}
+.dos .ayuda{margin:0 0 .3rem}
+.fotos{display:flex;gap:.75rem;flex-wrap:wrap;margin-top:.75rem}
+.fotos figure{margin:0;width:6rem;text-align:center}
+.fotos img{width:6rem;height:6rem;object-fit:cover;border-radius:.75rem;display:block}
+.foto{position:relative;margin:0;cursor:pointer;border-radius:.85rem;border:2px solid transparent}
+.foto:has(input:checked){border-color:var(--acento)}
+.fotos .quitar{background:none;border:0;color:#6e6e73;font:inherit;font-size:.8rem;cursor:pointer;padding:.3rem 0 0}
+input[type=file]{font:inherit;font-size:.9rem;margin-top:.75rem;max-width:100%}
+.boton.chico{padding:.5rem 1rem;font-size:.9rem}
+.generando{display:flex;gap:1rem;align-items:center}
+.extra{border:1px solid var(--acento);background:#fff4ed}
 """
 
 
@@ -301,11 +352,24 @@ def pagina(cuerpo: str) -> HTMLResponse:
     return HTMLResponse(PRINCIPIO + cuerpo + FINAL)
 
 
-def cabecera(salir: bool = False) -> str:
+ACTIVA = ' class="on"'
+MENU = {"asistente": ("Tu asistente", "/panel"), "contenido": ("Contenido", "/panel/contenido")}
+
+
+def cabecera(salir: bool = False, menu: str = "") -> str:
+    """`menu`: la sección en la que está (solo si su plan tiene más de una)."""
     boton = ('<form method="post" action="/panel/salir"><button class="salir">Salir</button></form>'
              if salir else "")
+    enlaces = "".join(f'<a href="{href}"{ACTIVA if k == menu else ""}>{nombre}</a>'
+                      for k, (nombre, href) in MENU.items())
     return (f'<header><div class="contenedor"><a class="marca" href="{config.SITE_URL}">Agentes IA by Skandar</a>'
-            f"{boton}</div></header>")
+            + (f'<nav class="menu">{enlaces}</nav>' if menu else "")
+            + f"{boton}</div></header>")
+
+
+def secciones(c: Cuenta, actual: str) -> str:
+    """El menú del panel si la cuenta tiene Contenido en su plan."""
+    return actual if c.imagenes_mes > 0 else ""
 
 
 def entrar() -> HTMLResponse:
@@ -353,7 +417,7 @@ async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt
         for k, (nombre, _) in TONOS.items()
     )
     return pagina(
-        cabecera(salir=True)
+        cabecera(salir=True, menu=secciones(c, "asistente"))
         + '<section class="oscuro portada"><div class="contenedor">'
         '<p class="antetitulo">Tu asistente</p>'
         f'<h1>@{escape(await usuario(c))}<span class="punto">.</span></h1>'
@@ -504,7 +568,7 @@ async def prueba_inicio(c: Cuenta, mensajes: list[list[str]], aviso: str = "") -
         '<p class="vacio">Escribe como si fueras un cliente. Usa las instrucciones que guardaste.</p>')
     return (
         PRINCIPIO
-        + cabecera(salir=True)
+        + cabecera(salir=True, menu=secciones(c, "asistente"))
         + '<section class="oscuro portada compacta"><div class="contenedor">'
         '<p class="antetitulo">Prueba tu asistente</p>'
         f'<h1>@{escape(await usuario(c))}<span class="punto">.</span></h1>'

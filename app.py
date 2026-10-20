@@ -27,7 +27,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse
 
-from igbot import admin, agent, botones, comentarios, conectar, config, limites, panel, reporte
+from igbot import admin, agent, botones, comentarios, conectar, config, contenido, limites, panel, reporte
 from igbot.cuenta import Cuenta, cargar, cuenta, de_carpeta, usar
 from igbot.dispatcher import Dispatcher
 from igbot.google import Google
@@ -146,7 +146,7 @@ async def arrancar(c: Cuenta) -> None:
         await resolver_id(c)
         # Mensajes, toques a los botones de inicio y, si hay reglas, comentarios.
         fields = "messages,messaging_postbacks"
-        if google and comentarios.available() or c.hide_spam:
+        if google and comentarios.available() or c.hide_spam or c.imagenes_mes:
             fields += ",comments"
         try:
             await c.instagram.subscribe(fields)
@@ -161,7 +161,8 @@ async def renovar_token(c: Cuenta) -> None:
 
 
 async def publicar(c: Cuenta) -> None:
-    if c.admin_ig_ids:
+    # Las programan sus administradores por DM o el cliente desde su panel (Contenido).
+    if c.admin_ig_ids or c.imagenes_mes:
         await admin.publish_due(c.store, c.instagram)
 
 
@@ -237,6 +238,7 @@ if not config.CLIENTE:
     # La página de conectar clientes la atiende solo el proceso principal.
     app.include_router(conectar.router)
     app.include_router(panel.router)
+    app.include_router(contenido.router)
 
 
 @app.get("/health")
@@ -421,7 +423,7 @@ async def receive_entry(c: Cuenta, entry: dict) -> None:
             continue
         value = change.get("value") or {}
         log.info("Comentario de %s: %r", (value.get("from") or {}).get("username"), value.get("text", "")[:80])
-        if google and comentarios.available() or c.hide_spam:
+        if google and comentarios.available() or c.hide_spam or c.imagenes_mes:
             in_background(handle_comment(value))
         else:
             log.info("Comentarios sin configurar (falta SHEET_COMMENTS o Google); se ignora")

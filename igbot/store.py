@@ -468,15 +468,28 @@ class Store:
         cur = await self.db.execute(f"SELECT {self.POST_FIELDS} FROM posts WHERE id = ?", (post_id,))
         return self._post(await cur.fetchone())
 
-    async def posts(self, statuses: tuple[str, ...], due_before: float | None = None) -> list[dict]:
+    async def posts(self, statuses: tuple[str, ...], due_before: float | None = None,
+                    user_id: str | None = None) -> list[dict]:
         marks = ",".join("?" * len(statuses))
         sql = f"SELECT {self.POST_FIELDS} FROM posts WHERE status IN ({marks})"
         args: list = list(statuses)
         if due_before is not None:
             sql += " AND publish_at <= ?"
             args.append(due_before)
+        if user_id is not None:
+            sql += " AND user_id = ?"
+            args.append(user_id)
         cur = await self.db.execute(sql + " ORDER BY publish_at, id", args)
         return [self._post(r) for r in await cur.fetchall()]
+
+    async def update_post(self, post_id: int, caption: str | None = None, publish_at: float | None = None,
+                          media_ids: list[int] | None = None) -> None:
+        """Cambia el texto, la hora o las fotos de una publicación que aún no sale."""
+        for campo, valor in (("caption", caption), ("publish_at", publish_at),
+                             ("media_ids", None if media_ids is None else ",".join(map(str, media_ids)))):
+            if valor is not None:
+                await self.db.execute(f"UPDATE posts SET {campo} = ? WHERE id = ?", (valor, post_id))
+        await self.db.commit()
 
     async def set_post(self, post_id: int, status: str, permalink: str = "", error: str = "",
                        only_if: str | None = None) -> bool:
