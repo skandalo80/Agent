@@ -156,6 +156,8 @@ def test_probar_mi_asistente(monkeypatch, tmp_path):
         assert client.post("/panel/probar", data={"mensaje": "hola"}).status_code == 403  # sin Origin
         r = client.post("/panel/probar", headers=ORIGEN, data={"mensaje": "¿Abren hoy?", "accion": "enviar"})
         assert "¿Abren hoy?" in r.text and "respuesta 1" in r.text
+        # Primero sale "escribiendo…" y, al llegar la respuesta, se oculta.
+        assert r.text.index('id="escribiendo"') < r.text.index("#escribiendo{display:none}") < r.text.index("respuesta 1")
         prompt, system, mcp = vistos[0]
         # Sus instrucciones guardadas + las reglas comunes, sin herramientas.
         assert system.startswith("Eres el café.") and "REGLAS COMUNES" in system and not mcp
@@ -165,6 +167,15 @@ def test_probar_mi_asistente(monkeypatch, tmp_path):
         assert "Usuario: ¿Abren hoy?" in vistos[1][0] and "Tú: respuesta 1" in vistos[1][0]
         r = client.post("/panel/probar", headers=ORIGEN, data={"mensaje": "otra"})
         assert "límite de mensajes de prueba" in r.text and len(vistos) == 2
+
+        async def falla(*a, **k):
+            raise RuntimeError("sin red")
+
+        monkeypatch.setattr(bot.agent, "run_claude", falla)
+        monkeypatch.setattr(panel, "MAX_PRUEBAS_DIA", 3)
+        r = client.post("/panel/probar", headers=ORIGEN, data={"mensaje": "¿Sigues?"})
+        assert "no pudo contestar" in r.text and r.text.endswith("</html>")
+        assert len(client.portal.call(panel.historial, c)) == 4  # lo fallido no se guarda
 
         r = client.post("/panel/probar", headers=ORIGEN, data={"accion": "reiniciar"})
         assert "respuesta 1" not in r.text

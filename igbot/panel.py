@@ -30,7 +30,7 @@ from pathlib import Path
 from urllib.parse import parse_qs
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 
 from . import config
 from .cuenta import Cuenta, usar
@@ -44,7 +44,7 @@ buscar: Callable[[str], Cuenta | None] = lambda ig_id: None
 alta: Callable[[str, str, str], Awaitable[Cuenta | None]] | None = None
 
 COOKIE = "panel"
-SESSION_DAYS = 7
+SESSION_DAYS = 30  # Instagram vuelve a pedir el permiso en cada inicio de sesión
 MAX_CAMPO = 3000
 MAX_PROMPT = 12000
 # Modelo del paquete Básico (solo chat).
@@ -249,6 +249,11 @@ main .boton.secundario{background:transparent;color:var(--negro);border-color:va
 .burbuja{max-width:82%;width:fit-content;padding:.6rem .95rem;border-radius:1.2rem;font-size:.95rem;line-height:1.45;margin-bottom:.55rem;white-space:pre-wrap;overflow-wrap:anywhere}
 .burbuja.cliente{background:var(--negro);color:var(--claro);margin-left:auto;border-bottom-right-radius:.35rem}
 .burbuja.agente{background:var(--claro);border:1px solid var(--linea-clara);border-bottom-left-radius:.35rem}
+.escribiendo{display:flex;gap:.3rem;align-items:center;height:2.4rem}
+.escribiendo span{width:.45rem;height:.45rem;border-radius:50%;background:var(--gris);animation:puntos 1.2s infinite ease-in-out}
+.escribiendo span:nth-child(2){animation-delay:.15s}
+.escribiendo span:nth-child(3){animation-delay:.3s}
+@keyframes puntos{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
 .vacio{color:#6e6e73;text-align:center;padding:2rem 0}
 .escribir{display:flex;gap:.6rem;margin-top:1rem}
 .escribir input{flex:1}
@@ -276,15 +281,19 @@ textarea.prompt{font:14px/1.5 ui-monospace,Menlo,monospace;min-height:20rem}
 """
 
 
+PRINCIPIO = (
+    '<!doctype html><html lang="es"><head><meta charset="utf-8">'
+    '<meta name="viewport" content="width=device-width, initial-scale=1">'
+    '<meta name="robots" content="noindex"><meta name="referrer" content="same-origin">'
+    '<meta name="theme-color" content="#0a0a0a">'
+    '<title>Tu asistente · Agentes IA by Skandar</title>'
+    f"<style>{ESTILO}</style></head><body>"
+)
+FINAL = "</body></html>"
+
+
 def pagina(cuerpo: str) -> HTMLResponse:
-    return HTMLResponse(
-        '<!doctype html><html lang="es"><head><meta charset="utf-8">'
-        '<meta name="viewport" content="width=device-width, initial-scale=1">'
-        '<meta name="robots" content="noindex"><meta name="referrer" content="same-origin">'
-        '<meta name="theme-color" content="#0a0a0a">'
-        '<title>Tu asistente · Agentes IA by Skandar</title>'
-        f"<style>{ESTILO}</style></head><body>{cuerpo}</body></html>"
-    )
+    return HTMLResponse(PRINCIPIO + cuerpo + FINAL)
 
 
 def cabecera(salir: bool = False) -> str:
@@ -475,15 +484,17 @@ async def responder_prueba(c: Cuenta, previos: list[list[str]], texto: str) -> s
         return await agent.run_claude("\n\n".join(partes), agent.system_prompt() + NOTA_PRUEBA, max_turns=1)
 
 
-async def pagina_prueba(c: Cuenta, aviso: str = "") -> HTMLResponse:
-    mensajes = await historial(c)
-    burbujas = "".join(
-        f'<div class="burbuja {"cliente" if rol == "user" else "agente"}">{escape(texto)}</div>'
-        for rol, texto in mensajes
-    ) or '<p class="vacio">Escribe como si fueras un cliente. Usa las instrucciones que guardaste.</p>'
-    _, usadas = await pruebas_hoy(c)
-    return pagina(
-        cabecera(salir=True)
+def burbuja(rol: str, texto: str) -> str:
+    return f'<div class="burbuja {"cliente" if rol == "user" else "agente"}">{escape(texto)}</div>'
+
+
+async def prueba_inicio(c: Cuenta, mensajes: list[list[str]], aviso: str = "") -> str:
+    """La página del chat de prueba hasta el último mensaje (sin cerrar el chat)."""
+    burbujas = "".join(burbuja(rol, texto) for rol, texto in mensajes) or (
+        '<p class="vacio">Escribe como si fueras un cliente. Usa las instrucciones que guardaste.</p>')
+    return (
+        PRINCIPIO
+        + cabecera(salir=True)
         + '<section class="oscuro portada"><div class="contenedor">'
         '<p class="antetitulo">Prueba tu asistente</p>'
         f'<h1>@{escape(await usuario(c))}<span class="punto">.</span></h1>'
@@ -491,7 +502,14 @@ async def pagina_prueba(c: Cuenta, aviso: str = "") -> HTMLResponse:
         "</div></section>"
         '<main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
-        + f'<div class="chat">{burbujas}<span id="ultimo"></span>'
+        + f'<div class="chat">{burbujas}'
+    )
+
+
+async def prueba_fin(c: Cuenta) -> str:
+    _, usadas = await pruebas_hoy(c)
+    return (
+        '<span id="ultimo"></span>'
         '<form method="post" action="/panel/probar#ultimo" class="escribir">'
         f'<input type="text" name="mensaje" maxlength="{MAX_MENSAJE_PRUEBA}" placeholder="Escribe un mensaje" required autofocus>'
         '<button class="boton" name="accion" value="enviar">Enviar</button></form></div>'
@@ -499,8 +517,12 @@ async def pagina_prueba(c: Cuenta, aviso: str = "") -> HTMLResponse:
         '<div class="acciones"><a class="boton secundario" href="/panel">← Volver al panel</a>'
         '<form method="post" action="/panel/probar"><button class="boton secundario" name="accion" value="reiniciar">'
         "Empezar de nuevo</button></form></div>"
-        "</div></main>"
+        "</div></main>" + FINAL
     )
+
+
+async def pagina_prueba(c: Cuenta, aviso: str = "") -> HTMLResponse:
+    return HTMLResponse(await prueba_inicio(c, await historial(c), aviso) + await prueba_fin(c))
 
 
 @router.get("/probar")
@@ -526,14 +548,26 @@ async def probar(request: Request):
         return await pagina_prueba(c, "Llegaste al límite de mensajes de prueba de hoy. Mañana puedes seguir probando.")
     previos = (await historial(c))[-MAX_PRUEBA_TURNOS:]
     await c.store.set(clave, str(usadas + 1))
-    try:
-        respuesta = await responder_prueba(c, previos, texto)
-    except Exception:
-        log.exception("Falló la prueba del asistente de %s", c.slug)
-        return await pagina_prueba(c, "Tu asistente no pudo contestar esta vez. Intenta de nuevo en un momento.")
-    previos += [["user", texto], ["assistant", respuesta]]
-    await c.store.set("prueba", json.dumps(previos[-MAX_PRUEBA_TURNOS:], ensure_ascii=False))
-    return await pagina_prueba(c)
+
+    async def pagina_en_partes():
+        # Sin JavaScript: primero sale su mensaje con "escribiendo…" (el navegador ya
+        # muestra la página nueva) y, cuando Claude contesta, el resto. Caddy no
+        # guarda respuestas sin Content-Length, las pasa tal cual van llegando.
+        yield (await prueba_inicio(c, previos + [["user", texto]])
+               + '<div class="burbuja agente escribiendo" id="escribiendo"><span></span><span></span><span></span></div>')
+        try:
+            respuesta = await responder_prueba(c, previos, texto)
+        except Exception:
+            log.exception("Falló la prueba del asistente de %s", c.slug)
+            yield ('<style>#escribiendo{display:none}</style><div class="aviso">'
+                   "Tu asistente no pudo contestar esta vez. Intenta de nuevo en un momento.</div>"
+                   + await prueba_fin(c))
+            return
+        nuevos = previos + [["user", texto], ["assistant", respuesta]]
+        await c.store.set("prueba", json.dumps(nuevos[-MAX_PRUEBA_TURNOS:], ensure_ascii=False))
+        yield "<style>#escribiendo{display:none}</style>" + burbuja("assistant", respuesta) + await prueba_fin(c)
+
+    return StreamingResponse(pagina_en_partes(), media_type="text/html; charset=utf-8")
 
 
 @router.post("/salir")
