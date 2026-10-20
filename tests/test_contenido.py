@@ -185,7 +185,7 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     reglas = client.portal.call(contenido.reglas, c.store)
     assert [(r.post, r.keywords, r.dm, r.public) for r in reglas] == [("ABC123", ["PRECIO"], "Cuesta $1,190.", "¡Listo!")]
     r = client.get("/panel/contenido")
-    assert "Publicados" in r.text and r.text.count("instagram.com/p/ABC123") == 1
+    assert "Ya publicados" in r.text and r.text.count("instagram.com/p/ABC123") == 1
     assert "instagram.com/p/DESDEAPP" in r.text and "Desde Instagram" in r.text
     assert r.text.index("DESDEAPP") < r.text.index("ABC123")  # el más nuevo primero
     assert "ya no se puede cambiar" in client.post("/panel/contenido/post/1", headers=ORIGEN,

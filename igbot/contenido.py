@@ -6,7 +6,7 @@ bot.skandar.online/panel/contenido, para las cuentas con contenido en su plan
 - Tu marca: colores (HEX, con su Pantone de referencia), tipografía y grosor de
   los títulos, estilo de las fotos, plantilla de inicio y fotos reales de sus
   productos. Se guarda en kv "marca" y la vista previa se rotula en el servidor.
-- Crear post: elige un objetivo (dar a conocer la marca, producto estrella,
+- Crear post: elige un objetivo (dar a conocer la marca, servicio o producto estrella,
   atraer clientes, explicar algo, contar una historia) y, si quiere, el tema.
   Claude escribe el título, el texto, la palabra clave y el DM con lo que el
   cliente puso en su panel; Gemini pinta la imagen (imagenes.crear_pieza) y
@@ -58,23 +58,23 @@ router = APIRouter(prefix="/panel/contenido")
 OBJETIVOS = {
     # clave: (nombre, de qué trata, nota, ejemplo de tema, qué le pedimos a Claude)
     "marca": ("Dar a conocer tu marca", "Quiénes son y qué los hace distintos.", "",
-              "Ej. Somos un taller familiar en Guadalajara desde 2015.",
+              "Ej. Somos un estudio de belleza en Guadalajara desde 2015.",
               "Presentar el negocio: quiénes son, qué ofrecen y qué los hace distintos. Sin precio."),
-    "estrella": ("Producto estrella", "Lo que más se vende o lo que quieres mover.", "Si vendes productos",
-                 "Ej. La cartera Atelier, en sus tres colores.",
+    "estrella": ("Servicio o producto estrella", "Lo que más te piden o lo que quieres mover.", "",
+                 "Ej. Nuestro facial hidratante de 60 minutos.",
                  "Destacar un producto o servicio concreto, con su precio si está en la información del negocio."),
     "crecer": ("Atraer clientes", "Promoción, novedad o razón para escribirte hoy.", "",
-               "Ej. Envío gratis esta semana en compras de más de $1,000.",
+               "Ej. Esta semana, 15% en tu primera cita.",
                "Dar una razón para escribir hoy: una promoción, una novedad o un beneficio. Solo promociones"
                " que estén en la información del negocio o en el tema."),
     "explicar": ("Explicar algo", "Cómo funciona, cómo se usa, qué incluye.", "",
-                 "Ej. Cómo cuidar una cartera de piel.",
+                 "Ej. Cómo cuidar tu piel después de un facial.",
                  "Explicar algo útil para sus clientes: cómo funciona, cómo se usa o qué incluye."),
     "historia": ("Contar una historia", "Una experiencia, un cliente, detrás de cámaras.", "",
-                 "Ej. Cómo hacemos cada cartera a mano.",
+                 "Ej. Cómo preparamos la cabina antes de cada cita.",
                  "Contar una historia breve y real del negocio: una experiencia, un cliente o detrás de cámaras."),
 }
-OBJETIVO_INICIAL = "estrella"
+OBJETIVO_INICIAL = "marca"
 
 ESTILOS = {
     # clave: (nombre, cómo se ve, cómo se le pide a Gemini)
@@ -92,13 +92,14 @@ ESTILO_INICIAL = "limpio"
 
 NOMBRES_PLANTILLA = {"editorial": "Editorial", "minimal": "Minimal", "marco": "Marco", "banda": "Banda"}
 COLORES = [  # (campo, nombre, para qué se usa)
-    ("principal", "Principal", "Títulos y texto sobre fondos claros."),
-    ("acento", "Acento", "El precio, los detalles y la plantilla Banda."),
+    ("principal", "Principal", "Títulos sobre fondos claros: plantillas Marco y Minimal. En Editorial el título"
+                                " va en blanco sobre la foto para que siempre se lea."),
+    ("acento", "Acento", "Los detalles, el precio y la plantilla Banda."),
     ("fondo", "Fondo", "El fondo de la plantilla Marco."),
 ]
 ESTADOS = {  # estado del post: (cómo se le dice al cliente, color de la etiqueta)
     "borrador": ("Borrador", ""), "programada": ("Programado", "verde"), "publicando": ("Publicando…", "verde"),
-    "publicada": ("Publicado", "verde"), "fallida": ("No salió", "rojo"), "cancelada": ("Descartado", ""),
+    "publicada": ("Publicado", ""), "fallida": ("No salió", "rojo"), "cancelada": ("Descartado", ""),
 }
 EDITABLES = ("borrador", "programada")
 
@@ -332,9 +333,17 @@ def sin_plan() -> HTMLResponse:
     )
 
 
+def recortar(texto: str, maximo: int = 60) -> str:
+    """Corta en la última palabra completa, con puntos suspensivos."""
+    texto = " ".join(texto.split())
+    if len(texto) <= maximo:
+        return texto
+    return texto[:maximo].rsplit(" ", 1)[0].rstrip(".,;:") + "…"
+
+
 def fila(c: Cuenta, post: dict, p: dict, token: str) -> str:
     estado, color = ESTADOS.get(post["status"], (post["status"], ""))
-    titulo = p.get("titulo") or post["caption"][:60] or "Sin título"
+    titulo = p.get("titulo") or recortar(post["caption"]) or "Sin título"
     objetivo = OBJETIVOS.get(p.get("objetivo"), ("",))[0]
     detalle = cuando(post["publish_at"]) if post["publish_at"] else "Sin fecha"
     if objetivo:
@@ -374,7 +383,7 @@ async def de_instagram(c: Cuenta) -> list[dict]:
 
 
 def fila_instagram(m: dict, ts: float) -> str:
-    titulo = (m.get("caption") or "").strip().split("\n")[0][:60] or "Post de Instagram"
+    titulo = recortar((m.get("caption") or "").strip().split("\n")[0]) or "Post de Instagram"
     foto = m.get("thumbnail_url") or m.get("media_url")
     imagen = (f'<img src="{escape(foto)}" alt="" referrerpolicy="no-referrer">' if foto
               else '<span class="pieza" style="width:4.5rem"></span>')
@@ -382,7 +391,7 @@ def fila_instagram(m: dict, ts: float) -> str:
            if m.get("permalink") else "")
     return (f'<div class="fila">{imagen}<div class="datos"><b>{escape(titulo)}</b>'
             f'<span>{escape(cuando(ts))} · Desde Instagram</span></div>'
-            f'<span class="chip verde">Publicado</span>{ver}</div>')
+            f'<span class="chip">Publicado</span>{ver}</div>')
 
 
 async def publicados_html(c: Cuenta) -> str:
@@ -419,13 +428,16 @@ async def calendario(c: Cuenta, aviso: str = "") -> HTMLResponse:
                        '<div class="acciones"><a class="boton" href="/panel/contenido/nuevo">Crear mi primer post</a>'
                        '<a class="boton secundario" href="/panel/contenido/marca">Antes, configurar mi marca</a></div></div>')
         if programados:
-            cuerpo += f'<div class="tarjeta"><span class="num">Programados</span>{await filas(c, programados)}</div>'
+            cuerpo += (f'<div class="tarjeta proximos"><span class="num">Próximos posts</span>'
+                       '<p class="ayuda">Ya aprobados: salen solos el día y la hora que dicen.</p>'
+                       f"{await filas(c, programados)}</div>")
         if borradores:
             cuerpo += (f'<div class="tarjeta"><span class="num">Borradores</span>'
                        '<p class="ayuda">No salen hasta que los apruebes.</p>'
                        f"{await filas(c, borradores)}</div>")
         if publicados:
-            cuerpo += f'<div class="tarjeta"><span class="num">Publicados</span>{publicados}</div>'
+            cuerpo += ('<div class="tarjeta antiguos"><span class="num">Ya publicados</span>'
+                       f'<p class="ayuda">Los últimos 12 de tu Instagram, también los que subiste desde la app.</p>{publicados}</div>')
         if pendientes:
             cuerpo += '<div class="acciones"><a class="boton" href="/panel/contenido/nuevo">+ Crear post</a></div>'
         return await pagina(c, "calendario", "Tus publicaciones: lo que viene y lo que ya salió.", cuerpo, aviso)
@@ -454,12 +466,12 @@ async def nuevo(c: Cuenta, valores: dict | None = None, aviso: str = "", confirm
     marcadas = set(valores.get("fotos", []))
     fotos = "".join(
         f'<label class="foto"><input type="checkbox" name="foto_{i}" value="{t}"{" checked" if t in marcadas else ""}>'
-        f'<img src="{url_imagen(c, t)}" alt="Foto de producto {i + 1}"></label>'
+        f'<img src="{url_imagen(c, t)}" alt="Foto {i + 1}"></label>'
         for i, t in enumerate(marca.get("fotos", [])) if archivo(c, t).is_file())
-    fotos_html = ('<label>Usar fotos de tu producto (opcional)</label>'
-                  '<p class="ayuda">Marca las que deben salir: la imagen se hace a partir de tu producto real.</p>'
+    fotos_html = ('<label>Usar tus fotos (opcional)</label>'
+                  '<p class="ayuda">Marca las que deben salir: la imagen se hace a partir de tu foto real.</p>'
                   f'<div class="fotos">{fotos}</div>') if fotos else (
-        '<p class="ayuda" style="margin-top:1.25rem">¿Quieres que salga tu producto real? '
+        '<p class="ayuda" style="margin-top:1.25rem">¿Quieres que salga tu negocio real? '
         '<a class="enlace" href="/panel/contenido/marca#fotos">Sube sus fotos en Tu marca</a>.</p>')
     cuerpo = (
         '<form method="post" action="/panel/contenido/nuevo">'
@@ -625,7 +637,7 @@ async def pagina_marca(c: Cuenta, marca: dict | None = None, aviso: str = "") ->
         + f"<b>{nombre}</b><span>{desc}</span></label>"
         for k, (nombre, desc, _) in ESTILOS.items())
     fotos = "".join(
-        f'<figure><img src="{url_imagen(c, t)}" alt="Foto de producto {i + 1}">'
+        f'<figure><img src="{url_imagen(c, t)}" alt="Foto {i + 1}">'
         f'<button class="quitar" name="accion" value="quitar_{i}" formnovalidate>Quitar</button></figure>'
         for i, t in enumerate(marca.get("fotos", [])) if archivo(c, t).is_file())
     actual = plantilla_de(marca)
@@ -650,8 +662,8 @@ async def pagina_marca(c: Cuenta, marca: dict | None = None, aviso: str = "") ->
         '<div class="tarjeta"><span class="num">03</span><h2>Estilo de tus fotos</h2>'
         '<p class="ayuda">Así le pedimos las imágenes al generador, en todos tus posts.</p>'
         f'<div class="opciones">{estilos}</div></div>'
-        '<div class="tarjeta" id="fotos"><span class="num">04</span><h2>Fotos de tus productos</h2>'
-        f'<p class="ayuda">Las usamos como base para que en tus posts salga tu producto real. Hasta {MAX_FOTOS}.</p>'
+        '<div class="tarjeta" id="fotos"><span class="num">04</span><h2>Fotos de tu negocio</h2>'
+        f'<p class="ayuda">Tu local, tu trabajo o tus productos: las usamos como base para que en tus posts salga lo real. Hasta {MAX_FOTOS}.</p>'
         f'<div class="fotos">{fotos}</div>'
         + ('<input type="file" name="fotos" accept="image/jpeg,image/png,image/webp" multiple>'
            '<div class="acciones"><button class="boton secundario" name="accion" value="subir">Subir fotos</button></div>'
@@ -862,7 +874,7 @@ async def muestra(request: Request):
         base = foto_estilo.read_bytes()
     else:
         base = archivo(c, fotos[0]).read_bytes() if fotos else _MUESTRA
-    texto = imagenes.Texto("Así se verán tus posts", "Con tu tipografía y tus colores.", "Desde $1,290 MXN",
+    texto = imagenes.Texto("Así se verán tus posts", "Con tu tipografía y tus colores.", "Agenda tu cita",
                            f"@{await panel.usuario(c)}")
     async with imagenes._turno:
         jpg = await asyncio.to_thread(imagenes.rotular, base, plantilla_de(datos), texto, kit(datos))

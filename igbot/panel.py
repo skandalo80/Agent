@@ -343,6 +343,8 @@ label.check input{width:auto;margin:0}
 .si-precio{display:none}
 form:has(#con_precio:checked) .si-precio{display:block}
 .js .sin-js{display:none}
+.antiguos .fila img{opacity:.85}
+.antiguos .datos b{font-weight:500}
 .dos{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:.6rem}
 .dos .ayuda{margin:0 0 .3rem}
 .fotos{display:flex;gap:.75rem;flex-wrap:wrap;margin-top:.75rem}
