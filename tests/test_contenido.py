@@ -142,6 +142,7 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     token = client.portal.call(c.store.media, post["media_ids"][0])[0]
     antes = Path(f"data/cafe_lunar/media/{token}.jpg").read_bytes()
     assert 'id="con_precio"' in r.text and "Cancelar cambios" in r.text
+    assert f'muestra.jpg?m={post["media_ids"][0]}"' in r.text  # otra imagen = otra URL: no sale la vieja del caché
     r = client.get("/panel/contenido/post/1/muestra.jpg?titulo=Otro&plantilla=minimal&precio=$9&con_precio=1")
     assert r.headers["content-type"] == "image/jpeg"
     assert Image.open(io.BytesIO(r.content)).size == (1080, 1350)

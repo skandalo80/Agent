@@ -22,7 +22,9 @@ function vigilar(form) {
   let espera;
   const refrescar = () => {
     clearTimeout(espera);
-    espera = setTimeout(() => { vista.src = form.dataset.vista + "?" + consulta(form); }, 250);
+    // data-vista trae la versión de la foto (?m=…): si se genera otra, no sale la vista vieja del caché.
+    const base = form.dataset.vista;
+    espera = setTimeout(() => { vista.src = base + (base.includes("?") ? "&" : "?") + consulta(form); }, 250);
   };
   form.addEventListener("input", (e) => {
     const t = e.target;
