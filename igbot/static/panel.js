@@ -2,7 +2,7 @@
 // Sin este archivo el panel funciona igual, con los botones "Ver cómo queda" y "Actualizar imagen".
 document.documentElement.classList.add("js");
 
-const CAMPOS = ["fuente", "peso", "principal", "acento", "fondo", "plantilla", "estilo", "titulo", "subtitulo", "precio"];
+const CAMPOS = ["fuente", "peso", "principal", "acento", "fondo", "plantilla", "estilo", "titulo", "subtitulo", "precio", "modo"];
 const FAMILIAS = {"Playfair Display": "Georgia, serif", "Lora": "Georgia, serif"};
 
 function consulta(form) {
@@ -13,7 +13,6 @@ function consulta(form) {
     if (typeof v === "string" && v) q.set(k, v);
   }
   if (datos.get("con_precio") === "1") q.set("con_precio", "1");
-  if (form.querySelector('input[name="propio"]')) q.set("propio", datos.get("propio") === "1" ? "1" : "0");
   return q.toString();
 }
 
@@ -57,7 +56,7 @@ function vigilar(form) {
     if (t.name === "peso") {
       form.querySelectorAll('input[name="fuente"]').forEach((f) => { f.parentElement.style.fontWeight = t.value; });
     }
-    if (CAMPOS.includes(t.name) || t.name === "con_precio" || t.name === "propio") refrescar();
+    if (CAMPOS.includes(t.name) || t.name === "con_precio") refrescar();
   });
 }
 

@@ -149,16 +149,10 @@ def estilo_de(datos: dict) -> str:
     return datos.get("estilo") if datos.get("estilo") in ESTILOS else ESTILO_INICIAL
 
 
-def usa_propio(datos: dict) -> bool:
-    """Marcó "Usar mi propio estilo": su descripción sustituye a los estilos de la lista."""
-    v = datos.get("propio")
-    if v is None:  # marcas guardadas antes de la casilla: con descripción, era la que mandaba
-        return bool(datos.get("estilo_propio", "").strip())
-    return v in (True, "1")
-
-
-def notas_estilo(datos: dict) -> str:
-    return datos.get("estilo_propio", "").strip() if usa_propio(datos) else ""
+def notas_estilo(datos: dict, modo: str) -> str:
+    """En Diseño libre manda la descripción del dueño ("Describe tu estilo"); con plantilla,
+    el estilo de fotos de la lista."""
+    return datos.get("estilo_propio", "").strip() if modo == "libre" else ""
 
 
 async def pieza(store: Store, post_id: int) -> dict:
@@ -273,8 +267,8 @@ async def generar(c: Cuenta, objetivo: str = "", tema: str = "", fotos: list[str
         marca = await marca_de(c)
         if post_id is None:
             fotos = [t for t in fotos if t in marca.get("fotos", [])]
-            texto = await escribir(c, objetivo, tema, len(fotos), con_precio, notas_estilo(marca))
             modo = modo if modo in MODOS else modo_de(marca)
+            texto = await escribir(c, objetivo, tema, len(fotos), con_precio, notas_estilo(marca, modo))
             plantilla = imagenes.LIBRE if modo == "libre" else plantilla_de(marca)
             p = {"objetivo": objetivo, "tema": tema, "fotos": fotos, "plantilla": plantilla,
                  "titulo": texto["titulo"], "subtitulo": texto["subtitulo"], "precio": texto["precio"],
@@ -283,9 +277,11 @@ async def generar(c: Cuenta, objetivo: str = "", tema: str = "", fotos: list[str
             caption = texto["caption"]
         else:
             p = await pieza(c.store, post_id)
+            modo = "libre" if libre(p) else "plantilla"
         referencias = [archivo(c, t).read_bytes() for t in p.get("fotos", []) if archivo(c, t).is_file()]
-        if notas := notas_estilo(marca):
-            idea = f"{p['imagen']}\n\nPhoto style, as the owner describes it (in Spanish): {notas}"
+        if modo == "libre":
+            notas = notas_estilo(marca, modo)
+            idea = p["imagen"] + (f"\n\nPhoto style, as the owner describes it (in Spanish): {notas}" if notas else "")
         else:
             idea = f"{p['imagen']}\n\nPhoto style: {ESTILOS[estilo_de(marca)][2]}"
         if not referencias and marca.get("fotos_estilo", True):  # sin foto de producto: sus fotos guían el estilo
@@ -337,16 +333,34 @@ def generando(c: Cuenta, trabajo, volver: str, mensaje: str) -> StreamingRespons
 # --- páginas ---
 
 PESTANAS = [("semana", "Esta semana", "/panel/contenido/semana"), ("calendario", "Calendario", "/panel/contenido"),
-            ("ideas", "Comentarios y DMs", "/panel/contenido/ideas"), ("nuevo", "+ Crear post", "/panel/contenido/nuevo"),
-            ("marca", "Tu marca", "/panel/contenido/marca")]
+            ("ideas", "Comentarios y DMs", "/panel/contenido/ideas"), ("nuevo", "+ Crear post", "/panel/contenido/nuevo")]
+
+
+async def resumen(c: Cuenta) -> str:
+    """Los números del mes arriba, como en Tu asistente: posts e imágenes que le quedan del plan,
+    lo programado y lo publicado. Un post cuenta el mes en que sale (o se publicó al momento)."""
+    with usar(c):
+        incluidas, extra = await imagenes.usadas(c.store)
+        ahora = tools.now()
+    mes = ahora.replace(day=1, hour=0, minute=0, second=0, microsecond=0).timestamp()
+    posts = await c.store.posts(("programada", "publicando", "publicada"))
+    del_mes = [p for p in posts if (p["publish_at"] or p["created_at"]) >= mes]
+    programados = sorted(p["publish_at"] for p in posts if p["status"] == "programada")
+    publicados = sum(p["status"] == "publicada" for p in del_mes)
+    if c.posts_mes > 0:
+        caja_posts = panel.restantes("Posts restantes", len(del_mes), c.posts_mes, "posts")
+    else:
+        caja_posts = panel.kpi("Posts este mes", str(len(del_mes)), "programados y publicados")
+    with usar(c):
+        proximo = f"el próximo: {cuando(programados[0])}" if programados else "ninguno por ahora"
+    return ('<div class="hoy kpis">' + caja_posts
+            + panel.kpi("Programados", str(len(programados)), proximo)
+            + panel.kpi("Publicados este mes", str(publicados), "desde tu panel")
+            + panel.restantes("Imágenes restantes", incluidas + extra, c.imagenes_mes, "imágenes")
+            + "</div>")
 
 
 async def pagina(c: Cuenta, actual: str, bajada: str, cuerpo: str, aviso: str = "") -> HTMLResponse:
-    with usar(c):
-        incluidas, extra = await imagenes.usadas(c.store)
-    contador = f"{incluidas} de {c.imagenes_mes} imágenes de tu plan este mes"
-    if extra:
-        contador += f" · {extra} extra"
     pestanas = "".join(
         f'<a href="{href}" class="{"on" if k == actual else ""}{" crear" if k == "nuevo" else ""}">{nombre}</a>'
         for k, nombre, href in PESTANAS)
@@ -354,11 +368,13 @@ async def pagina(c: Cuenta, actual: str, bajada: str, cuerpo: str, aviso: str = 
         panel.cabecera(salir=True, menu="contenido", cuenta=c)
         + '<section class="oscuro portada compacta"><div class="contenedor">'
         '<p class="antetitulo">Contenido</p>'
-        f'<h1>@{escape(await panel.usuario(c))}<span class="punto">.</span></h1>'
+        f'<div class="titulo-fila"><h1>@{escape(await panel.usuario(c))}<span class="punto">.</span></h1>'
+        f'<a class="boton secundario ajuste{" on" if actual == "marca" else ""}" href="/panel/contenido/marca">'
+        "Tu marca</a></div>"
         f'<p class="bajada" style="margin-left:0">{escape(bajada)}</p>'
         f'<nav class="pestanas">{pestanas}</nav>'
-        f'<p class="contador">{contador}</p>'
-        "</div></section>"
+        + await resumen(c)
+        + "</div></section>"
         '<main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
         + await panel.pendiente(c, actual)
@@ -714,7 +730,7 @@ def ejemplo(estilo: str) -> Path | None:
 def query_muestra(marca: dict, **cambios) -> str:
     claves = ("fuente", "peso", "principal", "acento", "fondo", "plantilla", "estilo")
     q = {k: marca[k] for k in claves if marca.get(k)}
-    q["propio"] = "1" if usa_propio(marca) else "0"
+    q["modo"] = modo_de(marca)
     return urlencode({**q, **cambios})
 
 
@@ -783,15 +799,13 @@ async def pagina_marca(c: Cuenta, marca: dict | None = None, aviso: str = "") ->
         '<div class="tarjeta"><span class="num">03</span><h2>Tipografía de títulos</h2>'
         f'<div class="chips">{fuentes}</div><label>Grosor</label><div class="chips">{pesos}</div></div>'
         '<div class="tarjeta"><span class="num">04</span><h2>Estilo de tus fotos</h2>'
-        '<p class="ayuda">Así le pedimos las imágenes al generador, en todos tus posts.</p>'
-        f'<label class="check"><input type="checkbox" id="propio" name="propio" value="1"{" checked" if usa_propio(marca) else ""}>'
-        " Usar mi propio estilo</label>"
-        '<div class="si-propio"><label for="estilo_propio">Describe tu estilo</label>'
-        '<p class="ayuda">Con tus palabras: lo que siempre debe verse en tus posts.</p>'
+        '<div class="si-plantilla"><p class="ayuda">Así le pedimos las fotos al generador para tus plantillas.</p>'
+        f'<div class="opciones">{estilos}</div></div>'
+        '<div class="si-libre"><p class="ayuda">En Diseño libre el generador arma el post completo siguiendo'
+        ' lo que escribas aquí.</p><label for="estilo_propio">Describe tu estilo</label>'
         f'<textarea id="estilo_propio" name="estilo_propio" rows="3" maxlength="{MAX_ESTILO}"'
         ' placeholder="Ej. Fondos oscuros, minimalista y elegante, el celular como protagonista, detalles en naranja.">'
-        f'{escape(marca.get("estilo_propio", ""))}</textarea></div>'
-        f'<div class="opciones no-propio">{estilos}</div></div>'
+        f'{escape(marca.get("estilo_propio", ""))}</textarea></div></div>'
         '<div class="tarjeta" id="fotos"><span class="num">05</span><h2>Fotos de tu negocio</h2>'
         f'<p class="ayuda">Tu local, tu trabajo o tus productos: las usamos como base para que en tus posts salga lo real. Hasta {MAX_FOTOS}.</p>'
         f'<div class="fotos">{fotos}</div>'
@@ -822,7 +836,6 @@ def marca_del_form(f, antes: dict) -> dict:
     datos["plantilla"] = f.get("plantilla") if f.get("plantilla") in imagenes.PLANTILLAS else plantilla_de(antes)
     datos["modo"] = f.get("modo") if f.get("modo") in MODOS else modo_de(antes)
     datos["estilo_propio"] = str(f.get("estilo_propio", "")).strip()[:MAX_ESTILO]
-    datos["propio"] = f.get("propio") == "1"
     datos["fotos_estilo"] = f.get("fotos_estilo") == "1"
     return datos
 
@@ -1012,7 +1025,7 @@ async def muestra(request: Request):
     datos = {**marca, **dict(request.query_params)}
     fotos = [t for t in marca.get("fotos", []) if archivo(c, t).is_file()]
     # La foto de ejemplo del estilo elegido; si no hay, la de su producto o una neutra.
-    if not usa_propio(datos) and (foto_estilo := ejemplo(estilo_de(datos))):
+    if modo_de(datos) != "libre" and (foto_estilo := ejemplo(estilo_de(datos))):
         base = foto_estilo.read_bytes()
     else:
         base = archivo(c, fotos[0]).read_bytes() if fotos else _MUESTRA
