@@ -19,7 +19,7 @@ import time
 import unicodedata
 from dataclasses import dataclass
 
-from . import config
+from . import config, limites
 from .cuenta import cuenta
 from .google import Google
 from .instagram import Instagram
@@ -171,7 +171,13 @@ async def handle(value: dict, store: Store, instagram: Instagram, google: Google
 
         rules += for_post(await reglas(store), code)
     literal = literal_matches(rules, text)
-    if cuenta().hide_spam and not literal and await spam_check(text):
+    # Una publicación viral no debe vaciar el presupuesto: pasado el tope del día (o el
+    # presupuesto de Claude), solo cuentan las palabras clave escritas tal cual.
+    con_claude = (await store.comments_since(limites.today_start()) <= cuenta().max_comments_per_day
+                  and not await limites.over_budget(store))
+    if not con_claude:
+        log.info("Tope de comentarios del día: el %s solo se revisa por palabra exacta", comment_id)
+    if con_claude and cuenta().hide_spam and not literal and await spam_check(text):
         try:
             await instagram.hide_comment(comment_id)
             await store.comment_result(comment_id, SPAM, False, False)
@@ -182,7 +188,7 @@ async def handle(value: dict, store: Store, instagram: Instagram, google: Google
     if not rules:
         log.info("La publicación no tiene palabras clave; se ignora el comentario %s", comment_id)
         return
-    matched = literal or await classify(rules, text)
+    matched = literal or (await classify(rules, text) if con_claude else [])
     if not matched:
         log.info("El comentario %s no coincide con ninguna palabra clave de %s", comment_id, code)
         await store.comment_result(comment_id, "", False, False)

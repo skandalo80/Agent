@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 import app as bot  # noqa: E402
 from igbot import panel  # noqa: E402
-from test_conectar import FakeHTTP, setup  # noqa: E402
+from test_conectar import FakeHTTP, FakeResponse, setup  # noqa: E402
 from test_cuenta import FakeInstagram  # noqa: E402
 
 ORIGEN = {"Origin": "https://bot.skandar.online"}
@@ -228,3 +228,35 @@ def test_probar_mi_asistente(monkeypatch, tmp_path):
         assert client.portal.call(panel.historial, c) == []
         # Nada de la prueba llega a Instagram ni a la cola del bot.
         assert c.instagram.sent == [] and client.portal.call(c.store.pending_users) == []
+
+
+def test_cuenta_grande_queda_en_revision(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    Path("prompts").mkdir()
+    avisos = setup(monkeypatch)
+    monkeypatch.setattr(bot, "Instagram", lambda store: FakeInstagram())
+    monkeypatch.setattr(bot, "cuentas", list(bot.cuentas))
+    monkeypatch.setattr(bot, "dispatchers", dict(bot.dispatchers))
+    monkeypatch.setattr(bot.principal, "ig_account_id", "negocio")
+
+    async def get(self, url, params=None):
+        if url.endswith("/access_token"):
+            return FakeResponse({"access_token": "largo", "expires_in": 5184000})
+        return FakeResponse({"user_id": "1784", "username": "cafe.lunar", "followers_count": 250,
+                             "media_count": 3200})  # miles de publicaciones
+
+    monkeypatch.setattr(FakeHTTP, "get", get)
+    with TestClient(bot.app, base_url="https://testserver") as client:
+        client.post("/conectar/solicitud", data={"usuario": "cafe.lunar", "nombre": "Ana", "correo": "ana@cafe.mx"})
+        r = client.get("/conectar/instagram", follow_redirects=False)
+        state = parse_qs(urlparse(r.headers["location"]).query)["state"][0]
+        client.get(f"/conectar/callback?code=abc&state={state}", follow_redirects=False)
+        assert "EN_REVISION=1" in Path("clientes/cafe_lunar/.env").read_text()
+        assert any("3,200 publicaciones" in t and "quedó en revisión" in t for _, t in avisos)
+
+        c = bot.buscar("1784")
+        client.get("/panel")  # bienvenida
+        r = client.get("/panel")
+        assert "En revisión" in r.text and ">Encender<" not in r.text
+        r = client.post("/panel/estado", headers=ORIGEN, data={"activo": "1"})
+        assert "En revisión" in r.text and not client.portal.call(panel.activo, c)

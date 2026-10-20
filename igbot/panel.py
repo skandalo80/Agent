@@ -49,7 +49,7 @@ router = APIRouter(prefix="/panel")
 # Los pone app.py al arrancar: la cuenta (ya cargada) de un id de Instagram.
 buscar: Callable[[str], Cuenta | None] = lambda ig_id: None
 # Y la que da de alta una cuenta nueva al conectarse (None si no tiene panel).
-alta: Callable[[str, str, str], Awaitable[Cuenta | None]] | None = None
+alta: Callable[[str, str, str, bool], Awaitable[Cuenta | None]] | None = None
 
 COOKIE = "panel"
 SESSION_DAYS = 30  # Instagram vuelve a pedir el permiso en cada inicio de sesión
@@ -57,6 +57,8 @@ MAX_CAMPO = 3000
 MAX_PROMPT = 12000
 # Modelo del paquete Básico (solo chat).
 MODELO_BASICO = "claude-haiku-5-5"
+# Lo que ve una cuenta grande recién conectada mientras se revisa (ver conectar.py).
+REVISION = "En revisión: por el tamaño de tu cuenta, la revisamos antes de encender tu asistente. Te avisamos."
 
 CAMPOS = [
     # (nombre, etiqueta, ayuda, filas)
@@ -128,7 +130,8 @@ def generar(usuario: str, perfil: dict) -> str:
 
 # --- alta de una cuenta nueva ---
 
-def preparar_carpeta(ig_id: str, usuario: str, token: str, correo: str, ocupados: set[str]) -> str:
+def preparar_carpeta(ig_id: str, usuario: str, token: str, correo: str, ocupados: set[str],
+                     revision: bool = False) -> str:
     """Crea clientes/<nombre>/ (.env con su token y system.md) y devuelve el nombre."""
     base = re.sub(r"[^a-z0-9_-]", "_", usuario.lower())[:30].strip("_") or f"ig_{ig_id[-8:]}"
     slug, n = base, 2
@@ -141,6 +144,8 @@ def preparar_carpeta(ig_id: str, usuario: str, token: str, correo: str, ocupados
               "GOOGLE_TOOLS=0", "PLAN=basico"]
     if correo:
         lineas.append(f"OWNER_EMAIL={correo}")  # a quién avisar cuando piden una persona
+    if revision:
+        lineas.append("EN_REVISION=1")  # cuenta grande: se enciende cuando se quite esta línea
     env = carpeta / ".env"
     env.write_text("\n".join(lineas) + "\n")
     os.chmod(env, 0o600)
@@ -199,7 +204,7 @@ async def form(request: Request) -> dict[str, str]:
 # --- datos de la cuenta ---
 
 async def activo(c: Cuenta) -> bool:
-    return await c.store.get("bot_activo") != "0"
+    return not c.en_revision and await c.store.get("bot_activo") != "0"
 
 
 async def perfil(c: Cuenta) -> dict:
@@ -542,10 +547,12 @@ async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt
         '<p class="antetitulo">Tu asistente</p>'
         f'<h1>@{escape(await usuario(c))}<span class="punto">.</span></h1>'
         f'<div class="estado"><div><span class="luz{" on" if encendido else ""}"></span>'
-        f'{"Está contestando tus mensajes." if encendido else "Está en pausa: no contesta mensajes."}</div>'
+        f'{"Está contestando tus mensajes." if encendido else REVISION if c.en_revision else "Está en pausa: no contesta mensajes."}</div>'
         f'<form method="post" action="/panel/estado"><input type="hidden" name="activo" value="{"0" if encendido else "1"}">'
         f'<div class="acciones-estado"><a class="boton secundario" href="/panel/probar#ultimo">Probar mi asistente</a>'
-        f'<button class="boton{" secundario" if encendido else ""}">{"Pausar" if encendido else "Encender"}</button></div></form></div>'
+        + ("" if c.en_revision else
+           f'<button class="boton{" secundario" if encendido else ""}">{"Pausar" if encendido else "Encender"}</button>')
+        + '</div></form></div>'
         + await hoy(c) +
         "</div></section>"
         '<main><div class="contenedor">'
@@ -904,7 +911,7 @@ async def guardar(request: Request):
     await c.store.set("asistente_listo", "1")
     log.info("@%s guardó las instrucciones de su asistente desde el panel", nombre)
     aviso = "Guardado. Tu asistente ya usa estas instrucciones."
-    if not await activo(c):
+    if not await activo(c) and not c.en_revision:
         aviso += " Cuando quieras que conteste, pulsa Encender."
     return await panel_de(c, aviso)
 
@@ -915,6 +922,8 @@ async def estado(request: Request):
     if not (c := cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     encender = (await form(request)).get("activo") == "1"
+    if encender and c.en_revision:
+        return await panel_de(c, REVISION)
     await c.store.set("bot_activo", "1" if encender else "0")
     log.info("@%s %s su asistente desde el panel", await usuario(c), "encendió" if encender else "pausó")
     return await panel_de(c, "Tu asistente ya está contestando." if encender else "Tu asistente quedó en pausa.")

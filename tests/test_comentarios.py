@@ -139,3 +139,17 @@ def test_sin_filtro_no_se_oculta_nada():
 
     ig, _, _ = run([comment("c1", "sigueme")], spam_check=always)
     assert ig.hidden == []
+
+
+def test_pasado_el_tope_del_dia_solo_cuentan_las_palabras_exactas(monkeypatch):
+    monkeypatch.setattr(cuenta(), "max_comments_per_day", 1)
+
+    async def classify(rules, text):
+        return [r for r in rules if r.keywords[0] == "PRECIO"]
+
+    ig, _, _ = run([
+        comment("c1", "cuánto cuestan?"),  # dentro del tope: Claude reconoce la variante
+        comment("c2", "cuánto cuestan?", author="beto"),  # pasado el tope ya no se le pregunta
+        comment("c3", "precio", author="eva"),  # la palabra exacta sigue funcionando
+    ], classify=classify)
+    assert ig.dms == [("c1", "Nuestros precios: ..."), ("c3", "Nuestros precios: ...")]
