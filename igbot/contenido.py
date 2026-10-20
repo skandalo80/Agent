@@ -315,7 +315,7 @@ def sin_plan() -> HTMLResponse:
         '<p class="antetitulo">Contenido</p><h1>Tus posts, listos para aprobar<span class="punto">.</span></h1>'
         '<p class="bajada">Tu plan actual solo incluye el asistente de mensajes. El contenido viene en los'
         ' planes Community Manager y Pro.</p>'
-        f'<div class="acciones"><a class="boton" href="/panel">Volver a tu asistente</a>'
+        f'<div class="acciones"><a class="boton" href="/panel/asistente">Volver a tu asistente</a>'
         f'<a class="boton secundario" href="{config.SITE_URL}/#precios">Ver planes</a></div>'
         "</div></section>"
     )

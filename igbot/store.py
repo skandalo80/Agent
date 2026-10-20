@@ -554,6 +554,12 @@ class Store:
             "total_pdf": await one(f"SELECT SUM(total) FROM quotes WHERE {window}", since, until),
         }
 
+    async def has_client_messages(self) -> bool:
+        """Si algún cliente ya escribió (sin contar a los administradores)."""
+        cur = await self.db.execute(
+            "SELECT 1 FROM messages WHERE role = 'user' AND user_id NOT LIKE 'admin:%' LIMIT 1")
+        return await cur.fetchone() is not None
+
     async def message_times(self, since: float, until: float) -> list[tuple[str, str, float, int]]:
         """(usuario, rol, hora, 1 si contestó una persona) de los mensajes con clientes, en orden."""
         cur = await self.db.execute(
