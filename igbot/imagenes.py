@@ -116,6 +116,32 @@ def prompt_final(idea: str, plantilla: str) -> str:
             "Do not include any text, letters, numbers, logos or watermarks.")
 
 
+# Diseño libre: el generador arma el post completo, con el texto dentro del diseño.
+# El texto no se puede cambiar después sin generar otra imagen.
+LIBRE = "libre"
+
+
+def prompt_libre(idea: str, texto: "Texto", marca: "Marca | None" = None) -> str:
+    m = marca or Marca()
+    lineas = [f'- Headline (largest): "{texto.titulo}"']
+    if texto.subtitulo:
+        lineas.append(f'- Subtitle (smaller): "{texto.subtitulo}"')
+    if texto.precio:
+        lineas.append(f'- Price or detail, in the accent color: "{texto.precio}"')
+    if texto.firma:
+        lineas.append(f'- Small signature at the bottom: "{texto.firma}"')
+    return (
+        "Design a finished, professional vertical 4:5 Instagram post (a graphic design, not just a photo).\n\n"
+        f"Visual: {idea.strip()}\n\n"
+        "Write exactly this text in the design, in Spanish, spelled exactly as given (keep every accent and"
+        " punctuation mark), and no other words:\n" + "\n".join(lineas) + "\n\n"
+        f"Typography: in the spirit of the {m.fuente} typeface, {'bold' if m.peso >= 700 else 'semibold' if m.peso >= 600 else 'regular'} headline,"
+        " strong hierarchy, generous margins, readable on a phone.\n"
+        f"Brand colors: main {m.principal}, accent {m.acento}, background {m.fondo}.\n"
+        "No logos, watermarks, fake buttons or extra text."
+    )
+
+
 # Tipografías de títulos que puede elegir el cliente (archivos en fonts/, todas OFL).
 FUENTES = {"Inter": "Inter", "Montserrat": "Montserrat", "Poppins": "Poppins",
            "Playfair Display": "PlayfairDisplay", "Lora": "Lora"}
@@ -357,14 +383,18 @@ def _jpg(data: bytes) -> bytes:
 async def crear_pieza(store: Store, user_id: str, idea: str, plantilla: str, texto: Texto,
                       fotos: list[bytes] = (), permitir_extra: bool = False, marca: Marca | None = None) -> dict:
     """Genera la imagen, la rotula y la deja en la tabla media (lista para publicar)."""
-    if plantilla not in PLANTILLAS:
+    if plantilla not in PLANTILLAS and plantilla != LIBRE:
         raise ErrorImagen(f"Plantilla desconocida: {plantilla}")
     tipo = await reservar(store, permitir_extra)
     try:
         async with _turno:
-            crudo = await proveedor.generar(prompt_final(idea, plantilla), list(fotos))
-            base = await asyncio.to_thread(_jpg, crudo)
-            final = await asyncio.to_thread(rotular, base, plantilla, texto, marca)
+            if plantilla == LIBRE:  # el texto ya viene en el diseño: no se rotula
+                crudo = await proveedor.generar(prompt_libre(idea, texto, marca), list(fotos))
+                base = final = await asyncio.to_thread(_jpg, crudo)
+            else:
+                crudo = await proveedor.generar(prompt_final(idea, plantilla), list(fotos))
+                base = await asyncio.to_thread(_jpg, crudo)
+                final = await asyncio.to_thread(rotular, base, plantilla, texto, marca)
     except Exception:
         await devolver(store, tipo)
         raise
@@ -372,7 +402,8 @@ async def crear_pieza(store: Store, user_id: str, idea: str, plantilla: str, tex
     token = secrets.token_urlsafe(18)
     pieza, sin_texto = _archivos(token)
     pieza.parent.mkdir(parents=True, exist_ok=True)
-    sin_texto.write_bytes(base)
+    if plantilla != LIBRE:  # sin texto, para poder cambiarlo gratis después
+        sin_texto.write_bytes(base)
     pieza.write_bytes(final)
     media_id = await store.add_media(user_id, token, f"{type(proveedor).__name__.lower()}:{getattr(proveedor, 'model', '')}")
     await store.add_event(user_id, "imagen", {"tipo": tipo, "media": media_id, "plantilla": plantilla})

@@ -196,6 +196,12 @@ muestra también los posts subidos desde la app de Instagram. El CSP del bot
 necesita `script-src 'self'; font-src 'self'; img-src 'self' https://*.cdninstagram.com
 https://*.fbcdn.net` (ver `deploy/Caddyfile`).
 
+Cada post se arma en uno de dos modos (Tu marca > "Cómo se arman tus posts", o al
+crear el post): **Con plantilla** (foto + texto rotulado en el servidor, editable
+gratis) o **Diseño libre** (Gemini diseña el post completo con el texto dentro;
+cambiar el texto genera otra imagen). Si el post no usa una foto de producto, hasta
+3 fotos de Tu marca van como referencia de estilo, junto con "Describe tu estilo".
+
 Dos pestañas proponen (`igbot/semana.py`): **Comentarios y DMs** agrupa con
 `COMMENTS_MODEL` lo que más escribieron en 7 días (DMs y comentarios; una vez al
 día, kv `ideas:<fecha>`) y cada tema abre Crear post con el tema puesto. **Esta
