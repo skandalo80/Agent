@@ -73,3 +73,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_IMAGE_MODEL = os.getenv("GEMINI_IMAGE_MODEL", "gemini-3.1-flash-image")
 # Lo que cuesta cada imagen, para el gasto diario de la cuenta (DAILY_BUDGET_USD).
 IMAGE_COST_USD = float(os.getenv("IMAGE_COST_USD", "0.04"))
+# Lo que se le cobra al cliente por imagen pasado su cupo del mes (solo se muestra).
+EXTRA_IMAGE_USD = os.getenv("EXTRA_IMAGE_USD", "0.25")
+# Quién escribe los posts del panel (título, texto, palabra clave): mejor redacción que Haiku.
+CONTENT_MODEL = os.getenv("CONTENT_MODEL", "claude-sonnet-5-5")

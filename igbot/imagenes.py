@@ -16,6 +16,7 @@ import asyncio
 import base64
 import io
 import logging
+import re
 import secrets
 from dataclasses import dataclass
 from pathlib import Path
@@ -33,8 +34,6 @@ FONTS = Path(__file__).resolve().parent.parent / "fonts"
 ANCHO, ALTO = 1080, 1350  # 4:5, lo más alto que acepta el feed de Instagram
 MARGEN = 84
 ACENTO = "#C2410C"
-TINTA = (29, 29, 31)
-BLANCO_CALIDO = (247, 245, 241)
 
 
 class ErrorImagen(Exception):
@@ -117,8 +116,38 @@ def prompt_final(idea: str, plantilla: str) -> str:
             "Do not include any text, letters, numbers, logos or watermarks.")
 
 
-def _fuente(tam: int, negrita: bool = False) -> ImageFont.FreeTypeFont:
-    return ImageFont.truetype(str(FONTS / ("Inter-SemiBold.ttf" if negrita else "Inter-Regular.ttf")), tam)
+# Tipografías de títulos que puede elegir el cliente (archivos en fonts/, todas OFL).
+FUENTES = {"Inter": "Inter", "Montserrat": "Montserrat", "Poppins": "Poppins",
+           "Playfair Display": "PlayfairDisplay", "Lora": "Lora"}
+PESOS = {400: "Regular", 600: "SemiBold", 700: "Bold"}
+HEX = re.compile(r"^#[0-9A-Fa-f]{6}$")
+
+
+@dataclass
+class Marca:
+    """El kit de marca de la cuenta: con qué letra y colores se rotula todo."""
+    fuente: str = "Inter"
+    peso: int = 600
+    principal: str = "#1D1D1F"  # texto sobre fondos claros
+    acento: str = ACENTO  # precio y detalles; fondo de la plantilla Banda
+    fondo: str = "#F7F5F1"  # fondo de la plantilla Marco
+
+    @classmethod
+    def de(cls, datos: dict) -> "Marca":
+        """La marca guardada en el panel; lo que no sea válido se queda como viene de fábrica."""
+        m = cls()
+        if datos.get("fuente") in FUENTES:
+            m.fuente = datos["fuente"]
+        if str(datos.get("peso")) in map(str, PESOS):
+            m.peso = int(datos["peso"])
+        for campo in ("principal", "acento", "fondo"):
+            if HEX.match(str(datos.get(campo, ""))):
+                setattr(m, campo, datos[campo].upper())
+        return m
+
+
+def _fuente(tam: int, peso: int = 400, fuente: str = "Inter") -> ImageFont.FreeTypeFont:
+    return ImageFont.truetype(str(FONTS / f"{FUENTES[fuente]}-{PESOS[peso]}.ttf"), tam)
 
 
 def _rgb(color: str) -> tuple[int, int, int]:
@@ -138,11 +167,11 @@ def _lineas(texto: str, fuente, ancho: int) -> list[str]:
     return lineas + ([actual] if actual else [])
 
 
-def _titulo(texto: str, ancho: int, maximo: int, minimo: int = 48, renglones: int = 3):
+def _titulo(texto: str, ancho: int, maximo: int, m: Marca, minimo: int = 48, renglones: int = 3):
     """La fuente más grande con la que el título cabe en `renglones` líneas."""
     tam = maximo
     while True:
-        fuente = _fuente(tam, negrita=True)
+        fuente = _fuente(tam, m.peso, m.fuente)
         lineas = _lineas(texto, fuente, ancho)
         if (len(lineas) <= renglones and all(fuente.getlength(l) <= ancho for l in lineas)) or tam <= minimo:
             return fuente, lineas
@@ -180,79 +209,92 @@ def _es_clara(img: Image.Image, caja: tuple[int, int, int, int]) -> bool:
     return ImageStat.Stat(img.crop(caja).convert("L")).mean[0] > 140
 
 
-def _textos(d, x, y, ancho, texto: Texto, color, secundario, acento, tam_titulo=96) -> int:
-    fuente, lineas = _titulo(texto.titulo, ancho, tam_titulo)
+def _precio(m: Marca) -> ImageFont.FreeTypeFont:
+    return _fuente(44, max(m.peso, 600), m.fuente)
+
+
+def _textos(d, x, y, ancho, texto: Texto, m: Marca, color, secundario, acento, tam_titulo=96) -> int:
+    fuente, lineas = _titulo(texto.titulo, ancho, tam_titulo, m)
     y = _bloque(d, x, y, lineas, fuente, color)
     if texto.subtitulo:
-        sub = _fuente(36)
+        sub = _fuente(36, 400, m.fuente)
         y = _bloque(d, x, y + 18, _lineas(texto.subtitulo, sub, ancho)[:3], sub, secundario, 1.3)
     if texto.precio:
         y += 30
         d.rectangle((x, y, x + 44, y + 4), fill=acento)
-        y = _bloque(d, x, y + 22, [texto.precio], _fuente(44, negrita=True), color)
+        y = _bloque(d, x, y + 22, [texto.precio], _precio(m), color)
     return y
 
 
-def _alto_textos(ancho: int, texto: Texto, tam_titulo=96) -> int:
-    fuente, lineas = _titulo(texto.titulo, ancho, tam_titulo)
+def _alto_textos(ancho: int, texto: Texto, m: Marca, tam_titulo=96) -> int:
+    fuente, lineas = _titulo(texto.titulo, ancho, tam_titulo, m)
     alto = _alto_bloque(lineas, fuente)
     if texto.subtitulo:
-        sub = _fuente(36)
+        sub = _fuente(36, 400, m.fuente)
         alto += 18 + _alto_bloque(_lineas(texto.subtitulo, sub, ancho)[:3], sub, 1.3)
     if texto.precio:
-        alto += 30 + 22 + _alto_bloque(["x"], _fuente(44, negrita=True))
+        alto += 30 + 22 + _alto_bloque(["x"], _precio(m))
     return alto
 
 
-def _firma(d, texto: Texto, color, y: int = ALTO - MARGEN + 10) -> None:
+def _firma(d, texto: Texto, m: Marca, color, y: int = ALTO - MARGEN + 10) -> None:
     if texto.firma:
-        d.text((MARGEN, y), texto.firma, font=_fuente(28), fill=color, anchor="ls")
+        d.text((MARGEN, y), texto.firma, font=_fuente(28, 400, m.fuente), fill=color, anchor="ls")
 
 
-def rotular(imagen: bytes, plantilla: str, texto: Texto, acento: str = "") -> bytes:
+def _claro(color: tuple[int, int, int]) -> bool:
+    r, g, b = color
+    return 0.299 * r + 0.587 * g + 0.114 * b > 150
+
+
+def rotular(imagen: bytes, plantilla: str, texto: Texto, marca: Marca | None = None) -> bytes:
     """La pieza final en JPG 1080x1350: la imagen con el texto de la plantilla."""
     if plantilla not in PLANTILLAS:
         raise ValueError(f"Plantilla desconocida: {plantilla}")
+    m = marca or Marca()
     base = ImageOps.exif_transpose(Image.open(io.BytesIO(imagen)))
-    color_acento = _rgb(acento)
+    principal, acento, fondo = _rgb(m.principal), _rgb(m.acento), _rgb(m.fondo)
     ancho_texto = ANCHO - 2 * MARGEN
 
     if plantilla == "editorial":
         img = _cubrir(base, ANCHO, ALTO)
-        y = ALTO - MARGEN - 40 - _alto_textos(ancho_texto, texto)
+        y = ALTO - MARGEN - 40 - _alto_textos(ancho_texto, texto, m)
         _degradado(img, min(0.5, max(0.2, (y - 220) / ALTO)), 225)  # empieza arriba del texto
         d = ImageDraw.Draw(img)
-        _textos(d, MARGEN, y, ancho_texto, texto, (255, 255, 255), (225, 225, 228), color_acento)
-        _firma(d, texto, (200, 200, 205))
+        _textos(d, MARGEN, y, ancho_texto, texto, m, (255, 255, 255), (225, 225, 228), acento)
+        _firma(d, texto, m, (200, 200, 205))
 
     elif plantilla == "minimal":
         img = _cubrir(base, ANCHO, ALTO)
         clara = _es_clara(img, (0, 0, ANCHO, ALTO // 3))
-        color, secundario = (TINTA, (90, 90, 95)) if clara else ((255, 255, 255), (230, 230, 232))
+        color, secundario = (principal, (90, 90, 95)) if clara else ((255, 255, 255), (230, 230, 232))
         d = ImageDraw.Draw(img)
-        _textos(d, MARGEN, MARGEN + 10, ancho_texto, texto, color, secundario, color_acento)
+        _textos(d, MARGEN, MARGEN + 10, ancho_texto, texto, m, color, secundario, acento)
         abajo_clara = _es_clara(img, (0, ALTO - 2 * MARGEN, ANCHO, ALTO))
-        _firma(d, texto, (90, 90, 95) if abajo_clara else (230, 230, 232))
+        _firma(d, texto, m, (90, 90, 95) if abajo_clara else (230, 230, 232))
 
     elif plantilla == "marco":
-        img = Image.new("RGB", (ANCHO, ALTO), BLANCO_CALIDO)
-        alto_texto = _alto_textos(ancho_texto, texto, tam_titulo=72)
+        img = Image.new("RGB", (ANCHO, ALTO), fondo)
+        alto_texto = _alto_textos(ancho_texto, texto, m, tam_titulo=72)
         alto_foto = ALTO - 2 * MARGEN - alto_texto - 56 - (40 if texto.firma else 0)
         img.paste(_cubrir(base, ancho_texto, alto_foto), (MARGEN, MARGEN))
         d = ImageDraw.Draw(img)
-        _textos(d, MARGEN, MARGEN + alto_foto + 48, ancho_texto, texto, TINTA, (100, 100, 105),
-                color_acento, tam_titulo=72)
-        _firma(d, texto, (120, 120, 125), y=ALTO - MARGEN + 30)
+        # Si el fondo de la marca es oscuro, el texto va en blanco.
+        color, secundario = (principal, (100, 100, 105)) if _claro(fondo) else ((255, 255, 255), (220, 220, 224))
+        _textos(d, MARGEN, MARGEN + alto_foto + 48, ancho_texto, texto, m, color, secundario,
+                acento, tam_titulo=72)
+        _firma(d, texto, m, (120, 120, 125) if _claro(fondo) else (200, 200, 205), y=ALTO - MARGEN + 30)
 
     else:  # banda
-        alto_banda = _alto_textos(ancho_texto, texto, tam_titulo=72) + 2 * 64 + (36 if texto.firma else 0)
-        img = Image.new("RGB", (ANCHO, ALTO), color_acento)
+        alto_banda = _alto_textos(ancho_texto, texto, m, tam_titulo=72) + 2 * 64 + (36 if texto.firma else 0)
+        img = Image.new("RGB", (ANCHO, ALTO), acento)
         img.paste(_cubrir(base, ANCHO, ALTO - alto_banda), (0, 0))
         d = ImageDraw.Draw(img)
-        # Sobre la banda de color, el precio se marca en blanco.
-        _textos(d, MARGEN, ALTO - alto_banda + 64, ancho_texto, texto, (255, 255, 255), (255, 240, 232),
-                (255, 255, 255), tam_titulo=72)
-        _firma(d, texto, (255, 235, 225), y=ALTO - 48)
+        # Sobre la banda de color, el precio se marca con el color del texto.
+        color, secundario = ((255, 255, 255), (255, 240, 232)) if not _claro(acento) else (principal, (60, 60, 65))
+        _textos(d, MARGEN, ALTO - alto_banda + 64, ancho_texto, texto, m, color, secundario,
+                color, tam_titulo=72)
+        _firma(d, texto, m, secundario, y=ALTO - 48)
 
     out = io.BytesIO()
     img.save(out, "JPEG", quality=90, optimize=True)
@@ -313,7 +355,7 @@ def _jpg(data: bytes) -> bytes:
 
 
 async def crear_pieza(store: Store, user_id: str, idea: str, plantilla: str, texto: Texto,
-                      fotos: list[bytes] = (), permitir_extra: bool = False, acento: str = "") -> dict:
+                      fotos: list[bytes] = (), permitir_extra: bool = False, marca: Marca | None = None) -> dict:
     """Genera la imagen, la rotula y la deja en la tabla media (lista para publicar)."""
     if plantilla not in PLANTILLAS:
         raise ErrorImagen(f"Plantilla desconocida: {plantilla}")
@@ -322,7 +364,7 @@ async def crear_pieza(store: Store, user_id: str, idea: str, plantilla: str, tex
         async with _turno:
             crudo = await proveedor.generar(prompt_final(idea, plantilla), list(fotos))
             base = await asyncio.to_thread(_jpg, crudo)
-            final = await asyncio.to_thread(rotular, base, plantilla, texto, acento)
+            final = await asyncio.to_thread(rotular, base, plantilla, texto, marca)
     except Exception:
         await devolver(store, tipo)
         raise
@@ -338,7 +380,7 @@ async def crear_pieza(store: Store, user_id: str, idea: str, plantilla: str, tex
     return {"media_id": media_id, "token": token, "tipo": tipo}
 
 
-async def rerotular(store: Store, media_id: int, plantilla: str, texto: Texto, acento: str = "") -> None:
+async def rerotular(store: Store, media_id: int, plantilla: str, texto: Texto, marca: Marca | None = None) -> None:
     """Cambia el texto o la plantilla de una pieza sin generar otra imagen (gratis)."""
     fila = await store.media(media_id)
     if not fila:
@@ -347,5 +389,5 @@ async def rerotular(store: Store, media_id: int, plantilla: str, texto: Texto, a
     if not sin_texto.is_file():
         raise ErrorImagen("Esa imagen no se generó aquí; no se le puede cambiar el texto.")
     async with _turno:
-        final = await asyncio.to_thread(rotular, sin_texto.read_bytes(), plantilla, texto, acento)
+        final = await asyncio.to_thread(rotular, sin_texto.read_bytes(), plantilla, texto, marca)
     pieza.write_bytes(final)

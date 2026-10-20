@@ -48,7 +48,7 @@ async def nueva_base(monkeypatch, tmp_path, cupo):
 
 @pytest.mark.parametrize("plantilla", imagenes.PLANTILLAS)
 def test_cada_plantilla_da_un_jpg_de_feed(plantilla):
-    img = Image.open(io.BytesIO(imagenes.rotular(foto(1600, 900), plantilla, TEXTO, "#1F3A5F")))
+    img = Image.open(io.BytesIO(imagenes.rotular(foto(1600, 900), plantilla, TEXTO, imagenes.Marca(acento="#1F3A5F"))))
     assert (img.format, img.size) == ("JPEG", (1080, 1350))
 
 

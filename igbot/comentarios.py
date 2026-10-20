@@ -5,6 +5,8 @@ en este orden y con el encabezado que sea: link de la publicación, palabra clav
 (o varias separadas por comas) y mensaje a mandar por DM. Una cuarta columna
 opcional es una respuesta pública. Solo reaccionan las publicaciones que estén
 en la hoja; para darle varias palabras clave a una publicación, una fila por cada una.
+Las cuentas con contenido en su plan también tienen las de los posts que armaron
+en su panel (palabra clave, DM y respuesta pública de cada post, ver contenido.py).
 
 Primero se buscan las palabras tal cual (sin importar mayúsculas ni acentos, y
 aceptando plurales); si ninguna aparece, Claude decide si el comentario se
@@ -158,10 +160,16 @@ async def handle(value: dict, store: Store, instagram: Instagram, google: Google
     if not await store.add_comment(comment_id, author, media_id, text):
         return  # Meta reintentó un aviso que ya se atendió
 
-    rules = []
-    if available() and google:
+    rules, code = [], ""
+    hoja = available() and google
+    if hoja or cuenta().imagenes_mes:
         code = shortcode(await instagram.permalink(media_id))
+    if hoja:
         rules = for_post(await load_rules(google), code)
+    if cuenta().imagenes_mes:
+        from .contenido import reglas  # las de los posts que armó el cliente en su panel
+
+        rules += for_post(await reglas(store), code)
     literal = literal_matches(rules, text)
     if cuenta().hide_spam and not literal and await spam_check(text):
         try:
@@ -172,7 +180,7 @@ async def handle(value: dict, store: Store, instagram: Instagram, google: Google
             log.exception("No se pudo ocultar el comentario %s", comment_id)
         return
     if not rules:
-        log.info("La publicación no tiene reglas en la hoja; se ignora el comentario %s", comment_id)
+        log.info("La publicación no tiene palabras clave; se ignora el comentario %s", comment_id)
         return
     matched = literal or await classify(rules, text)
     if not matched:

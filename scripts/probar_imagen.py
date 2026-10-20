@@ -28,6 +28,8 @@ def main():
     p.add_argument("--precio", default="Desde $1,290 MXN")
     p.add_argument("--firma", default="@skandar.online")
     p.add_argument("--acento", default=imagenes.ACENTO)
+    p.add_argument("--fuente", default="Inter", choices=list(imagenes.FUENTES))
+    p.add_argument("--peso", type=int, default=600, choices=list(imagenes.PESOS))
     p.add_argument("--salida", default="data/pruebas")
     a = p.parse_args()
 
@@ -41,9 +43,10 @@ def main():
     if a.idea:
         (salida / "base.jpg").write_bytes(imagenes._jpg(base))
     texto = imagenes.Texto(a.titulo, a.subtitulo, a.precio, a.firma)
+    marca = imagenes.Marca(fuente=a.fuente, peso=a.peso, acento=a.acento)
     for plantilla in imagenes.PLANTILLAS:
         destino = salida / f"{plantilla}.jpg"
-        destino.write_bytes(imagenes.rotular(base, plantilla, texto, a.acento))
+        destino.write_bytes(imagenes.rotular(base, plantilla, texto, marca))
         print(destino)
 
 

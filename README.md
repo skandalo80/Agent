@@ -174,13 +174,24 @@ Para activarlo en una cuenta:
 
 `igbot/imagenes.py` arma piezas para el feed: Gemini pinta la imagen sin letras
 y el servidor le pone título, subtítulo, precio y firma con una de 4 plantillas
-(`editorial`, `minimal`, `marco`, `banda`) en Inter y el color de acento. Cambiar
+(`editorial`, `minimal`, `marco`, `banda`) con la tipografía (Inter, Montserrat, Poppins,
+Playfair Display o Lora, en `fonts/`, todas OFL) y los colores de la marca. Cambiar
 el texto no genera otra imagen. Cada pieza queda en la tabla `media`, lista para
 publicarse con el mismo flujo de las publicaciones de los administradores.
 
 En `.env`: `GEMINI_API_KEY` (aistudio.google.com/apikey, cuenta de prepago) y,
 por cuenta, `IMAGES_PER_MONTH` (Community 40, Pro 80; 0 = sin contenido). Para
 probar en el servidor:
+
+Con `IMAGES_PER_MONTH` > 0 el panel del cliente muestra **Contenido**
+(`igbot/contenido.py`, `/panel/contenido`): su kit de marca (colores, tipografía,
+estilo de fotos, fotos de producto), crear un post a partir de un objetivo
+(Claude escribe con `CONTENT_MODEL`, Gemini pinta), editarlo, aprobarlo y el
+calendario. Los posts aprobados los publica el bucle de publicaciones y su palabra
+clave contesta comentarios igual que la hoja de `SHEET_COMMENTS`. Pasado el cupo,
+el cliente confirma la imagen extra (`EXTRA_IMAGE_USD`) y queda anotada en
+`events` ('imagen', tipo 'extra') para cobrarla. El CSP del bot necesita
+`img-src 'self'` (ver `deploy/Caddyfile`).
 
 ```bash
 .venv/bin/python scripts/probar_imagen.py --foto producto.jpg     # sin gastar
