@@ -294,7 +294,7 @@ async def pagina(c: Cuenta, actual: str, bajada: str, cuerpo: str, aviso: str = 
         f'<a href="{href}" class="{"on" if k == actual else ""}{" crear" if k == "nuevo" else ""}">{nombre}</a>'
         for k, nombre, href in PESTANAS)
     return panel.pagina(
-        '<div class="ancho">' + panel.cabecera(salir=True, menu="contenido")
+        panel.cabecera(salir=True, menu="contenido")
         + '<section class="oscuro portada compacta"><div class="contenedor">'
         '<p class="antetitulo">Contenido</p>'
         f'<h1>@{escape(await panel.usuario(c))}<span class="punto">.</span></h1>'
@@ -304,7 +304,7 @@ async def pagina(c: Cuenta, actual: str, bajada: str, cuerpo: str, aviso: str = 
         "</div></section>"
         '<main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
-        + cuerpo + "</div></main></div>"
+        + cuerpo + "</div></main>"
     )
 
 

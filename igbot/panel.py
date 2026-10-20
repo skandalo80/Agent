@@ -217,7 +217,7 @@ ESTILO = """
 *{box-sizing:border-box}
 body{margin:0;background:var(--claro);color:var(--negro);font:17px/1.55 "Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 a{color:inherit}
-.contenedor{max-width:46rem;margin:0 auto;padding:0 1.25rem}
+.contenedor{max-width:64rem;margin:0 auto;padding:0 1.25rem}
 header{background:var(--negro);color:var(--claro);border-bottom:1px solid var(--linea-oscura)}
 header .contenedor{display:flex;justify-content:space-between;align-items:center;height:3.25rem}
 .marca{font-weight:600;font-size:.95rem;text-decoration:none;letter-spacing:-.01em}
@@ -284,7 +284,6 @@ textarea.prompt{font:14px/1.5 ui-monospace,Menlo,monospace;min-height:20rem}
 .tonos input{accent-color:var(--acento)}
 .oculto{position:absolute;left:-9999px}
 header form{display:flex;margin:0}
-.ancho .contenedor{max-width:64rem}
 .menu a,.marca{white-space:nowrap}
 @media(max-width:560px){header .marca{font-size:0}header .marca::after{content:"Skandar";font-size:.95rem}.menu{gap:.9rem;margin-right:1rem}}
 .menu{display:flex;gap:1.25rem;font-size:.85rem;margin-left:auto;margin-right:1.5rem}
@@ -418,7 +417,7 @@ async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt
     )
     return pagina(
         cabecera(salir=True, menu=secciones(c, "asistente"))
-        + '<section class="oscuro portada"><div class="contenedor">'
+        + '<section class="oscuro portada compacta"><div class="contenedor">'
         '<p class="antetitulo">Tu asistente</p>'
         f'<h1>@{escape(await usuario(c))}<span class="punto">.</span></h1>'
         f'<div class="estado"><div><span class="luz{" on" if encendido else ""}"></span>'
