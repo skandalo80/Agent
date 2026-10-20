@@ -569,3 +569,12 @@ def test_crear_post_con_ajustes_solo_para_ese_post(cliente, monkeypatch):
     client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "marca", "como": "marca"})
     p = client.portal.call(contenido.pieza, c.store, 3)
     assert p["plantilla"] == "editorial" and "marca" not in p
+
+
+def test_configura_tu_asistente_va_plegado(cliente):
+    client, c, *_ = cliente
+    # Ya guardó sus instrucciones (el fixture): el formulario sale cerrado.
+    assert '<details class="grupo plegable" id="configura">' in client.get("/panel/asistente").text
+    client.portal.call(c.store.set, "asistente_listo", "0")
+    client.portal.call(c.store.set, "perfil", "")
+    assert '<details class="grupo plegable" id="configura" open>' in client.get("/panel/asistente").text

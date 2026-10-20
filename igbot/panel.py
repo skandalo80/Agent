@@ -429,6 +429,9 @@ label.check input[type=email]{flex:1;max-width:22rem;margin:0}
 .plegable[open] summary::after{transform:rotate(-135deg);margin-bottom:-.2rem}
 .plegable summary .resumen{margin-left:auto;color:#6e6e73;font-size:.85rem}
 .plegable[open] summary{margin-bottom:1rem}
+.grupo>summary{background:var(--blanco);border-radius:1.5rem;padding:1.5rem 2rem;margin-bottom:1.25rem}
+.grupo>summary .num{margin-bottom:.2rem}.grupo>summary .resumen{display:block;margin:0;font-size:.95rem}
+.grupo[open]>summary{margin-bottom:1.25rem}
 .filtros{display:flex;flex-wrap:wrap;gap:.5rem;margin:.5rem 0 .25rem}
 .filtros a{font-weight:500;font-size:.95rem;border:1px solid var(--linea-clara);border-radius:999px;padding:.45rem 1rem;color:inherit;text-decoration:none}
 .filtros a.on{background:var(--negro);color:var(--claro);border-color:var(--negro)}
@@ -517,10 +520,15 @@ async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt
                    confirmar: bool = False) -> HTMLResponse:
     """La página del panel. `aviso` sale arriba; `nota`, junto a las instrucciones
     (ahí deja la página "Generar instrucciones", con #instrucciones)."""
+    # El formulario va plegado; abierto si aún no lo configura o si viene de editarlo (Guardar, Generar...).
+    abierto = datos is not None or prompt is not None or bool(nota) or confirmar or not await asistente_listo(c)
     datos = datos if datos is not None else await perfil(c)
     prompt = prompt_actual(c) if prompt is None else prompt
     encendido = await activo(c)
-    formulario = _formulario(c, datos, prompt, pares_minimos, nota, confirmar)
+    formulario = (f'<details class="grupo plegable" id="configura"{" open" if abierto else ""}>'
+                  '<summary><div><span class="num">Configura tu asistente</span>'
+                  '<span class="resumen">Tu negocio, preguntas, políticas, tono e instrucciones</span></div></summary>'
+                  + _formulario(c, datos, prompt, pares_minimos, nota, confirmar) + "</details>")
     return pagina(
         cabecera(salir=True, menu="asistente", cuenta=c)
         + '<section class="oscuro portada compacta"><div class="contenedor">'
