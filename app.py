@@ -346,8 +346,11 @@ def verify(request: Request):
 def signature_ok(body: bytes, header: str | None) -> bool:
     if not header or not header.startswith("sha256="):
         return False
-    expected = hmac.new(config.APP_SECRET.encode(), body, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(expected, header.removeprefix("sha256="))
+    # Meta firma con la llave de la app de Meta o con la de Instagram (la de
+    # /conectar) según cómo se conectó la cuenta; se aceptan las dos.
+    given = header.removeprefix("sha256=")
+    return any(hmac.compare_digest(hmac.new(secret.encode(), body, hashlib.sha256).hexdigest(), given)
+               for secret in {config.APP_SECRET, config.IG_OAUTH_SECRET})
 
 
 def message_text(message: dict) -> str:
@@ -361,6 +364,7 @@ def message_text(message: dict) -> str:
 async def receive(request: Request):
     body = await request.body()
     if not signature_ok(body, request.headers.get("X-Hub-Signature-256")):
+        log.warning("Webhook con firma inválida; ¿IG_APP_SECRET o IG_OAUTH_SECRET mal copiados?")
         raise HTTPException(status_code=403, detail="firma inválida")
     if config.FORWARD_WEBHOOKS:
         in_background(forward(body, request.headers["X-Hub-Signature-256"]))
