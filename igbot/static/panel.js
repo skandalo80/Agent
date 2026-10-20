@@ -63,9 +63,14 @@ function vigilar(form) {
 document.querySelectorAll("form[data-vista]").forEach(vigilar);
 
 // Tarjetas plegables (<details class="plegable">): se acuerda si las cerraste, en este navegador.
+// Si la dirección apunta a ella o a algo de adentro (#instrucciones, #preguntas), se queda abierta.
+function apunta(d) {
+  if (!location.hash) return false;
+  try { return location.hash === "#" + d.id || !!d.querySelector(location.hash); } catch (e) { return false; }
+}
 document.querySelectorAll("details.plegable[id]").forEach((d) => {
   const clave = "plegado:" + d.id;
-  try { if (localStorage.getItem(clave) === "1" && location.hash !== "#" + d.id) d.open = false; } catch (e) { /* sin almacenamiento */ }
+  try { if (localStorage.getItem(clave) === "1" && !apunta(d)) d.open = false; } catch (e) { /* sin almacenamiento */ }
   d.addEventListener("toggle", () => {
     try { localStorage.setItem(clave, d.open ? "0" : "1"); } catch (e) { /* sin almacenamiento */ }
   });
