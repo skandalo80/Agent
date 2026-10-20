@@ -285,7 +285,8 @@ textarea.prompt{font:14px/1.5 ui-monospace,Menlo,monospace;min-height:20rem}
 .oculto{position:absolute;left:-9999px}
 header form{display:flex;margin:0}
 .menu a,.marca{white-space:nowrap}
-@media(max-width:560px){header .marca{font-size:0}header .marca::after{content:"Skandar";font-size:.95rem}.menu{gap:.9rem;margin-right:1rem}}
+.marca{margin-right:1rem}
+@media(max-width:560px){header .marca{font-size:0}header .marca::after{content:"Skandar";font-size:.95rem}.menu{gap:.75rem;margin-right:.75rem;font-size:.8rem}.kpis{grid-template-columns:1fr 1fr}.kpi{padding:1rem}.kpi b{font-size:1.6rem}header:has(.menu) .marca{display:none}header:has(.menu) .menu{margin-left:0}}
 .menu{display:flex;gap:1.25rem;font-size:.85rem;margin-left:auto;margin-right:1.5rem}
 .menu a{color:var(--gris);text-decoration:none}
 .menu a.on,.menu a:hover{color:var(--claro)}
@@ -333,6 +334,22 @@ input[type=file]{font:inherit;font-size:.9rem;margin-top:.75rem;max-width:100%}
 .boton.chico{padding:.5rem 1rem;font-size:.9rem}
 .generando{display:flex;gap:1rem;align-items:center}
 .extra{border:1px solid var(--acento);background:#fff4ed}
+.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(10.5rem,1fr));gap:.75rem;margin-bottom:1.25rem}
+.kpi{background:var(--blanco);border-radius:1.25rem;padding:1.25rem 1.4rem}
+.kpi span{display:block;color:#6e6e73;font-size:.85rem}
+.kpi b{display:block;font-size:2rem;font-weight:600;letter-spacing:-.03em;line-height:1.15;margin:.2rem 0}
+.kpi small{color:#6e6e73;font-size:.85rem}
+.grafica{width:100%;height:9rem;display:block;margin-top:1.25rem}
+.ejex{display:flex;color:#6e6e73;font-size:.75rem;margin-top:.35rem}
+.ejex span{flex:1;text-align:center;white-space:nowrap;min-width:0;overflow:visible}
+.grafica .b{fill:var(--acento-claro)}
+.grafica .b.fuera{fill:#c7c7cc}
+.grafica .eje{stroke:var(--linea-clara)}
+.leyenda{display:flex;gap:1.25rem;flex-wrap:wrap;color:#6e6e73;font-size:.85rem;margin-top:.75rem}
+.leyenda i{display:inline-block;width:.7rem;height:.7rem;border-radius:.2rem;margin-right:.4rem;background:var(--acento-claro)}
+.leyenda i.fuera{background:#c7c7cc}
+.tarjeta .kpis{margin:1rem 0 0}
+.tarjeta .kpi{background:var(--claro)}
 """
 
 
@@ -352,23 +369,20 @@ def pagina(cuerpo: str) -> HTMLResponse:
 
 
 ACTIVA = ' class="on"'
-MENU = {"asistente": ("Tu asistente", "/panel"), "contenido": ("Contenido", "/panel/contenido")}
+MENU = {"asistente": ("Tu asistente", "/panel"), "contenido": ("Contenido", "/panel/contenido"),
+        "resultados": ("Resultados", "/panel/resultados")}
 
 
-def cabecera(salir: bool = False, menu: str = "") -> str:
-    """`menu`: la sección en la que está (solo si su plan tiene más de una)."""
+def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None) -> str:
+    """`menu`: la sección en la que está. Contenido sale solo si el plan de `cuenta` lo tiene."""
     boton = ('<form method="post" action="/panel/salir"><button class="salir">Salir</button></form>'
              if salir else "")
     enlaces = "".join(f'<a href="{href}"{ACTIVA if k == menu else ""}>{nombre}</a>'
-                      for k, (nombre, href) in MENU.items())
+                      for k, (nombre, href) in MENU.items()
+                      if k != "contenido" or cuenta is None or cuenta.imagenes_mes > 0)
     return (f'<header><div class="contenedor"><a class="marca" href="{config.SITE_URL}">Agentes IA by Skandar</a>'
             + (f'<nav class="menu">{enlaces}</nav>' if menu else "")
             + f"{boton}</div></header>")
-
-
-def secciones(c: Cuenta, actual: str) -> str:
-    """El menú del panel si la cuenta tiene Contenido en su plan."""
-    return actual if c.imagenes_mes > 0 else ""
 
 
 def entrar() -> HTMLResponse:
@@ -416,7 +430,7 @@ async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt
         for k, (nombre, _) in TONOS.items()
     )
     return pagina(
-        cabecera(salir=True, menu=secciones(c, "asistente"))
+        cabecera(salir=True, menu="asistente", cuenta=c)
         + '<section class="oscuro portada compacta"><div class="contenedor">'
         '<p class="antetitulo">Tu asistente</p>'
         f'<h1>@{escape(await usuario(c))}<span class="punto">.</span></h1>'
@@ -567,7 +581,7 @@ async def prueba_inicio(c: Cuenta, mensajes: list[list[str]], aviso: str = "") -
         '<p class="vacio">Escribe como si fueras un cliente. Usa las instrucciones que guardaste.</p>')
     return (
         PRINCIPIO
-        + cabecera(salir=True, menu=secciones(c, "asistente"))
+        + cabecera(salir=True, menu="asistente", cuenta=c)
         + '<section class="oscuro portada compacta"><div class="contenedor">'
         '<p class="antetitulo">Prueba tu asistente</p>'
         f'<h1>@{escape(await usuario(c))}<span class="punto">.</span></h1>'

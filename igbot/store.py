@@ -14,6 +14,9 @@ from pathlib import Path
 
 import aiosqlite
 
+# Así empieza lo que contestó el dueño a mano (ver add_owner_message).
+MANUAL = "[contestó una persona del equipo]"
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS messages (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -26,6 +29,7 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 CREATE INDEX IF NOT EXISTS messages_user ON messages (user_id, id);
 CREATE INDEX IF NOT EXISTS messages_pending ON messages (status) WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS messages_time ON messages (created_at);
 
 CREATE TABLE IF NOT EXISTS summaries (
     user_id TEXT PRIMARY KEY,
@@ -232,7 +236,7 @@ class Store:
         await self.db.execute(
             "INSERT OR IGNORE INTO messages (user_id, role, text, mid, created_at)"
             " VALUES (?, 'assistant', ?, ?, ?)",
-            (user_id, f"[contestó una persona del equipo] {text}", mid, time.time()),
+            (user_id, f"{MANUAL} {text}", mid, time.time()),
         )
         await self.db.commit()
 
@@ -523,7 +527,7 @@ class Store:
     async def week_stats(self, since: float, until: float) -> dict:
         """Números de las conversaciones con clientes (sin las de los administradores)."""
         clients = "user_id NOT LIKE 'admin:%'"
-        manual = "[contestó una persona del equipo]%"
+        manual = MANUAL + "%"
 
         async def one(sql, *args):
             cur = await self.db.execute(sql, (*args,))
@@ -549,6 +553,15 @@ class Store:
             "cotizaciones_pdf": await one(f"SELECT COUNT(*) FROM quotes WHERE {window}", since, until),
             "total_pdf": await one(f"SELECT SUM(total) FROM quotes WHERE {window}", since, until),
         }
+
+    async def message_times(self, since: float, until: float) -> list[tuple[str, str, float, int]]:
+        """(usuario, rol, hora, 1 si contestó una persona) de los mensajes con clientes, en orden."""
+        cur = await self.db.execute(
+            "SELECT user_id, role, created_at, text LIKE ? FROM messages WHERE user_id NOT LIKE 'admin:%'"
+            " AND created_at >= ? AND created_at < ? ORDER BY id",
+            (MANUAL + "%", since, until),
+        )
+        return list(await cur.fetchall())
 
     async def meetings_between(self, start_iso: str, end_iso: str) -> int:
         """Reuniones activas en ese rango (las fechas van en la zona del negocio, como se guardan)."""
