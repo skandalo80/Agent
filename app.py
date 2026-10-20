@@ -192,14 +192,12 @@ def fondo() -> list[asyncio.Task]:
 
 
 def buscar(ig_id: str) -> Cuenta | None:
-    """La cuenta de clientes con ese id (la principal no tiene panel)."""
-    return next((c for c in cuentas[1:] if c.ig_account_id == ig_id), None)
+    """La cuenta con ese id, la principal incluida (en su panel no se editan las instrucciones)."""
+    return next((c for c in cuentas if ig_id and c.ig_account_id == ig_id), None)
 
 
 async def alta(ig_id: str, usuario: str, token: str) -> Cuenta | None:
     """Al conectarse por /conectar: su cuenta, que se crea (en pausa) si es nueva."""
-    if ig_id == principal.ig_account_id:
-        return None
     if not (c := buscar(ig_id)):
         slug = panel.preparar_carpeta(ig_id, usuario, token, await store.correo_de(usuario),
                                       {c.slug for c in cuentas})
