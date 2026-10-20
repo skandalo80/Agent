@@ -1,5 +1,4 @@
 """Cotizaciones, pasar a humano y pausa cuando contesta el dueño."""
-import asyncio
 import hashlib
 import hmac
 import json
@@ -152,7 +151,6 @@ def test_si_el_duenio_contesta_el_bot_se_calla(monkeypatch):
 
     monkeypatch.setattr(bot.agent, "reply", fake_reply)
     monkeypatch.setattr(bot.instagram, "send_text", fake_send)
-    monkeypatch.setattr(bot.instagram, "refresh_loop", lambda: asyncio.sleep(0))
     monkeypatch.setattr(bot, "ECHO_WAIT", 0)
 
     def post(event):

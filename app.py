@@ -1,9 +1,15 @@
 """Webhook de Instagram + agente de Claude.
 
+Un mismo proceso atiende varias cuentas de Instagram: la de .env y las de
+CUENTAS (clientes/<nombre>/.env). Cada aviso de Meta trae el id de su cuenta;
+con él se elige la Cuenta y todo lo demás corre dentro de usar(cuenta), con su
+base, su token, su prompt y sus límites.
+
 Flujo de un DM:
 1. Meta llama a POST /webhook. Se valida la firma, se guarda el mensaje como
-   pendiente y se responde 200 al instante (si tardamos, Meta reintenta).
-2. El Dispatcher despierta la conversación de ese usuario: espera unos
+   pendiente en la base de su cuenta y se responde 200 al instante (si
+   tardamos, Meta reintenta).
+2. El Dispatcher de esa cuenta despierta la conversación de ese usuario: espera unos
    segundos por si manda más mensajes y luego los contesta juntos y en orden.
 3. El agente arma el contexto (datos guardados + resumen + últimos mensajes),
    le pide la respuesta a Claude y se envía por la API de Instagram.
@@ -22,7 +28,7 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse
 
 from igbot import admin, agent, botones, comentarios, conectar, config, limites, reporte
-from igbot.cuenta import cuenta
+from igbot.cuenta import Cuenta, cargar, cuenta, usar
 from igbot.dispatcher import Dispatcher
 from igbot.google import Google
 from igbot.instagram import Instagram
@@ -31,8 +37,13 @@ from igbot.store import Store
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("igbot")
 
-store = Store(cuenta().db_path)
-instagram = Instagram(store)
+cuentas = cargar()
+for c in cuentas:
+    c.store = Store(c.db_path)
+    c.instagram = Instagram(c.store)
+principal = cuentas[0]
+# Atajos a la cuenta principal (la de .env).
+store, instagram = principal.store, principal.instagram
 # Agenda y correo solo si Google está configurado en .env.
 google = (
     Google(config.GOOGLE_CLIENT_ID, config.GOOGLE_CLIENT_SECRET, config.GOOGLE_REFRESH_TOKEN)
@@ -48,6 +59,7 @@ async def handle(user_id: str, rows: list[tuple[int, str]]) -> None:
     respuesta se descarta y se vuelve a generar con todos, para mandar una
     sola. No se descarta si ya agendó, canceló o mandó un correo.
     """
+    store, instagram = cuenta().store, cuenta().instagram
     if (until := await store.paused_until(user_id)) > time.time():
         # La conversación la lleva una persona: se guarda pero no se contesta.
         log.info("Conversación con %s en pausa %.1f h más; no se contesta", user_id, (until - time.time()) / 3600)
@@ -78,6 +90,7 @@ MAX_REDRAFTS = 2
 
 async def over_limits(user_id: str, rows: list[tuple[int, str]]) -> bool:
     """Si la persona o la cuenta ya pasaron su tope del día, no se llama a Claude."""
+    store, instagram = cuenta().store, cuenta().instagram
     if await limites.over_budget(store):
         log.warning("Presupuesto diario de Claude agotado; no se contesta a %s", user_id)
         await store.mark_seen([i for i, _ in rows])
@@ -104,36 +117,89 @@ async def over_limits(user_id: str, rows: list[tuple[int, str]]) -> bool:
         await store.mark_seen([i for i, _ in rows])
     return True
 
-dispatcher = Dispatcher(store, handle, config.DEBOUNCE_SECONDS, config.MAX_CONCURRENT)
+def atender(c: Cuenta):
+    async def handler(user_id: str, rows: list[tuple[int, str]]) -> None:
+        with usar(c):
+            await handle(user_id, rows)
+    return handler
+
+
+# Una cola por cuenta (orden por persona) con un tope común de respuestas a la vez.
+shared_slots = asyncio.Semaphore(config.MAX_CONCURRENT)
+dispatchers = {
+    c.slug: Dispatcher(c.store, atender(c), config.DEBOUNCE_SECONDS,
+                       config.MAX_CONCURRENT_PER_ACCOUNT, shared=shared_slots)
+    for c in cuentas
+}
+
+
+def nombre(c: Cuenta) -> str:
+    return c.slug or "principal"
+
+
+async def arrancar(c: Cuenta) -> None:
+    with usar(c):
+        await c.store.open()
+        await resolver_id(c)
+        # Mensajes, toques a los botones de inicio y, si hay reglas, comentarios.
+        fields = "messages,messaging_postbacks"
+        if google and comentarios.available() or c.hide_spam:
+            fields += ",comments"
+        try:
+            await c.instagram.subscribe(fields)
+        except Exception:
+            log.exception("No se pudo suscribir la cuenta %s a los avisos", nombre(c))
+        await botones.sync(c.store, c.instagram)
+        await dispatchers[c.slug].resume_pending()
+
+
+async def renovar_token(c: Cuenta) -> None:
+    await c.instagram.refresh_if_due()
+
+
+async def publicar(c: Cuenta) -> None:
+    if c.admin_ig_ids:
+        await admin.publish_due(c.store, c.instagram)
+
+
+async def reporte_semanal(c: Cuenta) -> None:
+    if c.admin_ig_ids or (c.report_email and google):
+        await reporte.tick(c.store, c.instagram, google)
+
+
+async def cada_cuenta(paso, every: float) -> None:
+    """Un solo bucle de fondo por tarea, que pasa por todas las cuentas."""
+    while True:
+        for c in cuentas:
+            with usar(c):
+                try:
+                    await paso(c)
+                except Exception:
+                    log.exception("Falló %s en la cuenta %s", paso.__name__, nombre(c))
+        await asyncio.sleep(every)
+
+
+def fondo() -> list[asyncio.Task]:
+    return [
+        asyncio.create_task(cada_cuenta(renovar_token, 3600)),
+        asyncio.create_task(cada_cuenta(publicar, 30)),
+        asyncio.create_task(cada_cuenta(reporte_semanal, 600)),
+    ]
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await store.open()
-    limites.store = store
     conectar.store, conectar.instagram, conectar.google = store, instagram, google
-    await my_account()
-    # Mensajes, toques a los botones de inicio y, si hay reglas, comentarios.
-    fields = "messages,messaging_postbacks"
-    if google and comentarios.available() or cuenta().hide_spam:
-        fields += ",comments"
-    try:
-        await instagram.subscribe(fields)
-    except Exception:
-        log.exception("No se pudo suscribir la cuenta a los avisos")
-    await botones.sync(store, instagram)
-    await dispatcher.resume_pending()
-    loops = [asyncio.create_task(instagram.refresh_loop())]
-    if cuenta().admin_ig_ids:
-        loops.append(asyncio.create_task(admin.publisher_loop(store, instagram)))
-    if cuenta().admin_ig_ids or (cuenta().report_email and google):
-        loops.append(asyncio.create_task(reporte.loop(store, instagram, google)))
+    for c in cuentas:
+        await arrancar(c)
+    loops = fondo()
     yield
     for task in loops:
         task.cancel()
-    await dispatcher.stop()
-    await instagram.close()
-    await store.close()
+    for c in cuentas:
+        await dispatchers[c.slug].stop()
+        await c.instagram.close()
+        await c.store.close()
 
 
 # Sin /docs ni /openapi.json: no hace falta publicar la lista de rutas.
@@ -202,6 +268,7 @@ async def owner_replied(user_id: str, mid: str, text: str) -> None:
 
     En ese caso el bot se calla en esa conversación por HUMAN_PAUSE_HOURS.
     """
+    store = cuenta().store
     await asyncio.sleep(ECHO_WAIT)
     since = time.time() - 600
     if await store.was_sent(mid) or (text and (
@@ -214,20 +281,30 @@ async def owner_replied(user_id: str, mid: str, text: str) -> None:
 
 
 background: set[asyncio.Task] = set()
-account_id = cuenta().ig_account_id
-# Con varias cuentas, un proceso que no sabe cuál es la suya no contesta nada
-# (si no, contestaría los DMs de las otras cuentas).
-MULTI_ACCOUNT = bool(config.CLIENTE or config.FORWARD_WEBHOOKS)
+# Con varias cuentas en la app, un aviso de una cuenta cuyo id no se conoce no
+# se contesta (si no, se contestaría con la cuenta equivocada).
+MULTI_ACCOUNT = bool(config.CLIENTE or config.FORWARD_WEBHOOKS or len(cuentas) > 1)
 
 
-async def my_account() -> str:
-    global account_id
-    if not account_id:
+async def resolver_id(c: Cuenta) -> None:
+    """Id de la cuenta (el que traen los avisos de Meta); si no está en su .env se pregunta."""
+    if not c.ig_account_id:
         try:
-            account_id = await instagram.account_id()
+            c.ig_account_id = await c.instagram.account_id()
         except Exception:
-            log.exception("No se pudo saber el id de la cuenta de Instagram")
-    return account_id
+            log.exception("No se pudo saber el id de la cuenta %s", nombre(c))
+
+
+async def cuenta_de(entry_id: str) -> Cuenta | None:
+    for c in cuentas:
+        if not c.ig_account_id:
+            with usar(c):
+                await resolver_id(c)
+        if c.ig_account_id == entry_id:
+            return c
+    if not MULTI_ACCOUNT and not principal.ig_account_id:
+        return principal  # una sola cuenta y no se supo su id: todo es suyo
+    return None
 
 
 def in_background(coro) -> None:
@@ -250,8 +327,9 @@ async def forward(body: bytes, signature: str) -> None:
 
 
 async def handle_comment(value: dict) -> None:
+    c = cuenta()
     try:
-        await comentarios.handle(value, store, instagram, google, account_id)
+        await comentarios.handle(value, c.store, c.instagram, google, c.ig_account_id)
     except Exception:
         log.exception("Falló el comentario %s", value.get("id"))
 
@@ -288,52 +366,56 @@ async def receive(request: Request):
         in_background(forward(body, request.headers["X-Hub-Signature-256"]))
 
     data = await request.json()
-    mine = await my_account() if MULTI_ACCOUNT else account_id
-    if MULTI_ACCOUNT and not mine:
-        return {"ok": True}
     for entry in data.get("entry", []):
-        if mine and str(entry.get("id")) != mine:
-            log.debug("Aviso de otra cuenta (%s); lo atiende su proceso", entry.get("id"))
+        c = await cuenta_de(str(entry.get("id")))
+        if not c:
+            log.debug("Aviso de otra cuenta (%s); no es de este proceso", entry.get("id"))
             continue
-        for change in entry.get("changes", []):
-            if change.get("field") != "comments":
-                continue
-            value = change.get("value") or {}
-            log.info("Comentario de %s: %r", (value.get("from") or {}).get("username"), value.get("text", "")[:80])
-            if google and comentarios.available() or cuenta().hide_spam:
-                in_background(handle_comment(value))
-            else:
-                log.info("Comentarios sin configurar (falta SHEET_COMMENTS o Google); se ignora")
-        for event in entry.get("messaging", []):
-            message = event.get("message")
-            if postback := event.get("postback"):
-                # Tocaron un botón de inicio: se contesta como si hubiera escrito la pregunta.
-                message = {"mid": postback.get("mid") or f"pb-{event.get('timestamp')}",
-                           "text": postback.get("title", "")}
-            if not message or message.get("is_deleted"):
-                continue
-            # Eco = un DM que salió de la cuenta. Nunca se contesta (sería un
-            # bucle), pero si lo escribió el dueño a mano, el bot se calla.
-            if message.get("is_echo"):
-                in_background(
-                    owner_replied(event["recipient"]["id"], message["mid"], message_text(message))
-                )
-                continue
-            user_id = event["sender"]["id"]
-            log.info("DM de %s", user_id)
-            text = message_text(message)
-            if not admin.is_admin(user_id):
-                text = limites.trim(text)
-            else:
-                if new_mode := admin.command(message.get("text", "")):
-                    in_background(admin.set_mode(store, instagram, user_id, new_mode))
-                    continue
-                if await admin.mode(store, user_id) == "admin":
-                    text, photos = await admin.incoming_text(store, user_id, message)
-                    for photo in photos:
-                        in_background(admin.save_photo_quietly(store, instagram, photo))
-                    user_id = admin.key(user_id)
-            if await store.add_incoming(user_id, message["mid"], text):
-                dispatcher.notify(user_id)
-
+        with usar(c):
+            await receive_entry(c, entry)
     return {"ok": True}
+
+
+async def receive_entry(c: Cuenta, entry: dict) -> None:
+    """Un aviso de una cuenta. Corre dentro de usar(c): lo que se lance aquí es de esa cuenta."""
+    store, instagram = c.store, c.instagram
+    for change in entry.get("changes", []):
+        if change.get("field") != "comments":
+            continue
+        value = change.get("value") or {}
+        log.info("Comentario de %s: %r", (value.get("from") or {}).get("username"), value.get("text", "")[:80])
+        if google and comentarios.available() or c.hide_spam:
+            in_background(handle_comment(value))
+        else:
+            log.info("Comentarios sin configurar (falta SHEET_COMMENTS o Google); se ignora")
+    for event in entry.get("messaging", []):
+        message = event.get("message")
+        if postback := event.get("postback"):
+            # Tocaron un botón de inicio: se contesta como si hubiera escrito la pregunta.
+            message = {"mid": postback.get("mid") or f"pb-{event.get('timestamp')}",
+                       "text": postback.get("title", "")}
+        if not message or message.get("is_deleted"):
+            continue
+        # Eco = un DM que salió de la cuenta. Nunca se contesta (sería un
+        # bucle), pero si lo escribió el dueño a mano, el bot se calla.
+        if message.get("is_echo"):
+            in_background(
+                owner_replied(event["recipient"]["id"], message["mid"], message_text(message))
+            )
+            continue
+        user_id = event["sender"]["id"]
+        log.info("DM de %s (%s)", user_id, nombre(c))
+        text = message_text(message)
+        if not admin.is_admin(user_id):
+            text = limites.trim(text)
+        else:
+            if new_mode := admin.command(message.get("text", "")):
+                in_background(admin.set_mode(store, instagram, user_id, new_mode))
+                continue
+            if await admin.mode(store, user_id) == "admin":
+                text, photos = await admin.incoming_text(store, user_id, message)
+                for photo in photos:
+                    in_background(admin.save_photo_quietly(store, instagram, photo))
+                user_id = admin.key(user_id)
+        if await store.add_incoming(user_id, message["mid"], text):
+            dispatchers[c.slug].notify(user_id)

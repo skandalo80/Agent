@@ -186,12 +186,8 @@ def test_webhook_manda_al_admin_con_su_asistente(monkeypatch):
     monkeypatch.setattr(bot.admin, "save_photo_quietly", nothing)
     monkeypatch.setattr(bot.instagram, "send_text", fake_send)
     monkeypatch.setattr(bot.instagram, "close", nothing)  # otras pruebas siguen usando su cliente
-    monkeypatch.setattr(bot.instagram, "refresh_loop", lambda: asyncio.sleep(0))
-    monkeypatch.setattr(bot.admin, "publisher_loop", lambda *a: asyncio.sleep(0))
-    # Si se corre en lunes después de las 9, el reporte semanal llegaría primero.
-    monkeypatch.setattr(bot.reporte, "loop", lambda *a: asyncio.sleep(0))
     monkeypatch.setattr(cuenta(), "admin_ig_ids", {"jefe"})
-    monkeypatch.setattr(bot, "account_id", "negocio")
+    monkeypatch.setattr(bot.principal, "ig_account_id", "negocio")
     monkeypatch.setattr(bot, "MULTI_ACCOUNT", False)
 
     def post(client, mid, sender, **message):
@@ -297,8 +293,7 @@ def test_tocar_un_boton_de_inicio_se_contesta_como_mensaje(monkeypatch):
     monkeypatch.setattr(bot.instagram, "close", nothing)
     monkeypatch.setattr(bot.instagram, "subscribe", nothing)
     monkeypatch.setattr(bot.botones, "sync", nothing)
-    monkeypatch.setattr(bot.instagram, "refresh_loop", lambda: asyncio.sleep(0))
-    monkeypatch.setattr(bot, "account_id", "negocio")
+    monkeypatch.setattr(bot.principal, "ig_account_id", "negocio")
     monkeypatch.setattr(bot, "MULTI_ACCOUNT", False)
 
     body = json.dumps({"entry": [{"id": "negocio", "messaging": [{

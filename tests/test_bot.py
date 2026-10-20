@@ -124,14 +124,13 @@ def test_webhook_de_punta_a_punta(monkeypatch):
     monkeypatch.setattr(bot.agent, "reply", fake_reply)
     monkeypatch.setattr(bot.agent, "summarize_if_needed", fake_summary)
     monkeypatch.setattr(bot.instagram, "send_text", fake_send)
-    monkeypatch.setattr(bot.instagram, "refresh_loop", lambda: asyncio.sleep(0))
     monkeypatch.setattr(bot, "ECHO_WAIT", 0)
 
     async def my_account():
         return "negocio"
 
     monkeypatch.setattr(bot.instagram, "account_id", my_account)
-    monkeypatch.setattr(bot, "account_id", "")  # se vuelve a vaciar al terminar la prueba
+    monkeypatch.setattr(bot.principal, "ig_account_id", "")  # se vuelve a vaciar al terminar la prueba
 
     async def ours(mid):  # el eco de esta prueba es de un DM que mandó el bot
         return True

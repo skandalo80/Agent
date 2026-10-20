@@ -217,16 +217,11 @@ class Instagram:
         days = int(data.get("expires_in", 0)) // 86400
         log.info("Token de Instagram renovado; vence en %d días", days)
 
-    async def refresh_loop(self) -> None:
-        """Revisa una vez al día si toca renovar el token."""
-        while True:
-            last = float(await self.store.get("ig_token_refreshed_at") or 0)
-            if time.time() - last > REFRESH_EVERY:
-                try:
-                    await self.refresh_token()
-                except Exception:
-                    log.exception("No se pudo renovar el token; se reintenta mañana")
-            await asyncio.sleep(24 * 3600)
+    async def refresh_if_due(self) -> None:
+        """Renueva el token si ya pasó una semana (lo llama el bucle de fondo de app.py)."""
+        last = float(await self.store.get("ig_token_refreshed_at") or 0)
+        if time.time() - last > REFRESH_EVERY:
+            await self.refresh_token()
 
 
 def split_text(text: str, limit: int = MAX_CHARS) -> list[str]:

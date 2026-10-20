@@ -6,7 +6,6 @@ publicaciones); solo el apartado "lo que más preguntan" lo escribe Claude
 Se manda por correo a REPORT_EMAIL y, en versión corta, por DM a los
 administradores: cada semana a la hora indicada, o cuando un administrador lo pide.
 """
-import asyncio
 import logging
 import time
 from collections import Counter
@@ -163,12 +162,8 @@ def due(current: datetime, last_week: str | None) -> str | None:
     return None
 
 
-async def loop(store: Store, instagram: Instagram, google: Google | None, every: float = 600) -> None:
-    while True:
-        try:
-            if week := due(now(), await store.get("report_week")):
-                await store.set("report_week", week)  # antes de mandar: nunca dos veces
-                await send(store, instagram, google)
-        except Exception:
-            log.exception("Falló el reporte semanal")
-        await asyncio.sleep(every)
+async def tick(store: Store, instagram: Instagram, google: Google | None) -> None:
+    """Manda el reporte si ya toca (lo llama cada pocos minutos el bucle de fondo de app.py)."""
+    if week := due(now(), await store.get("report_week")):
+        await store.set("report_week", week)  # antes de mandar: nunca dos veces
+        await send(store, instagram, google)

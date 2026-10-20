@@ -5,8 +5,9 @@ horario, límites, a quién avisar) vive en una Cuenta, y el código lo lee con
 cuenta().<dato>. Lo que es igual para todas (llaves de Meta, de Claude y de
 Google, la dirección pública del bot) se queda en config.
 
-Hoy cada proceso atiende una sola cuenta, la de su .env. Para atender varias
-en el mismo proceso basta con fijar la cuenta antes de contestar:
+El proceso principal atiende su cuenta (la de .env) y las de CUENTAS, cada
+una leída de clientes/<nombre>/.env (ver cargar()). Antes de atender algo de
+una cuenta se fija con:
 
     with usar(otra):
         ...  # aquí cuenta() es `otra`, también en las tareas que se creen dentro
@@ -14,13 +15,20 @@ en el mismo proceso basta con fijar la cuenta antes de contestar:
 La cuenta actual es una variable de contexto: cada tarea de asyncio tiene la
 suya, así que dos conversaciones de cuentas distintas a la vez no se mezclan.
 """
+import logging
 import os
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+from dotenv import dotenv_values
 
 from . import config
+
+log = logging.getLogger("igbot.cuenta")
 
 
 def _bool(value: str) -> bool:
@@ -69,6 +77,9 @@ class Cuenta:
     max_message_chars: int
     daily_budget_usd: float
     human_pause_hours: float
+    # Su base y su cliente de Instagram; los pone app.py al arrancar.
+    store: Any = field(default=None, repr=False, compare=False)
+    instagram: Any = field(default=None, repr=False, compare=False)
 
     @classmethod
     def desde_env(cls, slug: str, env: Mapping[str, str]) -> "Cuenta":
@@ -133,6 +144,29 @@ class Cuenta:
             # Horas que el bot se calla en una conversación que toma una persona.
             human_pause_hours=float(get("HUMAN_PAUSE_HOURS", "12")),
         )
+
+
+def de_carpeta(slug: str) -> Cuenta:
+    """Cuenta de clientes/<slug>/.env; lo que no es de la cuenta sale del .env común."""
+    propio = {k: v for k, v in dotenv_values(f"clientes/{slug}/.env").items() if v is not None}
+    comun = {k: v for k, v in os.environ.items() if k not in config.ACCOUNT_KEYS}
+    return Cuenta.desde_env(slug, {**comun, **propio})
+
+
+def cargar() -> list[Cuenta]:
+    """La cuenta de este proceso y, en el principal, las de CUENTAS."""
+    cuentas = [cuenta()]
+    if config.CLIENTE:
+        return cuentas  # proceso de una sola cuenta (igbot@<nombre>)
+    for slug in config.CUENTAS:
+        if not Path(f"clientes/{slug}/.env").is_file():
+            log.error("CUENTAS incluye %s, pero no existe clientes/%s/.env; se omite", slug, slug)
+            continue
+        try:
+            cuentas.append(de_carpeta(slug))
+        except KeyError as e:
+            log.error("A clientes/%s/.env le falta %s; se omite", slug, e)
+    return cuentas
 
 
 # La cuenta de este proceso (la de su .env); ver config.py.

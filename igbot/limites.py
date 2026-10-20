@@ -16,9 +16,6 @@ from .store import Store
 
 log = logging.getLogger("igbot.limites")
 
-# Se fija al arrancar; sin él (pruebas sueltas) el gasto no se anota.
-store: Store | None = None
-
 LIMIT_NOTICE = (
     "Por hoy ya llegamos al límite de mensajes por aquí. Mañana te sigo contestando sin problema."
 )
@@ -43,6 +40,8 @@ async def replies_today(db: Store, user_id: str) -> int:
 
 
 async def add_cost(usd: float) -> None:
+    """Suma al gasto del día de la cuenta actual (sin base, en pruebas sueltas, no se anota)."""
+    store = cuenta().store
     if store is None or not usd:
         return
     spent = float(await store.get(_cost_key()) or 0) + usd

@@ -30,6 +30,9 @@ else:
 VERIFY_TOKEN = os.environ["IG_VERIFY_TOKEN"]
 APP_SECRET = os.environ["IG_APP_SECRET"]
 API_VERSION = os.getenv("IG_API_VERSION", "v23.0")
+# Cuentas de clientes que atiende este mismo proceso, además de la suya:
+# nombres de carpetas de clientes/ con su .env (p. ej. CUENTAS=nortex,cafelunar).
+CUENTAS = [c.strip() for c in os.getenv("CUENTAS", "").split(",") if c.strip()]
 # Meta manda los avisos de todas las cuentas de la app al mismo webhook. El
 # proceso que los recibe se los reenvía tal cual a los de las otras cuentas
 # (lista separada por comas, p. ej. http://127.0.0.1:8002/webhook).
@@ -46,6 +49,8 @@ PUBLIC_URL = os.getenv("PUBLIC_URL", "").rstrip("/")
 DEBOUNCE_SECONDS = float(os.getenv("DEBOUNCE_SECONDS", "5"))
 # Conversaciones que se atienden a la vez (cada una abre un proceso del Agent SDK).
 MAX_CONCURRENT = int(os.getenv("MAX_CONCURRENT", "4"))
+# Y de una misma cuenta, para que un cliente con mucho tráfico no frene a los demás.
+MAX_CONCURRENT_PER_ACCOUNT = int(os.getenv("MAX_CONCURRENT_PER_ACCOUNT", "3"))
 
 # --- Google (opcional: sin esto el bot no agenda ni manda correos) ---
 # Credenciales OAuth de tu cuenta de Gmail; ver "Agenda y correo" en el README.

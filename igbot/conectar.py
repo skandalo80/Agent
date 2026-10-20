@@ -191,7 +191,7 @@ async def callback(request: Request):
     await avisar(
         f"Instagram conectado: @{usuario}",
         f"@{usuario} conectó su Instagram. Dale de alta en el servidor con:\n"
-        f"python scripts/alta_cliente.py {usuario} <nombre-corto> <puerto>",
+        f"python scripts/alta_cliente.py {usuario} <nombre-corto>",
     )
     response = back("/conectado")
     response.delete_cookie(STATE_COOKIE, path="/conectar")

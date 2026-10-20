@@ -8,7 +8,8 @@ Reglas:
 - Si llegan más mensajes mientras se genera la respuesta, la misma tarea
   vuelve a dar la vuelta y los contesta después.
 - Entre todos los usuarios, como máximo `max_concurrent` respuestas se
-  generan a la vez.
+  generan a la vez; con `shared`, además se respeta un tope común entre
+  varios Dispatcher (uno por cuenta).
 
 La cola real vive en la base (mensajes `pending`); aquí solo se decide quién
 trabaja y cuándo. Si algún día hay varios servidores, esto se cambia por
@@ -16,6 +17,7 @@ Redis sin tocar el resto.
 """
 import asyncio
 import logging
+from contextlib import nullcontext
 from collections.abc import Awaitable, Callable
 
 from .store import Store
@@ -34,11 +36,13 @@ class Dispatcher:
         max_concurrent: int,
         retries: int = 3,
         retry_delay: float = 20,
+        shared: asyncio.Semaphore | None = None,
     ):
         self.store = store
         self.handle = handle
         self.debounce = debounce
         self.slots = asyncio.Semaphore(max_concurrent)
+        self.shared = shared
         self.retries = retries
         self.retry_delay = retry_delay
         self.active: dict[str, asyncio.Task] = {}
@@ -78,7 +82,7 @@ class Dispatcher:
                         continue  # llegó algo mientras leíamos la base
                     return
                 try:
-                    async with self.slots:
+                    async with self.slots, self.shared or nullcontext():
                         await self.handle(user_id, rows)
                     failures = 0
                 except Exception:
