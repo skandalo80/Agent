@@ -70,7 +70,7 @@ SITE_URL = os.getenv("SITE_URL", "https://skandar.online").rstrip("/")
 # --- Imágenes para contenido (igbot/imagenes.py) ---
 # Clave de la API de Gemini (aistudio.google.com/apikey; cuenta de prepago).
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_IMAGE_MODEL = os.getenv("GEMINI_IMAGE_MODEL", "gemini-3.1-flash-image")
+GEMINI_IMAGE_MODEL = os.getenv("GEMINI_IMAGE_MODEL", "gemini-3.1-flash-lite-image")
 # Lo que cuesta cada imagen, para el gasto diario de la cuenta (DAILY_BUDGET_USD).
 IMAGE_COST_USD = float(os.getenv("IMAGE_COST_USD", "0.04"))
 # Lo que se le cobra al cliente por imagen pasado su cupo del mes (solo se muestra).

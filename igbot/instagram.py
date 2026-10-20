@@ -105,6 +105,12 @@ class Instagram:
         await self.store.set(key, link)
         return link
 
+    async def recent_media(self, limit: int = 12) -> list[dict]:
+        """Las últimas publicaciones de la cuenta (las suba quien las suba)."""
+        data = await self._graph("GET", "me/media", limit=limit,
+                                 fields="id,caption,media_type,media_url,thumbnail_url,permalink,timestamp")
+        return data.get("data", [])
+
     async def subscribe(self, fields: str) -> None:
         """Suscribe esta cuenta a los avisos del webhook (p. ej. 'messages,comments')."""
         r = await self.http.post(

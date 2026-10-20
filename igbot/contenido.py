@@ -20,8 +20,14 @@ Lo que no cabe en la tabla posts (objetivo, textos de la imagen, plantilla,
 palabra clave) va en kv "pieza:<id del post>". La palabra clave de un post ya
 publicado funciona como una regla de comentarios (ver reglas()).
 
-Sin JavaScript (el CSP del bot no lo deja): todo son formularios y la imagen
-se genera en una respuesta en partes, como el chat de prueba.
+Todo son formularios y la imagen se genera en una respuesta en partes, como el
+chat de prueba. El único JavaScript es igbot/static/panel.js (el CSP solo deja
+scripts del mismo dominio): cambia la vista previa al momento en Tu marca y en el
+editor (/muestra.jpg y /post/<id>/muestra.jpg rotulan sin guardar). Sin él, los
+botones "Ver cómo queda" y "Actualizar imagen" hacen lo mismo.
+
+Publicados junta los posts del panel con los últimos de la cuenta en Instagram
+(también los subidos desde la app), pedidos cada 10 minutos como mucho.
 """
 import asyncio
 import io
@@ -29,13 +35,14 @@ import json
 import logging
 import re
 import secrets
+import time
 from datetime import datetime, timedelta
 from html import escape
 from pathlib import Path
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response, StreamingResponse
 from PIL import Image, ImageDraw, ImageOps
 
 from . import config, imagenes, panel, tools
@@ -167,7 +174,7 @@ Reglas:
 - Usa solo datos que estén en la información del negocio o en el tema. No inventes precios, promociones, existencias, horarios ni testimonios.
 - "titulo": lo que va escrito sobre la imagen. Máximo 6 palabras, sin punto final.
 - "subtitulo": una frase corta (máximo 12 palabras) que complete el título, o "".
-- "precio": solo si el post es de un producto o servicio con precio en la información (ej. "Desde $1,290 MXN"); si no, "".
+- "precio": solo si <con_precio> dice "sí" y el precio está en la información del negocio o en el tema (ej. "Desde $1,290 MXN"); si no, "".
 - "caption": el texto del post. De 2 a 5 frases cortas; al final invita a comentar la palabra clave para recibir la información por mensaje directo, y luego de 3 a 6 hashtags. Máximo 1500 caracteres.
 - "palabra_clave": una sola palabra en mayúsculas que la gente comentará (ej. PRECIO, INFO, ENVIO).
 - "respuesta_comentario": respuesta pública corta para quien comenta la palabra (ej. "¡Listo! Te mandamos la información por mensaje.").
@@ -194,14 +201,18 @@ def leer_respuesta(texto: str) -> dict:
     return out
 
 
-async def escribir(c: Cuenta, objetivo: str, tema: str, n_fotos: int) -> dict:
+async def escribir(c: Cuenta, objetivo: str, tema: str, n_fotos: int, con_precio: bool = False) -> dict:
     from . import agent  # import tardío: agent importa el SDK
 
     negocio = panel.prompt_actual(c)[:8000] or "(El cliente aún no llena la información de su negocio.)"
     prompt = (f"<negocio>\n{negocio}\n</negocio>\n\n<objetivo>{OBJETIVOS[objetivo][4]}</objetivo>\n\n"
               f"<tema>{tema or 'El dueño no dio tema: elige algo concreto de la información del negocio.'}</tema>\n\n"
+              f"<con_precio>{'sí' if con_precio else 'no'}</con_precio>\n"
               f"<fotos_de_referencia>{n_fotos}</fotos_de_referencia>\n<hoy>{tools.now():%Y-%m-%d}</hoy>")
-    return leer_respuesta(await agent.run_claude(prompt, SISTEMA, max_turns=1, model=config.CONTENT_MODEL))
+    texto = leer_respuesta(await agent.run_claude(prompt, SISTEMA, max_turns=1, model=config.CONTENT_MODEL))
+    if not con_precio:
+        texto["precio"] = ""  # la mayoría de los posts no llevan precio: solo si el cliente lo pidió
+    return texto
 
 
 # --- generar ---
@@ -220,13 +231,13 @@ def texto_imagen(p: dict, usuario: str) -> imagenes.Texto:
 
 
 async def generar(c: Cuenta, objetivo: str = "", tema: str = "", fotos: list[str] = (), extra: bool = False,
-                  post_id: int | None = None) -> int:
+                  post_id: int | None = None, con_precio: bool = False) -> int:
     """Un post nuevo (Claude + imagen) o, con post_id, otra imagen para el mismo post."""
     with usar(c):
         marca = await marca_de(c)
         if post_id is None:
             fotos = [t for t in fotos if t in marca.get("fotos", [])]
-            texto = await escribir(c, objetivo, tema, len(fotos))
+            texto = await escribir(c, objetivo, tema, len(fotos), con_precio)
             p = {"objetivo": objetivo, "tema": tema, "fotos": fotos, "plantilla": plantilla_de(marca),
                  "titulo": texto["titulo"], "subtitulo": texto["subtitulo"], "precio": texto["precio"],
                  "imagen": texto["imagen"], "clave": texto["palabra_clave"],
@@ -294,7 +305,7 @@ async def pagina(c: Cuenta, actual: str, bajada: str, cuerpo: str, aviso: str = 
         f'<a href="{href}" class="{"on" if k == actual else ""}{" crear" if k == "nuevo" else ""}">{nombre}</a>'
         for k, nombre, href in PESTANAS)
     return panel.pagina(
-        panel.cabecera(salir=True, menu="contenido")
+        panel.cabecera(salir=True, menu="contenido", cuenta=c)
         + '<section class="oscuro portada compacta"><div class="contenedor">'
         '<p class="antetitulo">Contenido</p>'
         f'<h1>@{escape(await panel.usuario(c))}<span class="punto">.</span></h1>'
@@ -344,27 +355,78 @@ async def filas(c: Cuenta, posts: list[dict]) -> str:
     return "".join(out)
 
 
+DE_INSTAGRAM_TTL = 600  # los posts subidos desde la app se piden a Instagram cada 10 min como mucho
+_de_instagram: dict[str, tuple[float, list[dict]]] = {}
+
+
+async def de_instagram(c: Cuenta) -> list[dict]:
+    """Los últimos posts de la cuenta en Instagram, también los subidos desde la app."""
+    guardado = _de_instagram.get(c.slug)
+    if guardado and time.monotonic() - guardado[0] < DE_INSTAGRAM_TTL:
+        return guardado[1]
+    try:
+        posts = await c.instagram.recent_media(12)
+    except Exception as e:  # sin Instagram la página sale igual, solo con los posts del panel
+        log.warning("No se pudieron leer los posts de Instagram de %s: %s", c.slug, e)
+        return []
+    _de_instagram[c.slug] = (time.monotonic(), posts)
+    return posts
+
+
+def fila_instagram(m: dict, ts: float) -> str:
+    titulo = (m.get("caption") or "").strip().split("\n")[0][:60] or "Post de Instagram"
+    foto = m.get("thumbnail_url") or m.get("media_url")
+    imagen = (f'<img src="{escape(foto)}" alt="" referrerpolicy="no-referrer">' if foto
+              else '<span class="pieza" style="width:4.5rem"></span>')
+    ver = (f'<a class="boton secundario chico" href="{escape(m["permalink"])}" target="_blank" rel="noopener">Ver</a>'
+           if m.get("permalink") else "")
+    return (f'<div class="fila">{imagen}<div class="datos"><b>{escape(titulo)}</b>'
+            f'<span>{escape(cuando(ts))} · Desde Instagram</span></div>'
+            f'<span class="chip verde">Publicado</span>{ver}</div>')
+
+
+async def publicados_html(c: Cuenta) -> str:
+    """Publicados del panel y de la app de Instagram juntos, del más nuevo al más viejo."""
+    del_panel = (await c.store.posts(("publicada",), user_id=PANEL))[-12:]
+    enlaces = {shortcode(p["permalink"]) for p in del_panel} - {""}
+    lista = []
+    for post in del_panel:
+        media = await c.store.media(post["media_ids"][0]) if post["media_ids"] else None
+        html = fila(c, post, await pieza(c.store, post["id"]), media[0] if media else "")
+        lista.append((post["publish_at"] or 0, html))
+    for m in await de_instagram(c):
+        if m.get("permalink") and shortcode(m["permalink"]) in enlaces:
+            continue
+        try:
+            ts = datetime.strptime(m["timestamp"], "%Y-%m-%dT%H:%M:%S%z").timestamp()
+        except (KeyError, ValueError):
+            continue
+        lista.append((ts, fila_instagram(m, ts)))
+    lista.sort(key=lambda x: x[0], reverse=True)
+    return "".join(html for _, html in lista[:12])
+
+
 async def calendario(c: Cuenta, aviso: str = "") -> HTMLResponse:
     with usar(c):
         pendientes = await c.store.posts(("programada", "publicando", "fallida", "borrador"), user_id=PANEL)
         programados = [p for p in pendientes if p["status"] != "borrador"]
         borradores = [p for p in pendientes if p["status"] == "borrador"]
-        publicados = (await c.store.posts(("publicada",), user_id=PANEL))[-12:][::-1]
-        if not (pendientes or publicados):
-            cuerpo = ('<div class="tarjeta"><h2>Aún no tienes posts</h2>'
-                      '<p class="ayuda">Dinos qué quieres lograr y te armamos el post: imagen, texto y palabra clave.</p>'
-                      '<div class="acciones"><a class="boton" href="/panel/contenido/nuevo">Crear mi primer post</a>'
-                      '<a class="boton secundario" href="/panel/contenido/marca">Antes, configurar mi marca</a></div></div>')
-        else:
-            cuerpo = ""
-            if programados:
-                cuerpo += f'<div class="tarjeta"><span class="num">Programados</span>{await filas(c, programados)}</div>'
-            if borradores:
-                cuerpo += (f'<div class="tarjeta"><span class="num">Borradores</span>'
-                           '<p class="ayuda">No salen hasta que los apruebes.</p>'
-                           f"{await filas(c, borradores)}</div>")
-            if publicados:
-                cuerpo += f'<div class="tarjeta"><span class="num">Publicados</span>{await filas(c, publicados)}</div>'
+        publicados = await publicados_html(c)
+        cuerpo = ""
+        if not pendientes:
+            cuerpo += ('<div class="tarjeta"><h2>Aún no tienes posts</h2>'
+                       '<p class="ayuda">Dinos qué quieres lograr y te armamos el post: imagen, texto y palabra clave.</p>'
+                       '<div class="acciones"><a class="boton" href="/panel/contenido/nuevo">Crear mi primer post</a>'
+                       '<a class="boton secundario" href="/panel/contenido/marca">Antes, configurar mi marca</a></div></div>')
+        if programados:
+            cuerpo += f'<div class="tarjeta"><span class="num">Programados</span>{await filas(c, programados)}</div>'
+        if borradores:
+            cuerpo += (f'<div class="tarjeta"><span class="num">Borradores</span>'
+                       '<p class="ayuda">No salen hasta que los apruebes.</p>'
+                       f"{await filas(c, borradores)}</div>")
+        if publicados:
+            cuerpo += f'<div class="tarjeta"><span class="num">Publicados</span>{publicados}</div>'
+        if pendientes:
             cuerpo += '<div class="acciones"><a class="boton" href="/panel/contenido/nuevo">+ Crear post</a></div>'
         return await pagina(c, "calendario", "Tus publicaciones: lo que viene y lo que ya salió.", cuerpo, aviso)
 
@@ -408,7 +470,10 @@ async def nuevo(c: Cuenta, valores: dict | None = None, aviso: str = "", confirm
         '<div class="tarjeta"><span class="num">02</span><h2>¿De qué trata?</h2>'
         '<p class="ayuda">Opcional. Si lo dejas vacío, lo proponemos con la información de tu negocio.</p>'
         f'<textarea name="tema" rows="3" maxlength="{MAX_TEMA}" placeholder="{OBJETIVOS[elegido][3]}">'
-        f'{escape(valores.get("tema", ""))}</textarea>{fotos_html}</div>'
+        f'{escape(valores.get("tema", ""))}</textarea>'
+        f'<label class="check"><input type="checkbox" name="con_precio" value="1"'
+        f'{" checked" if valores.get("con_precio") else ""}> Este post lleva precio</label>'
+        f'{fotos_html}</div>'
         + ("" if confirmar else
            '<div class="acciones"><button class="boton" name="accion" value="generar">Generar propuesta · usa 1 imagen</button></div>')
         + "</form>"
@@ -428,7 +493,7 @@ async def editor(c: Cuenta, post_id: int, aviso: str = "", confirmar: bool = Fal
             raise HTTPException(status_code=404)
         p = await pieza(c.store, post_id)
         media = await c.store.media(post["media_ids"][0]) if post["media_ids"] else None
-        imagen = (f'<img class="pieza" src="{url_imagen(c, media[0])}" alt="{escape(p.get("titulo", ""))}">'
+        imagen = (f'<img class="pieza" id="vista" src="{url_imagen(c, media[0])}" alt="{escape(p.get("titulo", ""))}">'
                   if media else '<div class="pieza"></div>')
         estado, color = ESTADOS.get(post["status"], (post["status"], ""))
         objetivo = OBJETIVOS.get(p.get("objetivo"), ("Post",))[0]
@@ -456,13 +521,15 @@ async def editor(c: Cuenta, post_id: int, aviso: str = "", confirmar: bool = Fal
         if post["status"] == "borrador":
             botones = ('<button class="boton" name="accion" value="aprobar">Aprobar y programar</button>'
                        '<button class="boton secundario" name="accion" value="guardar">Guardar borrador</button>'
-                       '<button class="boton secundario" name="accion" value="cancelar" formnovalidate>Descartar</button>')
+                       '<a class="boton secundario" href="/panel/contenido">Cancelar cambios</a>'
+                       '<button class="boton secundario" name="accion" value="cancelar" formnovalidate>Descartar post</button>')
         else:
             botones = ('<button class="boton" name="accion" value="aprobar">Guardar cambios</button>'
-                       '<button class="boton secundario" name="accion" value="borrador">Pasar a borrador</button>'
-                       '<button class="boton secundario" name="accion" value="cancelar" formnovalidate>Cancelar publicación</button>')
+                       '<a class="boton secundario" href="/panel/contenido">Cancelar cambios</a>'
+                       '<button class="boton secundario" name="accion" value="borrador">Quitar de programados</button>'
+                       '<button class="boton secundario" name="accion" value="cancelar" formnovalidate>Descartar post</button>')
         cuerpo = (
-            f'<form method="post" action="/panel/contenido/post/{post_id}">'
+            f'<form method="post" action="/panel/contenido/post/{post_id}" data-vista="/panel/contenido/post/{post_id}/muestra.jpg">'
             # Enter en un campo guarda; no aprueba ni genera otra imagen.
             '<button class="oculto" name="accion" value="guardar" tabindex="-1" aria-hidden="true">Guardar</button>'
             + (tarjeta_extra(c, "otra") if confirmar else "")
@@ -472,9 +539,12 @@ async def editor(c: Cuenta, post_id: int, aviso: str = "", confirmar: bool = Fal
             f'<label>Plantilla</label><div class="chips">{plantillas}</div>'
             + campo("titulo", "Título", p.get("titulo", ""), 80)
             + campo("subtitulo", "Subtítulo", p.get("subtitulo", ""), 120)
-            + campo("precio", "Precio", p.get("precio", ""), 40, "Déjalo vacío si el post no lleva precio.")
-            + '<p class="ayuda" style="margin-top:1rem">El texto lo escribimos sobre la imagen: sale exacto y cambiarlo es gratis.</p>'
-            '<div class="acciones"><button class="boton secundario" name="accion" value="actualizar">Actualizar imagen</button>'
+            + f'<label class="check"><input type="checkbox" id="con_precio" name="con_precio" value="1"'
+            f'{" checked" if p.get("precio") else ""}> Este post lleva precio</label>'
+            + '<div class="si-precio">' + campo("precio", "Precio", p.get("precio", ""), 40) + "</div>"
+            + '<p class="ayuda" style="margin-top:1rem">El texto lo escribimos sobre la imagen: sale exacto y cambiarlo es gratis.'
+            ' La imagen de la izquierda cambia al momento; se guarda al guardar o aprobar.</p>'
+            '<div class="acciones"><button class="boton secundario sin-js" name="accion" value="actualizar">Actualizar imagen</button>'
             '<button class="boton secundario" name="accion" value="otra">Otra imagen · usa 1 de tu cupo</button></div></div>'
             '<div class="tarjeta"><span class="num">02 · Publicación</span>'
             '<label for="caption">Texto del post</label>'
@@ -511,35 +581,48 @@ def muestra_base() -> bytes:
 
 
 _MUESTRA = muestra_base()
+# Una foto de ejemplo por estilo (las genera una vez scripts/ejemplos_estilo.py; sirven a todas las cuentas).
+EJEMPLOS = Path("data/estilos")
+
+
+def ejemplo(estilo: str) -> Path | None:
+    path = EJEMPLOS / f"{estilo}.jpg"
+    return path if estilo in ESTILOS and path.is_file() else None
 
 
 def query_muestra(marca: dict) -> str:
-    claves = ("fuente", "peso", "principal", "acento", "fondo", "plantilla")
+    claves = ("fuente", "peso", "principal", "acento", "fondo", "plantilla", "estilo")
     return urlencode({k: marca[k] for k in claves if marca.get(k)})
 
 
 async def pagina_marca(c: Cuenta, marca: dict | None = None, aviso: str = "") -> HTMLResponse:
     marca = marca if marca is not None else await marca_de(c)
     m = kit(marca)
+    # El cuadro de color es el selector del navegador (cambia al momento, con o sin JavaScript).
     colores = "".join(
-        f'<div class="color"><span class="muestra" style="background:{getattr(m, k)}"></span><div class="dos">'
-        f'<div><label for="{k}">{nombre}</label><p class="ayuda">{uso}</p>'
-        f'<input type="text" id="{k}" name="{k}" value="{escape(marca.get(k) or getattr(m, k))}" maxlength="7"'
-        f' pattern="#?[0-9A-Fa-f]{{6}}" placeholder="#000000" aria-label="Código HEX del color {nombre.lower()}"></div>'
-        f'<div><label for="pantone_{k}">Pantone</label><p class="ayuda">Opcional, como referencia.</p>'
-        f'<input type="text" id="pantone_{k}" name="pantone_{k}" value="{escape(marca.get("pantone_" + k, ""))}"'
-        ' maxlength="40"></div></div></div>'
+        f'<div class="color"><input type="color" class="muestra" id="{k}" name="{k}" value="{getattr(m, k).lower()}"'
+        f' aria-label="Color {nombre.lower()}"><div><label for="{k}">{nombre} <span class="hex" data-hex="{k}">'
+        f"{getattr(m, k)}</span></label>"
+        f'<p class="ayuda">{uso}</p>'
+        f'<label class="pantone" for="pantone_{k}">Pantone <span>(solo referencia, no cambia el color)</span></label>'
+        f'<input type="text" class="chico" id="pantone_{k}" name="pantone_{k}" placeholder="Ej. 7621 C"'
+        f' value="{escape(marca.get("pantone_" + k, ""))}" maxlength="40"></div></div>'
         for k, nombre, uso in COLORES)
+    familia = {f: (f"'{f}', Georgia, serif" if f in ("Playfair Display", "Lora") else f"'{f}', system-ui, sans-serif")
+               for f in imagenes.FUENTES}
     fuentes = "".join(
-        f'<label><input type="radio" name="fuente" value="{f}"{" checked" if f == m.fuente else ""}> {f}</label>'
+        f'<label style="font-family:{familia[f]};font-weight:{m.peso}"><input type="radio" name="fuente" value="{f}"'
+        f'{" checked" if f == m.fuente else ""}> {f}</label>'
         for f in imagenes.FUENTES)
     pesos = "".join(
-        f'<label><input type="radio" name="peso" value="{w}"{" checked" if w == m.peso else ""}> {n}</label>'
+        f'<label style="font-family:{familia[m.fuente]};font-weight:{w}"><input type="radio" name="peso" value="{w}"'
+        f'{" checked" if w == m.peso else ""}> {n}</label>'
         for w, n in ((400, "Regular"), (600, "Semibold"), (700, "Bold")))
     actual_estilo = estilo_de(marca)
     estilos = "".join(
         f'<label class="opcion"><input type="radio" name="estilo" value="{k}"{" checked" if k == actual_estilo else ""}>'
-        f"<b>{nombre}</b><span>{desc}</span></label>"
+        + (f'<img class="ejemplo" src="/panel/contenido/estilo/{k}.jpg" alt="">' if ejemplo(k) else "")
+        + f"<b>{nombre}</b><span>{desc}</span></label>"
         for k, (nombre, desc, _) in ESTILOS.items())
     fotos = "".join(
         f'<figure><img src="{url_imagen(c, t)}" alt="Foto de producto {i + 1}">'
@@ -551,15 +634,17 @@ async def pagina_marca(c: Cuenta, marca: dict | None = None, aviso: str = "") ->
         for k, nombre in NOMBRES_PLANTILLA.items())
     sube = len(marca.get("fotos", [])) < MAX_FOTOS
     cuerpo = (
-        '<form method="post" action="/panel/contenido/marca" enctype="multipart/form-data">'
+        '<form method="post" action="/panel/contenido/marca" enctype="multipart/form-data"'
+        ' data-vista="/panel/contenido/muestra.jpg">'
         '<button class="oculto" name="accion" value="guardar" tabindex="-1" aria-hidden="true">Guardar</button>'
         '<div class="editor"><div class="fija">'
-        f'<img class="pieza" src="/panel/contenido/muestra.jpg?{escape(query_muestra(marca))}" alt="Vista previa de tu marca">'
-        '<p class="ayuda" style="margin-top:.75rem">Vista previa. Cambia algo y pulsa «Ver cómo queda».</p>'
-        '<div class="acciones" style="margin-top:.5rem"><button class="boton secundario" name="accion" value="vista">'
+        f'<img class="pieza" id="vista" src="/panel/contenido/muestra.jpg?{escape(query_muestra(marca))}"'
+        ' alt="Vista previa de tu marca">'
+        '<p class="ayuda" style="margin-top:.75rem">Vista previa: cambia al momento. Pulsa Guardar para quedártela.</p>'
+        '<div class="acciones sin-js" style="margin-top:.5rem"><button class="boton secundario" name="accion" value="vista">'
         "Ver cómo queda</button></div></div><div>"
         '<div class="tarjeta"><span class="num">01</span><h2>Paleta de colores</h2>'
-        f'<p class="ayuda">El código HEX de tu marca; es el que usamos al rotular.</p>{colores}</div>'
+        f'<p class="ayuda">Toca cada cuadro para elegir el color; ahí también puedes escribir el código HEX.</p>{colores}</div>'
         '<div class="tarjeta"><span class="num">02</span><h2>Tipografía de títulos</h2>'
         f'<div class="chips">{fuentes}</div><label>Grosor</label><div class="chips">{pesos}</div></div>'
         '<div class="tarjeta"><span class="num">03</span><h2>Estilo de tus fotos</h2>'
@@ -628,13 +713,14 @@ async def crear(request: Request):
     objetivo = f.get("objetivo") if f.get("objetivo") in OBJETIVOS else OBJETIVO_INICIAL
     tema = f.get("tema", "").strip()[:MAX_TEMA]
     fotos = [f[k] for k in sorted(f) if k.startswith("foto_")][:MAX_FOTOS]
-    valores = {"objetivo": objetivo, "tema": tema, "fotos": fotos}
+    con_precio = f.get("con_precio") == "1"
+    valores = {"objetivo": objetivo, "tema": tema, "fotos": fotos, "con_precio": con_precio}
     falta = await falta_cupo(c, f.get("extra") == "1")
     if falta == "plan":
         return sin_plan()
     if falta == "extra":
         return await nuevo(c, valores, confirmar=True)
-    return generando(c, lambda: generar(c, objetivo, tema, fotos, extra=f.get("extra") == "1"),
+    return generando(c, lambda: generar(c, objetivo, tema, fotos, extra=f.get("extra") == "1", con_precio=con_precio),
                      "/panel/contenido/nuevo", "Escribiendo tu post y generando la imagen…")
 
 
@@ -669,6 +755,8 @@ async def editar(request: Request, post_id: int):
         p["plantilla"] = f.get("plantilla") if f.get("plantilla") in imagenes.PLANTILLAS else p.get("plantilla")
         for k, n in (("titulo", 80), ("subtitulo", 120), ("precio", 40), ("respuesta", 300), ("dm", 1000)):
             p[k] = f.get(k, "").strip()[:n]
+        if f.get("con_precio") != "1":
+            p["precio"] = ""  # sin la casilla, el post no lleva precio aunque haya algo escrito
         p["clave"] = re.sub(r"[^\wÁÉÍÓÚÜÑ]", "", f.get("clave", "").upper())[:20]
         caption = f.get("caption", "").strip()[:MAX_CAPTION]
         if not p["titulo"]:
@@ -769,9 +857,44 @@ async def muestra(request: Request):
     marca = await marca_de(c)
     datos = {**marca, **dict(request.query_params)}
     fotos = [t for t in marca.get("fotos", []) if archivo(c, t).is_file()]
-    base = archivo(c, fotos[0]).read_bytes() if fotos else _MUESTRA
+    # La foto de ejemplo del estilo elegido; si no hay, la de su producto o una neutra.
+    if foto_estilo := ejemplo(estilo_de(datos)):
+        base = foto_estilo.read_bytes()
+    else:
+        base = archivo(c, fotos[0]).read_bytes() if fotos else _MUESTRA
     texto = imagenes.Texto("Así se verán tus posts", "Con tu tipografía y tus colores.", "Desde $1,290 MXN",
                            f"@{await panel.usuario(c)}")
     async with imagenes._turno:
         jpg = await asyncio.to_thread(imagenes.rotular, base, plantilla_de(datos), texto, kit(datos))
     return Response(jpg, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=600"})
+
+
+@router.get("/post/{post_id}/muestra.jpg")
+async def muestra_post(request: Request, post_id: int):
+    """La imagen del post con el texto y la plantilla de la URL, sin guardar (vista previa del editor)."""
+    if not (c := panel.cuenta_de_sesion(request)):
+        raise HTTPException(status_code=404)
+    with usar(c):
+        post = await c.store.post(post_id)
+        if not post or post["user_id"] != PANEL or not post["media_ids"]:
+            raise HTTPException(status_code=404)
+        token = (await c.store.media(post["media_ids"][0]))[0]
+        sin_texto = Path(c.media_dir) / f"{token}.base.jpg"
+        if not sin_texto.is_file():
+            raise HTTPException(status_code=404)
+        q = request.query_params
+        p = {"titulo": q.get("titulo", "")[:80], "subtitulo": q.get("subtitulo", "")[:120],
+             "precio": q.get("precio", "")[:40] if q.get("con_precio") == "1" else ""}
+        plantilla = q.get("plantilla") if q.get("plantilla") in imagenes.PLANTILLAS else imagenes.PLANTILLA_INICIAL
+        texto = texto_imagen(p, await panel.usuario(c))
+        marca = kit(await marca_de(c))
+    async with imagenes._turno:
+        jpg = await asyncio.to_thread(imagenes.rotular, sin_texto.read_bytes(), plantilla, texto, marca)
+    return Response(jpg, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=600"})
+
+
+@router.get("/estilo/{estilo}.jpg")
+def foto_de_estilo(estilo: str):
+    if not (path := ejemplo(estilo)):
+        raise HTTPException(status_code=404)
+    return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=86400"})

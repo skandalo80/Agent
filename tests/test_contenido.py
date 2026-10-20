@@ -27,6 +27,16 @@ POST = {"titulo": "Cartera Atelier", "subtitulo": "Piel italiana, hecha a mano."
         "mensaje_dm": "La cartera Atelier cuesta $1,290 MXN.", "imagen": "A leather handbag on a stone table."}
 
 
+class ConPosts(FakeInstagram):
+    """Lo que ya hay en el Instagram del cliente: uno subido desde la app y el que publicó el panel."""
+
+    async def recent_media(self, limit=12):
+        return [{"id": "1", "caption": "Desde la app\nSegunda línea", "media_url": "https://scontent.cdninstagram.com/a.jpg",
+                 "permalink": "https://www.instagram.com/p/DESDEAPP/", "timestamp": "2099-01-01T10:00:00+0000"},
+                {"id": "2", "caption": "Del panel", "permalink": "https://www.instagram.com/p/ABC123/",
+                 "timestamp": "2020-01-01T10:00:00+0000"}]
+
+
 def png() -> bytes:
     out = io.BytesIO()
     Image.new("RGB", (800, 1000), (120, 90, 60)).save(out, "PNG")
@@ -47,7 +57,8 @@ def cliente(monkeypatch, tmp_path):
     Path("prompts").mkdir()
     Path("prompts/comun.md").write_text("REGLAS")
     setup(monkeypatch)
-    monkeypatch.setattr(bot, "Instagram", lambda store: FakeInstagram())
+    monkeypatch.setattr(bot, "Instagram", lambda store: ConPosts())
+    monkeypatch.setattr(contenido, "_de_instagram", {})
     monkeypatch.setattr(bot, "cuentas", list(bot.cuentas))
     monkeypatch.setattr(bot, "dispatchers", dict(bot.dispatchers))
     monkeypatch.setattr(bot.principal, "ig_account_id", "negocio")
@@ -83,7 +94,9 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     client, c, llamadas, proveedor = cliente
     monkeypatch.setattr(c, "imagenes_mes", 2)
     assert 'href="/panel/contenido">Contenido</a>' in client.get("/panel").text
-    assert "Aún no tienes posts" in client.get("/panel/contenido").text
+    r = client.get("/panel/contenido")
+    assert "Aún no tienes posts" in r.text and "DESDEAPP" in r.text  # lo de la app sale aunque no haya del panel
+    assert "Este post lleva precio" in client.get("/panel/contenido/nuevo").text
     assert client.get("/panel/contenido/nuevo").text.count('name="objetivo"') == 5
 
     # Tu marca: colores, letra y una foto del producto.
@@ -106,7 +119,7 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     # Crear post: Claude escribe, Gemini pinta (con la foto real) y queda en borrador.
     assert client.post("/panel/contenido/nuevo", data={"objetivo": "estrella"}).status_code == 403  # sin Origin
     r = client.post("/panel/contenido/nuevo", headers=ORIGEN,
-                    data={"objetivo": "estrella", "tema": "La cartera Atelier", "foto_0": token_foto})
+                    data={"objetivo": "estrella", "tema": "La cartera Atelier", "foto_0": token_foto, "con_precio": "1"})
     assert r.text.index('id="generando"') < r.text.index("#generando{display:none}")
     assert 'url=/panel/contenido/post/1"' in r.text and r.text.endswith("</html>")
     prompt, system, model = llamadas[0]
@@ -125,7 +138,13 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     assert "Cartera Atelier" in r.text and "Aprobar y programar" in r.text
     token = client.portal.call(c.store.media, post["media_ids"][0])[0]
     antes = Path(f"data/cafe_lunar/media/{token}.jpg").read_bytes()
+    assert 'id="con_precio"' in r.text and "Cancelar cambios" in r.text
+    r = client.get("/panel/contenido/post/1/muestra.jpg?titulo=Otro&plantilla=minimal&precio=$9&con_precio=1")
+    assert r.headers["content-type"] == "image/jpeg"
+    assert Image.open(io.BytesIO(r.content)).size == (1080, 1350)
+    assert client.get("/panel/contenido/post/99/muestra.jpg").status_code == 404
     editado = {"plantilla": "marco", "titulo": "Cartera Atelier", "subtitulo": "", "precio": "$1,190 MXN",
+               "con_precio": "1",
                "caption": "Nuevo texto #cartera", "clave": "precio", "respuesta": "¡Listo!", "dm": "Cuesta $1,190."}
     r = client.post("/panel/contenido/post/1", headers=ORIGEN, data={**editado, "accion": "actualizar"})
     assert "texto nuevo" in r.text
@@ -140,9 +159,11 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     r = client.post("/panel/contenido/post/1", headers=ORIGEN,
                     data={**editado, "cuando": hora.strftime("%Y-%m-%dT%H:%M"), "accion": "aprobar"})
     assert "Listo: sale el" in r.text and "Programado" in r.text
+    assert "Quitar de programados" in client.get("/panel/contenido/post/1").text
     post = client.portal.call(c.store.post, 1)
     assert post["status"] == "programada" and post["publish_at"] == hora.timestamp()
     assert post["caption"] == "Nuevo texto #cartera"
+    assert client.portal.call(contenido.pieza, c.store, 1)["precio"] == "$1,190 MXN"
 
     # Le toca salir: se publica sin mandarle DM a nadie y la palabra clave ya responde comentarios.
     publicadas = []
@@ -164,7 +185,9 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     reglas = client.portal.call(contenido.reglas, c.store)
     assert [(r.post, r.keywords, r.dm, r.public) for r in reglas] == [("ABC123", ["PRECIO"], "Cuesta $1,190.", "¡Listo!")]
     r = client.get("/panel/contenido")
-    assert "Publicados" in r.text and "instagram.com/p/ABC123" in r.text
+    assert "Publicados" in r.text and r.text.count("instagram.com/p/ABC123") == 1
+    assert "instagram.com/p/DESDEAPP" in r.text and "Desde Instagram" in r.text
+    assert r.text.index("DESDEAPP") < r.text.index("ABC123")  # el más nuevo primero
     assert "ya no se puede cambiar" in client.post("/panel/contenido/post/1", headers=ORIGEN,
                                                    data={**editado, "accion": "guardar"}).text
 
@@ -198,3 +221,35 @@ def test_si_falla_la_imagen_se_avisa_y_no_queda_post(cliente, monkeypatch):
     assert "Esa idea no se pudo ilustrar." in r.text and "post/" not in r.text
     assert client.portal.call(c.store.posts, ("borrador",), None, admin.PANEL) == []
     assert client.portal.call(imagenes.usadas, c.store) == (0, 0)
+
+
+def test_sin_precio_no_lleva_precio(cliente, monkeypatch):
+    client, c, llamadas, _ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 3)
+    client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "marca"})
+    assert "<con_precio>no</con_precio>" in llamadas[0][0]
+    assert client.portal.call(contenido.pieza, c.store, 1)["precio"] == ""
+    datos = {"plantilla": "editorial", "titulo": "Hola", "precio": "$5", "caption": "x", "accion": "guardar"}
+    client.post("/panel/contenido/post/1", headers=ORIGEN, data=datos)
+    assert client.portal.call(contenido.pieza, c.store, 1)["precio"] == ""  # sin la casilla no se guarda
+
+
+def test_si_instagram_falla_la_pagina_sale(cliente, monkeypatch):
+    client, c, *_ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 3)
+
+    async def falla(limit=12):
+        raise RuntimeError("caído")
+
+    monkeypatch.setattr(c.instagram, "recent_media", falla)
+    r = client.get("/panel/contenido")
+    assert r.status_code == 200 and "Aún no tienes posts" in r.text
+
+
+def test_script_y_fuentes(cliente):
+    client, *_ = cliente
+    assert '<script src="/panel/static/panel.js" defer></script>' in client.get("/panel").text
+    r = client.get("/panel/static/panel.js")
+    assert r.status_code == 200 and "javascript" in r.headers["content-type"]
+    assert client.get("/panel/static/fuentes/Lora-Bold.ttf").headers["content-type"] == "font/ttf"
+    assert client.get("/panel/static/fuentes/..%2F.env").status_code == 404
