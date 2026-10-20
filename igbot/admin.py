@@ -12,7 +12,6 @@ Con "modo cliente" el administrador habla con el bot como cualquier cliente
 (para probarlo) y con "modo admin" vuelve. Lo que escribe en modo admin se
 guarda aparte (usuario "admin:<id>") para no mezclarse con sus pruebas.
 """
-import asyncio
 import io
 import logging
 import re
@@ -205,15 +204,6 @@ async def publish_due(store: Store, instagram: Instagram) -> None:
             await store.add_bot_message(key(post["user_id"]), text)
         except Exception:
             log.exception("No se pudo avisar de la publicación %s", post["id"])
-
-
-async def publisher_loop(store: Store, instagram: Instagram, every: float = 30) -> None:
-    while True:
-        try:
-            await publish_due(store, instagram)
-        except Exception:
-            log.exception("Falló la revisión de publicaciones programadas")
-        await asyncio.sleep(every)
 
 
 def describe(post: dict) -> str:

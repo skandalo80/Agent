@@ -35,8 +35,7 @@ def setup(monkeypatch):
 async def new_store(monkeypatch):
     store = Store(":memory:")
     await store.open()
-    monkeypatch.setattr(bot, "store", store)
-    monkeypatch.setattr(limites, "store", store)
+    monkeypatch.setattr(cuenta(), "store", store)
     return store
 
 

@@ -5,7 +5,8 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def no_instagram_on_startup(monkeypatch):
-    """Al arrancar la app en pruebas, no se llama a Instagram (suscripción y botones)."""
+    """Al arrancar la app en pruebas, no se llama a Instagram (suscripción y botones)
+    ni corren los bucles de fondo (token, publicaciones, reporte semanal)."""
     if "app" in sys.modules:
         bot = sys.modules["app"]
 
@@ -14,3 +15,4 @@ def no_instagram_on_startup(monkeypatch):
 
         monkeypatch.setattr(bot.instagram, "subscribe", nothing)
         monkeypatch.setattr(bot.instagram, "set_ice_breakers", nothing)
+        monkeypatch.setattr(bot, "fondo", lambda: [])

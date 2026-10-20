@@ -38,3 +38,104 @@ def test_dos_cuentas_a_la_vez_no_se_mezclan():
     assert seen["a"] == ("token-a", "hola  […mensaje recortado]")
     assert seen["b"] == ("token-b", "hola a todos")
     assert cuenta() is principal  # al salir, vuelve la de antes
+
+
+class FakeInstagram:
+    """Cliente de Instagram de otra cuenta, sin red: anota lo que manda."""
+
+    def __init__(self):
+        self.sent = []
+
+    async def send_text(self, user_id, text):
+        self.sent.append((user_id, text))
+
+    async def subscribe(self, fields):
+        pass
+
+    async def set_ice_breakers(self, questions):
+        pass
+
+    async def close(self):
+        pass
+
+
+def test_un_proceso_atiende_dos_cuentas_sin_mezclarlas(monkeypatch):
+    import hashlib
+    import hmac
+    import json
+    import time
+
+    from fastapi.testclient import TestClient
+
+    import app as bot
+    from igbot.dispatcher import Dispatcher
+    from igbot.store import Store
+
+    principal = bot.principal
+    cliente = dataclasses.replace(principal, slug="cafelunar", ig_account_id="cafe",
+                                  prompt_path="clientes/cafelunar/system.md")
+    cliente.store, cliente.instagram = Store(":memory:"), FakeInstagram()
+    principal_sent = []
+
+    async def principal_send(user_id, text):
+        principal_sent.append((user_id, text))
+
+    async def fake_reply(store, google, user_id, new_messages, instagram=None):
+        # Lo que el agente ve de la cuenta: su prompt y su base.
+        assert store is cuenta().store
+        return f"{cuenta().prompt_path}: {new_messages[0]}", False
+
+    async def nothing(*a):
+        pass
+
+    monkeypatch.setattr(bot.agent, "reply", fake_reply)
+    monkeypatch.setattr(bot.agent, "summarize_if_needed", nothing)
+    monkeypatch.setattr(bot.instagram, "send_text", principal_send)
+    monkeypatch.setattr(principal, "ig_account_id", "negocio")
+    monkeypatch.setattr(bot, "cuentas", [principal, cliente])
+    monkeypatch.setattr(bot, "MULTI_ACCOUNT", True)
+    monkeypatch.setitem(bot.dispatchers, "cafelunar",
+                        Dispatcher(cliente.store, bot.atender(cliente), 0.05, 2, shared=bot.shared_slots))
+
+    def dm(account, sender, mid, text):
+        return {"id": account, "messaging": [{
+            "sender": {"id": sender}, "recipient": {"id": account}, "message": {"mid": mid, "text": text},
+        }]}
+
+    # Un mismo aviso de Meta puede traer entradas de varias cuentas.
+    body = json.dumps({"entry": [
+        dm("negocio", "ana", "m1", "hola vendedor"),
+        dm("cafe", "beto", "m2", "hola café"),
+        dm("desconocida", "carla", "m3", "nadie me contesta"),
+    ]}).encode()
+    sig = hmac.new(b"secreto", body, hashlib.sha256).hexdigest()
+    with TestClient(bot.app) as client:
+        client.post("/webhook", content=body,
+                    headers={"X-Hub-Signature-256": f"sha256={sig}", "Content-Type": "application/json"})
+        deadline = time.time() + 3
+        while (not principal_sent or not cliente.instagram.sent) and time.time() < deadline:
+            time.sleep(0.05)
+
+    assert principal_sent == [("ana", "prompts/system.md: hola vendedor")]
+    assert cliente.instagram.sent == [("beto", "clientes/cafelunar/system.md: hola café")]
+
+
+def test_bucle_de_fondo_pasa_por_cada_cuenta(monkeypatch):
+    import app as bot
+
+    otra = dataclasses.replace(bot.principal, slug="otra")
+    monkeypatch.setattr(bot, "cuentas", [bot.principal, otra])
+    vistas = []
+
+    async def paso(c):
+        vistas.append((c.slug, cuenta().slug))
+        if c.slug == "":
+            raise RuntimeError("falla en una cuenta")  # no detiene a las demás
+
+    async def main():
+        task = asyncio.create_task(bot.cada_cuenta(paso, 3600))
+        await asyncio.sleep(0.05)
+        task.cancel()
+
+    asyncio.run(main())
+    assert vistas == [("", ""), ("otra", "otra")]

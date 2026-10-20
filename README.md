@@ -82,26 +82,27 @@ echo "PUBLIC_URL=https://bot.skandar.online" >> .env
 sudo systemctl restart igbot
 ```
 
-## Varias cuentas de Instagram (Nortex Uniformes)
+## Varias cuentas de Instagram
 
-Cada cuenta corre como un proceso aparte con su propio prompt, datos y token, sobre el mismo código. La principal (@skandar.online, el vendedor) es `igbot` en el puerto 8001; otra cuenta es `igbot@<nombre>`, con su carpeta `clientes/<nombre>/` (prompt `system.md`, `catalogo.yaml` opcional y `.env`) y sus datos en `data/<nombre>/`.
+Un solo proceso (`igbot`, puerto 8001) atiende todas las cuentas sobre el mismo código. La principal (@skandar.online, el vendedor) usa el `.env`; cada cliente tiene su carpeta `clientes/<nombre>/` (prompt `system.md`, `catalogo.yaml` opcional y `.env` con su token) y sus datos en `data/<nombre>/`. Las cuentas de clientes que se atienden se listan en el `.env` principal:
 
-Meta manda los avisos de todas las cuentas de la app al mismo webhook (`bot.skandar.online/webhook`). El proceso principal se los reenvía tal cual, con su firma, a los demás (`FORWARD_WEBHOOKS`), y cada proceso solo atiende los de su cuenta (la reconoce al arrancar con su token).
-
-Para dar de alta @nortex_uniformes:
-1. En Instagram, que sea cuenta de Empresa. En la app de Meta: Roles de la app → **Instagram Tester** → invita a `nortex_uniformes` y acepta desde esa cuenta (Configuración → Apps y sitios web → Invitaciones de tester). Luego, en *API de Instagram con inicio de sesión de Instagram* → **Generar tokens**, agrega la cuenta y copia su token. Revisa también en esa cuenta: Configuración → Mensajes → *Permitir acceso a los mensajes*.
-2. En el servidor:
-```bash
-cd ~/ig-bot && git pull
-cp clientes/nortex/.env.example clientes/nortex/.env && chmod 600 clientes/nortex/.env
-nano clientes/nortex/.env          # pega el token de Nortex en IG_ACCESS_TOKEN
-echo "FORWARD_WEBHOOKS=http://127.0.0.1:8002/webhook" >> .env
-sudo cp deploy/igbot@.service /etc/systemd/system/
-sudo systemctl daemon-reload && sudo systemctl enable --now igbot@nortex
-sudo systemctl restart igbot
-sudo journalctl -u igbot -u igbot@nortex -f   # cada uno dice "Cuenta de Instagram: @..."
 ```
-3. Manda un DM a @nortex_uniformes desde tu cuenta de prueba.
+CUENTAS=cafelunar,otra_cuenta
+```
+
+Meta manda los avisos de todas las cuentas al mismo webhook (`bot.skandar.online/webhook`). Cada aviso trae el id de su cuenta y el bot lo atiende con la configuración de esa cuenta: su base, su token, su prompt y sus límites (ver `igbot/cuenta.py`). Cada cuenta tiene su cola; `MAX_CONCURRENT` (4) es el tope de respuestas a la vez entre todas y `MAX_CONCURRENT_PER_ACCOUNT` (3) el de una sola cuenta. La renovación de tokens, las publicaciones programadas y el reporte semanal son un bucle por tarea que pasa por todas las cuentas.
+
+Para dar de alta un cliente que ya se conectó en skandar.online/conectar:
+```bash
+cd ~/ig-bot && .venv/bin/python scripts/alta_cliente.py cafe.lunar cafelunar
+nano clientes/cafelunar/system.md       # el prompt del negocio
+nano .env                                # agrega cafelunar a CUENTAS
+sudo systemctl restart igbot
+sudo journalctl -u igbot -f              # dice "Cuenta de Instagram: @cafe.lunar"
+```
+En esa cuenta revisa también: Configuración → Mensajes → *Permitir acceso a los mensajes*.
+
+Si un cliente aún corre como proceso aparte (`igbot@<nombre>`, de antes de este cambio): agrégalo a `CUENTAS`, quita `FORWARD_WEBHOOKS` del `.env` principal, `sudo systemctl disable --now igbot@<nombre>` y `sudo systemctl restart igbot`. Nunca dejes la misma cuenta en `CUENTAS` y en `igbot@<nombre>` a la vez: contestaría dos veces. El modo de un proceso por cuenta (`CLIENTE=<nombre>`, `deploy/igbot@.service`) sigue funcionando.
 
 **Modelo por cuenta.** Cada cuenta puede usar otro modelo con `CLAUDE_MODEL` en su `clientes/<nombre>/.env`. Para un cliente del paquete Básico (solo contesta con la información del negocio) usa el más barato: `CLAUDE_MODEL=claude-haiku-5-5`.
 
@@ -110,7 +111,7 @@ sudo journalctl -u igbot -u igbot@nortex -f   # cada uno dice "Cuenta de Instagr
 Para que el bot pueda leer las hojas (una sola vez):
 1. En Google Cloud, en el mismo proyecto de la agenda: *APIs y servicios* → *Biblioteca* → **Google Sheets API** → *Habilitar*. En *Pantalla de consentimiento* → *Acceso a datos* agrega el permiso `.../auth/spreadsheets.readonly`.
 2. En tu computadora vuelve a correr `python3 scripts/google_auth.py ruta/a/client_secret.json` (ahora pide también ver tus hojas) y reemplaza `GOOGLE_REFRESH_TOKEN` en `~/ig-bot/.env` con el nuevo. Las hojas deben ser de esa misma cuenta de Google o estar compartidas con ella.
-3. `sudo systemctl restart igbot igbot@nortex`.
+3. `sudo systemctl restart igbot`.
 
 ## Conectar clientes desde la web (skandar.online/conectar)
 
@@ -118,7 +119,7 @@ Mientras la app de Meta no tenga App Review, solo se conectan las cuentas invita
 1. El cliente deja su @, nombre y correo. Te llega un DM (si le escribiste al bot en las últimas 24 h) y un correo a `OWNER_EMAIL`.
 2. Tú lo invitas a mano: panel de Meta → Roles de la app → **Instagram Testers** → su @. Le avisas y él acepta en instagram.com → Configuración → Apps y sitios web → Invitaciones de prueba.
 3. Pulsa **Conectar tu Instagram**: inicia sesión, autoriza y el bot guarda su token de 60 días en la tabla `conexiones` de `data/bot.db`. Te vuelve a avisar.
-4. En el servidor: `.venv/bin/python scripts/alta_cliente.py` lista las cuentas conectadas y `.venv/bin/python scripts/alta_cliente.py <usuario> <nombre-corto> <puerto>` crea `clientes/<nombre-corto>/.env` con su token, id y puerto, y dice los comandos que faltan.
+4. En el servidor: `.venv/bin/python scripts/alta_cliente.py` lista las cuentas conectadas y `.venv/bin/python scripts/alta_cliente.py <usuario> <nombre-corto>` crea `clientes/<nombre-corto>/.env` con su token e id, y dice los pasos que faltan (ver "Varias cuentas de Instagram").
 
 Una sola vez: en el `.env` principal pon `IG_APP_ID` (y `IG_OAUTH_SECRET` si el "Instagram app secret" no es el mismo que `IG_APP_SECRET`), y en el panel de Meta, en *API de Instagram con inicio de sesión de Instagram* → *Configurar inicio de sesión para empresas*, agrega la URL de redirección `https://bot.skandar.online/conectar/callback`.
 
