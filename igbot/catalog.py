@@ -10,17 +10,17 @@ from pathlib import Path
 
 import yaml
 
-from . import config
+from .cuenta import cuenta
 from .pdf_marca import Cotizacion
 
 
 @lru_cache
 def load(path: str | None = None) -> dict:
-    return yaml.safe_load(Path(path or config.CATALOG_PATH).read_text(encoding="utf-8"))
+    return yaml.safe_load(Path(path or cuenta().catalog_path).read_text(encoding="utf-8"))
 
 
 def available() -> bool:
-    return Path(config.CATALOG_PATH).exists()
+    return Path(cuenta().catalog_path).exists()
 
 
 def money(amount: float, currency: str) -> str:

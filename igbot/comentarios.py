@@ -18,6 +18,7 @@ import unicodedata
 from dataclasses import dataclass
 
 from . import config
+from .cuenta import cuenta
 from .google import Google
 from .instagram import Instagram
 from .store import Store
@@ -103,22 +104,23 @@ def combine_dm(rules: list[Rule]) -> str:
     return "\n\n".join(parts)
 
 
-_cache: tuple[float, list[Rule]] | None = None
+_cache: dict[str, tuple[float, list[Rule]]] = {}  # por link de la hoja (cada cuenta tiene la suya)
 
 
 async def load_rules(google: Google) -> list[Rule]:
-    global _cache
-    if _cache and time.time() - _cache[0] < config.SHEETS_CACHE_SECONDS:
-        return _cache[1]
+    url = cuenta().sheet_comments
+    hit = _cache.get(url)
+    if hit and time.time() - hit[0] < config.SHEETS_CACHE_SECONDS:
+        return hit[1]
     from .tienda import parse_sheet
 
-    rules = parse_rules(await google.sheet_rows(*parse_sheet(config.SHEET_COMMENTS)))
-    _cache = (time.time(), rules)
+    rules = parse_rules(await google.sheet_rows(*parse_sheet(url)))
+    _cache[url] = (time.time(), rules)
     return rules
 
 
 def available() -> bool:
-    return bool(config.SHEET_COMMENTS)
+    return bool(cuenta().sheet_comments)
 
 
 SPAM = "[oculto: spam]"
@@ -161,7 +163,7 @@ async def handle(value: dict, store: Store, instagram: Instagram, google: Google
         code = shortcode(await instagram.permalink(media_id))
         rules = for_post(await load_rules(google), code)
     literal = literal_matches(rules, text)
-    if config.HIDE_SPAM and not literal and await spam_check(text):
+    if cuenta().hide_spam and not literal and await spam_check(text):
         try:
             await instagram.hide_comment(comment_id)
             await store.comment_result(comment_id, SPAM, False, False)

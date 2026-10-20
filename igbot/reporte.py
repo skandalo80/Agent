@@ -13,6 +13,7 @@ from collections import Counter
 from datetime import datetime, timedelta
 
 from . import config
+from .cuenta import cuenta
 from .google import Google
 from .comentarios import SPAM
 from .instagram import Instagram
@@ -72,7 +73,7 @@ async def build(store: Store, instagram: Instagram | None = None, until: float |
     meetings = await store.meetings_between(start.isoformat(), (start + timedelta(days=7)).isoformat())
 
     account = await store.get("account_username")
-    name = f"@{account}" if account else (config.MAIL_FROM_NAME or "tu cuenta")
+    name = f"@{account}" if account else (cuenta().mail_from_name or "tu cuenta")
     first = datetime.fromtimestamp(since, tz())
     subject = f"Reporte semanal de {name}: {first:%d/%m} al {start:%d/%m}"
 
@@ -136,14 +137,14 @@ async def send(store: Store, instagram: Instagram, google: Google | None, admins
     """Arma el reporte y lo manda. Devuelve un resumen de a dónde llegó."""
     subject, text = await build(store, instagram)
     sent = []
-    email = config.REPORT_EMAIL if email is None else email
+    email = cuenta().report_email if email is None else email
     if email and google:
         try:
-            await google.send_email(config.MAIL_FROM, config.MAIL_FROM_NAME, email, "", subject, text)
+            await google.send_email(config.MAIL_FROM, cuenta().mail_from_name, email, "", subject, text)
             sent.append(f"correo a {email}")
         except Exception:
             log.exception("No se pudo mandar el reporte por correo")
-    for admin in config.ADMIN_IG_IDS if admins is None else admins:
+    for admin in cuenta().admin_ig_ids if admins is None else admins:
         try:
             await instagram.send_text(admin, short(text))
             await store.add_bot_message(f"admin:{admin}", "[reporte semanal]\n" + short(text))
@@ -157,7 +158,7 @@ async def send(store: Store, instagram: Instagram, google: Google | None, admins
 def due(current: datetime, last_week: str | None) -> str | None:
     """La semana ISO a reportar si ya toca (día y hora del reporte) y no se ha mandado."""
     week = f"{current.isocalendar().year}-{current.isocalendar().week}"
-    if current.isoweekday() == config.REPORT_DAY and current.hour >= config.REPORT_HOUR and week != last_week:
+    if current.isoweekday() == cuenta().report_day and current.hour >= cuenta().report_hour and week != last_week:
         return week
     return None
 

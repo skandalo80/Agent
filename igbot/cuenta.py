@@ -1,0 +1,152 @@
+"""La cuenta de Instagram que se está atendiendo.
+
+Todo lo que puede cambiar de un negocio a otro (token, prompt, catálogo, hojas,
+horario, límites, a quién avisar) vive en una Cuenta, y el código lo lee con
+cuenta().<dato>. Lo que es igual para todas (llaves de Meta, de Claude y de
+Google, la dirección pública del bot) se queda en config.
+
+Hoy cada proceso atiende una sola cuenta, la de su .env. Para atender varias
+en el mismo proceso basta con fijar la cuenta antes de contestar:
+
+    with usar(otra):
+        ...  # aquí cuenta() es `otra`, también en las tareas que se creen dentro
+
+La cuenta actual es una variable de contexto: cada tarea de asyncio tiene la
+suya, así que dos conversaciones de cuentas distintas a la vez no se mezclan.
+"""
+import os
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass
+
+from . import config
+
+
+def _bool(value: str) -> bool:
+    return value in ("1", "true", "si", "sí")
+
+
+def _ids(value: str) -> set[str]:
+    return {i.strip() for i in value.split(",") if i.strip()}
+
+
+@dataclass
+class Cuenta:
+    slug: str  # "" = la principal (el vendedor); si no, el nombre de clientes/<slug>/
+    access_token: str
+    ig_account_id: str
+    db_path: str
+    prompt_path: str
+    catalog_path: str
+    quotes_dir: str
+    sheet_catalog: str
+    sheet_inventory: str
+    store_rules_path: str
+    sheet_comments: str
+    hide_spam: bool
+    buttons_path: str
+    admin_ig_ids: set[str]
+    media_slug: str
+    media_dir: str
+    report_email: str
+    report_day: int
+    report_hour: int
+    model: str
+    effort: str
+    history_window: int
+    mail_from_name: str
+    mail_cc: str
+    owner_email: str
+    timezone: str
+    business_hours: str
+    business_days: list[int]
+    meeting_minutes: int
+    min_notice_hours: float
+    max_meetings_per_user: int
+    max_emails_per_user_per_day: int
+    max_replies_per_user_per_day: int
+    max_message_chars: int
+    daily_budget_usd: float
+    human_pause_hours: float
+
+    @classmethod
+    def desde_env(cls, slug: str, env: Mapping[str, str]) -> "Cuenta":
+        """Arma la cuenta con las variables de su .env (ver .env.example)."""
+        def get(key: str, default: str = "") -> str:
+            return env.get(key) or default
+
+        client_dir = f"clientes/{slug}" if slug else ""
+        data_dir = f"data/{slug}" if slug else "data"
+        return cls(
+            slug=slug,
+            access_token=env["IG_ACCESS_TOKEN"],
+            # Si se deja vacío, se pregunta a la API al arrancar.
+            ig_account_id=get("IG_ACCOUNT_ID"),
+            db_path=get("DB_PATH", f"{data_dir}/bot.db"),
+            prompt_path=get("PROMPT_PATH", f"{client_dir}/system.md" if slug else "prompts/system.md"),
+            # Paquetes y precios de las cotizaciones (si no existe, no hay cotizaciones).
+            catalog_path=get("CATALOG_PATH", f"{client_dir}/catalogo.yaml" if slug else "negocio/catalogo.yaml"),
+            quotes_dir=get("QUOTES_DIR", f"{data_dir}/cotizaciones"),
+            # Tienda de productos: catálogo y existencias en Google Sheets (el link
+            # de cada hoja, con su #gid=) y las reglas de precios por cantidad en YAML.
+            sheet_catalog=get("SHEET_CATALOG"),
+            sheet_inventory=get("SHEET_INVENTORY"),
+            store_rules_path=get("STORE_RULES_PATH", f"{client_dir}/reglas.yaml" if slug else "negocio/reglas.yaml"),
+            # Reglas de comentarios (palabra clave -> DM): link de la pestaña de la hoja.
+            sheet_comments=get("SHEET_COMMENTS"),
+            # Ocultar comentarios que son spam en todas las publicaciones.
+            hide_spam=_bool(get("HIDE_SPAM")),
+            # Botones de inicio (preguntas que salen al abrir un chat nuevo).
+            buttons_path=get("BUTTONS_PATH", f"{client_dir}/botones.yaml" if slug else "negocio/botones.yaml"),
+            # Ids de Instagram de quienes, al escribirle al bot, hablan con el
+            # asistente interno (publicar, reactivar chats). Cambian en cada cuenta.
+            admin_ig_ids=_ids(get("ADMIN_IG_IDS")),
+            # Fotos que mandan los administradores; se sirven en
+            # PUBLIC_URL/media/<media_slug>/<nombre>.jpg.
+            media_slug=slug or "principal",
+            media_dir=f"{data_dir}/media",
+            # Reporte semanal por correo (si hay) y por DM a los administradores.
+            report_email=get("REPORT_EMAIL"),
+            report_day=int(get("REPORT_DAY", "1")),
+            report_hour=int(get("REPORT_HOUR", "9")),
+            model=get("CLAUDE_MODEL", "claude-opus-5-5"),
+            effort=get("CLAUDE_EFFORT", "low"),
+            # Mensajes recientes que el modelo ve tal cual; lo anterior va al resumen.
+            history_window=int(get("HISTORY_WINDOW", "20")),
+            mail_from_name=get("MAIL_FROM_NAME"),  # nombre que ve el cliente
+            mail_cc=get("MAIL_CC"),  # copia extra de cada correo (opcional)
+            # A quién avisar cuando alguien pide una persona (por defecto, tu Gmail).
+            owner_email=get("OWNER_EMAIL", config.MAIL_FROM),
+            timezone=get("TIMEZONE", "America/Mexico_City"),
+            business_hours=get("BUSINESS_HOURS", "09:00-18:00"),
+            business_days=[int(d) for d in get("BUSINESS_DAYS", "1,2,3,4,5").split(",")],  # 1=lunes
+            meeting_minutes=int(get("MEETING_MINUTES", "30")),
+            min_notice_hours=float(get("MIN_NOTICE_HOURS", "2")),
+            max_meetings_per_user=int(get("MAX_MEETINGS_PER_USER", "2")),
+            max_emails_per_user_per_day=int(get("MAX_EMAILS_PER_USER_PER_DAY", "3")),
+            # Límites contra abuso: respuestas por persona al día, caracteres de
+            # cada DM que se le pasan a Claude y gasto máximo diario (0 = sin límite).
+            max_replies_per_user_per_day=int(get("MAX_REPLIES_PER_USER_PER_DAY", "30")),
+            max_message_chars=int(get("MAX_MESSAGE_CHARS", "1000")),
+            daily_budget_usd=float(get("DAILY_BUDGET_USD", "5")),
+            # Horas que el bot se calla en una conversación que toma una persona.
+            human_pause_hours=float(get("HUMAN_PAUSE_HOURS", "12")),
+        )
+
+
+# La cuenta de este proceso (la de su .env); ver config.py.
+_actual: ContextVar[Cuenta] = ContextVar("cuenta", default=Cuenta.desde_env(config.CLIENTE, os.environ))
+
+
+def cuenta() -> Cuenta:
+    return _actual.get()
+
+
+@contextmanager
+def usar(c: Cuenta) -> Iterator[Cuenta]:
+    token = _actual.set(c)
+    try:
+        yield c
+    finally:
+        _actual.reset(token)

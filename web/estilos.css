@@ -133,6 +133,28 @@ footer a:hover { color: var(--claro); }
 .legal a { color: var(--acento-claro); }
 .legal .fecha { color: var(--gris); }
 
+/* Conectar tu Instagram */
+.conectar-portada { padding-bottom: 5rem; }
+.requisito { color: #6e6e73; font-size: .95rem; margin-bottom: 2.5rem; }
+.paso { background: var(--blanco); border-radius: 1.5rem; padding: 2.25rem 2rem; margin-bottom: 1.25rem; }
+.paso .num { font-size: .85rem; font-weight: 600; color: var(--acento); margin-bottom: 1.25rem; display: block; }
+.paso h3 { font-size: 1.5rem; }
+.paso p { color: #6e6e73; margin-bottom: .75rem; }
+.paso strong, .paso em { color: var(--negro); }
+.ruta { font-size: .9rem; font-weight: 500; color: var(--negro) !important; background: var(--claro); border-radius: .75rem; padding: .7rem 1rem; }
+.izquierda-acciones { justify-content: flex-start; margin-top: 1.5rem; }
+.formulario { display: grid; gap: 1rem; margin-top: 1.5rem; }
+.formulario label { display: grid; gap: .35rem; font-size: .85rem; font-weight: 500; color: var(--negro); }
+.formulario input {
+  font: inherit; font-size: 1rem; color: var(--negro); background: var(--claro);
+  border: 1px solid var(--linea-clara); border-radius: .75rem; padding: .75rem 1rem;
+}
+.formulario input:focus { outline: 2px solid var(--acento); outline-offset: 1px; border-color: transparent; }
+.formulario .boton { justify-self: start; border: 0; cursor: pointer; font: inherit; font-weight: 600; }
+.oculto { position: absolute; left: -9999px; }
+.aviso-form { font-size: .95rem; border-radius: .75rem; padding: .75rem 1rem; background: #fff7ed; color: var(--acento) !important; }
+.error-form { background: #fef2f2; color: #b91c1c !important; }
+
 @media (max-width: 40rem) {
   section { padding: 5rem 0; }
   nav a:not(:last-child) { display: none; }

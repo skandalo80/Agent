@@ -112,6 +112,16 @@ Para que el bot pueda leer las hojas (una sola vez):
 2. En tu computadora vuelve a correr `python3 scripts/google_auth.py ruta/a/client_secret.json` (ahora pide también ver tus hojas) y reemplaza `GOOGLE_REFRESH_TOKEN` en `~/ig-bot/.env` con el nuevo. Las hojas deben ser de esa misma cuenta de Google o estar compartidas con ella.
 3. `sudo systemctl restart igbot igbot@nortex`.
 
+## Conectar clientes desde la web (skandar.online/conectar)
+
+Mientras la app de Meta no tenga App Review, solo se conectan las cuentas invitadas como **Instagram Tester**. La página `/conectar` ordena el proceso:
+1. El cliente deja su @, nombre y correo. Te llega un DM (si le escribiste al bot en las últimas 24 h) y un correo a `OWNER_EMAIL`.
+2. Tú lo invitas a mano: panel de Meta → Roles de la app → **Instagram Testers** → su @. Le avisas y él acepta en instagram.com → Configuración → Apps y sitios web → Invitaciones de prueba.
+3. Pulsa **Conectar tu Instagram**: inicia sesión, autoriza y el bot guarda su token de 60 días en la tabla `conexiones` de `data/bot.db`. Te vuelve a avisar.
+4. En el servidor: `.venv/bin/python scripts/alta_cliente.py` lista las cuentas conectadas y `.venv/bin/python scripts/alta_cliente.py <usuario> <nombre-corto> <puerto>` crea `clientes/<nombre-corto>/.env` con su token, id y puerto, y dice los comandos que faltan.
+
+Una sola vez: en el `.env` principal pon `IG_APP_ID` (y `IG_OAUTH_SECRET` si el "Instagram app secret" no es el mismo que `IG_APP_SECRET`), y en el panel de Meta, en *API de Instagram con inicio de sesión de Instagram* → *Configurar inicio de sesión para empresas*, agrega la URL de redirección `https://bot.skandar.online/conectar/callback`.
+
 ## Comentarios: palabra clave → DM
 
 Cuando alguien comenta una publicación con una palabra clave (p. ej. PRECIO), el bot le manda un DM privado con el mensaje que tú definas, y opcionalmente responde en público. Las reglas viven en una hoja de Google Sheets (`SHEET_COMMENTS` en el `.env` de la cuenta) con tres columnas, en este orden:

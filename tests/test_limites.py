@@ -7,6 +7,7 @@ os.environ.update(
     DB_PATH=":memory:", DEBOUNCE_SECONDS="0.2",
 )
 
+from igbot.cuenta import cuenta  # noqa: E402
 import app as bot  # noqa: E402
 from igbot import limites  # noqa: E402
 from igbot.store import Store  # noqa: E402
@@ -45,14 +46,14 @@ async def dm(store, n):
 
 
 def test_los_mensajes_largos_se_recortan(monkeypatch):
-    monkeypatch.setattr(bot.config, "MAX_MESSAGE_CHARS", 10)
+    monkeypatch.setattr(cuenta(), "max_message_chars", 10)
     assert limites.trim("corto") == "corto"
     assert limites.trim("x" * 50) == "x" * 10 + " […mensaje recortado]"
 
 
 def test_tope_diario_por_persona(monkeypatch):
     sent, asked = setup(monkeypatch)
-    monkeypatch.setattr(bot.config, "MAX_REPLIES_PER_USER_PER_DAY", 2)
+    monkeypatch.setattr(cuenta(), "max_replies_per_user_per_day", 2)
 
     async def main():
         store = await new_store(monkeypatch)
@@ -69,7 +70,7 @@ def test_tope_diario_por_persona(monkeypatch):
 
 def test_presupuesto_diario(monkeypatch):
     sent, asked = setup(monkeypatch)
-    monkeypatch.setattr(bot.config, "DAILY_BUDGET_USD", 1.0)
+    monkeypatch.setattr(cuenta(), "daily_budget_usd", 1.0)
 
     async def main():
         store = await new_store(monkeypatch)

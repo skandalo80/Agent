@@ -9,25 +9,28 @@ from pathlib import Path
 
 from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query
 
-from . import catalog, config, limites, tienda, tools
+from . import catalog, limites, tienda, tools
+from .cuenta import cuenta
 from .google import Google
 from .instagram import Instagram
 from .store import Store
 
 log = logging.getLogger("igbot.agent")
 
-# Carpeta vacía como directorio de trabajo del SDK.
-WORKDIR = Path(config.DB_PATH).parent / "agent-cwd"
+def workdir() -> Path:
+    """Carpeta vacía como directorio de trabajo del SDK (una por cuenta)."""
+    return Path(cuenta().db_path).parent / "agent-cwd"
 
 
 async def run_claude(
     prompt: str, system: str, mcp=None, allowed=(), max_turns=5, model: str | None = None
 ) -> str:
-    WORKDIR.mkdir(parents=True, exist_ok=True)
+    cwd = workdir()
+    cwd.mkdir(parents=True, exist_ok=True)
     options = ClaudeAgentOptions(
         system_prompt=system,
-        model=model or config.MODEL,
-        effort=config.EFFORT,
+        model=model or cuenta().model,
+        effort=cuenta().effort,
         tools=[],  # sin herramientas de Claude Code
         mcp_servers=mcp or {},
         strict_mcp_config=True,
@@ -35,7 +38,7 @@ async def run_claude(
         permission_mode="dontAsk",  # lo que no está permitido se rechaza
         setting_sources=[],  # no leer configuraciones del servidor
         max_turns=max_turns,
-        cwd=str(WORKDIR),
+        cwd=str(cwd),
         extra_args={"no-session-persistence": None},  # la memoria es nuestra
     )
     result = None
@@ -56,7 +59,7 @@ def render(rows) -> str:
 async def build_prompt(store: Store, user_id: str, new_messages: list[str]) -> str:
     facts = await store.facts(user_id)
     summary = await store.summary(user_id)
-    history = await store.recent(user_id, config.HISTORY_WINDOW)
+    history = await store.recent(user_id, cuenta().history_window)
     parts = []
     if facts:
         parts.append(
@@ -68,7 +71,7 @@ async def build_prompt(store: Store, user_id: str, new_messages: list[str]) -> s
         parts.append(f"<resumen_de_antes>\n{summary}\n</resumen_de_antes>")
     if history:
         parts.append(f"<conversacion_reciente>\n{render(history)}\n</conversacion_reciente>")
-    parts.append(f"<ahora>{tools.fmt(tools.now())} ({config.TIMEZONE}), {tools.now():%Y-%m-%d}</ahora>")
+    parts.append(f"<ahora>{tools.fmt(tools.now())} ({cuenta().timezone}), {tools.now():%Y-%m-%d}</ahora>")
     parts.append(
         "<mensajes_nuevos>\n" + "\n".join(new_messages) + "\n</mensajes_nuevos>\n\n"
         "Escribe la respuesta que se enviará por DM (solo el texto del mensaje)."
@@ -82,7 +85,7 @@ STYLE_PATH = Path("prompts/comun.md")
 
 def system_prompt() -> str:
     """Las instrucciones del bot más el catálogo del negocio, si hay."""
-    system = Path(config.PROMPT_PATH).read_text(encoding="utf-8")
+    system = Path(cuenta().prompt_path).read_text(encoding="utf-8")
     system += "\n\n" + STYLE_PATH.read_text(encoding="utf-8")
     if catalog.available():
         system += f"\n\n<catalogo>\n{catalog.prompt_text()}\n</catalogo>"
@@ -119,7 +122,7 @@ async def summarize_if_needed(store: Store, user_id: str) -> None:
 
     Se espera a que sobren 10 mensajes para no resumir en cada respuesta.
     """
-    old = await store.to_summarize(user_id, keep=config.HISTORY_WINDOW)
+    old = await store.to_summarize(user_id, keep=cuenta().history_window)
     if len(old) < 10:
         return
     previous = await store.summary(user_id)

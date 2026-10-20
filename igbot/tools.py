@@ -16,6 +16,7 @@ from zoneinfo import ZoneInfo
 from claude_agent_sdk import create_sdk_mcp_server, tool
 
 from . import catalog, config, tienda
+from .cuenta import cuenta
 from .google import Google
 from .instagram import Instagram
 from .store import Store
@@ -35,7 +36,7 @@ def error(text: str) -> dict:
 
 
 def tz() -> ZoneInfo:
-    return ZoneInfo(config.TIMEZONE)
+    return ZoneInfo(cuenta().timezone)
 
 
 def now() -> datetime:
@@ -49,9 +50,9 @@ def fmt(dt: datetime) -> str:
 
 def business_window(day: date) -> tuple[datetime, datetime] | None:
     """Inicio y fin del horario de atención de ese día, o None si no se atiende."""
-    if day.isoweekday() not in config.BUSINESS_DAYS:
+    if day.isoweekday() not in cuenta().business_days:
         return None
-    start_s, end_s = config.BUSINESS_HOURS.split("-")
+    start_s, end_s = cuenta().business_hours.split("-")
     start = datetime.combine(day, datetime.strptime(start_s, "%H:%M").time(), tz())
     end = datetime.combine(day, datetime.strptime(end_s, "%H:%M").time(), tz())
     return start, end
@@ -68,8 +69,8 @@ def free_slots(day: date, busy: list[tuple[str, str]], current: datetime) -> lis
     window = business_window(day)
     if not window:
         return []
-    step = timedelta(minutes=config.MEETING_MINUTES)
-    earliest = current + timedelta(hours=config.MIN_NOTICE_HOURS)
+    step = timedelta(minutes=cuenta().meeting_minutes)
+    earliest = current + timedelta(hours=cuenta().min_notice_hours)
     slots, t = [], window[0]
     while t + step <= window[1]:
         if t >= earliest and not overlaps(t, t + step, busy):
@@ -140,8 +141,8 @@ def workspace_tools(store: Store, google: Google, user_id: str, state: dict | No
             return ok(f"No quedan horarios libres el {DAYS[day.weekday()]} {day:%d/%m}.")
         horas = ", ".join(f"{s:%H:%M}" for s in slots)
         return ok(
-            f"Libres el {DAYS[day.weekday()]} {day:%d/%m} ({config.MEETING_MINUTES} min,"
-            f" hora de {config.TIMEZONE}): {horas}"
+            f"Libres el {DAYS[day.weekday()]} {day:%d/%m} ({cuenta().meeting_minutes} min,"
+            f" hora de {cuenta().timezone}): {horas}"
         )
 
     @tool(
@@ -159,30 +160,30 @@ def workspace_tools(store: Store, google: Google, user_id: str, state: dict | No
             start = datetime.combine(day, datetime.strptime(args["hora"].strip(), "%H:%M").time(), tz())
         except ValueError:
             return error("Fecha u hora inválida; usa AAAA-MM-DD y HH:MM.")
-        end = start + timedelta(minutes=config.MEETING_MINUTES)
+        end = start + timedelta(minutes=cuenta().meeting_minutes)
         window = business_window(day)
         if not window or start < window[0] or end > window[1]:
-            return error(f"Fuera del horario de atención ({config.BUSINESS_HOURS}).")
-        if start < now() + timedelta(hours=config.MIN_NOTICE_HOURS):
-            return error(f"Se necesitan al menos {config.MIN_NOTICE_HOURS:g} horas de anticipación.")
+            return error(f"Fuera del horario de atención ({cuenta().business_hours}).")
+        if start < now() + timedelta(hours=cuenta().min_notice_hours):
+            return error(f"Se necesitan al menos {cuenta().min_notice_hours:g} horas de anticipación.")
         upcoming = await store.meetings(user_id, now().isoformat())
-        if len(upcoming) >= config.MAX_MEETINGS_PER_USER:
+        if len(upcoming) >= cuenta().max_meetings_per_user:
             return error(
                 f"Esta persona ya tiene {len(upcoming)} reuniones agendadas (máximo"
-                f" {config.MAX_MEETINGS_PER_USER}). Puede cancelar una antes."
+                f" {cuenta().max_meetings_per_user}). Puede cancelar una antes."
             )
         if overlaps(start, end, await google.busy(start.isoformat(), end.isoformat())):
             return error("Ese horario ya está ocupado. Revisa la disponibilidad otra vez.")
         nombre = args["nombre"].strip()[:80] or "Cliente"
         event_id, link = await google.create_meeting(
-            start.isoformat(), end.isoformat(), config.TIMEZONE, email,
+            start.isoformat(), end.isoformat(), cuenta().timezone, email,
             summary=f"Reunión con {nombre}",
             description=f"Agendada por el asistente de Instagram.\nMotivo: {args['motivo'][:500]}",
         )
         await store.add_meeting(event_id, user_id, start.isoformat(), email, link)
         state["acted"] = True
         return ok(
-            f"Agendada para el {fmt(start)} (hora de {config.TIMEZONE}). Invitación enviada a"
+            f"Agendada para el {fmt(start)} (hora de {cuenta().timezone}). Invitación enviada a"
             f" {email}. Link de Meet: {link or 'viene en la invitación'}. id: {event_id}"
         )
 
@@ -221,11 +222,11 @@ def workspace_tools(store: Store, google: Google, user_id: str, state: dict | No
         if problem := await check_email(email):
             return error(problem)
         sent = await store.emails_since(user_id, time.time() - 86400)
-        if sent >= config.MAX_EMAILS_PER_USER_PER_DAY:
+        if sent >= cuenta().max_emails_per_user_per_day:
             return error("Ya se le enviaron los correos permitidos hoy. Ofrece seguir por aquí.")
         subject = args["asunto"].strip()[:150]
         await google.send_email(
-            config.MAIL_FROM, config.MAIL_FROM_NAME, email, config.MAIL_CC,
+            config.MAIL_FROM, cuenta().mail_from_name, email, cuenta().mail_cc,
             subject, args["cuerpo"][:5000],
         )
         await store.log_email(user_id, email, subject)
@@ -240,7 +241,7 @@ QUOTE_ARGS = {"paquete": str, "pago": str, "bloques_extra": int}
 
 def quote_url(token: str) -> str:
     """Link público del PDF; lo sirve cualquier proceso (todas las cuentas comparten data/)."""
-    slug = f"{config.CLIENTE}/" if config.CLIENTE else ""
+    slug = f"{cuenta().slug}/" if cuenta().slug else ""
     return f"{config.PUBLIC_URL}/cotizaciones/{slug}{token}.pdf"
 
 
@@ -264,7 +265,7 @@ async def check_quote_delivery(
             return "Para mandarla por correo pídele su correo; si prefiere no darlo, mándala solo por este chat."
         if problem := await check_client_email(store, user_id, email):
             return problem
-        if await store.emails_since(user_id, time.time() - 86400) >= config.MAX_EMAILS_PER_USER_PER_DAY:
+        if await store.emails_since(user_id, time.time() - 86400) >= cuenta().max_emails_per_user_per_day:
             return "Ya se le enviaron los correos permitidos hoy. Ofrece mandarla por este chat."
     return None
 
@@ -278,7 +279,7 @@ async def deliver_quote(
     if canal != "chat":
         try:
             await google.send_email(
-                config.MAIL_FROM, sender, email, config.MAIL_CC, subject, body,
+                config.MAIL_FROM, sender, email, cuenta().mail_cc, subject, body,
                 attachments=[(f"Cotizacion-{folio}.pdf", data)],
             )
             await store.log_email(user_id, email, subject)
@@ -335,7 +336,7 @@ def quote_tools(
         number = await store.add_quote(user_id, token, q.paquete, q.pago, q.bloques_extra, q.primer_pago, email)
         folio = f"COT-{number:04d}"
         data = catalog.pdf(q, folio, nombre, empresa, email, now().date())
-        folder = Path(config.QUOTES_DIR)
+        folder = Path(cuenta().quotes_dir)
         folder.mkdir(parents=True, exist_ok=True)
         (folder / f"{token}.pdf").write_bytes(data)
 
@@ -350,7 +351,7 @@ def quote_tools(
         )
         sent = await deliver_quote(
             store, google, instagram, user_id, canal, email, folio, token, data, subject, body,
-            config.MAIL_FROM_NAME,
+            cuenta().mail_from_name,
         )
         if not sent:
             return error("No se pudo mandar la cotización en este momento. Ofrece intentarlo en un rato.")
@@ -495,7 +496,7 @@ def store_tools(
         number = await store.add_quote(user_id, token, "pedido", "", 0, order.total, email)
         folio = f"COT-{number:04d}"
         data = tienda.pdf(order, folio, nombre, empresa, email, now().date())
-        folder = Path(config.QUOTES_DIR)
+        folder = Path(cuenta().quotes_dir)
         folder.mkdir(parents=True, exist_ok=True)
         (folder / f"{token}.pdf").write_bytes(data)
 
@@ -511,7 +512,7 @@ def store_tools(
         )
         sent = await deliver_quote(
             store, google, instagram, user_id, canal, email, folio, token, data, subject, body,
-            config.MAIL_FROM_NAME or neg["nombre"],
+            cuenta().mail_from_name or neg["nombre"],
         )
         if not sent:
             return error("No se pudo mandar la cotización en este momento. Ofrece intentarlo en un rato.")
@@ -534,10 +535,10 @@ def human_tools(store: Store, google: Google | None, user_id: str, state: dict |
         {"motivo": str},
     )
     async def pasar_a_humano(args):
-        await store.pause(user_id, time.time() + config.HUMAN_PAUSE_HOURS * 3600)
+        await store.pause(user_id, time.time() + cuenta().human_pause_hours * 3600)
         await store.add_event(user_id, "humano", {"motivo": args["motivo"][:300]})
         state["acted"] = True
-        if google and config.OWNER_EMAIL:
+        if google and cuenta().owner_email:
             facts = await store.facts(user_id)
             recent = await store.recent(user_id, 10)
             body = (
@@ -545,12 +546,12 @@ def human_tools(store: Store, google: Google | None, user_id: str, state: dict |
                 + ("Datos guardados:\n" + "\n".join(f"- {k}: {v}" for k, v in facts.items()) + "\n\n" if facts else "")
                 + "Últimos mensajes:\n"
                 + "\n".join(f"{'Cliente' if r == 'user' else 'Bot'}: {t}" for r, t in recent)
-                + f"\n\nEl bot no contestará en esa conversación durante {config.HUMAN_PAUSE_HOURS:g} horas."
+                + f"\n\nEl bot no contestará en esa conversación durante {cuenta().human_pause_hours:g} horas."
                 " Contéstale desde Instagram."
             )
             try:
                 await google.send_email(
-                    config.MAIL_FROM, config.MAIL_FROM_NAME, config.OWNER_EMAIL, "",
+                    config.MAIL_FROM, cuenta().mail_from_name, cuenta().owner_email, "",
                     "Instagram: un cliente quiere hablar contigo", body,
                 )
             except Exception:

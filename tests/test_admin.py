@@ -16,6 +16,7 @@ import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from PIL import Image  # noqa: E402
 
+from igbot.cuenta import cuenta  # noqa: E402
 import app as bot  # noqa: E402
 from igbot import admin, config  # noqa: E402
 from igbot.store import Store  # noqa: E402
@@ -50,7 +51,7 @@ class FakeIG:
 
 @pytest.fixture
 def env(monkeypatch, tmp_path):
-    monkeypatch.setattr(config, "MEDIA_DIR", str(tmp_path / "media"))
+    monkeypatch.setattr(cuenta(), "media_dir", str(tmp_path / "media"))
     monkeypatch.setattr(config, "PUBLIC_URL", "https://bot.ejemplo.com")
 
     async def setup():
@@ -84,7 +85,7 @@ def test_fotos_del_admin_se_guardan_y_se_nombran(env):
     assert text.startswith(f"[foto {photos[0]}] [envió: video") and text.endswith("publica esto")
     run(admin.save_photo(store, ig, photos[0]))
     token, _, note = run(store.media(photos[0]))
-    img = Image.open(f"{config.MEDIA_DIR}/{token}.jpg")
+    img = Image.open(f"{cuenta().media_dir}/{token}.jpg")
     assert img.format == "JPEG" and img.size == (1080, 1350)  # 9:16 recortada a 4:5
     assert "4:5" in note
 
@@ -187,7 +188,9 @@ def test_webhook_manda_al_admin_con_su_asistente(monkeypatch):
     monkeypatch.setattr(bot.instagram, "close", nothing)  # otras pruebas siguen usando su cliente
     monkeypatch.setattr(bot.instagram, "refresh_loop", lambda: asyncio.sleep(0))
     monkeypatch.setattr(bot.admin, "publisher_loop", lambda *a: asyncio.sleep(0))
-    monkeypatch.setattr(bot.config, "ADMIN_IG_IDS", {"jefe"})
+    # Si se corre en lunes después de las 9, el reporte semanal llegaría primero.
+    monkeypatch.setattr(bot.reporte, "loop", lambda *a: asyncio.sleep(0))
+    monkeypatch.setattr(cuenta(), "admin_ig_ids", {"jefe"})
     monkeypatch.setattr(bot, "account_id", "negocio")
     monkeypatch.setattr(bot, "MULTI_ACCOUNT", False)
 
