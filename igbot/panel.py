@@ -262,9 +262,15 @@ main .boton.secundario{background:transparent;color:var(--negro);border-color:va
 .escribiendo span:nth-child(2){animation-delay:.15s}
 .escribiendo span:nth-child(3){animation-delay:.3s}
 @keyframes puntos{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
-.compacta{padding:2.25rem 0 2rem}
-/* La franja negra mide lo mismo en todas las secciones (la más alta es Contenido). */
-@media(min-width:561px){.compacta{min-height:18rem}}
+.compacta{padding:2.25rem 0 2rem;display:flex}
+/* La franja negra mide lo mismo en todas las secciones: el resumen (.hoy) va siempre pegado abajo. */
+@media(min-width:561px){.compacta{min-height:28.5rem}.compacta .hoy .kpi{min-height:8.6rem}}
+.compacta>.contenedor{display:flex;flex-direction:column;width:100%}
+.compacta .hoy{margin-top:auto}
+.compacta .estado,.compacta .pestanas{margin-bottom:1.25rem}
+.titulo-fila{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap}
+.oscuro .boton.ajuste{padding:.55rem 1.1rem;font-size:.9rem}
+.oscuro .boton.ajuste.on{background:var(--claro);color:var(--negro)}
 .compacta h1{font-size:clamp(1.9rem,5vw,2.75rem)}
 .compacta .bajada{font-size:1.05rem;margin-top:.5rem}
 .compacta+main{padding-top:1.5rem}
@@ -349,7 +355,7 @@ label.check input{width:auto;margin:0}
 .si-precio{display:none}
 form:has(#con_precio:checked) .si-precio{display:block}
 form:has(input[name=modo][value=libre]:checked) .si-plantilla{display:none}
-.si-propio{display:none}form:has(#propio:checked) .si-propio{display:block}form:has(#propio:checked) .no-propio{display:none}
+.si-libre{display:none}form:has(input[name=modo][value=libre]:checked) .si-libre{display:block}
 .minis{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-top:.75rem}
 .minis figure{margin:0}.minis figcaption{color:#6e6e73;font-size:.8rem;margin-top:.35rem;line-height:1.3}
 .pieza.cargando{opacity:.45;transition:opacity .2s}
@@ -386,9 +392,9 @@ input[type=file]{font:inherit;font-size:.9rem;margin-top:.75rem;max-width:100%}
 .kpi span{display:block;color:#6e6e73;font-size:.85rem}
 .kpi b{display:block;font-size:2rem;font-weight:600;letter-spacing:-.03em;line-height:1.15;margin:.2rem 0}
 .kpi small{color:#6e6e73;font-size:.85rem}
-.hoy{margin:1rem 0 0;grid-template-columns:repeat(4,1fr)}
+.hoy{margin:1rem 0 0;grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr))}
 .hoy .kpi{background:var(--grafito);color:var(--claro);border:1px solid var(--linea-oscura)}
-.hoy .kpi b{font-size:1.6rem}.hoy .kpi span,.hoy .kpi small{color:#a1a1a6}
+.hoy .kpi b{font-size:1.6rem}.hoy .kpi span,.hoy .kpi small{color:#a1a1a6}.hoy .kpi small{display:block;line-height:1.35}
 .barra{height:.35rem;border-radius:999px;background:var(--linea-oscura);margin-top:.5rem;overflow:hidden}
 .barra i{display:block;height:100%;background:var(--acento-claro)}
 .avatar{width:2.6rem;height:2.6rem;border-radius:50%;background:var(--claro);display:grid;place-items:center;font-weight:600;flex:none}
@@ -548,9 +554,21 @@ def hace(t: float) -> str:
     return "ayer" if s < 2 * 86400 else f"hace {int(s // 86400)} días"
 
 
+def kpi(etiqueta: str, valor: str, nota: str, extra: str = "") -> str:
+    return f'<div class="kpi"><span>{etiqueta}</span><b>{valor}</b><small>{nota}</small>{extra}</div>'
+
+
+def restantes(etiqueta: str, usados: int, tope: int, que: str) -> str:
+    """Cuánto le queda del plan este mes, con su barra. Pasarse no corta nada: se ve como extra."""
+    barra = f'<div class="barra"><i style="width:{min(100, usados / tope * 100):.0f}%"></i></div>'
+    if usados > tope:
+        return kpi(etiqueta, "0", f"{usados - tope:,} {que} extra este mes", barra)
+    return kpi(etiqueta, f"{tope - usados:,}", f"de {tope:,} este mes", barra)
+
+
 async def hoy(c: Cuenta) -> str:
     """Los números del día, debajo del estado. El gasto en dólares solo lo ve la cuenta principal:
-    a un cliente le diría cuánto cuesta su asistente; él ve sus mensajes del mes."""
+    a un cliente le diría cuánto cuesta su asistente; él ve los mensajes que le quedan de su plan."""
     from datetime import datetime
     from zoneinfo import ZoneInfo
 
@@ -563,8 +581,6 @@ async def hoy(c: Cuenta) -> str:
     respuesta = resultados.conversaciones(filas, c, inicio, 1)["respuesta"]
     en_pausa = len(await c.store.paused_list(time.time()))
 
-    def kpi(etiqueta: str, valor: str, nota: str, extra: str = "") -> str:
-        return f'<div class="kpi"><span>{etiqueta}</span><b>{valor}</b><small>{nota}</small>{extra}</div>'
     chats = len(set(contestados))
     cajas = [
         kpi("Contestados hoy", str(len(contestados)), f"en {chats} chat{'s' if chats != 1 else ''}"),
@@ -581,7 +597,11 @@ async def hoy(c: Cuenta) -> str:
                          f"de US${tope:.2f} al día" if tope > 0 else "sin límite diario", barra))
     else:
         mes = inicio.replace(day=1).timestamp()
-        cajas.append(kpi("Mensajes este mes", str(await c.store.client_messages_since(mes)), "de tus clientes"))
+        if c.mensajes_mes > 0:
+            cajas.append(restantes("Mensajes restantes", await c.store.all_bot_replies_since(mes), c.mensajes_mes,
+                                   "respuestas"))
+        else:
+            cajas.append(kpi("Mensajes este mes", str(await c.store.client_messages_since(mes)), "de tus clientes"))
     return f'<div class="hoy kpis">{"".join(cajas)}</div>'
 
 

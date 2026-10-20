@@ -454,6 +454,13 @@ class Store:
             (since,))
         return (await cur.fetchone())[0]
 
+    async def all_bot_replies_since(self, since: float) -> int:
+        """Respuestas del bot a todos los clientes desde `since` (las del dueño llevan mid)."""
+        cur = await self.db.execute(
+            "SELECT COUNT(*) FROM messages WHERE role = 'assistant' AND user_id NOT LIKE 'admin:%'"
+            " AND mid IS NULL AND created_at >= ?", (since,))
+        return (await cur.fetchone())[0]
+
     async def unpause(self, user_id: str) -> None:
         await self.db.execute("DELETE FROM paused WHERE user_id = ?", (user_id,))
         await self.db.commit()

@@ -232,15 +232,15 @@ async def pagina(c: Cuenta, rango: str) -> HTMLResponse:
                        for k, nombre in RANGOS.items())
     if d["recibidos"]:
         pct = round(d["resueltas"] / d["escribieron"] * 100) if d["escribieron"] else 0
-        cuerpo = (
-            '<div class="kpis">'
-            + kpi("Conversaciones", d["personas"], f'{d["nuevas"]} nuevas')
-            + kpi("Mensajes recibidos", d["recibidos"], f'{plural(d["respuestas_bot"], "respuesta")} de tu asistente')
-            + kpi("Resueltas por tu asistente", f"{pct}%",
-                  f'{d["resueltas"]} de {d["escribieron"]} sin pasar a una persona')
+        numeros = (
+            '<div class="hoy kpis">'
+            + kpi("Conversaciones", d["personas"], plural(d["nuevas"], "nueva"))
+            + kpi("Mensajes recibidos", d["recibidos"], plural(d["respuestas_bot"], "respuesta"))
+            + kpi("Resueltas solas", f"{pct}%", f'{d["resueltas"]} de {d["escribieron"]} sin ayuda')
             + kpi("Tiempo de respuesta", duracion(d["respuesta"]), "lo normal (mediana)")
-            + kpi("Fuera de horario", d["fuera"], f"respuestas fuera de tu horario ({dias_de_horario(c)})")
-            + "</div>"
+            + kpi("Fuera de horario", d["fuera"], plural(d["fuera"], "respuesta"))
+            + "</div>")
+        cuerpo = (
             '<div class="tarjeta"><span class="num">Por día</span><h2>Mensajes recibidos</h2>'
             f"{por_dia(d)}</div>"
             '<div class="tarjeta"><span class="num">Por hora</span><h2>A qué hora te escriben</h2>'
@@ -248,6 +248,7 @@ async def pagina(c: Cuenta, rango: str) -> HTMLResponse:
             '<div class="leyenda"><span><i></i>Dentro de tu horario</span><span><i class="fuera"></i>Fuera de tu horario</span></div></div>'
         )
     else:
+        numeros = ""
         cuerpo = ('<div class="tarjeta"><h2>Aún no hay mensajes en este periodo</h2>'
                   '<p class="ayuda">Cuando tu asistente esté encendido y te escriban, aquí verás lo que hizo por ti.</p>'
                   '<div class="acciones"><a class="boton" href="/panel/asistente">Ir a tu asistente</a></div></div>')
@@ -259,7 +260,7 @@ async def pagina(c: Cuenta, rango: str) -> HTMLResponse:
         '<p class="antetitulo">Resultados</p>'
         f'<h1>@{escape(await panel.usuario(c))}<span class="punto">.</span></h1>'
         f'<p class="bajada" style="margin-left:0">Lo que hizo tu asistente en los últimos {RANGOS[rango]}.</p>'
-        f'<nav class="pestanas">{pestanas}</nav>'
+        f'<nav class="pestanas">{pestanas}</nav>{numeros}'
         "</div></section>"
         f'<main><div class="contenedor">{cuerpo}'
         '<p class="nota">Los números se actualizan cada 10 minutos.</p></div></main>'

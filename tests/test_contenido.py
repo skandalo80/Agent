@@ -210,7 +210,7 @@ def test_pasado_el_cupo_pide_confirmar_la_imagen_extra(cliente, monkeypatch):
                     data={"objetivo": "historia", "tema": "Cómo empezamos", "extra": "1", "accion": "generar"})
     assert "post/2" in r.text and len(proveedor.llamadas) == 2
     assert client.portal.call(imagenes.usadas, c.store) == (1, 1)
-    assert "1 de 1 imágenes de tu plan este mes · 1 extra" in client.get("/panel/contenido").text
+    assert "1 imágenes extra este mes" in client.get("/panel/contenido").text
 
     # Otra imagen para un post también pide confirmar.
     r = client.post("/panel/contenido/post/2", headers=ORIGEN, data={"titulo": "Cómo empezamos", "accion": "otra"})
@@ -371,7 +371,7 @@ def test_diseno_libre_con_el_estilo_de_sus_fotos(cliente, monkeypatch):
     client, c, llamadas, proveedor = cliente
     monkeypatch.setattr(c, "imagenes_mes", 5)
     marca = {"principal": "#111111", "acento": "#E8590C", "fondo": "#000000", "fuente": "Inter", "peso": "700",
-             "estilo": "premium", "plantilla": "editorial", "modo": "libre", "fotos_estilo": "1", "propio": "1",
+             "estilo": "premium", "plantilla": "editorial", "modo": "libre", "fotos_estilo": "1",
              "estilo_propio": "Fondos oscuros, minimalista, el celular como protagonista."}
     r = client.post("/panel/contenido/marca", headers=ORIGEN, data={**marca, "accion": "subir"},
                     files={"fotos": ("post.png", png(), "image/png")})
@@ -407,31 +407,23 @@ def test_diseno_libre_con_el_estilo_de_sus_fotos(cliente, monkeypatch):
     assert "Do not include any text" in proveedor.llamadas[-1][0]
 
 
-def test_estilo_propio_reemplaza_a_los_de_la_lista(cliente, monkeypatch):
+def test_el_estilo_depende_del_modo_del_post(cliente, monkeypatch):
     client, c, llamadas, proveedor = cliente
     monkeypatch.setattr(c, "imagenes_mes", 5)
     base = {"principal": "#111111", "acento": "#E8590C", "fondo": "#000000", "fuente": "Inter", "peso": "700",
             "estilo": "limpio", "estilo_propio": "Fondos oscuros y detalles en naranja.", "accion": "guardar"}
-    # Sin la casilla, la descripción se guarda pero manda el estilo de la lista.
+    # Ya no hay casilla: con plantilla mandan los estilos de la lista; en libre, su descripción.
     r = client.post("/panel/contenido/marca", headers=ORIGEN, data=base)
-    assert 'id="propio" name="propio" value="1">' in r.text
-    client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "marca"})
+    assert 'name="propio"' not in r.text and 'class="si-libre"' in r.text
+    client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "marca", "modo": "plantilla"})
     assert "Studio photography" in proveedor.llamadas[-1][0] and "naranja" not in proveedor.llamadas[-1][0]
     assert "<estilo_de_la_marca>" not in llamadas[-1][0]
 
-    r = client.post("/panel/contenido/marca", headers=ORIGEN, data={**base, "propio": "1"})
-    assert 'id="propio" name="propio" value="1" checked>' in r.text
-    client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "marca"})
+    client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "marca", "modo": "libre"})
     assert "naranja" in proveedor.llamadas[-1][0] and "Studio photography" not in proveedor.llamadas[-1][0]
-    # La vista previa no usa la foto de ejemplo de un estilo de la lista.
-    assert client.get("/panel/contenido/muestra.jpg?propio=1").status_code == 200
-
-
-def test_marca_viejo_con_descripcion_usa_su_estilo():
-    assert contenido.usa_propio({"estilo": "limpio", "estilo_propio": "Oscuro"})
-    assert not contenido.usa_propio({"estilo": "limpio"})
-    assert not contenido.usa_propio({"estilo_propio": "Oscuro", "propio": False})
-    assert contenido.usa_propio({"propio": "1"}) and not contenido.usa_propio({"propio": "0", "estilo_propio": "x"})
+    assert "<estilo_de_la_marca>" in llamadas[-1][0]
+    # La vista previa en libre no usa la foto de ejemplo de un estilo de la lista.
+    assert client.get("/panel/contenido/muestra.jpg?modo=libre").status_code == 200
 
 
 def test_orden_de_tu_marca_y_miniaturas(cliente, monkeypatch):
@@ -527,3 +519,21 @@ def test_bienvenida_con_contenido_y_lo_que_falta(cliente, monkeypatch):
     client.post("/panel/contenido/marca", headers=ORIGEN, data={"principal": "#111111", "accion": "guardar"})
     assert "Te falta configurar" not in client.get("/panel/asistente").text
     assert "Te falta configurar" not in client.get("/panel/contenido").text
+
+
+def test_resumen_del_plan_arriba(cliente, monkeypatch):
+    client, c, *_ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 40)
+    monkeypatch.setattr(c, "posts_mes", 12)
+    monkeypatch.setattr(c, "mensajes_mes", 1000)
+    r = client.get("/panel/contenido")
+    assert "Posts restantes" in r.text and "de 12 este mes" in r.text and "de 40 este mes" in r.text
+    # Tu marca es un ajuste: va junto al nombre, no entre las pestañas.
+    nav = r.text.split('<nav class="pestanas">')[1].split("</nav>")[0]
+    assert "/panel/contenido/marca" not in nav and 'class="boton secundario ajuste"' in r.text
+    assert 'ajuste on"' in client.get("/panel/contenido/marca").text
+    r = client.get("/panel/asistente")
+    assert "Mensajes restantes" in r.text and "de 1,000 este mes" in r.text and "Gasto de hoy" not in r.text
+    # Sin tope en su plan, sale solo el conteo del mes.
+    monkeypatch.setattr(c, "mensajes_mes", 0)
+    assert "Mensajes este mes" in client.get("/panel/asistente").text

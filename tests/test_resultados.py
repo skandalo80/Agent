@@ -102,8 +102,8 @@ def test_basico_sin_mensajes_y_con_mensajes(cliente, monkeypatch):
     assert "Aún no hay mensajes" in client.get("/panel/resultados").text  # sigue en caché
     monkeypatch.setattr(resultados, "_cache", {})
     html = client.get("/panel/resultados").text
-    assert "1 de 2 sin pasar a una persona" in html and "50%" in html
-    assert "1 respuesta de tu asistente" in html
+    assert "1 de 2 sin ayuda" in html and "50%" in html
+    assert ">1 respuesta<" in html
     assert html.count("<svg") == 2 and "no cuenta" not in html
     assert "De comentario a mensaje" not in html  # Básico: sin bloque de contenido
     assert 'class="on">30 días' in client.get("/panel/resultados?dias=30").text
