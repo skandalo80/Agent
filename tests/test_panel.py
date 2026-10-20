@@ -107,7 +107,7 @@ def test_cliente_se_conecta_configura_y_enciende(monkeypatch, tmp_path):
         assert client.post("/panel/guardar", headers={"Origin": "https://otro.com", "Sec-Fetch-Site": "cross-site"},
                            data={**datos, "accion": "generar"}).status_code == 403
         r = client.post("/panel/guardar", headers=ORIGEN, data={**datos, "accion": "generar"})
-        assert "Cafetería en Puebla" in r.text and "Revisa las instrucciones" in r.text
+        assert "Cafetería en Puebla" in r.text and "revísalas y pulsa Guardar" in r.text
         assert "Cafetería" not in Path(c.prompt_path).read_text()  # generar no guarda
 
         r = client.post("/panel/guardar", headers=ORIGEN,
