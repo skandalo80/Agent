@@ -262,10 +262,13 @@ def test_script_y_fuentes(cliente):
 def test_chats_en_pausa(cliente):
     client, c, *_ = cliente
     import time
-    assert "Ninguno: tu asistente está contestando" in client.get("/panel/asistente").text
-    client.portal.call(c.store.pause, "ana", time.time() + 3600)
     r = client.get("/panel/asistente")
-    assert "@ana" in r.text and "Vuelve a contestar solo en 1 h" in r.text and "Reactivar" in r.text
+    assert "Conversaciones recientes" in r.text and "Aún no te escribe nadie" in r.text
+    assert "Contestados hoy" in r.text and "Mensajes este mes" in r.text and "Gasto de hoy" not in r.text
+    client.portal.call(c.store.pause, "ana", time.time() + 3600)
+    r = client.get("/panel/asistente?ver=pausa")
+    assert "@ana" in r.text and "vuelve a contestar solo en 1 h" in r.text and "Reactivar" in r.text
+    assert 'href="https://ig.me/m/ana"' in r.text and "En pausa (1)" in r.text
     assert client.post("/panel/pausas", data={"usuario": "ana", "accion": "reactivar"}).status_code == 403  # sin Origin
     r = client.post("/panel/pausas", headers=ORIGEN, data={"usuario": "ana", "accion": "extender"})
     assert "sigue en pausa 12 h más" in r.text
@@ -274,6 +277,28 @@ def test_chats_en_pausa(cliente):
     assert "vuelve a contestarle a @ana" in r.text and client.portal.call(c.store.paused_until, "ana") == 0
     assert "ya no estaba en pausa" in client.post("/panel/pausas", headers=ORIGEN,
                                                   data={"usuario": "beto", "accion": "reactivar"}).text
+
+
+def test_conversaciones_recientes_y_tomar_un_chat(cliente):
+    client, c, *_ = cliente
+    store = c.store
+    client.portal.call(store.add_incoming, "beto", "m1", "¿Tienen lugar mañana?")
+    ids = [i for i, _ in client.portal.call(store.pending, "beto")]
+    client.portal.call(store.mark_answered, "beto", ids, "Sí, a las 5.")
+    client.portal.call(store.add_incoming, "caro", "m2", "Hola, ¿precios?")
+    r = client.get("/panel/asistente")
+    assert "@beto" in r.text and "«¿Tienen lugar mañana?»" in r.text and "Asistente" in r.text
+    assert "@caro" in r.text and "Sin contestar" in r.text and r.text.index("@caro") < r.text.index("@beto")
+    assert "Tomar este chat" in r.text and "Sin contestar (1)" in r.text
+    assert '<b>1</b><small>en 1 chat</small>' in r.text and "Mensajes este mes</span><b>2</b>" in r.text
+    r = client.get("/panel/asistente?ver=sin")
+    assert "@caro" in r.text and "@beto" not in r.text
+
+    r = client.post("/panel/pausas", headers=ORIGEN, data={"usuario": "beto", "accion": "tomar"})
+    assert "el asistente no le contesta a @beto en 12 h" in r.text and "En pausa · tú" in r.text
+    assert client.portal.call(store.paused_until, "beto") > 0
+    assert "No encontramos ese chat" in client.post("/panel/pausas", headers=ORIGEN,
+                                                    data={"usuario": "nadie", "accion": "tomar"}).text
 
 
 TEMAS = {"temas": [{"tema": "Horario de fin de semana", "personas": 4, "ejemplo": "¿Abren el sábado?",

@@ -427,6 +427,28 @@ class Store:
         )
         return list(await cur.fetchall())
 
+    async def recent_chats(self, limit: int) -> list[tuple[str, float, str, str, str]]:
+        """Los últimos chats con clientes: (usuario, hora, rol y texto del último mensaje,
+        último mensaje del cliente), del más reciente al más viejo."""
+        cur = await self.db.execute(
+            "SELECT m.user_id, m.created_at, m.role, m.text, COALESCE((SELECT u.text FROM messages u"
+            " WHERE u.user_id = m.user_id AND u.role = 'user' ORDER BY u.id DESC LIMIT 1), '')"
+            " FROM messages m JOIN (SELECT MAX(id) AS id FROM messages WHERE user_id NOT LIKE 'admin:%'"
+            " GROUP BY user_id) ultimo ON m.id = ultimo.id ORDER BY m.id DESC LIMIT ?",
+            (limit,),
+        )
+        return list(await cur.fetchall())
+
+    async def has_chat(self, user_id: str) -> bool:
+        cur = await self.db.execute("SELECT 1 FROM messages WHERE user_id = ? LIMIT 1", (user_id,))
+        return await cur.fetchone() is not None
+
+    async def client_messages_since(self, since: float) -> int:
+        cur = await self.db.execute(
+            "SELECT COUNT(*) FROM messages WHERE role = 'user' AND user_id NOT LIKE 'admin:%' AND created_at >= ?",
+            (since,))
+        return (await cur.fetchone())[0]
+
     async def unpause(self, user_id: str) -> None:
         await self.db.execute("DELETE FROM paused WHERE user_id = ?", (user_id,))
         await self.db.commit()

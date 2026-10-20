@@ -144,6 +144,7 @@ def test_la_cuenta_principal_edita_sus_instrucciones_aparte(monkeypatch, tmp_pat
 
         r = client.get("/panel/asistente")
         assert "Cuenta principal" in r.text and "Generar instrucciones" in r.text and "PROMPT DEL VENDEDOR" in r.text
+        assert "Gasto de hoy" in r.text and "Mensajes este mes" not in r.text
         # Lo que guarda va aparte (fuera de git) y manda sobre el del repo hasta que lo restaure.
         r = client.post("/panel/guardar", headers=ORIGEN, data={"accion": "guardar", "prompt": "PROMPT DE LA DEMO"})
         assert Path("prompts/system.md").read_text() == "PROMPT DEL VENDEDOR"
