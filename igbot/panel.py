@@ -244,6 +244,14 @@ main .boton.secundario{background:transparent;color:var(--negro);border-color:va
 .acciones{display:flex;gap:.75rem;flex-wrap:wrap;align-items:center;margin-top:1.5rem}
 .centro .acciones{justify-content:center;margin-top:2.25rem}
 .estado{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-top:2rem;padding:1rem 1.25rem;border:1px solid var(--linea-oscura);border-radius:1.25rem;background:var(--grafito)}
+.acciones-estado{display:flex;gap:.6rem;flex-wrap:wrap}
+.chat{background:var(--blanco);border-radius:1.5rem;padding:1.5rem}
+.burbuja{max-width:82%;width:fit-content;padding:.6rem .95rem;border-radius:1.2rem;font-size:.95rem;line-height:1.45;margin-bottom:.55rem;white-space:pre-wrap;overflow-wrap:anywhere}
+.burbuja.cliente{background:var(--negro);color:var(--claro);margin-left:auto;border-bottom-right-radius:.35rem}
+.burbuja.agente{background:var(--claro);border:1px solid var(--linea-clara);border-bottom-left-radius:.35rem}
+.vacio{color:#6e6e73;text-align:center;padding:2rem 0}
+.escribir{display:flex;gap:.6rem;margin-top:1rem}
+.escribir input{flex:1}
 .luz{display:inline-block;width:.6rem;height:.6rem;border-radius:50%;margin-right:.5rem;background:var(--acento-claro)}
 .luz.on{background:#30d158}
 main{padding:3rem 0 5rem}
@@ -338,7 +346,8 @@ async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt
         f'<div class="estado"><div><span class="luz{" on" if encendido else ""}"></span>'
         f'{"Está contestando tus mensajes." if encendido else "Está en pausa: no contesta mensajes."}</div>'
         f'<form method="post" action="/panel/estado"><input type="hidden" name="activo" value="{"0" if encendido else "1"}">'
-        f'<button class="boton{" secundario" if encendido else ""}">{"Pausar" if encendido else "Encender"}</button></form></div>'
+        f'<div class="acciones-estado"><a class="boton secundario" href="/panel/probar#ultimo">Probar mi asistente</a>'
+        f'<button class="boton{" secundario" if encendido else ""}">{"Pausar" if encendido else "Encender"}</button></div></form></div>'
         "</div></section>"
         '<main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
@@ -428,6 +437,103 @@ async def estado(request: Request):
     await c.store.set("bot_activo", "1" if encender else "0")
     log.info("@%s %s su asistente desde el panel", await usuario(c), "encendió" if encender else "pausó")
     return await panel_de(c, "Tu asistente ya está contestando." if encender else "Tu asistente quedó en pausa.")
+
+
+# --- probar el asistente antes de encenderlo ---
+
+MAX_PRUEBA_TURNOS = 20  # mensajes que se recuerdan en el chat de prueba
+MAX_PRUEBAS_DIA = 40  # mensajes de prueba por cuenta al día (cada uno cuesta una llamada a Claude)
+MAX_MENSAJE_PRUEBA = 500
+NOTA_PRUEBA = (
+    "\n\n<prueba>Esta conversación es una prueba del dueño del negocio desde su panel. Contesta"
+    " exactamente como le contestarías a un cliente. Aquí no tienes herramientas: si te tocaría"
+    " pasar con una persona, solo di lo que le dirías al cliente.</prueba>"
+)
+
+
+async def historial(c: Cuenta) -> list[list[str]]:
+    return json.loads(await c.store.get("prueba") or "[]")
+
+
+async def pruebas_hoy(c: Cuenta) -> tuple[str, int]:
+    from .limites import today_start
+    with usar(c):  # el día empieza a medianoche en la zona horaria de la cuenta
+        clave = f"pruebas:{int(today_start())}"
+    return clave, int(await c.store.get(clave) or 0)
+
+
+async def responder_prueba(c: Cuenta, previos: list[list[str]], texto: str) -> str:
+    """La respuesta del asistente con sus instrucciones guardadas, sin herramientas."""
+    from . import agent, tools  # import tardío: agent importa el SDK
+    with usar(c):
+        partes = []
+        if previos:
+            partes.append(f"<conversacion_reciente>\n{agent.render(previos)}\n</conversacion_reciente>")
+        partes.append(f"<ahora>{tools.fmt(tools.now())} ({c.timezone}), {tools.now():%Y-%m-%d}</ahora>")
+        partes.append(f"<mensajes_nuevos>\n{texto}\n</mensajes_nuevos>\n\n"
+                      "Escribe la respuesta que se enviará por DM (solo el texto del mensaje).")
+        return await agent.run_claude("\n\n".join(partes), agent.system_prompt() + NOTA_PRUEBA, max_turns=1)
+
+
+async def pagina_prueba(c: Cuenta, aviso: str = "") -> HTMLResponse:
+    mensajes = await historial(c)
+    burbujas = "".join(
+        f'<div class="burbuja {"cliente" if rol == "user" else "agente"}">{escape(texto)}</div>'
+        for rol, texto in mensajes
+    ) or '<p class="vacio">Escribe como si fueras un cliente. Usa las instrucciones que guardaste.</p>'
+    _, usadas = await pruebas_hoy(c)
+    return pagina(
+        cabecera(salir=True)
+        + '<section class="oscuro portada"><div class="contenedor">'
+        '<p class="antetitulo">Prueba tu asistente</p>'
+        f'<h1>@{escape(await usuario(c))}<span class="punto">.</span></h1>'
+        '<p class="bajada" style="margin-left:0">Así contestaría tus mensajes. Nada de esto llega a Instagram.</p>'
+        "</div></section>"
+        '<main><div class="contenedor">'
+        + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
+        + f'<div class="chat">{burbujas}<span id="ultimo"></span>'
+        '<form method="post" action="/panel/probar#ultimo" class="escribir">'
+        f'<input type="text" name="mensaje" maxlength="{MAX_MENSAJE_PRUEBA}" placeholder="Escribe un mensaje" required autofocus>'
+        '<button class="boton" name="accion" value="enviar">Enviar</button></form></div>'
+        f'<p class="ayuda" style="margin-top:.75rem">Te quedan {max(MAX_PRUEBAS_DIA - usadas, 0)} mensajes de prueba hoy.</p>'
+        '<div class="acciones"><a class="boton secundario" href="/panel">← Volver al panel</a>'
+        '<form method="post" action="/panel/probar"><button class="boton secundario" name="accion" value="reiniciar">'
+        "Empezar de nuevo</button></form></div>"
+        "</div></main>"
+    )
+
+
+@router.get("/probar")
+async def ver_prueba(request: Request):
+    c = cuenta_de_sesion(request)
+    return await pagina_prueba(c) if c else RedirectResponse("/panel", status_code=303)
+
+
+@router.post("/probar")
+async def probar(request: Request):
+    de_aqui(request)
+    if not (c := cuenta_de_sesion(request)):
+        return RedirectResponse("/panel", status_code=303)
+    f = await form(request)
+    if f.get("accion") == "reiniciar":
+        await c.store.set("prueba", "[]")
+        return await pagina_prueba(c)
+    texto = f.get("mensaje", "").strip()[:MAX_MENSAJE_PRUEBA]
+    if not texto:
+        return await pagina_prueba(c)
+    clave, usadas = await pruebas_hoy(c)
+    if usadas >= MAX_PRUEBAS_DIA:
+        return await pagina_prueba(c, "Llegaste al límite de mensajes de prueba de hoy. Mañana puedes seguir probando.")
+    previos = (await historial(c))[-MAX_PRUEBA_TURNOS:]
+    await c.store.set(clave, str(usadas + 1))
+    try:
+        respuesta = await responder_prueba(c, previos, texto)
+    except Exception:
+        log.exception("Falló la prueba del asistente de %s", c.slug)
+        return await pagina_prueba(c, "Tu asistente no pudo contestar esta vez. Intenta de nuevo en un momento.")
+    previos += [["user", texto], ["assistant", respuesta]]
+    await c.store.set("prueba", json.dumps(previos[-MAX_PRUEBA_TURNOS:], ensure_ascii=False))
+    return await pagina_prueba(c)
 
 
 @router.post("/salir")

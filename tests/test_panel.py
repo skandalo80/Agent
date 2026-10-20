@@ -124,3 +124,50 @@ def test_cliente_se_conecta_configura_y_enciende(monkeypatch, tmp_path):
         otro = TestClient(bot.app, base_url="https://testserver")
         r = otro.post("/panel/estado", headers=ORIGEN, data={"activo": "0"}, follow_redirects=False)
         assert r.status_code == 303 and client.portal.call(panel.activo, c)
+
+
+def test_probar_mi_asistente(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    Path("prompts").mkdir()
+    Path("prompts/comun.md").write_text("REGLAS COMUNES")
+    setup(monkeypatch)
+    monkeypatch.setattr(bot, "Instagram", lambda store: FakeInstagram())
+    monkeypatch.setattr(bot, "cuentas", list(bot.cuentas))
+    monkeypatch.setattr(bot, "dispatchers", dict(bot.dispatchers))
+    monkeypatch.setattr(bot.principal, "ig_account_id", "negocio")
+    vistos = []
+
+    async def fake_claude(prompt, system, mcp=None, allowed=(), max_turns=5, model=None):
+        vistos.append((prompt, system, mcp))
+        return f"respuesta {len(vistos)}"
+
+    monkeypatch.setattr(bot.agent, "run_claude", fake_claude)
+    monkeypatch.setattr(panel, "MAX_PRUEBAS_DIA", 2)
+
+    with TestClient(bot.app, base_url="https://testserver") as client:
+        assert client.get("/panel/probar", follow_redirects=False).status_code == 303  # sin sesión
+        r = client.get("/conectar/instagram", follow_redirects=False)
+        state = parse_qs(urlparse(r.headers["location"]).query)["state"][0]
+        client.get(f"/conectar/callback?code=abc&state={state}", follow_redirects=False)
+        c = bot.buscar("1784")
+        client.post("/panel/guardar", headers=ORIGEN, data={"accion": "guardar", "prompt": "Eres el café."})
+
+        assert "Probar mi asistente" in client.get("/panel").text
+        assert client.post("/panel/probar", data={"mensaje": "hola"}).status_code == 403  # sin Origin
+        r = client.post("/panel/probar", headers=ORIGEN, data={"mensaje": "¿Abren hoy?", "accion": "enviar"})
+        assert "¿Abren hoy?" in r.text and "respuesta 1" in r.text
+        prompt, system, mcp = vistos[0]
+        # Sus instrucciones guardadas + las reglas comunes, sin herramientas.
+        assert system.startswith("Eres el café.") and "REGLAS COMUNES" in system and not mcp
+        assert "¿Abren hoy?" in prompt
+
+        r = client.post("/panel/probar", headers=ORIGEN, data={"mensaje": "¿Y mañana?"})
+        assert "Usuario: ¿Abren hoy?" in vistos[1][0] and "Tú: respuesta 1" in vistos[1][0]
+        r = client.post("/panel/probar", headers=ORIGEN, data={"mensaje": "otra"})
+        assert "límite de mensajes de prueba" in r.text and len(vistos) == 2
+
+        r = client.post("/panel/probar", headers=ORIGEN, data={"accion": "reiniciar"})
+        assert "respuesta 1" not in r.text
+        assert client.portal.call(panel.historial, c) == []
+        # Nada de la prueba llega a Instagram ni a la cola del bot.
+        assert c.instagram.sent == [] and client.portal.call(c.store.pending_users) == []
