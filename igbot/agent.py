@@ -85,7 +85,7 @@ STYLE_PATH = Path("prompts/comun.md")
 
 def system_prompt() -> str:
     """Las instrucciones del bot más el catálogo del negocio, si hay."""
-    system = Path(cuenta().prompt_path).read_text(encoding="utf-8")
+    system = cuenta().ruta_prompt().read_text(encoding="utf-8")
     system += "\n\n" + STYLE_PATH.read_text(encoding="utf-8")
     if catalog.available():
         system += f"\n\n<catalogo>\n{catalog.prompt_text()}\n</catalogo>"

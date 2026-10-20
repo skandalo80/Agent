@@ -126,7 +126,7 @@ def test_cliente_se_conecta_configura_y_enciende(monkeypatch, tmp_path):
         assert r.status_code == 303 and client.portal.call(panel.activo, c)
 
 
-def test_la_cuenta_principal_entra_a_su_panel_sin_tocar_sus_instrucciones(monkeypatch, tmp_path):
+def test_la_cuenta_principal_edita_sus_instrucciones_aparte(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     Path("prompts").mkdir()
     Path("prompts/system.md").write_text("PROMPT DEL VENDEDOR")
@@ -143,9 +143,15 @@ def test_la_cuenta_principal_entra_a_su_panel_sin_tocar_sus_instrucciones(monkey
         assert not Path("clientes").exists() and len(bot.cuentas) == 1  # no se da de alta otra vez
 
         r = client.get("/panel/asistente")
-        assert "cuenta principal" in r.text and "Generar instrucciones" not in r.text
-        client.post("/panel/guardar", headers=ORIGEN, data={"accion": "guardar", "prompt": "otro"})
+        assert "Cuenta principal" in r.text and "Generar instrucciones" in r.text and "PROMPT DEL VENDEDOR" in r.text
+        # Lo que guarda va aparte (fuera de git) y manda sobre el del repo hasta que lo restaure.
+        r = client.post("/panel/guardar", headers=ORIGEN, data={"accion": "guardar", "prompt": "PROMPT DE LA DEMO"})
         assert Path("prompts/system.md").read_text() == "PROMPT DEL VENDEDOR"
+        assert "Volver a las del servidor" in r.text and "PROMPT DE LA DEMO" in r.text
+        assert bot.principal.ruta_prompt().read_text() == "PROMPT DE LA DEMO\n"
+        r = client.post("/panel/guardar", headers=ORIGEN, data={"accion": "restaurar"})
+        assert "vuelve a usar las instrucciones del servidor" in r.text and "PROMPT DEL VENDEDOR" in r.text
+        assert bot.principal.ruta_prompt() == Path("prompts/system.md")
 
 
 def test_probar_mi_asistente(monkeypatch, tmp_path):
