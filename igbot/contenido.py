@@ -99,7 +99,7 @@ COLORES = [  # (campo, nombre, para qué se usa)
 ]
 ESTADOS = {  # estado del post: (cómo se le dice al cliente, color de la etiqueta)
     "borrador": ("Borrador", ""), "programada": ("Programado", "verde"), "publicando": ("Publicando…", "verde"),
-    "publicada": ("Publicado", "verde"), "fallida": ("No salió", "rojo"), "cancelada": ("Descartado", ""),
+    "publicada": ("Publicado", ""), "fallida": ("No salió", "rojo"), "cancelada": ("Descartado", ""),
 }
 EDITABLES = ("borrador", "programada")
 
@@ -333,9 +333,17 @@ def sin_plan() -> HTMLResponse:
     )
 
 
+def recortar(texto: str, maximo: int = 60) -> str:
+    """Corta en la última palabra completa, con puntos suspensivos."""
+    texto = " ".join(texto.split())
+    if len(texto) <= maximo:
+        return texto
+    return texto[:maximo].rsplit(" ", 1)[0].rstrip(".,;:") + "…"
+
+
 def fila(c: Cuenta, post: dict, p: dict, token: str) -> str:
     estado, color = ESTADOS.get(post["status"], (post["status"], ""))
-    titulo = p.get("titulo") or post["caption"][:60] or "Sin título"
+    titulo = p.get("titulo") or recortar(post["caption"]) or "Sin título"
     objetivo = OBJETIVOS.get(p.get("objetivo"), ("",))[0]
     detalle = cuando(post["publish_at"]) if post["publish_at"] else "Sin fecha"
     if objetivo:
@@ -375,7 +383,7 @@ async def de_instagram(c: Cuenta) -> list[dict]:
 
 
 def fila_instagram(m: dict, ts: float) -> str:
-    titulo = (m.get("caption") or "").strip().split("\n")[0][:60] or "Post de Instagram"
+    titulo = recortar((m.get("caption") or "").strip().split("\n")[0]) or "Post de Instagram"
     foto = m.get("thumbnail_url") or m.get("media_url")
     imagen = (f'<img src="{escape(foto)}" alt="" referrerpolicy="no-referrer">' if foto
               else '<span class="pieza" style="width:4.5rem"></span>')
@@ -383,7 +391,7 @@ def fila_instagram(m: dict, ts: float) -> str:
            if m.get("permalink") else "")
     return (f'<div class="fila">{imagen}<div class="datos"><b>{escape(titulo)}</b>'
             f'<span>{escape(cuando(ts))} · Desde Instagram</span></div>'
-            f'<span class="chip verde">Publicado</span>{ver}</div>')
+            f'<span class="chip">Publicado</span>{ver}</div>')
 
 
 async def publicados_html(c: Cuenta) -> str:
@@ -420,13 +428,16 @@ async def calendario(c: Cuenta, aviso: str = "") -> HTMLResponse:
                        '<div class="acciones"><a class="boton" href="/panel/contenido/nuevo">Crear mi primer post</a>'
                        '<a class="boton secundario" href="/panel/contenido/marca">Antes, configurar mi marca</a></div></div>')
         if programados:
-            cuerpo += f'<div class="tarjeta"><span class="num">Programados</span>{await filas(c, programados)}</div>'
+            cuerpo += (f'<div class="tarjeta proximos"><span class="num">Próximos posts</span>'
+                       '<p class="ayuda">Ya aprobados: salen solos el día y la hora que dicen.</p>'
+                       f"{await filas(c, programados)}</div>")
         if borradores:
             cuerpo += (f'<div class="tarjeta"><span class="num">Borradores</span>'
                        '<p class="ayuda">No salen hasta que los apruebes.</p>'
                        f"{await filas(c, borradores)}</div>")
         if publicados:
-            cuerpo += f'<div class="tarjeta"><span class="num">Publicados</span>{publicados}</div>'
+            cuerpo += ('<div class="tarjeta antiguos"><span class="num">Ya publicados</span>'
+                       f'<p class="ayuda">Los últimos 12 de tu Instagram, también los que subiste desde la app.</p>{publicados}</div>')
         if pendientes:
             cuerpo += '<div class="acciones"><a class="boton" href="/panel/contenido/nuevo">+ Crear post</a></div>'
         return await pagina(c, "calendario", "Tus publicaciones: lo que viene y lo que ya salió.", cuerpo, aviso)
