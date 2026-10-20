@@ -56,11 +56,24 @@ CAMPOS = [
      "Qué vendes u ofreces, dónde estás y qué te hace diferente.", 4),
     ("horarios", "Horarios", "Por ejemplo: lunes a viernes de 9:00 a 18:00, sábados de 10:00 a 14:00.", 2),
     ("precios", "Precios", "Productos o servicios con su precio. Lo que no pongas aquí, el asistente no lo inventa.", 5),
-    ("faq", "Preguntas frecuentes", "Una por línea con su respuesta. Ej.: ¿Hacen envíos? Sí, a todo México.", 6),
-    ("politicas", "Políticas", "Envíos, cambios y devoluciones, formas de pago, apartados.", 4),
-    ("humano", "Si piden hablar con una persona",
-     "Qué debe decir. Ej.: que alguien del equipo le contesta hoy mismo.", 2),
 ]
+# Políticas por tema: así el cliente ve qué le falta contestar. Las vacías no van al prompt.
+POLITICAS = [
+    ("envios", "Envíos", "A dónde envías, cuánto cuesta y cuánto tarda."),
+    ("cambios", "Cambios y devoluciones", "En qué casos y en cuántos días."),
+    ("pagos", "Formas de pago", "Efectivo, transferencia, tarjeta, meses sin intereses."),
+    ("apartados", "Apartados o reservaciones", "Si se puede apartar o reservar y cómo."),
+    ("otras_politicas", "Otra política", "Cualquier otra regla que tus clientes deban saber."),
+]
+HUMANO = ("humano", "Si piden hablar con una persona",
+          "Qué debe decir. Ej.: que alguien del equipo le contesta hoy mismo.", 2)
+MIN_PREGUNTAS = 3
+EJEMPLOS = [  # para que vean cómo llenar cada par
+    ("¿Hacen envíos?", "Sí, a todo México por paquetería."),
+    ("¿Tienen estacionamiento?", "Sí, gratis para clientes."),
+    ("¿Dan factura?", "Sí, pídela al momento de pagar."),
+]
+MAX_PREGUNTAS = 40
 
 TONOS = {
     "amigable": ("Amigable", "Cercano y cálido. Tuteas, usas frases cortas y puedes poner algún emoji de vez en cuando."),
@@ -68,10 +81,17 @@ TONOS = {
     "formal": ("Formal", "Formal y respetuoso. Hablas de usted y no usas emojis."),
 }
 
-SECCIONES = [
-    ("negocio", "EL NEGOCIO"), ("horarios", "HORARIOS"), ("precios", "PRECIOS"),
-    ("faq", "PREGUNTAS FRECUENTES"), ("politicas", "POLÍTICAS"),
-]
+
+def preguntas(perfil: dict) -> list[dict]:
+    """[{"p": pregunta, "r": respuesta}]; antes del panel con pares era un solo texto."""
+    faq = perfil.get("faq") or []
+    return [{"p": "", "r": faq}] if isinstance(faq, str) else faq
+
+
+def politicas(perfil: dict) -> dict:
+    if "politicas" in perfil and not any(perfil.get(k) for k, *_ in POLITICAS):
+        return {"otras_politicas": perfil["politicas"]}  # texto de antes de separarlas por tema
+    return {k: perfil.get(k, "") for k, *_ in POLITICAS}
 
 
 def generar(usuario: str, perfil: dict) -> str:
@@ -79,9 +99,17 @@ def generar(usuario: str, perfil: dict) -> str:
     _, tono = TONOS.get(perfil.get("tono"), TONOS["amigable"])
     out = [f"Eres el asistente de Instagram de @{usuario}. Contestas los mensajes directos de sus clientes.",
            "", "TONO", tono]
-    for key, titulo in SECCIONES:
+    for key, titulo in [("negocio", "EL NEGOCIO"), ("horarios", "HORARIOS"), ("precios", "PRECIOS")]:
         if valor := perfil.get(key, "").strip():
             out += ["", titulo, valor]
+    pares = [q for q in preguntas(perfil) if q["r"].strip()]
+    if pares:
+        out += ["", "PREGUNTAS FRECUENTES"]
+        for q in pares:
+            out += [f"- {q['p'].strip()}\n  {q['r'].strip()}" if q["p"].strip() else f"- {q['r'].strip()}"]
+    temas = politicas(perfil)
+    if lineas := [f"- {nombre}: {temas[k].strip()}" for k, nombre, _ in POLITICAS if temas.get(k, "").strip()]:
+        out += ["", "POLÍTICAS", *lineas]
     humano = perfil.get("humano", "").strip() or "Dile que alguien del equipo le escribe en cuanto pueda."
     out += ["", "SI PIDEN HABLAR CON UNA PERSONA", humano + " Usa la herramienta pasar_a_humano.",
             "", "REGLAS",
@@ -181,31 +209,61 @@ def prompt_actual(c: Cuenta) -> str:
 
 # --- páginas ---
 
+# Misma identidad que skandar.online (web/estilos.css): negro, grises de Apple,
+# botones en píldora y el acento naranja. Sin fuentes externas (el CSP del bot
+# no las deja): "Inter" si la tiene instalada, si no la del sistema.
 ESTILO = """
-:root{color-scheme:light dark;--fondo:#f5f5f7;--tarjeta:#fff;--texto:#1d1d1f;--suave:#6e6e73;--borde:#d2d2d7;--acento:#0071e3}
-@media (prefers-color-scheme:dark){:root{--fondo:#000;--tarjeta:#1c1c1e;--texto:#f5f5f7;--suave:#a1a1a6;--borde:#38383a;--acento:#2997ff}}
+:root{--negro:#0a0a0a;--grafito:#1d1d1f;--gris:#86868b;--claro:#f5f5f7;--blanco:#fff;--acento:#c2410c;--acento-claro:#f97316;--linea-oscura:#2c2c2e;--linea-clara:#d2d2d7}
 *{box-sizing:border-box}
-body{margin:0;background:var(--fondo);color:var(--texto);font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
-main{max-width:44rem;margin:0 auto;padding:2rem 1rem 4rem}
-header{display:flex;justify-content:space-between;align-items:center;gap:1rem;margin-bottom:1.5rem}
-.marca{font-weight:600}
-h1{font-size:2rem;line-height:1.15;margin:0 0 .5rem}
-h2{font-size:1.15rem;margin:0 0 .75rem}
-.tarjeta{background:var(--tarjeta);border:1px solid var(--borde);border-radius:14px;padding:1.25rem;margin-bottom:1rem}
-.suave{color:var(--suave);font-size:.9rem;margin:.15rem 0 .5rem}
-label{display:block;font-weight:600;margin-top:1rem}
-textarea,input[type=text]{width:100%;font:inherit;color:inherit;background:transparent;border:1px solid var(--borde);border-radius:10px;padding:.6rem .75rem}
-textarea.prompt{font:14px/1.45 ui-monospace,Menlo,monospace;min-height:18rem}
-.tonos{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.5rem}
-.tonos label{font-weight:500;margin:0;border:1px solid var(--borde);border-radius:999px;padding:.35rem .9rem;cursor:pointer}
-.botones{display:flex;flex-wrap:wrap;gap:.75rem;margin-top:1.25rem}
-button,.boton{font:inherit;font-weight:600;border-radius:999px;padding:.6rem 1.2rem;border:1px solid var(--acento);cursor:pointer;text-decoration:none;display:inline-block}
-.primario{background:var(--acento);color:#fff}
-.secundario{background:transparent;color:var(--acento)}
-.estado{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap}
-.punto{display:inline-block;width:.6rem;height:.6rem;border-radius:50%;margin-right:.4rem;background:#ff9f0a}
-.punto.on{background:#30d158}
-.aviso{border-color:var(--acento)}
+body{margin:0;background:var(--claro);color:var(--negro);font:17px/1.55 "Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+.contenedor{max-width:46rem;margin:0 auto;padding:0 1.25rem}
+header{background:var(--negro);color:var(--claro);border-bottom:1px solid var(--linea-oscura)}
+header .contenedor{display:flex;justify-content:space-between;align-items:center;height:3.25rem}
+.marca{font-weight:600;font-size:.95rem;text-decoration:none;letter-spacing:-.01em}
+.salir{background:none;border:0;color:var(--gris);font:inherit;font-size:.85rem;cursor:pointer;padding:0}
+.salir:hover{color:var(--claro)}
+.oscuro{background:var(--negro);color:var(--claro)}
+.portada{padding:5rem 0 4rem}
+.entrar{min-height:calc(100vh - 3.25rem);display:flex;align-items:center;text-align:center}
+.antetitulo{font-size:.8rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--gris);margin:0 0 1rem}
+h1,h2{font-weight:600;letter-spacing:-.035em;margin:0}
+h1{font-size:clamp(2.5rem,8vw,4.5rem);line-height:1.04;overflow-wrap:anywhere}
+h2{font-size:1.5rem;letter-spacing:-.02em;margin-bottom:.25rem}
+.punto{color:var(--acento-claro)}
+.bajada{font-size:clamp(1.1rem,2.4vw,1.35rem);line-height:1.4;color:var(--gris);margin:1.25rem auto 0;max-width:34rem}
+.nota{color:var(--gris);font-size:.9rem;margin-top:2rem}
+.enlace{color:var(--acento-claro);text-decoration:none;font-weight:500}
+.enlace:hover{text-decoration:underline}
+.boton{display:inline-block;padding:.8rem 1.5rem;border-radius:999px;font:inherit;font-weight:600;font-size:1rem;text-decoration:none;cursor:pointer;border:1px solid transparent;transition:transform .2s}
+.boton:hover{transform:scale(1.03)}
+.oscuro .boton{background:var(--claro);color:var(--negro)}
+.oscuro .boton.secundario{background:transparent;color:var(--claro);border-color:#48484a}
+main .boton{background:var(--negro);color:var(--claro)}
+main .boton.secundario{background:transparent;color:var(--negro);border-color:var(--linea-clara)}
+.acciones{display:flex;gap:.75rem;flex-wrap:wrap;align-items:center;margin-top:1.5rem}
+.centro .acciones{justify-content:center;margin-top:2.25rem}
+.estado{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-top:2rem;padding:1rem 1.25rem;border:1px solid var(--linea-oscura);border-radius:1.25rem;background:var(--grafito)}
+.luz{display:inline-block;width:.6rem;height:.6rem;border-radius:50%;margin-right:.5rem;background:var(--acento-claro)}
+.luz.on{background:#30d158}
+main{padding:3rem 0 5rem}
+.aviso{background:var(--blanco);border-left:3px solid var(--acento);border-radius:.75rem;padding:1rem 1.25rem;margin-bottom:1.25rem}
+.tarjeta{background:var(--blanco);border-radius:1.5rem;padding:2rem;margin-bottom:1.25rem}
+.num{display:block;font-size:.85rem;font-weight:600;color:var(--acento);margin-bottom:1rem}
+.ayuda{color:#6e6e73;font-size:.9rem;margin:.1rem 0 .5rem}
+label{display:block;font-weight:600;font-size:.95rem;margin-top:1.25rem}
+textarea,input[type=text]{width:100%;font:inherit;font-size:1rem;color:var(--negro);background:var(--claro);border:1px solid var(--linea-clara);border-radius:.85rem;padding:.7rem .9rem}
+textarea:focus,input[type=text]:focus{outline:2px solid var(--acento-claro);outline-offset:1px;border-color:transparent}
+textarea.prompt{font:14px/1.5 ui-monospace,Menlo,monospace;min-height:20rem}
+.par{border:1px solid var(--linea-clara);border-radius:1rem;padding:1rem;margin-top:1rem}
+.par label{margin-top:0}
+.par textarea{margin-top:.4rem}
+.par .quitar{background:none;border:0;color:#6e6e73;font:inherit;font-size:.85rem;cursor:pointer;padding:.5rem 0 0}
+.par .quitar:hover{color:var(--acento)}
+.tonos{display:flex;flex-wrap:wrap;gap:.6rem;margin-top:.75rem}
+.tonos label{margin:0;font-weight:500;border:1px solid var(--linea-clara);border-radius:999px;padding:.45rem 1rem;cursor:pointer}
+.tonos input{accent-color:var(--acento)}
+.oculto{position:absolute;left:-9999px}
 """
 
 
@@ -214,53 +272,106 @@ def pagina(cuerpo: str) -> HTMLResponse:
         '<!doctype html><html lang="es"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
         '<meta name="robots" content="noindex"><meta name="referrer" content="same-origin">'
+        '<meta name="theme-color" content="#0a0a0a">'
         '<title>Tu asistente · Agentes IA by Skandar</title>'
-        f"<style>{ESTILO}</style></head><body><main>{cuerpo}</main></body></html>"
+        f"<style>{ESTILO}</style></head><body>{cuerpo}</body></html>"
     )
+
+
+def cabecera(salir: bool = False) -> str:
+    boton = ('<form method="post" action="/panel/salir"><button class="salir">Salir</button></form>'
+             if salir else "")
+    return (f'<header><div class="contenedor"><a class="marca" href="{config.SITE_URL}">Agentes IA by Skandar</a>'
+            f"{boton}</div></header>")
 
 
 def entrar() -> HTMLResponse:
     return pagina(
-        '<header><span class="marca">Agentes IA by Skandar</span></header>'
-        '<h1>Tu asistente de Instagram</h1>'
-        '<p class="suave">Entra con tu cuenta de Instagram para configurar lo que responde tu asistente.</p>'
-        '<div class="botones"><a class="boton primario" href="/conectar/instagram">Entrar con Instagram</a></div>'
+        cabecera()
+        + '<section class="oscuro entrar"><div class="contenedor centro">'
+        '<p class="antetitulo">Panel de clientes</p>'
+        '<h1>Tu asistente<span class="punto">.</span></h1>'
+        '<p class="bajada">Entra con tu cuenta de Instagram para configurar lo que responde tu asistente.</p>'
+        '<div class="acciones"><a class="boton" href="/conectar/instagram">Entrar con Instagram</a></div>'
+        f'<p class="nota">¿Aún no conectas tu Instagram? <a class="enlace" href="{config.SITE_URL}/conectar">Empieza aquí ›</a></p>'
+        "</div></section>"
     )
 
 
-async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt: str | None = None) -> HTMLResponse:
+def caja(nombre: str, etiqueta: str, ayuda: str, valor: str, filas: int = 2) -> str:
+    return (f'<label for="{nombre}">{etiqueta}</label><p class="ayuda">{ayuda}</p>'
+            f'<textarea id="{nombre}" name="{nombre}" rows="{filas}" maxlength="{MAX_CAMPO}">{escape(valor)}</textarea>')
+
+
+async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt: str | None = None,
+                   pares_minimos: int = MIN_PREGUNTAS) -> HTMLResponse:
     datos = datos if datos is not None else await perfil(c)
     prompt = prompt_actual(c) if prompt is None else prompt
     encendido = await activo(c)
-    tono_actual = datos.get("tono", "amigable")
-    campos = "".join(
-        f'<label for="{k}">{etq}</label><p class="suave">{ayuda}</p>'
-        f'<textarea id="{k}" name="{k}" rows="{filas}" maxlength="{MAX_CAMPO}">{escape(datos.get(k, ""))}</textarea>'
-        for k, etq, ayuda, filas in CAMPOS
+    pares = preguntas(datos)
+    pares += [{"p": "", "r": ""}] * (max(MIN_PREGUNTAS, pares_minimos) - len(pares))
+    temas = politicas(datos)
+    negocio = "".join(caja(k, etq, ayuda, datos.get(k, ""), filas) for k, etq, ayuda, filas in CAMPOS)
+    faq = "".join(
+        f'<div class="par"><label for="faq_p_{i}">Pregunta {i + 1}</label>'
+        f'<input type="text" id="faq_p_{i}" name="faq_p_{i}" maxlength="300" value="{escape(q["p"])}"'
+        f' placeholder="{EJEMPLOS[i % len(EJEMPLOS)][0]}">'
+        f'<textarea name="faq_r_{i}" rows="2" maxlength="{MAX_CAMPO}" placeholder="{EJEMPLOS[i % len(EJEMPLOS)][1]}">'
+        f'{escape(q["r"])}</textarea>'
+        f'<button class="quitar" name="accion" value="quitar_{i}">Quitar</button></div>'
+        for i, q in enumerate(pares)
     )
+    pol = "".join(caja(k, etq, ayuda, temas.get(k, "")) for k, etq, ayuda in POLITICAS)
+    tono_actual = datos.get("tono", "amigable")
     tonos = "".join(
         f'<label><input type="radio" name="tono" value="{k}"{" checked" if k == tono_actual else ""}> {nombre}</label>'
         for k, (nombre, _) in TONOS.items()
     )
     return pagina(
-        f'<header><span class="marca">Agentes IA by Skandar</span>'
-        f'<form method="post" action="/panel/salir"><button class="secundario">Salir</button></form></header>'
-        f'<h1>@{escape(await usuario(c))}</h1>'
-        + (f'<div class="tarjeta aviso">{escape(aviso)}</div>' if aviso else "")
-        + f'<div class="tarjeta estado"><div><span class="punto{" on" if encendido else ""}"></span>'
-        f'{"Tu asistente está contestando." if encendido else "Tu asistente está en pausa: no contesta mensajes."}</div>'
+        cabecera(salir=True)
+        + '<section class="oscuro portada"><div class="contenedor">'
+        '<p class="antetitulo">Tu asistente</p>'
+        f'<h1>@{escape(await usuario(c))}<span class="punto">.</span></h1>'
+        f'<div class="estado"><div><span class="luz{" on" if encendido else ""}"></span>'
+        f'{"Está contestando tus mensajes." if encendido else "Está en pausa: no contesta mensajes."}</div>'
         f'<form method="post" action="/panel/estado"><input type="hidden" name="activo" value="{"0" if encendido else "1"}">'
-        f'<button class="{"secundario" if encendido else "primario"}">{"Pausar" if encendido else "Encender"}</button></form></div>'
-        f'<form method="post" action="/panel/guardar">'
-        f'<div class="tarjeta"><h2>Tu negocio</h2>{campos}'
+        f'<button class="boton{" secundario" if encendido else ""}">{"Pausar" if encendido else "Encender"}</button></form></div>'
+        "</div></section>"
+        '<main><div class="contenedor">'
+        + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
+        + '<form method="post" action="/panel/guardar">'
+        # Enter en un campo no debe quitar una pregunta: el primer botón del formulario solo recarga.
+        '<button class="oculto" name="accion" value="vista" tabindex="-1" aria-hidden="true">Actualizar</button>'
+        f'<div class="tarjeta"><span class="num">01</span><h2>Tu negocio</h2>{negocio}</div>'
+        f'<div class="tarjeta"><span class="num">02</span><h2>Preguntas frecuentes</h2>'
+        f'<p class="ayuda">Lo que más te preguntan, con la respuesta que darías tú.</p>'
+        f'<input type="hidden" name="faq_n" value="{len(pares)}">{faq}'
+        f'<div class="acciones"><button class="boton secundario" name="accion" value="agregar">+ Agregar pregunta</button></div></div>'
+        f'<div class="tarjeta"><span class="num">03</span><h2>Políticas</h2>'
+        f'<p class="ayuda">Llena solo las que apliquen a tu negocio.</p>{pol}</div>'
+        f'<div class="tarjeta"><span class="num">04</span><h2>Cómo habla</h2>'
+        f'{caja(HUMANO[0], HUMANO[1], HUMANO[2], datos.get(HUMANO[0], ""), HUMANO[3])}'
         f'<label>Tono</label><div class="tonos">{tonos}</div>'
-        f'<div class="botones"><button class="secundario" name="accion" value="generar">Generar instrucciones</button></div></div>'
-        f'<div class="tarjeta"><h2>Instrucciones de tu asistente</h2>'
-        f'<p class="suave">Se arman con tus datos y el tono. Puedes editarlas antes de guardar.</p>'
+        f'<div class="acciones"><button class="boton secundario" name="accion" value="generar">Generar instrucciones</button></div></div>'
+        f'<div class="tarjeta"><span class="num">05</span><h2>Instrucciones de tu asistente</h2>'
+        f'<p class="ayuda">Se arman con tus datos y el tono. Puedes editarlas antes de guardar.</p>'
         f'<textarea class="prompt" name="prompt" maxlength="{MAX_PROMPT}">{escape(prompt)}</textarea>'
-        f'<div class="botones"><button class="primario" name="accion" value="guardar">Guardar</button></div></div>'
-        f'</form>'
+        f'<div class="acciones"><button class="boton" name="accion" value="guardar">Guardar</button></div></div>'
+        "</form></div></main>"
     )
+
+
+def datos_de(f: dict[str, str]) -> dict:
+    """El perfil tal como viene del formulario (las preguntas vacías se quedan, para no moverlas)."""
+    datos = {k: f.get(k, "").strip()[:MAX_CAMPO] for k in [*(c[0] for c in CAMPOS), *(p[0] for p in POLITICAS), HUMANO[0]]}
+    datos["tono"] = f.get("tono") if f.get("tono") in TONOS else "amigable"
+    try:
+        n = min(int(f.get("faq_n", "0")), MAX_PREGUNTAS)
+    except ValueError:
+        n = 0
+    datos["faq"] = [{"p": f.get(f"faq_p_{i}", "").strip()[:300], "r": f.get(f"faq_r_{i}", "").strip()[:MAX_CAMPO]}
+                    for i in range(n)]
+    return datos
 
 
 @router.get("")
@@ -275,15 +386,25 @@ async def guardar(request: Request):
     if not (c := cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     f = await form(request)
-    datos = {k: f.get(k, "").strip()[:MAX_CAMPO] for k, *_ in CAMPOS}
-    datos["tono"] = f.get("tono") if f.get("tono") in TONOS else "amigable"
+    datos = datos_de(f)
+    accion = f.get("accion", "")
+    prompt = f.get("prompt", "")[:MAX_PROMPT]
+    # Agregar o quitar una pregunta solo redibuja la página: nada se guarda todavía.
+    if accion == "agregar":
+        return await panel_de(c, "", datos, prompt, pares_minimos=len(datos["faq"]) + 1)
+    if accion.startswith("quitar_") and accion[7:].isdigit():
+        del datos["faq"][int(accion[7:]):int(accion[7:]) + 1]
+        return await panel_de(c, "", datos, prompt)
+    if accion not in ("generar", "guardar"):
+        return await panel_de(c, "", datos, prompt)
+    datos["faq"] = [q for q in datos["faq"] if q["p"] or q["r"]]
     with usar(c):
         await c.store.set("perfil", json.dumps(datos, ensure_ascii=False))
         nombre = await usuario(c)
-        if f.get("accion") == "generar":
+        if accion == "generar":
             return await panel_de(c, "Revisa las instrucciones y pulsa Guardar para que tu asistente las use.",
                                   datos, generar(nombre, datos))
-        prompt = f.get("prompt", "").strip()[:MAX_PROMPT] or generar(nombre, datos)
+        prompt = prompt.strip() or generar(nombre, datos)
         Path(c.prompt_path).parent.mkdir(parents=True, exist_ok=True)
         Path(c.prompt_path).write_text(prompt + "\n", encoding="utf-8")
     log.info("@%s guardó las instrucciones de su asistente desde el panel", nombre)
@@ -301,7 +422,7 @@ async def estado(request: Request):
     encender = (await form(request)).get("activo") == "1"
     await c.store.set("bot_activo", "1" if encender else "0")
     log.info("@%s %s su asistente desde el panel", await usuario(c), "encendió" if encender else "pausó")
-    return await panel_de(c, "Tu asistente está contestando." if encender else "Tu asistente quedó en pausa.")
+    return await panel_de(c, "Tu asistente ya está contestando." if encender else "Tu asistente quedó en pausa.")
 
 
 @router.post("/salir")

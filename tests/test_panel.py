@@ -27,6 +27,20 @@ def test_generar_arma_las_instrucciones_con_el_tono():
     assert "Tuteas" in panel.generar("x", {})  # sin tono: amigable
 
 
+def test_preguntas_en_pares_y_politicas_por_tema():
+    texto = panel.generar("cafe.lunar", {
+        "faq": [{"p": "¿Hacen envíos?", "r": "Sí, a todo México."}, {"p": "¿Sin respuesta?", "r": ""}],
+        "envios": "Gratis desde $500", "pagos": "Transferencia", "cambios": "",
+    })
+    assert "PREGUNTAS FRECUENTES\n- ¿Hacen envíos?\n  Sí, a todo México." in texto
+    assert "Sin respuesta" not in texto  # una pregunta sin respuesta no le sirve al asistente
+    assert "POLÍTICAS\n- Envíos: Gratis desde $500\n- Formas de pago: Transferencia" in texto
+    assert "Cambios" not in texto
+    # Perfiles de antes (texto libre) se siguen leyendo.
+    viejo = panel.generar("x", {"faq": "¿Abren domingo? No.", "politicas": "Sin cambios."})
+    assert "- ¿Abren domingo? No." in viejo and "- Otra política: Sin cambios." in viejo
+
+
 def test_sesion_firmada_y_con_vencimiento(monkeypatch):
     class R:
         def __init__(self, valor):
@@ -76,6 +90,17 @@ def test_cliente_se_conecta_configura_y_enciende(monkeypatch, tmp_path):
         sig = hmac.new(b"secreto", body, hashlib.sha256).hexdigest()
         client.post("/webhook", content=body, headers={"X-Hub-Signature-256": f"sha256={sig}"})
         assert client.portal.call(c.store.pending_users) == []
+
+        # Agregar y quitar preguntas solo redibuja (no guarda) y no pierde lo escrito.
+        r = client.post("/panel/guardar", headers=ORIGEN, data={
+            "faq_n": "3", "faq_p_0": "¿Envíos?", "faq_r_0": "Sí", "faq_p_1": "¿Factura?", "faq_r_1": "Sí",
+            "accion": "agregar"})
+        assert 'name="faq_p_3"' in r.text and "¿Factura?" in r.text and 'name="faq_p_4"' not in r.text
+        r = client.post("/panel/guardar", headers=ORIGEN, data={
+            "faq_n": "4", "faq_p_0": "¿Envíos?", "faq_r_0": "Sí", "faq_p_1": "¿Factura?", "faq_r_1": "Sí",
+            "accion": "quitar_0"})
+        assert "¿Envíos?" not in r.text and "¿Factura?" in r.text
+        assert client.portal.call(panel.perfil, c) == {}
 
         datos = {"negocio": "Cafetería en Puebla", "horarios": "9 a 21", "tono": "profesional"}
         assert client.post("/panel/guardar", data={**datos, "accion": "generar"}).status_code == 403  # sin Origin
