@@ -334,7 +334,7 @@ header form{display:flex;margin:0}
 .fila .datos span{display:block;color:#6e6e73;font-size:.9rem}
 @media(max-width:560px){.fila{flex-wrap:wrap;gap:.6rem 1rem}.fila .datos{flex-basis:calc(100% - 5.5rem)}.fila img+.datos+.chip,.fila .pieza+.datos+.chip{margin-left:5.5rem}}
 .chip{display:inline-block;font-size:.75rem;font-weight:600;padding:.2rem .65rem;border-radius:999px;background:var(--claro);color:#3a3a3c;border:1px solid var(--linea-clara);white-space:nowrap}
-.chip.verde{background:#e8f5ec;color:#1d6b37;border-color:transparent}
+.chip.verde{background:#e8f5ec;color:#1d6b37;border-color:transparent}.chip.azul{background:#eaf1fb;color:#2f5fa8;border-color:transparent}
 .chip.rojo{background:#fdecea;color:#a1260d;border-color:transparent}
 .color{display:flex;gap:1rem;align-items:flex-start;margin-top:1.25rem}
 .color>div{flex:1;min-width:0}
@@ -380,6 +380,9 @@ form:has(input[name=modo][value=libre]:checked) .si-plantilla{display:none}
 .detalle summary::after{content:"›";margin-left:.35rem;display:inline-block;transition:transform .15s}.detalle[open] summary::after{transform:rotate(90deg)}
 .detalle p{margin:.45rem 0}.detalle .texto-post{white-space:pre-wrap}
 .chip.acento{background:#fff4ed;color:var(--acento);border-color:transparent}
+/* Cada objetivo de post con su color: tonos suaves de la misma familia, para distinguirlos de un vistazo. */
+.chip.obj-estrella{background:#fdf3e1;color:#a5590a}.chip.obj-crecer{background:#fdeef0;color:#b4344d}
+.chip.obj-explicar{background:#f2eefb;color:#6b4fb0}.chip.obj-historia{background:#e8f4f3;color:#2f7a78}
 .titulo-seccion{display:flex;justify-content:space-between;align-items:flex-end;gap:1rem;margin-bottom:1rem}
 .titulo-seccion h2{margin:0}
 .acciones-fila{display:flex;gap:.5rem;flex:none}

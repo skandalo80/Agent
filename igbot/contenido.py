@@ -98,8 +98,8 @@ COLORES = [  # (campo, nombre, para qué se usa)
     ("fondo", "Fondo", "El fondo de la plantilla Marco."),
 ]
 ESTADOS = {  # estado del post: (cómo se le dice al cliente, color de la etiqueta)
-    "borrador": ("Borrador", ""), "programada": ("Programado", "verde"), "publicando": ("Publicando…", "verde"),
-    "publicada": ("Publicado", ""), "fallida": ("No salió", "rojo"), "cancelada": ("Descartado", ""),
+    "borrador": ("Borrador", ""), "programada": ("Programado", "azul"), "publicando": ("Publicando…", "azul"),
+    "publicada": ("Publicado", "verde"), "fallida": ("No salió", "rojo"), "cancelada": ("Descartado", ""),
 }
 EDITABLES = ("borrador", "programada")
 
@@ -496,6 +496,13 @@ async def publicados_html(c: Cuenta) -> str:
     return "".join(html for _, html in lista[:12])
 
 
+def plegable(id_: str, titulo: str, n: int, cuerpo: str, clase: str = "") -> str:
+    """Una sección del calendario que se puede cerrar (el navegador recuerda si la cerraste)."""
+    cuenta = f'<span class="resumen">{n}</span>' if n else ""
+    return (f'<details class="tarjeta plegable {clase}" id="{id_}" open><summary><span class="num">{titulo}</span>'
+            f"{cuenta}</summary>{cuerpo}</details>")
+
+
 async def calendario(c: Cuenta, aviso: str = "") -> HTMLResponse:
     with usar(c):
         pendientes = await c.store.posts(("programada", "publicando", "fallida", "borrador"), user_id=PANEL)
@@ -509,16 +516,16 @@ async def calendario(c: Cuenta, aviso: str = "") -> HTMLResponse:
                        '<div class="acciones"><a class="boton" href="/panel/contenido/nuevo">Crear mi primer post</a>'
                        '<a class="boton secundario" href="/panel/contenido/marca">Antes, configurar mi marca</a></div></div>')
         if programados:
-            cuerpo += (f'<div class="tarjeta proximos"><span class="num">Próximos posts</span>'
-                       '<p class="ayuda">Ya aprobados: salen solos el día y la hora que dicen.</p>'
-                       f"{await filas(c, programados)}</div>")
+            cuerpo += plegable("proximos", "Próximos posts", len(programados),
+                               '<p class="ayuda">Ya aprobados: salen solos el día y la hora que dicen.</p>'
+                               + await filas(c, programados))
         if borradores:
-            cuerpo += (f'<div class="tarjeta"><span class="num">Borradores</span>'
-                       '<p class="ayuda">No salen hasta que los apruebes.</p>'
-                       f"{await filas(c, borradores)}</div>")
+            cuerpo += plegable("borradores", "Borradores", len(borradores),
+                               '<p class="ayuda">No salen hasta que los apruebes.</p>' + await filas(c, borradores))
         if publicados:
-            cuerpo += ('<div class="tarjeta antiguos"><span class="num">Ya publicados</span>'
-                       f'<p class="ayuda">Los últimos 12 de tu Instagram, también los que subiste desde la app.</p>{publicados}</div>')
+            cuerpo += plegable("publicados", "Ya publicados", 0,
+                               '<p class="ayuda">Los últimos 12 de tu Instagram, también los que subiste desde la app.</p>'
+                               + publicados, clase="antiguos")
         if pendientes:
             cuerpo += '<div class="acciones"><a class="boton" href="/panel/contenido/nuevo">+ Crear post</a></div>'
         return await pagina(c, "calendario", "Tus publicaciones: lo que viene y lo que ya salió.", cuerpo, aviso)
