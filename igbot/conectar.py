@@ -130,6 +130,13 @@ def start():
     return response
 
 
+def check(r: httpx.Response) -> None:
+    """Como raise_for_status, pero deja en el log lo que contestó Instagram (dice qué falló)."""
+    if r.is_error:
+        log.error("Instagram respondió %s en %s: %s", r.status_code, r.url.path, r.text[:500])
+    r.raise_for_status()
+
+
 async def exchange(code: str) -> tuple[str, float]:
     """Código de un solo uso -> token corto -> token de 60 días."""
     async with httpx.AsyncClient(timeout=15) as http:
@@ -140,7 +147,7 @@ async def exchange(code: str) -> tuple[str, float]:
             "redirect_uri": redirect_uri(),
             "code": code,
         })
-        r.raise_for_status()
+        check(r)
         data = r.json()
         short = (data.get("data") or [data])[0]["access_token"]
         r = await http.get(f"{GRAPH}/access_token", params={
@@ -148,7 +155,7 @@ async def exchange(code: str) -> tuple[str, float]:
             "client_secret": config.IG_OAUTH_SECRET,
             "access_token": short,
         })
-        r.raise_for_status()
+        check(r)
         data = r.json()
         return data["access_token"], time.time() + float(data.get("expires_in", 60 * 24 * 3600))
 
@@ -157,7 +164,7 @@ async def whoami(token: str) -> tuple[str, str]:
     async with httpx.AsyncClient(timeout=15) as http:
         r = await http.get(f"{GRAPH}/{config.API_VERSION}/me",
                            params={"fields": "user_id,username", "access_token": token})
-        r.raise_for_status()
+        check(r)
         data = r.json()
         return str(data["user_id"]), data["username"]
 

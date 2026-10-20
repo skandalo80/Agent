@@ -12,6 +12,8 @@ from igbot import conectar  # noqa: E402
 
 
 class FakeResponse:
+    is_error = False
+
     def __init__(self, data):
         self.data = data
 
