@@ -6,7 +6,7 @@ contraseñas) y desde ahí:
   frecuentes, políticas, qué hacer si piden una persona),
 - elige un tono (amigable, profesional o formal) y con eso se arman las
   instrucciones de su asistente, que puede revisar y editar antes de guardar,
-- enciende o pausa su asistente.
+- enciende o pausa su asistente;
 - ve los chats en pausa (los atiende una persona) y los reactiva o les da más tiempo.
 
 /panel lleva a Resultados cuando el asistente ya está encendido y con mensajes
