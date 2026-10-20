@@ -1,6 +1,7 @@
 """Contenido en el panel: marca, crear post, editarlo, aprobarlo y publicarlo."""
 import io
 import json
+import re
 import os
 from datetime import timedelta
 from pathlib import Path
@@ -593,3 +594,43 @@ def test_subir_fotos_solo_para_un_post(cliente, monkeypatch):
     # Un token inventado no sirve para leer otro archivo.
     client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "producto", "foto_0": "../../.env"})
     assert client.portal.call(contenido.pieza, c.store, 2)["fotos"] == []
+
+
+def test_ideas_para_el_tema_con_tope_diario(cliente, monkeypatch):
+    client, c, llamadas, _ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 2)
+
+    async def fake_claude(prompt, system, mcp=None, allowed=(), max_turns=5, model=None):
+        llamadas.append((prompt, system, model))
+        return "Carrusel con los tres paquetes, su precio y lo que incluye cada uno."
+
+    monkeypatch.setattr(bot.agent, "run_claude", fake_claude)
+    assert "Te quedan 3 de 3 hoy" in client.get("/panel/contenido/nuevo").text
+    r = client.post("/panel/contenido/nuevo", headers=ORIGEN,
+                    data={"objetivo": "estrella", "tema": "comparar <paquetes>", "accion": "ampliar"})
+    assert "Carrusel con los tres paquetes" in r.text and "Te quedan 2 de 3 hoy" in r.text
+    assert "<idea>comparar &lt;paquetes&gt;</idea>" in llamadas[-1][0]  # lo del cliente va escapado
+    client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "estrella", "accion": "sugerir"})
+    assert "<idea>" not in llamadas[-1][0]
+    client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "estrella", "accion": "sugerir"})
+    n = len(llamadas)
+    r = client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "estrella", "accion": "sugerir"})
+    assert "Ya usaste las ideas de hoy" in r.text and len(llamadas) == n  # ya no se llama a Claude
+    assert client.portal.call(c.store.posts, ("borrador",)) == []  # las ideas no crean posts ni usan imagen
+
+
+def test_precio_escrito_y_fotos_para_ver_antes_de_generar(cliente, monkeypatch):
+    client, c, llamadas, _ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 2)
+    r = client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "marca", "accion": "subir_fotos"},
+                    files={"fotos_post": ("bolsa.png", png(), "image/png")})
+    assert "tus fotos ya están marcadas" in r.text and "Fotos solo para este post" in r.text
+    assert r.text.count('checked><img') == 1 and not llamadas[1:]  # se ve y queda marcada; no se generó nada
+    token = re.search(r'name="foto_0" value="([^"]+)"', r.text).group(1)
+    assert token not in client.portal.call(contenido.marca_de, c).get("fotos", [])  # no va a su marca
+
+    client.post("/panel/contenido/nuevo", headers=ORIGEN,
+                data={"objetivo": "marca", "con_precio": "1", "precio": "Desde $990 MXN", "foto_0": token})
+    assert "<precio_del_dueño>Desde $990 MXN</precio_del_dueño>" in llamadas[-1][0]
+    p = client.portal.call(contenido.pieza, c.store, 1)
+    assert p["precio"] == "Desde $990 MXN" and p["fotos"] == [token]

@@ -403,6 +403,8 @@ form:has(input[name=modo][value=libre]:checked) .si-plantilla{display:none}
 .fotos .quitar{background:none;border:0;color:#6e6e73;font:inherit;font-size:.8rem;cursor:pointer;padding:.3rem 0 0}
 input[type=file]{font:inherit;font-size:.9rem;margin-top:.75rem;max-width:100%}
 .boton.chico{padding:.5rem 1rem;font-size:.9rem}
+.ideas{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin:.6rem 0 .2rem}.ideas .ayuda{margin:0}.ideas input[type=file]{width:auto;max-width:100%}
+.boton[disabled]{opacity:.45;cursor:not-allowed}
 .generando{display:flex;gap:1rem;align-items:center}
 .extra{border:1px solid var(--acento);background:#fff4ed}
 .kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(10.5rem,1fr));gap:.75rem;margin-bottom:1.25rem}
