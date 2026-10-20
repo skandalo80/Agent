@@ -290,3 +290,33 @@ sudo systemctl reload caddy
 ```
 
 Para actualizarla después: `git pull` y repetir el `cp`. No hace falta recargar Caddy.
+
+La página incluye `404.html`, `robots.txt`, `sitemap.xml`, `og.png` (la vista previa al compartir el link por Instagram o WhatsApp) y `sitio.js`. No hay scripts ni estilos dentro del HTML porque la CSP de Caddy solo permite archivos del propio dominio; si agregas uno, ponlo en un archivo aparte. Si cambias la página, actualiza la fecha en `sitemap.xml`.
+
+### Cabeceras de seguridad
+
+`deploy/Caddyfile` (bot) y `deploy/Caddyfile-web` (página) traen HSTS, CSP, anti-iframe y nosniff; la página además manda su 404 propia. Si ya tenías los bloques viejos en `/etc/caddy/Caddyfile`, reemplázalos (no toques los de otras apps):
+
+```bash
+sudo cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.bak
+sudo nano /etc/caddy/Caddyfile   # borra los bloques bot.skandar.online, skandar.online y www.skandar.online
+cat ~/ig-bot/deploy/Caddyfile ~/ig-bot/deploy/Caddyfile-web | sudo tee -a /etc/caddy/Caddyfile
+sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile && sudo systemctl reload caddy
+curl -sI https://skandar.online | grep -i strict   # debe salir Strict-Transport-Security
+```
+
+Si `validate` falla, regresa con `sudo cp /etc/caddy/Caddyfile.bak /etc/caddy/Caddyfile`.
+
+## Respaldos
+
+`scripts/respaldo.py` copia cada base de `data/` a `~/respaldos/AAAA-MM-DD/` (14 días). Se activa una vez:
+
+```bash
+sudo cp ~/ig-bot/deploy/igbot-respaldo.service ~/ig-bot/deploy/igbot-respaldo.timer /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now igbot-respaldo.timer
+sudo systemctl start igbot-respaldo && ls ~/respaldos   # prueba ahora mismo
+```
+
+Esto protege contra borrados o una base dañada, pero vive en el mismo disco. Para cubrir que se pierda la instancia, haz de vez en cuando un respaldo del volumen de arranque en Oracle Cloud (Storage → Boot volumes → Create backup; la capa gratuita incluye 5).
+
+Para restaurar: `sudo systemctl stop igbot`, copia el `.db` del día a `data/` y `sudo systemctl start igbot`.

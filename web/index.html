@@ -9,6 +9,30 @@
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <meta name="description" content="Agentes de inteligencia artificial que atienden el Instagram de tu negocio las 24 horas, con tu información, tu tono y tu criterio.">
 <meta name="theme-color" content="#0a0a0a">
+<link rel="canonical" href="https://skandar.online/">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="es_MX">
+<meta property="og:site_name" content="Agentes IA by Skandar">
+<meta property="og:url" content="https://skandar.online/">
+<meta property="og:title" content="Agentes IA by Skandar">
+<meta property="og:description" content="Tu Instagram, atendido las 24 horas. Con tu información, tu tono y tu criterio.">
+<meta property="og:image" content="https://skandar.online/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Agentes IA by Skandar. Siempre disponible.">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "name": "Agentes IA by Skandar",
+  "url": "https://skandar.online/",
+  "logo": "https://skandar.online/apple-touch-icon.png",
+  "description": "Agentes de inteligencia artificial que atienden el Instagram de tu negocio las 24 horas.",
+  "areaServed": "MX",
+  "sameAs": ["https://www.instagram.com/skandar.online/"]
+}
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
@@ -65,7 +89,7 @@
     <div class="contenedor">
       <h2>Las mismas preguntas.<br>Respondidas al instante.</h2>
       <p class="bajada angosto">Precio, envíos, disponibilidad. Tu agente las resuelve desde el primer mensaje y tú te quedas con las conversaciones que necesitan a una persona.</p>
-      <div class="funciones" style="text-align:left">
+      <div class="funciones izquierda">
         <div class="funcion"><span class="num">01</span><h3>Responde como tú.</h3><p>Contesta con la información, el tono y las reglas de tu negocio desde el primer mensaje.</p></div>
         <div class="funcion"><span class="num">02</span><h3>Cotiza en segundos.</h3><p>Consulta tu inventario y tus precios, y envía la cotización en PDF por mensaje y por correo.</p></div>
         <div class="funcion"><span class="num">03</span><h3>Agenda por ti.</h3><p>Reserva citas en tu calendario y le confirma al cliente.</p></div>
@@ -158,19 +182,6 @@
     <a href="/privacidad">Aviso de privacidad</a>
   </div>
 </footer>
-<script>
-document.querySelectorAll('.sugerencia[data-texto]').forEach(function (a) {
-  a.addEventListener('click', function (e) {
-    if (!navigator.clipboard) return;
-    e.preventDefault();
-    var ir = function () { window.location.href = a.href; };
-    var aviso = document.getElementById('aviso-copia');
-    navigator.clipboard.writeText(a.dataset.texto).then(function () {
-      aviso.textContent = 'Mensaje copiado. Abriendo Instagram…';
-      setTimeout(ir, 400);
-    }, ir);
-  });
-});
-</script>
+<script src="/sitio.js"></script>
 </body>
 </html>
