@@ -339,3 +339,42 @@ def test_esta_semana(con_mensajes, monkeypatch):
     monkeypatch.setattr(c, "imagenes_mes", 4)
     r = client.post("/panel/contenido/semana", headers=ORIGEN, data={"accion": "armar"})
     assert "Te queda 1 imagen de tu plan" in r.text and len(proveedor.llamadas) == 3
+
+
+def test_diseno_libre_con_el_estilo_de_sus_fotos(cliente, monkeypatch):
+    client, c, llamadas, proveedor = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 5)
+    marca = {"principal": "#111111", "acento": "#E8590C", "fondo": "#000000", "fuente": "Inter", "peso": "700",
+             "estilo": "premium", "plantilla": "editorial", "modo": "libre", "fotos_estilo": "1",
+             "estilo_propio": "Fondos oscuros, minimalista, el celular como protagonista."}
+    r = client.post("/panel/contenido/marca", headers=ORIGEN, data={**marca, "accion": "subir"},
+                    files={"fotos": ("post.png", png(), "image/png")})
+    guardada = client.portal.call(contenido.marca_de, c)
+    assert guardada["modo"] == "libre" and guardada["fotos_estilo"] is True and "celular" in guardada["estilo_propio"]
+    assert 'name="modo" value="libre" checked' in r.text
+
+    r = client.get("/panel/contenido/nuevo")
+    assert 'name="modo" value="libre" checked' in r.text
+    client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "marca"})
+    assert "<estilo_de_la_marca>Fondos oscuros" in llamadas[-1][0]
+    prompt, fotos = proveedor.llamadas[-1]
+    assert 'Headline (largest): "Cartera Atelier"' in prompt and "#E8590C" in prompt
+    assert "celular como protagonista" in prompt and "brand's own photos" in prompt and len(fotos) == 1
+    p = client.portal.call(contenido.pieza, c.store, 1)
+    assert p["plantilla"] == "libre"
+    token = client.portal.call(c.store.media, client.portal.call(c.store.post, 1)["media_ids"][0])[0]
+    assert Path(f"data/cafe_lunar/media/{token}.jpg").is_file()
+    assert not Path(f"data/cafe_lunar/media/{token}.base.jpg").exists()
+
+    r = client.get("/panel/contenido/post/1")
+    assert "Rehacer el diseño" in r.text and "data-vista" not in r.text and 'name="plantilla"' not in r.text
+    r = client.post("/panel/contenido/post/1", headers=ORIGEN,
+                    data={"titulo": "Otro título", "caption": "x", "accion": "guardar"})
+    assert "Guardado." in r.text and client.portal.call(contenido.pieza, c.store, 1)["plantilla"] == "libre"
+    client.post("/panel/contenido/post/1", headers=ORIGEN, data={"titulo": "Otro título", "caption": "x", "accion": "otra"})
+    assert 'Headline (largest): "Otro título"' in proveedor.llamadas[-1][0]
+
+    # Con plantilla en este post, aunque la marca diga libre.
+    client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "marca", "modo": "plantilla"})
+    assert client.portal.call(contenido.pieza, c.store, 2)["plantilla"] == "editorial"
+    assert "Do not include any text" in proveedor.llamadas[-1][0]

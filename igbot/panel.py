@@ -343,6 +343,7 @@ label.check{display:flex;gap:.5rem;align-items:center;font-weight:500;cursor:poi
 label.check input{width:auto;margin:0}
 .si-precio{display:none}
 form:has(#con_precio:checked) .si-precio{display:block}
+form:has(input[name=modo][value=libre]:checked) .si-plantilla{display:none}
 .js .sin-js{display:none}
 .propuestas{display:grid;grid-template-columns:repeat(auto-fill,minmax(15.5rem,1fr));gap:1rem}
 .propuesta{background:var(--blanco);border-radius:1.25rem;overflow:hidden;display:flex;flex-direction:column}
