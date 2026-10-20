@@ -258,6 +258,8 @@ main .boton.secundario{background:transparent;color:var(--negro);border-color:va
 .escribiendo span:nth-child(3){animation-delay:.3s}
 @keyframes puntos{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
 .compacta{padding:2.25rem 0 2rem}
+/* La franja negra mide lo mismo en todas las secciones (la más alta es Contenido). */
+@media(min-width:561px){.compacta{min-height:18rem}}
 .compacta h1{font-size:clamp(1.9rem,5vw,2.75rem)}
 .compacta .bajada{font-size:1.05rem;margin-top:.5rem}
 .compacta+main{padding-top:1.5rem}
