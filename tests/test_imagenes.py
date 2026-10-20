@@ -52,6 +52,10 @@ def test_cada_plantilla_da_un_jpg_de_feed(plantilla):
     assert (img.format, img.size) == ("JPEG", (1080, 1350))
 
 
+def test_la_plantilla_inicial_es_editorial():
+    assert imagenes.PLANTILLA_INICIAL == "editorial" in imagenes.PLANTILLAS
+
+
 def test_el_prompt_pide_imagen_sin_letras():
     prompt = imagenes.prompt_final("Cartera sobre una mesa", "minimal")
     assert prompt.startswith("Cartera sobre una mesa")

@@ -108,6 +108,8 @@ ESPACIO = {
     "banda": "Keep the subject in the upper two thirds.",
 }
 PLANTILLAS = tuple(ESPACIO)
+# La que sale si el cliente no elige otra (la que escogió Skandar).
+PLANTILLA_INICIAL = "editorial"
 
 
 def prompt_final(idea: str, plantilla: str) -> str:
