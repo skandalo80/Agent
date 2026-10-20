@@ -213,3 +213,20 @@ def test_token_nuevo_en_env_reemplaza_al_renovado(monkeypatch):
         await store.close()
 
     asyncio.run(main())
+
+
+def test_firma_con_la_llave_de_meta_o_la_de_instagram(monkeypatch):
+    import app as bot
+    from igbot import config
+
+    monkeypatch.setattr(config, "APP_SECRET", "meta")
+    monkeypatch.setattr(config, "IG_OAUTH_SECRET", "instagram")
+    body = b'{"entry": []}'
+
+    def firma(secret):
+        return "sha256=" + hmac.new(secret, body, hashlib.sha256).hexdigest()
+
+    assert bot.signature_ok(body, firma(b"meta"))
+    assert bot.signature_ok(body, firma(b"instagram"))
+    assert not bot.signature_ok(body, firma(b"otra"))
+    assert not bot.signature_ok(body, None)
