@@ -273,3 +273,69 @@ def test_chats_en_pausa(cliente):
     assert "vuelve a contestarle a @ana" in r.text and client.portal.call(c.store.paused_until, "ana") == 0
     assert "ya no estaba en pausa" in client.post("/panel/pausas", headers=ORIGEN,
                                                   data={"usuario": "beto", "accion": "reactivar"}).text
+
+
+TEMAS = {"temas": [{"tema": "Horario de fin de semana", "personas": 4, "ejemplo": "¿Abren el sábado?",
+                    "objetivo": "explicar", "idea": "Post con el horario del sábado"},
+                   {"tema": "x", "personas": "muchas", "objetivo": "otro"}]}
+PLAN = {"posts": [{"objetivo": "explicar", "tema": "Horario del sábado", "por_que": "Te preguntaron 4 veces."},
+                  {"objetivo": "marca", "tema": "Quiénes somos", "por_que": "Para que te conozcan."},
+                  {"objetivo": "estrella", "tema": "El facial", "por_que": "Es lo que más te piden."}]}
+
+
+@pytest.fixture
+def con_mensajes(cliente, monkeypatch):
+    client, c, llamadas, proveedor = cliente
+
+    async def fake_claude(prompt, system, mcp=None, allowed=(), max_turns=5, model=None):
+        llamadas.append((prompt, system, model))
+        if "Agrupas" in system:
+            return json.dumps(TEMAS)
+        if "3 posts de esta semana" in system:
+            return json.dumps(PLAN)
+        return json.dumps(POST)
+
+    monkeypatch.setattr(bot.agent, "run_claude", fake_claude)
+    monkeypatch.setattr(c, "imagenes_mes", 10)
+    client.portal.call(c.store.add_incoming, "ana", "m1", "Hola, ¿abren el sábado?")
+    client.portal.call(c.store.add_comment, "k1", "beto", "post1", "¿Horario del sábado?")
+    return client, c, llamadas, proveedor
+
+
+def test_comentarios_y_dms(con_mensajes):
+    client, c, llamadas, _ = con_mensajes
+    r = client.get("/panel/contenido/ideas")
+    assert "Horario de fin de semana" in r.text and "4 personas" in r.text and "De 2 mensajes" in r.text
+    assert 'href="/panel/contenido/ideas" class="on"' in r.text
+    prompt, system, model = llamadas[0]
+    assert "(DM, persona 1) Hola, ¿abren el sábado?" in prompt and "(comentario, persona 2)" in prompt
+    assert model == "claude-haiku-5-5"
+    client.get("/panel/contenido/ideas")
+    assert len(llamadas) == 1  # una vez al día
+    r = client.get("/panel/contenido/nuevo?objetivo=explicar&tema=Post+con+el+horario+del+s%C3%A1bado")
+    assert "Post con el horario del sábado</textarea>" in r.text and 'value="explicar" checked' in r.text
+
+
+def test_esta_semana(con_mensajes, monkeypatch):
+    client, c, llamadas, proveedor = con_mensajes
+    r = client.get("/panel/contenido/semana")
+    assert "Tu semana en un clic" in r.text and "Armar mi semana · usa 3 imágenes" in r.text
+    r = client.post("/panel/contenido/semana", headers=ORIGEN, data={"accion": "armar"})
+    assert "Post 3 de 3" in r.text and 'url=/panel/contenido/semana"' in r.text
+    assert len(proveedor.llamadas) == 3
+    r = client.get("/panel/contenido/semana")
+    assert r.text.count('class="propuesta"') == 3 and "Te preguntaron 4 veces." in r.text
+    assert "0 de 3 aprobadas" in r.text and "Proponer 3 más" in r.text
+    posts = client.portal.call(c.store.posts, ("borrador",), None, admin.PANEL)
+    fechas = sorted(p["publish_at"] for p in posts)
+    assert fechas[1] - fechas[0] == 2 * 86400
+    r = client.post("/panel/contenido/semana", headers=ORIGEN, data={"aprobar": str(posts[0]["id"])})
+    assert "Listo: sale el" in r.text and "1 de 3 aprobadas" in r.text
+    assert client.portal.call(c.store.post, posts[0]["id"])["status"] == "programada"
+    assert "ya no está en borrador" in client.post("/panel/contenido/semana", headers=ORIGEN,
+                                                   data={"aprobar": str(posts[0]["id"])}).text
+
+    # Sin cupo para 3 más, pide confirmar las extra antes de gastar.
+    monkeypatch.setattr(c, "imagenes_mes", 4)
+    r = client.post("/panel/contenido/semana", headers=ORIGEN, data={"accion": "armar"})
+    assert "Te queda 1 imagen de tu plan" in r.text and len(proveedor.llamadas) == 3

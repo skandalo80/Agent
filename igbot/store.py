@@ -602,6 +602,15 @@ class Store:
         )
         return list(await cur.fetchall())
 
+    async def client_comments(self, since: float, until: float, limit: int = 200) -> list[tuple[str, str]]:
+        """Los comentarios que dejaron en las publicaciones (lo más reciente primero)."""
+        cur = await self.db.execute(
+            "SELECT user_id, text FROM comments WHERE created_at >= ? AND created_at < ?"
+            " ORDER BY created_at DESC LIMIT ?",
+            (since, until, limit),
+        )
+        return list(await cur.fetchall())
+
     # --- conexión de cuentas de clientes ---
 
     async def add_solicitud(self, usuario: str, nombre: str, correo: str) -> None:

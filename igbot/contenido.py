@@ -292,7 +292,8 @@ def generando(c: Cuenta, trabajo, volver: str, mensaje: str) -> StreamingRespons
 
 # --- páginas ---
 
-PESTANAS = [("calendario", "Calendario", "/panel/contenido"), ("nuevo", "+ Crear post", "/panel/contenido/nuevo"),
+PESTANAS = [("semana", "Esta semana", "/panel/contenido/semana"), ("calendario", "Calendario", "/panel/contenido"),
+            ("ideas", "Comentarios y DMs", "/panel/contenido/ideas"), ("nuevo", "+ Crear post", "/panel/contenido/nuevo"),
             ("marca", "Tu marca", "/panel/contenido/marca")]
 
 
@@ -713,7 +714,9 @@ async def ver(request: Request):
 async def ver_nuevo(request: Request):
     if not (c := panel.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
-    return await nuevo(c) if c.imagenes_mes > 0 else sin_plan()
+    q = request.query_params  # desde Comentarios y DMs llega con el tema ya puesto
+    valores = {"objetivo": q.get("objetivo", ""), "tema": q.get("tema", "")[:MAX_TEMA]}
+    return await nuevo(c, valores) if c.imagenes_mes > 0 else sin_plan()
 
 
 @router.post("/nuevo")
