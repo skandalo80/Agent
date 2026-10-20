@@ -155,6 +155,8 @@ def test_webhook_de_punta_a_punta(monkeypatch):
 
     with TestClient(bot.app) as client:
         assert client.post("/webhook", content=b"{}").status_code == 403
+        for hidden in ("/docs", "/redoc", "/openapi.json"):
+            assert client.get(hidden).status_code == 404
         assert post(dm("m1", "hola")).status_code == 200
         post(dm("m1", "hola"))  # reintento de Meta
         post(dm("m3", "eco", echo=True))

@@ -67,6 +67,7 @@ p { margin: 0; }
 
 /* Portada con teléfono */
 .portada { padding: 6rem 0 0; overflow: hidden; }
+.error { padding-bottom: 8rem; min-height: 60vh; }
 .telefono {
   width: min(20rem, 82vw); margin: 5rem auto 0; padding: .7rem .7rem 0;
   background: #1c1c1e; border: 1px solid #3a3a3c; border-bottom: 0;
@@ -89,6 +90,7 @@ p { margin: 0; }
 
 /* Funciones */
 .funciones { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: 1.25rem; margin-top: 4rem; }
+.izquierda { text-align: left; }
 .funcion { background: var(--blanco); border-radius: 1.5rem; padding: 2rem; }
 .funcion .num { font-size: .85rem; font-weight: 600; color: var(--acento); margin-bottom: 1.5rem; display: block; }
 .funcion p { color: #6e6e73; }

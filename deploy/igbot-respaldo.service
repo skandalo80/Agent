@@ -1,0 +1,8 @@
+[Unit]
+Description=Respaldo de las bases del IG Bot
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/ig-bot
+ExecStart=/home/ubuntu/ig-bot/.venv/bin/python scripts/respaldo.py

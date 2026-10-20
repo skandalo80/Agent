@@ -134,7 +134,8 @@ async def lifespan(app: FastAPI):
     await store.close()
 
 
-app = FastAPI(lifespan=lifespan)
+# Sin /docs ni /openapi.json: no hace falta publicar la lista de rutas.
+app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 
 
 @app.get("/health")
