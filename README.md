@@ -196,6 +196,13 @@ muestra también los posts subidos desde la app de Instagram. El CSP del bot
 necesita `script-src 'self'; font-src 'self'; img-src 'self' https://*.cdninstagram.com
 https://*.fbcdn.net` (ver `deploy/Caddyfile`).
 
+Dos pestañas proponen (`igbot/semana.py`): **Comentarios y DMs** agrupa con
+`COMMENTS_MODEL` lo que más escribieron en 7 días (DMs y comentarios; una vez al
+día, kv `ideas:<fecha>`) y cada tema abre Crear post con el tema puesto. **Esta
+semana** ("Armar mi semana") pide a `CONTENT_MODEL` 3 posts con objetivos distintos
+y los genera (3 imágenes del cupo; si no alcanzan, pide confirmar las extra); quedan
+en borrador con fecha sugerida y se aprueban desde ahí.
+
 Las fotos de ejemplo de cada estilo (Tu marca > Estilo de tus fotos) se generan una
 vez para todos los clientes (4 imágenes, ~US$0.16) y quedan en `data/estilos/`:
 `.venv/bin/python scripts/ejemplos_estilo.py`.

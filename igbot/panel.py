@@ -344,6 +344,18 @@ label.check input{width:auto;margin:0}
 .si-precio{display:none}
 form:has(#con_precio:checked) .si-precio{display:block}
 .js .sin-js{display:none}
+.propuestas{display:grid;grid-template-columns:repeat(auto-fill,minmax(15.5rem,1fr));gap:1rem}
+.propuesta{background:var(--blanco);border-radius:1.25rem;overflow:hidden;display:flex;flex-direction:column}
+.propuesta .pieza{border-radius:0}
+.propuesta .cuerpo{padding:1rem 1.1rem 1.2rem;display:flex;flex-direction:column;gap:.45rem;flex:1}
+.propuesta .cuerpo p{margin:0;font-size:.92rem;line-height:1.45}
+.propuesta .arriba{display:flex;justify-content:space-between;gap:.5rem}
+.propuesta .acciones{margin-top:auto;padding-top:.4rem}
+.propuesta .acciones .boton{flex:1;text-align:center}
+.por-que{color:#6e6e73}
+.chip.acento{background:#fff4ed;color:var(--acento);border-color:transparent}
+.titulo-seccion{display:flex;justify-content:space-between;align-items:flex-end;gap:1rem;margin-bottom:1rem}
+.titulo-seccion h2{margin:0}
 .acciones-fila{display:flex;gap:.5rem;flex:none}
 .antiguos .fila img{opacity:.85}
 .antiguos .datos b{font-weight:500}

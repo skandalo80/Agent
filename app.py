@@ -27,7 +27,8 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse
 
-from igbot import admin, agent, botones, comentarios, conectar, config, contenido, limites, panel, reporte, resultados
+from igbot import (admin, agent, botones, comentarios, conectar, config, contenido, limites, panel, reporte, resultados,
+                   semana)
 from igbot.cuenta import Cuenta, cargar, cuenta, de_carpeta, usar
 from igbot.dispatcher import Dispatcher
 from igbot.google import Google
@@ -237,6 +238,7 @@ if not config.CLIENTE:
     app.include_router(conectar.router)
     app.include_router(panel.router)
     app.include_router(contenido.router)
+    app.include_router(semana.router)
     app.include_router(resultados.router)
 
 
