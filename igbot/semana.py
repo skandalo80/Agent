@@ -28,7 +28,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from . import config, imagenes, panel, tools
 from .admin import PANEL
 from .contenido import (HORA_SUGERIDA, OBJETIVOS, cuando, falta_cupo, generar, guardar_pieza, pagina,
-                        pieza, recortar, sin_plan, url_imagen)
+                        pieza, sin_plan, url_imagen)
 from .cuenta import Cuenta, usar
 
 log = logging.getLogger("igbot.semana")
@@ -178,8 +178,10 @@ def tarjeta(c: Cuenta, post: dict, p: dict, token: str) -> str:
         f'<div class="arriba"><span class="chip acento">{escape(OBJETIVOS.get(p.get("objetivo"), ("",))[0])}</span>'
         f'<span class="chip{" verde" if aprobado else ""}">{estado}</span></div>'
         f'<b>{escape(cuando(post["publish_at"]))}</b>'
+        # El porqué y el texto del post, plegados para que las tarjetas queden parejas.
+        + '<details class="detalle"><summary>Ver por qué y el texto</summary>'
         + (f'<p class="por-que">{escape(p["por_que"])}</p>' if p.get("por_que") else "")
-        + f'<p>{escape(recortar(post["caption"], 160))}</p>'
+        + f'<p class="texto-post">{escape(post["caption"])}</p></details>'
         + (f'<p class="ayuda">Comentan <b>{escape(p["clave"])}</b> y reciben un DM</p>' if p.get("clave") else "")
         + f'<div class="acciones">{botones}</div></div></div>')
 

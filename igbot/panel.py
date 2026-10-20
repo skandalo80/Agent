@@ -375,6 +375,10 @@ form:has(input[name=modo][value=libre]:checked) .si-plantilla{display:none}
 .propuesta .acciones{margin-top:auto;padding-top:.4rem}
 .propuesta .acciones .boton{flex:1;text-align:center}
 .por-que{color:#6e6e73}
+.detalle summary{cursor:pointer;list-style:none;color:#6e6e73;font-size:.9rem;font-weight:500;margin-top:.5rem}
+.detalle summary::-webkit-details-marker{display:none}
+.detalle summary::after{content:"›";margin-left:.35rem;display:inline-block;transition:transform .15s}.detalle[open] summary::after{transform:rotate(90deg)}
+.detalle p{margin:.45rem 0}.detalle .texto-post{white-space:pre-wrap}
 .chip.acento{background:#fff4ed;color:var(--acento);border-color:transparent}
 .titulo-seccion{display:flex;justify-content:space-between;align-items:flex-end;gap:1rem;margin-bottom:1rem}
 .titulo-seccion h2{margin:0}
