@@ -9,6 +9,9 @@ contraseñas) y desde ahí:
 - enciende o pausa su asistente;
 - ve los chats en pausa (los atiende una persona) y los reactiva o les da más tiempo.
 
+La cuenta principal también se edita aquí (para enseñarlo en una demo): lo que
+guarda va a data/system.md y manda sobre prompts/system.md hasta que lo restaure.
+
 /panel lleva a Resultados cuando el asistente ya está encendido y con mensajes
 de clientes; si no, a Tu asistente (/panel/asistente) para configurarlo.
 
@@ -207,7 +210,7 @@ async def usuario(c: Cuenta) -> str:
 
 
 def prompt_actual(c: Cuenta) -> str:
-    path = Path(c.prompt_path)
+    path = c.ruta_prompt()
     return path.read_text(encoding="utf-8") if path.is_file() else ""
 
 
@@ -468,7 +471,7 @@ async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt
     datos = datos if datos is not None else await perfil(c)
     prompt = prompt_actual(c) if prompt is None else prompt
     encendido = await activo(c)
-    formulario = _formulario(c, datos, prompt, pares_minimos, nota) if c.slug else ""
+    formulario = _formulario(c, datos, prompt, pares_minimos, nota)
     return pagina(
         cabecera(salir=True, menu="asistente", cuenta=c)
         + '<section class="oscuro portada compacta"><div class="contenedor">'
@@ -483,7 +486,8 @@ async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt
         '<main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
         + await pausas(c)
-        + (PRINCIPAL if not c.slug else formulario)
+        + ("" if c.slug else principal(c))
+        + formulario
         + "</div></main>"
     )
 
@@ -514,13 +518,18 @@ async def pausas(c: Cuenta) -> str:
             + detalle + "</div>")
 
 
-# La cuenta principal (la vendedora, la del .env) usa prompts/system.md, que vive en
-# el repo: el panel no lo pisa. Desde aquí solo se enciende, se pausa y se prueba.
-PRINCIPAL = (
-    '<div class="tarjeta"><span class="num">01</span><h2>Instrucciones</h2>'
-    '<p class="ayuda">Esta es la cuenta principal: sus instrucciones se editan en el servidor'
-    " (prompts/system.md) y no desde el panel. Aquí puedes encenderla, pausarla y probarla.</p></div>"
-)
+# La cuenta principal (la vendedora, la del .env) usa prompts/system.md, que vive en el
+# repo. Lo que se guarda aquí va aparte (Cuenta.prompt_editado) para no chocar con git pull;
+# "Volver a las del servidor" lo borra y vuelve a mandar el del repo.
+def principal(c: Cuenta) -> str:
+    if c.prompt_editado().is_file():
+        return ('<form method="post" action="/panel/guardar" class="aviso acciones-fila" style="align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">'
+                "<span>Tu asistente usa las instrucciones que guardaste aquí, no las del servidor"
+                " (prompts/system.md). Los cambios a ese archivo no se aplican mientras tanto.</span>"
+                '<button class="boton secundario chico" name="accion" value="restaurar">'
+                "Volver a las del servidor</button></form>")
+    return ('<div class="aviso">Cuenta principal: abajo, en Tono e instrucciones, están las del servidor'
+            " (prompts/system.md). Si las cambias y guardas, tu asistente usa las tuyas hasta que las restaures.</div>")
 
 
 def _formulario(c: Cuenta, datos: dict, prompt: str, pares_minimos: int, nota: str) -> str:
@@ -616,7 +625,11 @@ async def guardar(request: Request):
     if accion.startswith("quitar_") and accion[7:].isdigit():
         del datos["faq"][int(accion[7:]):int(accion[7:]) + 1]
         return await panel_de(c, "", datos, prompt)
-    if accion not in ("generar", "guardar") or not c.slug:  # la principal no se edita aquí
+    if accion == "restaurar" and not c.slug:
+        c.prompt_editado().unlink(missing_ok=True)
+        log.info("@%s volvió a las instrucciones del servidor", await usuario(c))
+        return await panel_de(c, "Listo: tu asistente vuelve a usar las instrucciones del servidor.")
+    if accion not in ("generar", "guardar"):
         return await panel_de(c, "", datos, prompt)
     datos["faq"] = [q for q in datos["faq"] if q["p"] or q["r"]]
     with usar(c):
@@ -626,8 +639,9 @@ async def guardar(request: Request):
             return await panel_de(c, nota="Listo: revísalas y pulsa Guardar para que tu asistente las use.",
                                   datos=datos, prompt=generar(nombre, datos))
         prompt = prompt.strip() or generar(nombre, datos)
-        Path(c.prompt_path).parent.mkdir(parents=True, exist_ok=True)
-        Path(c.prompt_path).write_text(prompt + "\n", encoding="utf-8")
+        destino = Path(c.prompt_path) if c.slug else c.prompt_editado()
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        destino.write_text(prompt + "\n", encoding="utf-8")
     log.info("@%s guardó las instrucciones de su asistente desde el panel", nombre)
     aviso = "Guardado. Tu asistente ya usa estas instrucciones."
     if not await activo(c):

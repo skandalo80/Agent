@@ -84,6 +84,16 @@ class Cuenta:
     store: Any = field(default=None, repr=False, compare=False)
     instagram: Any = field(default=None, repr=False, compare=False)
 
+    def ruta_prompt(self) -> Path:
+        """Las instrucciones vigentes. La principal usa prompts/system.md (del repo) salvo que
+        se hayan editado en el panel: esas van junto a su base (data/system.md), fuera de git."""
+        if not self.slug and (editado := self.prompt_editado()).is_file():
+            return editado
+        return Path(self.prompt_path)
+
+    def prompt_editado(self) -> Path:
+        return Path(self.db_path).parent / "system.md"
+
     @classmethod
     def desde_env(cls, slug: str, env: Mapping[str, str]) -> "Cuenta":
         """Arma la cuenta con las variables de su .env (ver .env.example)."""
