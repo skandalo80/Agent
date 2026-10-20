@@ -170,6 +170,23 @@ Para activarlo en una cuenta:
 2. Escríbele cualquier cosa al bot desde tu Instagram y busca tu id en el log (`journalctl -u igbot@nortex | grep "DM de"` para Nortex, `journalctl -u igbot | grep "DM de"` para el vendedor). Ponlo en `ADMIN_IG_IDS` del `.env` de la cuenta (el id cambia en cada cuenta del negocio).
 3. Revisa que el `.env` principal tenga `PUBLIC_URL`, y reinicia.
 
+## Imágenes para contenido (Gemini)
+
+`igbot/imagenes.py` arma piezas para el feed: Gemini pinta la imagen sin letras
+y el servidor le pone título, subtítulo, precio y firma con una de 4 plantillas
+(`editorial`, `minimal`, `marco`, `banda`) en Inter y el color de acento. Cambiar
+el texto no genera otra imagen. Cada pieza queda en la tabla `media`, lista para
+publicarse con el mismo flujo de las publicaciones de los administradores.
+
+En `.env`: `GEMINI_API_KEY` (aistudio.google.com/apikey, cuenta de prepago) y,
+por cuenta, `IMAGES_PER_MONTH` (Community 40, Pro 80; 0 = sin contenido). Para
+probar en el servidor:
+
+```bash
+.venv/bin/python scripts/probar_imagen.py --foto producto.jpg     # sin gastar
+.venv/bin/python scripts/probar_imagen.py --idea "Cartera de piel sobre granito"  # 1 imagen
+```
+
 ## Reporte semanal
 
 Cada lunes a las 9:00 (hora del negocio) llega un resumen de los últimos 7 días: personas que escribieron (y cuántas nuevas), respuestas del bot, cotizaciones (cuántas personas, monto total y lo más cotizado), conversaciones pasadas a una persona o contestadas a mano, comentarios con palabra clave, publicaciones, y un resumen de Claude de lo que más preguntan y qué oportunidades hay.

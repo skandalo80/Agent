@@ -17,6 +17,7 @@ ACCOUNT_KEYS = {
     "DB_PATH", "PROMPT_PATH", "CATALOG_PATH", "QUOTES_DIR",
     "SHEET_CATALOG", "SHEET_INVENTORY", "STORE_RULES_PATH", "SHEET_COMMENTS",
     "ADMIN_IG_IDS", "REPORT_EMAIL", "BUTTONS_PATH", "HIDE_SPAM", "GOOGLE_TOOLS",
+    "IMAGES_PER_MONTH",
 }
 if CLIENTE:
     load_dotenv(f"{CLIENT_DIR}/.env")
@@ -65,3 +66,10 @@ MAIL_FROM = os.getenv("MAIL_FROM", "")  # tu dirección de Gmail
 IG_APP_ID = os.getenv("IG_APP_ID", "")
 IG_OAUTH_SECRET = os.getenv("IG_OAUTH_SECRET", "") or APP_SECRET
 SITE_URL = os.getenv("SITE_URL", "https://skandar.online").rstrip("/")
+
+# --- Imágenes para contenido (igbot/imagenes.py) ---
+# Clave de la API de Gemini (aistudio.google.com/apikey; cuenta de prepago).
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_IMAGE_MODEL = os.getenv("GEMINI_IMAGE_MODEL", "gemini-3.1-flash-image")
+# Lo que cuesta cada imagen, para el gasto diario de la cuenta (DAILY_BUDGET_USD).
+IMAGE_COST_USD = float(os.getenv("IMAGE_COST_USD", "0.04"))

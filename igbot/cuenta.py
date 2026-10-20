@@ -79,6 +79,7 @@ class Cuenta:
     daily_budget_usd: float
     human_pause_hours: float
     google_tools: bool
+    imagenes_mes: int
     # Su base y su cliente de Instagram; los pone app.py al arrancar.
     store: Any = field(default=None, repr=False, compare=False)
     instagram: Any = field(default=None, repr=False, compare=False)
@@ -148,6 +149,9 @@ class Cuenta:
             # Agendar en tu calendario, mandar correos y cotizar con tu Google.
             # Las cuentas que se dan de alta solas desde el panel (Básico) no lo tienen.
             google_tools=_bool(get("GOOGLE_TOOLS", "1")),
+            # Imágenes de contenido incluidas al mes (0 = su plan no incluye contenido;
+            # Community 40, Pro 80). Las que pasen de aquí se cobran aparte.
+            imagenes_mes=int(get("IMAGES_PER_MONTH", "0")),
         )
 
 
