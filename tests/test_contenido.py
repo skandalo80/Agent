@@ -346,7 +346,7 @@ def test_diseno_libre_con_el_estilo_de_sus_fotos(cliente, monkeypatch):
     client, c, llamadas, proveedor = cliente
     monkeypatch.setattr(c, "imagenes_mes", 5)
     marca = {"principal": "#111111", "acento": "#E8590C", "fondo": "#000000", "fuente": "Inter", "peso": "700",
-             "estilo": "premium", "plantilla": "editorial", "modo": "libre", "fotos_estilo": "1",
+             "estilo": "premium", "plantilla": "editorial", "modo": "libre", "fotos_estilo": "1", "propio": "1",
              "estilo_propio": "Fondos oscuros, minimalista, el celular como protagonista."}
     r = client.post("/panel/contenido/marca", headers=ORIGEN, data={**marca, "accion": "subir"},
                     files={"fotos": ("post.png", png(), "image/png")})
@@ -361,6 +361,7 @@ def test_diseno_libre_con_el_estilo_de_sus_fotos(cliente, monkeypatch):
     prompt, fotos = proveedor.llamadas[-1]
     assert 'Headline (largest): "Cartera Atelier"' in prompt and "#E8590C" in prompt
     assert "celular como protagonista" in prompt and "brand's own photos" in prompt and len(fotos) == 1
+    assert "Photo style, as the owner describes it" in prompt and "Dark background" not in prompt
     p = client.portal.call(contenido.pieza, c.store, 1)
     assert p["plantilla"] == "libre"
     token = client.portal.call(c.store.media, client.portal.call(c.store.post, 1)["media_ids"][0])[0]
@@ -379,3 +380,64 @@ def test_diseno_libre_con_el_estilo_de_sus_fotos(cliente, monkeypatch):
     client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "marca", "modo": "plantilla"})
     assert client.portal.call(contenido.pieza, c.store, 2)["plantilla"] == "editorial"
     assert "Do not include any text" in proveedor.llamadas[-1][0]
+
+
+def test_estilo_propio_reemplaza_a_los_de_la_lista(cliente, monkeypatch):
+    client, c, llamadas, proveedor = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 5)
+    base = {"principal": "#111111", "acento": "#E8590C", "fondo": "#000000", "fuente": "Inter", "peso": "700",
+            "estilo": "limpio", "estilo_propio": "Fondos oscuros y detalles en naranja.", "accion": "guardar"}
+    # Sin la casilla, la descripción se guarda pero manda el estilo de la lista.
+    r = client.post("/panel/contenido/marca", headers=ORIGEN, data=base)
+    assert 'id="propio" name="propio" value="1">' in r.text
+    client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "marca"})
+    assert "Studio photography" in proveedor.llamadas[-1][0] and "naranja" not in proveedor.llamadas[-1][0]
+    assert "<estilo_de_la_marca>" not in llamadas[-1][0]
+
+    r = client.post("/panel/contenido/marca", headers=ORIGEN, data={**base, "propio": "1"})
+    assert 'id="propio" name="propio" value="1" checked>' in r.text
+    client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "marca"})
+    assert "naranja" in proveedor.llamadas[-1][0] and "Studio photography" not in proveedor.llamadas[-1][0]
+    # La vista previa no usa la foto de ejemplo de un estilo de la lista.
+    assert client.get("/panel/contenido/muestra.jpg?propio=1").status_code == 200
+
+
+def test_marca_viejo_con_descripcion_usa_su_estilo():
+    assert contenido.usa_propio({"estilo": "limpio", "estilo_propio": "Oscuro"})
+    assert not contenido.usa_propio({"estilo": "limpio"})
+    assert not contenido.usa_propio({"estilo_propio": "Oscuro", "propio": False})
+    assert contenido.usa_propio({"propio": "1"}) and not contenido.usa_propio({"propio": "0", "estilo_propio": "x"})
+
+
+def test_orden_de_tu_marca_y_miniaturas(cliente, monkeypatch):
+    client, c, *_ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 5)
+    r = client.get("/panel/contenido/marca")
+    orden = [r.text.index(t) for t in ("Cómo se arman tus posts", "Paleta de colores", "Tipografía de títulos",
+                                        "Estilo de tus fotos", "Fotos de tu negocio")]
+    assert orden == sorted(orden)
+    assert 'data-plantilla="marco"' in r.text and 'data-plantilla="banda"' in r.text
+    assert "plantilla=marco" in r.text and client.get("/panel/contenido/muestra.jpg?plantilla=banda").status_code == 200
+
+
+def test_insights_de_un_post(cliente, monkeypatch):
+    client, c, *_ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 5)
+    pedidos = []
+
+    async def insights(media_id):
+        pedidos.append(media_id)
+        return {"reach": 1520, "views": 2100, "likes": 87, "comments": 9, "saved": 14, "shares": 6}
+    monkeypatch.setattr(c.instagram, "media_insights", insights, raising=False)
+    r = client.get("/panel/contenido")
+    assert 'href="/panel/contenido/insights/1"' in r.text
+    r = client.get("/panel/contenido/insights/1")
+    assert "Alcance" in r.text and "1,520" in r.text and "Guardados" in r.text and pedidos == ["1"]
+    assert client.get("/panel/contenido/insights/999").status_code == 404
+    assert client.get("/panel/contenido/insights/abc").status_code == 404
+
+    async def sin_permiso(media_id):
+        raise RuntimeError("Instagram respondió 400")
+    monkeypatch.setattr(c.instagram, "media_insights", sin_permiso, raising=False)
+    r = client.get("/panel/contenido/insights/1")
+    assert r.status_code == 200 and "vuelve a conectarla" in r.text

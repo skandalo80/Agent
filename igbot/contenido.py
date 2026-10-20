@@ -149,6 +149,18 @@ def estilo_de(datos: dict) -> str:
     return datos.get("estilo") if datos.get("estilo") in ESTILOS else ESTILO_INICIAL
 
 
+def usa_propio(datos: dict) -> bool:
+    """Marcó "Usar mi propio estilo": su descripción sustituye a los estilos de la lista."""
+    v = datos.get("propio")
+    if v is None:  # marcas guardadas antes de la casilla: con descripción, era la que mandaba
+        return bool(datos.get("estilo_propio", "").strip())
+    return v in (True, "1")
+
+
+def notas_estilo(datos: dict) -> str:
+    return datos.get("estilo_propio", "").strip() if usa_propio(datos) else ""
+
+
 async def pieza(store: Store, post_id: int) -> dict:
     return json.loads(await store.get(f"pieza:{post_id}") or "{}")
 
@@ -261,7 +273,7 @@ async def generar(c: Cuenta, objetivo: str = "", tema: str = "", fotos: list[str
         marca = await marca_de(c)
         if post_id is None:
             fotos = [t for t in fotos if t in marca.get("fotos", [])]
-            texto = await escribir(c, objetivo, tema, len(fotos), con_precio, marca.get("estilo_propio", "").strip())
+            texto = await escribir(c, objetivo, tema, len(fotos), con_precio, notas_estilo(marca))
             modo = modo if modo in MODOS else modo_de(marca)
             plantilla = imagenes.LIBRE if modo == "libre" else plantilla_de(marca)
             p = {"objetivo": objetivo, "tema": tema, "fotos": fotos, "plantilla": plantilla,
@@ -272,9 +284,10 @@ async def generar(c: Cuenta, objetivo: str = "", tema: str = "", fotos: list[str
         else:
             p = await pieza(c.store, post_id)
         referencias = [archivo(c, t).read_bytes() for t in p.get("fotos", []) if archivo(c, t).is_file()]
-        idea = f"{p['imagen']}\n\nPhoto style: {ESTILOS[estilo_de(marca)][2]}"
-        if notas := marca.get("estilo_propio", "").strip():
-            idea += f"\nThe owner describes the brand's style like this (in Spanish): {notas}"
+        if notas := notas_estilo(marca):
+            idea = f"{p['imagen']}\n\nPhoto style, as the owner describes it (in Spanish): {notas}"
+        else:
+            idea = f"{p['imagen']}\n\nPhoto style: {ESTILOS[estilo_de(marca)][2]}"
         if not referencias and marca.get("fotos_estilo", True):  # sin foto de producto: sus fotos guían el estilo
             referencias = [archivo(c, t).read_bytes() for t in marca.get("fotos", [])[:3] if archivo(c, t).is_file()]
             if referencias:
@@ -373,7 +386,12 @@ def recortar(texto: str, maximo: int = 60) -> str:
     return texto[:maximo].rsplit(" ", 1)[0].rstrip(".,;:") + "…"
 
 
-def fila(c: Cuenta, post: dict, p: dict, token: str) -> str:
+def boton_insights(ig_id: str) -> str:
+    return (f'<a class="boton secundario chico" href="/panel/contenido/insights/{escape(ig_id)}">Insights</a>'
+            if ig_id else "")
+
+
+def fila(c: Cuenta, post: dict, p: dict, token: str, ig_id: str = "") -> str:
     estado, color = ESTADOS.get(post["status"], (post["status"], ""))
     titulo = p.get("titulo") or recortar(post["caption"]) or "Sin título"
     objetivo = OBJETIVOS.get(p.get("objetivo"), ("",))[0]
@@ -381,7 +399,7 @@ def fila(c: Cuenta, post: dict, p: dict, token: str) -> str:
     if objetivo:
         detalle += f" · {objetivo}"
     accion = (f'<a class="boton secundario chico" href="{escape(post["permalink"])}" target="_blank" rel="noopener">Ver</a>'
-              if post["status"] == "publicada" and post["permalink"]
+              + boton_insights(ig_id) if post["status"] == "publicada" and post["permalink"]
               else f'<a class="boton secundario chico" href="/panel/contenido/post/{post["id"]}">Editar</a>')
     imagen = f'<img src="{url_imagen(c, token)}" alt="">' if token else '<span class="pieza" style="width:4.5rem"></span>'
     return (f'<div class="fila">{imagen}<div class="datos"><b>{escape(titulo)}</b><span>{escape(detalle)}</span></div>'
@@ -423,19 +441,22 @@ def fila_instagram(m: dict, ts: float) -> str:
            if m.get("permalink") else "")
     return (f'<div class="fila">{imagen}<div class="datos"><b>{escape(titulo)}</b>'
             f'<span>{escape(cuando(ts))} · Desde Instagram</span></div>'
-            f'<span class="chip">Publicado</span>{ver}</div>')
+            f'<span class="chip">Publicado</span>{ver}{boton_insights(m.get("id", ""))}</div>')
 
 
 async def publicados_html(c: Cuenta) -> str:
     """Publicados del panel y de la app de Instagram juntos, del más nuevo al más viejo."""
     del_panel = (await c.store.posts(("publicada",), user_id=PANEL))[-12:]
     enlaces = {shortcode(p["permalink"]) for p in del_panel} - {""}
+    en_instagram = await de_instagram(c)
+    ids = {shortcode(m["permalink"]): m.get("id", "") for m in en_instagram if m.get("permalink")}
     lista = []
     for post in del_panel:
         media = await c.store.media(post["media_ids"][0]) if post["media_ids"] else None
-        html = fila(c, post, await pieza(c.store, post["id"]), media[0] if media else "")
+        html = fila(c, post, await pieza(c.store, post["id"]), media[0] if media else "",
+                    ids.get(shortcode(post["permalink"] or ""), ""))
         lista.append((post["publish_at"] or 0, html))
-    for m in await de_instagram(c):
+    for m in en_instagram:
         if m.get("permalink") and shortcode(m["permalink"]) in enlaces:
             continue
         try:
@@ -473,6 +494,43 @@ async def calendario(c: Cuenta, aviso: str = "") -> HTMLResponse:
         if pendientes:
             cuerpo += '<div class="acciones"><a class="boton" href="/panel/contenido/nuevo">+ Crear post</a></div>'
         return await pagina(c, "calendario", "Tus publicaciones: lo que viene y lo que ya salió.", cuerpo, aviso)
+
+
+METRICAS = [  # (métrica de Instagram, cómo se le dice al cliente, qué es)
+    ("reach", "Alcance", "Cuentas que lo vieron"),
+    ("views", "Vistas", "Veces que se mostró"),
+    ("likes", "Me gusta", ""),
+    ("comments", "Comentarios", ""),
+    ("saved", "Guardados", "Lo guardaron para después"),
+    ("shares", "Compartidos", "Lo mandaron a alguien"),
+]
+
+
+async def pagina_insights(c: Cuenta, media_id: str) -> HTMLResponse:
+    m = next((m for m in await de_instagram(c) if m.get("id") == media_id), None)
+    if not m:
+        raise HTTPException(status_code=404)
+    titulo = recortar((m.get("caption") or "").strip().split("\n")[0]) or "Post de Instagram"
+    try:
+        datos = await c.instagram.media_insights(media_id)
+    except Exception as e:  # p. ej. el token no tiene el permiso de estadísticas
+        log.warning("Sin insights de %s para %s: %s", media_id, c.slug, e)
+        datos = None
+    if datos is None:
+        cifras = ('<p class="ayuda">Instagram no nos dio las estadísticas de este post. Casi siempre es porque tu'
+                  " cuenta se conectó antes de que pidiéramos ese permiso: vuelve a conectarla en"
+                  ' <a href="/conectar">Conectar Instagram</a> y acepta el permiso de estadísticas.</p>')
+    else:
+        cifras = '<div class="kpis">' + "".join(
+            f'<div class="kpi"><span>{nombre}</span><b>{datos.get(k, 0):,}</b><small>{nota}</small></div>'
+            for k, nombre, nota in METRICAS) + "</div>"
+        cifras += ('<p class="ayuda">Instagram actualiza estas cifras con unas horas de retraso. Las cuentas'
+                   " de menos de 100 seguidores a veces no tienen todas.</p>")
+    ver = (f'<a class="boton secundario" href="{escape(m["permalink"])}" target="_blank" rel="noopener">'
+           "Ver en Instagram</a>" if m.get("permalink") else "")
+    cuerpo = (f'<div class="tarjeta"><span class="num">Insights</span><h2>{escape(titulo)}</h2>{cifras}'
+              f'<div class="acciones"><a class="boton" href="/panel/contenido">Volver</a>{ver}</div></div>')
+    return await pagina(c, "calendario", "Cómo le fue a este post en Instagram.", cuerpo)
 
 
 def tarjeta_extra(c: Cuenta, accion: str) -> str:
@@ -652,9 +710,14 @@ def ejemplo(estilo: str) -> Path | None:
     return path if estilo in ESTILOS and path.is_file() else None
 
 
-def query_muestra(marca: dict) -> str:
+def query_muestra(marca: dict, **cambios) -> str:
     claves = ("fuente", "peso", "principal", "acento", "fondo", "plantilla", "estilo")
-    return urlencode({k: marca[k] for k in claves if marca.get(k)})
+    q = {k: marca[k] for k in claves if marca.get(k)}
+    q["propio"] = "1" if usa_propio(marca) else "0"
+    return urlencode({**q, **cambios})
+
+
+MINIS = [("marco", "Marco: usa tu color de fondo"), ("banda", "Banda: usa tu color de acento")]
 
 
 async def pagina_marca(c: Cuenta, marca: dict | None = None, aviso: str = "") -> HTMLResponse:
@@ -702,22 +765,33 @@ async def pagina_marca(c: Cuenta, marca: dict | None = None, aviso: str = "") ->
         '<div class="editor"><div class="fija">'
         f'<img class="pieza" id="vista" src="/panel/contenido/muestra.jpg?{escape(query_muestra(marca))}"'
         ' alt="Vista previa de tu marca">'
+        '<div class="minis si-plantilla">' + "".join(
+            f'<figure><img class="pieza" data-plantilla="{k}"'
+            f' src="/panel/contenido/muestra.jpg?{escape(query_muestra(marca, plantilla=k))}" alt=""'
+            f' loading="lazy"><figcaption>{nombre}</figcaption></figure>' for k, nombre in MINIS) + '</div>'
         '<p class="ayuda" style="margin-top:.75rem">Vista previa: cambia al momento. Pulsa Guardar para quedártela.</p>'
         '<div class="acciones sin-js" style="margin-top:.5rem"><button class="boton secundario" name="accion" value="vista">'
         "Ver cómo queda</button></div></div><div>"
-        '<div class="tarjeta"><span class="num">01</span><h2>Paleta de colores</h2>'
+        '<div class="tarjeta"><span class="num">01</span><h2>Cómo se arman tus posts</h2>'
+        '<p class="ayuda">Lo que usan tus posts nuevos; en cada post nuevo lo puedes cambiar.</p>'
+        f'<div class="opciones">{opciones_modo(modo_de(marca))}</div>'
+        '<div class="si-plantilla"><label>Plantilla</label>'
+        f'<div class="chips">{plantillas}</div></div></div>'
+        '<div class="tarjeta"><span class="num">02</span><h2>Paleta de colores</h2>'
         f'<p class="ayuda">Toca cada cuadro para elegir el color; ahí también puedes escribir el código HEX.</p>{colores}</div>'
-        '<div class="tarjeta"><span class="num">02</span><h2>Tipografía de títulos</h2>'
+        '<div class="tarjeta"><span class="num">03</span><h2>Tipografía de títulos</h2>'
         f'<div class="chips">{fuentes}</div><label>Grosor</label><div class="chips">{pesos}</div></div>'
-        '<div class="tarjeta"><span class="num">03</span><h2>Estilo de tus fotos</h2>'
+        '<div class="tarjeta"><span class="num">04</span><h2>Estilo de tus fotos</h2>'
         '<p class="ayuda">Así le pedimos las imágenes al generador, en todos tus posts.</p>'
-        f'<div class="opciones">{estilos}</div>'
-        '<label for="estilo_propio">Describe tu estilo (opcional)</label>'
-        '<p class="ayuda">Con tus palabras: lo que siempre debe verse en tus posts. Pesa más que la opción de arriba.</p>'
+        f'<label class="check"><input type="checkbox" id="propio" name="propio" value="1"{" checked" if usa_propio(marca) else ""}>'
+        " Usar mi propio estilo</label>"
+        '<div class="si-propio"><label for="estilo_propio">Describe tu estilo</label>'
+        '<p class="ayuda">Con tus palabras: lo que siempre debe verse en tus posts.</p>'
         f'<textarea id="estilo_propio" name="estilo_propio" rows="3" maxlength="{MAX_ESTILO}"'
         ' placeholder="Ej. Fondos oscuros, minimalista y elegante, el celular como protagonista, detalles en naranja.">'
         f'{escape(marca.get("estilo_propio", ""))}</textarea></div>'
-        '<div class="tarjeta" id="fotos"><span class="num">04</span><h2>Fotos de tu negocio</h2>'
+        f'<div class="opciones no-propio">{estilos}</div></div>'
+        '<div class="tarjeta" id="fotos"><span class="num">05</span><h2>Fotos de tu negocio</h2>'
         f'<p class="ayuda">Tu local, tu trabajo o tus productos: las usamos como base para que en tus posts salga lo real. Hasta {MAX_FOTOS}.</p>'
         f'<div class="fotos">{fotos}</div>'
         f'<label class="check"><input type="checkbox" name="fotos_estilo" value="1"'
@@ -727,11 +801,7 @@ async def pagina_marca(c: Cuenta, marca: dict | None = None, aviso: str = "") ->
         + ('<input type="file" name="fotos" accept="image/jpeg,image/png,image/webp" multiple>'
            '<div class="acciones"><button class="boton secundario" name="accion" value="subir">Subir fotos</button></div>'
            if sube else "")
-        + '</div><div class="tarjeta"><span class="num">05</span><h2>Cómo se arman tus posts</h2>'
-        '<p class="ayuda">Lo que usan tus posts nuevos; en cada post nuevo lo puedes cambiar.</p>'
-        f'<div class="opciones">{opciones_modo(modo_de(marca))}</div>'
-        '<div class="si-plantilla"><label>Plantilla</label>'
-        f'<div class="chips">{plantillas}</div></div></div>'
+        + '</div>'
         '<div class="acciones"><button class="boton" name="accion" value="guardar">Guardar</button></div>'
         "</div></div></form>"
     )
@@ -751,6 +821,7 @@ def marca_del_form(f, antes: dict) -> dict:
     datos["plantilla"] = f.get("plantilla") if f.get("plantilla") in imagenes.PLANTILLAS else plantilla_de(antes)
     datos["modo"] = f.get("modo") if f.get("modo") in MODOS else modo_de(antes)
     datos["estilo_propio"] = str(f.get("estilo_propio", "")).strip()[:MAX_ESTILO]
+    datos["propio"] = f.get("propio") == "1"
     datos["fotos_estilo"] = f.get("fotos_estilo") == "1"
     return datos
 
@@ -940,7 +1011,7 @@ async def muestra(request: Request):
     datos = {**marca, **dict(request.query_params)}
     fotos = [t for t in marca.get("fotos", []) if archivo(c, t).is_file()]
     # La foto de ejemplo del estilo elegido; si no hay, la de su producto o una neutra.
-    if foto_estilo := ejemplo(estilo_de(datos)):
+    if not usa_propio(datos) and (foto_estilo := ejemplo(estilo_de(datos))):
         base = foto_estilo.read_bytes()
     else:
         base = archivo(c, fotos[0]).read_bytes() if fotos else _MUESTRA
@@ -973,6 +1044,15 @@ async def muestra_post(request: Request, post_id: int):
     async with imagenes._turno:
         jpg = await asyncio.to_thread(imagenes.rotular, sin_texto.read_bytes(), plantilla, texto, marca)
     return Response(jpg, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=600"})
+
+
+@router.get("/insights/{media_id}")
+async def ver_insights(request: Request, media_id: str):
+    if not (c := panel.cuenta_de_sesion(request)):
+        return RedirectResponse("/panel", status_code=303)
+    if not media_id.isdigit() or c.imagenes_mes <= 0:
+        raise HTTPException(status_code=404)
+    return await pagina_insights(c, media_id)
 
 
 @router.get("/estilo/{estilo}.jpg")
