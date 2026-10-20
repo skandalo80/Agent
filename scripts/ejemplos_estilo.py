@@ -16,8 +16,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from igbot import contenido, imagenes  # noqa: E402
 
-ESCENA = ("A generic premium product on display: a ceramic coffee cup, a small leather notebook and a "
-          "glass perfume bottle arranged together.")
+# Una escena de servicio (la mayoría de los clientes son estéticas, consultorios, estudios), sin personas.
+ESCENA = ("A calm, modern beauty and wellness studio corner: a treatment bed with folded white towels, "
+          "a few skincare bottles on a small shelf and a green plant. No people.")
 
 
 async def main():
