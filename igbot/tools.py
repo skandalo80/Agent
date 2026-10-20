@@ -566,7 +566,8 @@ def build(
 ):
     """Servidor MCP con las herramientas de este usuario y la lista de permitidas."""
     tools = memory_tools(store, user_id) + human_tools(store, google, user_id, state)
-    if google:
+    # Agenda, correo y cotizaciones usan tu Google: solo en las cuentas que lo tienen.
+    if google and cuenta().google_tools:
         tools += workspace_tools(store, google, user_id, state)
         if catalog.available():
             tools += quote_tools(store, google, instagram, user_id, state)

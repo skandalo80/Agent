@@ -17,8 +17,9 @@ suya, así que dos conversaciones de cuentas distintas a la vez no se mezclan.
 """
 import logging
 import os
+import sqlite3
 from collections.abc import Iterator, Mapping
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -77,6 +78,7 @@ class Cuenta:
     max_message_chars: int
     daily_budget_usd: float
     human_pause_hours: float
+    google_tools: bool
     # Su base y su cliente de Instagram; los pone app.py al arrancar.
     store: Any = field(default=None, repr=False, compare=False)
     instagram: Any = field(default=None, repr=False, compare=False)
@@ -143,6 +145,9 @@ class Cuenta:
             daily_budget_usd=float(get("DAILY_BUDGET_USD", "5")),
             # Horas que el bot se calla en una conversación que toma una persona.
             human_pause_hours=float(get("HUMAN_PAUSE_HOURS", "12")),
+            # Agendar en tu calendario, mandar correos y cotizar con tu Google.
+            # Las cuentas que se dan de alta solas desde el panel (Básico) no lo tienen.
+            google_tools=_bool(get("GOOGLE_TOOLS", "1")),
         )
 
 
@@ -153,12 +158,24 @@ def de_carpeta(slug: str) -> Cuenta:
     return Cuenta.desde_env(slug, {**comun, **propio})
 
 
+def dadas_de_alta(db_path: str) -> list[str]:
+    """Las cuentas que se dieron de alta solas al conectarse (ver panel.py)."""
+    if not Path(db_path).is_file():
+        return []
+    try:
+        with closing(sqlite3.connect(db_path)) as db:
+            return [r[0] for r in db.execute(
+                "SELECT slug FROM conexiones WHERE slug IS NOT NULL ORDER BY created_at")]
+    except sqlite3.OperationalError:
+        return []  # base de antes del panel (sin la columna slug)
+
+
 def cargar() -> list[Cuenta]:
-    """La cuenta de este proceso y, en el principal, las de CUENTAS."""
+    """La cuenta de este proceso y, en el principal, las de CUENTAS y las del panel."""
     cuentas = [cuenta()]
     if config.CLIENTE:
         return cuentas  # proceso de una sola cuenta (igbot@<nombre>)
-    for slug in config.CUENTAS:
+    for slug in dict.fromkeys(config.CUENTAS + dadas_de_alta(cuentas[0].db_path)):
         if not Path(f"clientes/{slug}/.env").is_file():
             log.error("CUENTAS incluye %s, pero no existe clientes/%s/.env; se omite", slug, slug)
             continue
