@@ -280,8 +280,8 @@ main{padding:3rem 0 5rem}
 .num{display:block;font-size:.85rem;font-weight:600;color:var(--acento);margin-bottom:1rem}
 .ayuda{color:#6e6e73;font-size:.9rem;margin:.1rem 0 .5rem}
 label{display:block;font-weight:600;font-size:.95rem;margin-top:1.25rem}
-textarea,input[type=text],input[type=datetime-local]{width:100%;font:inherit;font-size:1rem;color:var(--negro);background:var(--claro);border:1px solid var(--linea-clara);border-radius:.85rem;padding:.7rem .9rem}
-textarea:focus,input[type=text]:focus,input[type=datetime-local]:focus{outline:2px solid var(--acento-claro);outline-offset:1px;border-color:transparent}
+textarea,input[type=text],input[type=datetime-local],input[type=time],input[type=email]{width:100%;font:inherit;font-size:1rem;color:var(--negro);background:var(--claro);border:1px solid var(--linea-clara);border-radius:.85rem;padding:.7rem .9rem}
+textarea:focus,input[type=text]:focus,input[type=datetime-local]:focus,input[type=time]:focus,input[type=email]:focus{outline:2px solid var(--acento-claro);outline-offset:1px;border-color:transparent}
 textarea.prompt{font:14px/1.5 ui-monospace,Menlo,monospace;min-height:20rem}
 .tarjeta .aviso{background:var(--claro);margin:1rem 0 0}
 .par{border:1px solid var(--linea-clara);border-radius:1rem;padding:1rem;margin-top:1rem}
@@ -392,6 +392,12 @@ input[type=file]{font:inherit;font-size:.9rem;margin-top:.75rem;max-width:100%}
 .barra{height:.35rem;border-radius:999px;background:var(--linea-oscura);margin-top:.5rem;overflow:hidden}
 .barra i{display:block;height:100%;background:var(--acento-claro)}
 .avatar{width:2.6rem;height:2.6rem;border-radius:50%;background:var(--claro);display:grid;place-items:center;font-weight:600;flex:none}
+.sub{margin-top:1.5rem;padding-top:1.5rem;border-top:1px solid var(--linea-clara)}
+.horas{display:flex;gap:.75rem;align-items:center;margin-top:.6rem}.horas input{width:9rem}
+label.check input[type=email]{flex:1;max-width:22rem;margin:0}
+.si-fijo{display:none;margin-top:.75rem}form:has(input[name=fuera][value=fijo]:checked) .si-fijo{display:block}
+.semaforo{width:.65rem;height:.65rem;border-radius:50%;flex:none;margin:0 .4rem;background:#30d158}
+.semaforo.sem-aviso{background:#ff9f0a}.semaforo.sem-mal{background:#ff453a}
 .plegable summary{display:flex;justify-content:space-between;align-items:center;cursor:pointer;list-style:none}
 .plegable summary::-webkit-details-marker{display:none}
 .plegable summary .num{margin:0}
@@ -506,10 +512,16 @@ async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt
         '<main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
         + await recientes(c, ver)
+        + await tarjetas_ajustes(c)
         + ("" if c.slug else principal(c))
         + formulario
         + "</div></main>"
     )
+
+
+async def tarjetas_ajustes(c: Cuenta) -> str:
+    from . import ajustes  # ajustes usa este módulo
+    return ajustes.tarjeta(c) + await ajustes.conexion(c)
 
 
 def hace(t: float) -> str:

@@ -87,6 +87,8 @@ def system_prompt() -> str:
     """Las instrucciones del bot más el catálogo del negocio, si hay."""
     system = cuenta().ruta_prompt().read_text(encoding="utf-8")
     system += "\n\n" + STYLE_PATH.read_text(encoding="utf-8")
+    from .ajustes import prompt_horario  # ajustes importa el panel, que importa este módulo
+    system += "\n\n" + prompt_horario(cuenta())
     if catalog.available():
         system += f"\n\n<catalogo>\n{catalog.prompt_text()}\n</catalogo>"
     if tienda.available():

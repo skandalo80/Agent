@@ -83,6 +83,10 @@ class Cuenta:
     # Su base y su cliente de Instagram; los pone app.py al arrancar.
     store: Any = field(default=None, repr=False, compare=False)
     instagram: Any = field(default=None, repr=False, compare=False)
+    # Ajustes que el dueño cambia en su panel (Tu asistente > Ajustes; ver igbot/ajustes.py).
+    aviso_dm: bool = True  # avisar por DM a los administradores cuando piden una persona
+    aviso_correo: bool = True  # y por correo a owner_email
+    fuera_horario: str = ""  # mensaje fijo fuera de horario; vacío = decir cuándo le contestan
 
     def ruta_prompt(self) -> Path:
         """Las instrucciones vigentes. La principal usa prompts/system.md (del repo) salvo que
