@@ -415,6 +415,35 @@ async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt
     datos = datos if datos is not None else await perfil(c)
     prompt = prompt_actual(c) if prompt is None else prompt
     encendido = await activo(c)
+    formulario = _formulario(c, datos, prompt, pares_minimos, nota) if c.slug else ""
+    return pagina(
+        cabecera(salir=True, menu="asistente", cuenta=c)
+        + '<section class="oscuro portada compacta"><div class="contenedor">'
+        '<p class="antetitulo">Tu asistente</p>'
+        f'<h1>@{escape(await usuario(c))}<span class="punto">.</span></h1>'
+        f'<div class="estado"><div><span class="luz{" on" if encendido else ""}"></span>'
+        f'{"Está contestando tus mensajes." if encendido else "Está en pausa: no contesta mensajes."}</div>'
+        f'<form method="post" action="/panel/estado"><input type="hidden" name="activo" value="{"0" if encendido else "1"}">'
+        f'<div class="acciones-estado"><a class="boton secundario" href="/panel/probar#ultimo">Probar mi asistente</a>'
+        f'<button class="boton{" secundario" if encendido else ""}">{"Pausar" if encendido else "Encender"}</button></div></form></div>'
+        "</div></section>"
+        '<main><div class="contenedor">'
+        + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
+        + (PRINCIPAL if not c.slug else formulario)
+        + "</div></main>"
+    )
+
+
+# La cuenta principal (la vendedora, la del .env) usa prompts/system.md, que vive en
+# el repo: el panel no lo pisa. Desde aquí solo se enciende, se pausa y se prueba.
+PRINCIPAL = (
+    '<div class="tarjeta"><span class="num">01</span><h2>Instrucciones</h2>'
+    '<p class="ayuda">Esta es la cuenta principal: sus instrucciones se editan en el servidor'
+    " (prompts/system.md) y no desde el panel. Aquí puedes encenderla, pausarla y probarla.</p></div>"
+)
+
+
+def _formulario(c: Cuenta, datos: dict, prompt: str, pares_minimos: int, nota: str) -> str:
     pares = preguntas(datos)
     pares += [{"p": "", "r": ""}] * (max(MIN_PREGUNTAS, pares_minimos) - len(pares))
     temas = politicas(datos)
@@ -434,20 +463,8 @@ async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt
         f'<label><input type="radio" name="tono" value="{k}"{" checked" if k == tono_actual else ""}> {nombre}</label>'
         for k, (nombre, _) in TONOS.items()
     )
-    return pagina(
-        cabecera(salir=True, menu="asistente", cuenta=c)
-        + '<section class="oscuro portada compacta"><div class="contenedor">'
-        '<p class="antetitulo">Tu asistente</p>'
-        f'<h1>@{escape(await usuario(c))}<span class="punto">.</span></h1>'
-        f'<div class="estado"><div><span class="luz{" on" if encendido else ""}"></span>'
-        f'{"Está contestando tus mensajes." if encendido else "Está en pausa: no contesta mensajes."}</div>'
-        f'<form method="post" action="/panel/estado"><input type="hidden" name="activo" value="{"0" if encendido else "1"}">'
-        f'<div class="acciones-estado"><a class="boton secundario" href="/panel/probar#ultimo">Probar mi asistente</a>'
-        f'<button class="boton{" secundario" if encendido else ""}">{"Pausar" if encendido else "Encender"}</button></div></form></div>'
-        "</div></section>"
-        '<main><div class="contenedor">'
-        + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
-        + '<form method="post" action="/panel/guardar">'
+    return (
+        '<form method="post" action="/panel/guardar">'
         # Enter en un campo no debe quitar una pregunta: el primer botón del formulario solo recarga.
         '<button class="oculto" name="accion" value="vista" tabindex="-1" aria-hidden="true">Actualizar</button>'
         f'<div class="tarjeta"><span class="num">01</span><h2>Tu negocio</h2>{negocio}</div>'
@@ -467,7 +484,7 @@ async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt
         f'<label>Instrucciones de tu asistente</label><p class="ayuda">Puedes editarlas antes de guardar.</p>'
         f'<textarea class="prompt" name="prompt" maxlength="{MAX_PROMPT}">{escape(prompt)}</textarea>'
         f'<div class="acciones"><button class="boton" name="accion" value="guardar">Guardar</button></div></div>'
-        "</form></div></main>"
+        "</form>"
     )
 
 
@@ -519,7 +536,7 @@ async def guardar(request: Request):
     if accion.startswith("quitar_") and accion[7:].isdigit():
         del datos["faq"][int(accion[7:]):int(accion[7:]) + 1]
         return await panel_de(c, "", datos, prompt)
-    if accion not in ("generar", "guardar"):
+    if accion not in ("generar", "guardar") or not c.slug:  # la principal no se edita aquí
         return await panel_de(c, "", datos, prompt)
     datos["faq"] = [q for q in datos["faq"] if q["p"] or q["r"]]
     with usar(c):

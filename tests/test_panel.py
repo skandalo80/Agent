@@ -126,6 +126,28 @@ def test_cliente_se_conecta_configura_y_enciende(monkeypatch, tmp_path):
         assert r.status_code == 303 and client.portal.call(panel.activo, c)
 
 
+def test_la_cuenta_principal_entra_a_su_panel_sin_tocar_sus_instrucciones(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    Path("prompts").mkdir()
+    Path("prompts/system.md").write_text("PROMPT DEL VENDEDOR")
+    setup(monkeypatch)
+    monkeypatch.setattr(bot, "cuentas", list(bot.cuentas))
+    monkeypatch.setattr(bot.principal, "ig_account_id", "1784")  # la que conecta es la principal
+
+    with TestClient(bot.app, base_url="https://testserver") as client:
+        client.post("/conectar/solicitud", data={"usuario": "cafe.lunar", "nombre": "Ana", "correo": "ana@cafe.mx"})
+        r = client.get("/conectar/instagram", follow_redirects=False)
+        state = parse_qs(urlparse(r.headers["location"]).query)["state"][0]
+        r = client.get(f"/conectar/callback?code=abc&state={state}", follow_redirects=False)
+        assert r.headers["location"] == "https://bot.skandar.online/panel"
+        assert not Path("clientes").exists() and len(bot.cuentas) == 1  # no se da de alta otra vez
+
+        r = client.get("/panel/asistente")
+        assert "cuenta principal" in r.text and "Generar instrucciones" not in r.text
+        client.post("/panel/guardar", headers=ORIGEN, data={"accion": "guardar", "prompt": "otro"})
+        assert Path("prompts/system.md").read_text() == "PROMPT DEL VENDEDOR"
+
+
 def test_probar_mi_asistente(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     Path("prompts").mkdir()
