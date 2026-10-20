@@ -584,7 +584,7 @@ async def editor(c: Cuenta, post_id: int, aviso: str = "", confirmar: bool = Fal
                        '<button class="boton secundario" name="accion" value="cancelar" formnovalidate>Descartar post</button>')
         cuerpo = (
             f'<form method="post" action="/panel/contenido/post/{post_id}"'
-            + ("" if es_libre else f' data-vista="/panel/contenido/post/{post_id}/muestra.jpg"') + ">"
+            + ("" if es_libre else f' data-vista="/panel/contenido/post/{post_id}/muestra.jpg?m={post["media_ids"][0]}"') + ">"
             # Enter en un campo guarda; no aprueba ni genera otra imagen.
             '<button class="oculto" name="accion" value="guardar" tabindex="-1" aria-hidden="true">Guardar</button>'
             + (tarjeta_extra(c, "otra") if confirmar else "")
@@ -697,7 +697,7 @@ async def pagina_marca(c: Cuenta, marca: dict | None = None, aviso: str = "") ->
     sube = len(marca.get("fotos", [])) < MAX_FOTOS
     cuerpo = (
         '<form method="post" action="/panel/contenido/marca" enctype="multipart/form-data"'
-        ' data-vista="/panel/contenido/muestra.jpg">'
+        f' data-vista="/panel/contenido/muestra.jpg?v={escape((marca.get("fotos") or ["0"])[0][:8])}">'
         '<button class="oculto" name="accion" value="guardar" tabindex="-1" aria-hidden="true">Guardar</button>'
         '<div class="editor"><div class="fija">'
         f'<img class="pieza" id="vista" src="/panel/contenido/muestra.jpg?{escape(query_muestra(marca))}"'
