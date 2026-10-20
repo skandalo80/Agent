@@ -141,10 +141,12 @@ def test_la_cuenta_principal_edita_sus_instrucciones_aparte(monkeypatch, tmp_pat
         r = client.get(f"/conectar/callback?code=abc&state={state}", follow_redirects=False)
         assert r.headers["location"] == "https://bot.skandar.online/panel"
         assert not Path("clientes").exists() and len(bot.cuentas) == 1  # no se da de alta otra vez
+        # Volver a conectarse deja el token nuevo (con los permisos de ahora) en su base.
+        assert client.portal.call(bot.principal.store.get, "ig_token") == "largo"
 
         r = client.get("/panel/asistente")
         assert "Cuenta principal" in r.text and "Generar instrucciones" in r.text and "PROMPT DEL VENDEDOR" in r.text
-        assert "Gasto de hoy" in r.text and "Mensajes este mes" not in r.text
+        assert "Gasto de hoy" in r.text and "Mensajes este mes" not in r.text and "Límite de gasto" in r.text
         assert '<details class="tarjeta plegable" id="chats" open>' in r.text
         # Generar no pisa unas instrucciones escritas a mano sin preguntar.
         r = client.post("/panel/guardar", headers=ORIGEN,

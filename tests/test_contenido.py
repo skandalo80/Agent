@@ -466,3 +466,46 @@ def test_insights_de_un_post(cliente, monkeypatch):
     monkeypatch.setattr(c.instagram, "media_insights", sin_permiso, raising=False)
     r = client.get("/panel/contenido/insights/1")
     assert r.status_code == 200 and "vuelve a conectarla" in r.text
+
+
+def test_ajustes_y_conexion(cliente, monkeypatch):
+    from igbot import agent, ajustes
+    from igbot.cuenta import usar
+    client, c, *_ = cliente
+    ajustes._revision.clear()
+    r = client.get("/panel/asistente")
+    assert 'id="ajustes"' in r.text and 'name="pausa" value="12" checked' in r.text
+    assert "Conexión" in r.text and "Recibiendo mensajes" in r.text and "Gasto de hoy" not in r.text
+    assert "Límite de gasto" not in r.text  # el gasto solo lo ve la cuenta principal
+
+    datos = {"pausa": "24", "dias": ["1", "2", "3", "4", "5", "6"], "desde": "10:00", "hasta": "19:30",
+             "fuera": "fijo", "fuera_texto": "Te contestamos el lunes.", "aviso_correo": "1", "correo": "ana@cafe.mx"}
+    assert client.post("/panel/ajustes", data=datos).status_code == 403  # sin Origin
+    r = client.post("/panel/ajustes", headers=ORIGEN, data=datos)
+    assert "ya trabaja con estos ajustes" in r.text and 'name="pausa" value="24" checked' in r.text
+    assert c.human_pause_hours == 24 and c.business_days == [1, 2, 3, 4, 5, 6]
+    assert c.business_hours == "10:00-19:30" and c.owner_email == "ana@cafe.mx" and not c.aviso_dm
+    with usar(c):
+        prompt = agent.system_prompt()
+    assert "lun–sáb 10:00–19:30" in prompt and '"Te contestamos el lunes."' in prompt
+    # Se guardan en su base: al arrancar otra vez se vuelven a aplicar.
+    c.human_pause_hours = 12
+    client.portal.call(ajustes.cargar, c)
+    assert c.human_pause_hours == 24
+
+    # Valores raros no se guardan: se queda lo que había.
+    client.post("/panel/ajustes", headers=ORIGEN, data={"pausa": "999", "desde": "25:00", "hasta": "x", "correo": "no"})
+    assert c.human_pause_hours == 24 and c.business_hours == "10:00-19:30" and c.owner_email == "ana@cafe.mx"
+    assert c.fuera_horario == "" and c.business_days == [1, 2, 3, 4, 5, 6]
+
+
+def test_conexion_avisa_si_falta_el_permiso_de_estadisticas(cliente, monkeypatch):
+    from igbot import ajustes
+    client, c, *_ = cliente
+    ajustes._revision.clear()
+
+    async def sin_permiso(media_id):
+        raise RuntimeError("Instagram respondió 400")
+    monkeypatch.setattr(c.instagram, "media_insights", sin_permiso, raising=False)
+    r = client.get("/panel/asistente")
+    assert "Estadísticas: falta" in r.text and 'href="/conectar/instagram"' in r.text and "Hay algo que revisar" in r.text

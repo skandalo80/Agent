@@ -27,7 +27,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse
 
-from igbot import (admin, agent, botones, comentarios, conectar, config, contenido, limites, panel, reporte, resultados,
+from igbot import (admin, agent, ajustes, botones, comentarios, conectar, config, contenido, limites, panel, reporte, resultados,
                    semana)
 from igbot.cuenta import Cuenta, cargar, cuenta, de_carpeta, usar
 from igbot.dispatcher import Dispatcher
@@ -144,6 +144,7 @@ def nombre(c: Cuenta) -> str:
 async def arrancar(c: Cuenta) -> None:
     with usar(c):
         await c.store.open()
+        await ajustes.cargar(c)  # lo que cambió en su panel manda sobre su .env
         await resolver_id(c)
         # Mensajes, toques a los botones de inicio y, si hay reglas, comentarios.
         fields = "messages,messaging_postbacks"
@@ -211,6 +212,11 @@ async def alta(ig_id: str, usuario: str, token: str) -> Cuenta | None:
         await c.store.set("bot_activo", "0")  # no contesta hasta que lo encienda en su panel
         cuentas.append(c)  # desde aquí le llegan sus avisos
         log.info("Cuenta nueva desde el panel: @%s (clientes/%s), en pausa", usuario, slug)
+    else:
+        # Ya existía: el token nuevo (con los permisos de ahora, p. ej. estadísticas) sustituye
+        # al que tenía. Va a su base, igual que cuando se renueva solo cada semana.
+        await c.store.set("ig_token", token)
+        await c.store.set("ig_token_refreshed_at", str(time.time()))
     await c.store.set("account_username", usuario)
     return c
 
@@ -237,6 +243,7 @@ if not config.CLIENTE:
     # La página de conectar clientes la atiende solo el proceso principal.
     app.include_router(conectar.router)
     app.include_router(panel.router)
+    app.include_router(ajustes.router)
     app.include_router(contenido.router)
     app.include_router(semana.router)
     app.include_router(resultados.router)

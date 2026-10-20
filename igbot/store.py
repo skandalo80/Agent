@@ -439,6 +439,11 @@ class Store:
         )
         return list(await cur.fetchall())
 
+    async def last_client_message(self) -> float:
+        cur = await self.db.execute(
+            "SELECT MAX(created_at) FROM messages WHERE role = 'user' AND user_id NOT LIKE 'admin:%'")
+        return (await cur.fetchone())[0] or 0.0
+
     async def has_chat(self, user_id: str) -> bool:
         cur = await self.db.execute("SELECT 1 FROM messages WHERE user_id = ? LIMIT 1", (user_id,))
         return await cur.fetchone() is not None

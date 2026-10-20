@@ -524,7 +524,8 @@ def store_tools(
     return tools + [enviar_cotizacion_pedido] if store else tools
 
 
-def human_tools(store: Store, google: Google | None, user_id: str, state: dict | None = None) -> list:
+def human_tools(store: Store, google: Google | None, user_id: str, state: dict | None = None,
+                instagram: Instagram | None = None) -> list:
     state = state if state is not None else {}
 
     @tool(
@@ -538,7 +539,15 @@ def human_tools(store: Store, google: Google | None, user_id: str, state: dict |
         await store.pause(user_id, time.time() + cuenta().human_pause_hours * 3600)
         await store.add_event(user_id, "humano", {"motivo": args["motivo"][:300]})
         state["acted"] = True
-        if google and cuenta().owner_email:
+        # Por DM a los administradores (solo llega si le escribieron al bot en las últimas 24 h).
+        if instagram and cuenta().aviso_dm:
+            quien = await instagram.username(user_id)
+            for admin_id in cuenta().admin_ig_ids:
+                try:
+                    await instagram.send_text(admin_id, f"{quien} pidió hablar con una persona: {args['motivo'][:300]}")
+                except Exception:
+                    log.warning("No se pudo avisar por DM a %s", admin_id)
+        if google and cuenta().owner_email and cuenta().aviso_correo:
             facts = await store.facts(user_id)
             recent = await store.recent(user_id, 10)
             body = (
@@ -565,7 +574,7 @@ def build(
     store: Store, google: Google | None, user_id: str, state: dict, instagram: Instagram | None = None
 ):
     """Servidor MCP con las herramientas de este usuario y la lista de permitidas."""
-    tools = memory_tools(store, user_id) + human_tools(store, google, user_id, state)
+    tools = memory_tools(store, user_id) + human_tools(store, google, user_id, state, instagram)
     # Agenda, correo y cotizaciones usan tu Google: solo en las cuentas que lo tienen.
     if google and cuenta().google_tools:
         tools += workspace_tools(store, google, user_id, state)
