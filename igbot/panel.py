@@ -8,6 +8,9 @@ contraseñas) y desde ahí:
   instrucciones de su asistente, que puede revisar y editar antes de guardar,
 - enciende o pausa su asistente.
 
+/panel lleva a Resultados cuando el asistente ya está encendido y con mensajes
+de clientes; si no, a Tu asistente (/panel/asistente) para configurarlo.
+
 Una cuenta que se conecta por primera vez se da de alta sola (carpeta
 clientes/<nombre>/ con su token, ver preparar_carpeta) y queda en pausa hasta
 que la encienden aquí. Las reglas comunes (prompts/comun.md) siempre van
@@ -369,8 +372,8 @@ def pagina(cuerpo: str) -> HTMLResponse:
 
 
 ACTIVA = ' class="on"'
-MENU = {"asistente": ("Tu asistente", "/panel"), "contenido": ("Contenido", "/panel/contenido"),
-        "resultados": ("Resultados", "/panel/resultados")}
+MENU = {"resultados": ("Resultados", "/panel/resultados"), "asistente": ("Tu asistente", "/panel/asistente"),
+        "contenido": ("Contenido", "/panel/contenido")}
 
 
 def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None) -> str:
@@ -479,8 +482,22 @@ def datos_de(f: dict[str, str]) -> dict:
     return datos
 
 
+async def inicio(c: Cuenta) -> str:
+    """A dónde lleva /panel: a Resultados si el asistente ya trabaja (encendido y con
+    mensajes de clientes); si no, a Tu asistente, para que lo configure y lo encienda."""
+    if await activo(c) and await c.store.has_client_messages():
+        return "/panel/resultados"
+    return "/panel/asistente"
+
+
 @router.get("")
 async def ver(request: Request):
+    c = cuenta_de_sesion(request)
+    return RedirectResponse(await inicio(c), status_code=303) if c else entrar()
+
+
+@router.get("/asistente")
+async def ver_asistente(request: Request):
     c = cuenta_de_sesion(request)
     return await panel_de(c) if c else entrar()
 
@@ -601,7 +618,7 @@ async def prueba_fin(c: Cuenta, ancla: bool = True) -> str:
         f'<input type="text" name="mensaje" maxlength="{MAX_MENSAJE_PRUEBA}" placeholder="Escribe un mensaje" required autofocus>'
         '<button class="boton" name="accion" value="enviar">Enviar</button></form></div>'
         f'<p class="ayuda" style="margin-top:.75rem">Te quedan {max(MAX_PRUEBAS_DIA - usadas, 0)} mensajes de prueba hoy.</p>'
-        '<div class="acciones"><a class="boton secundario" href="/panel">← Volver al panel</a>'
+        '<div class="acciones"><a class="boton secundario" href="/panel/asistente">← Volver a tu asistente</a>'
         '<form method="post" action="/panel/probar"><button class="boton secundario" name="accion" value="reiniciar">'
         "Empezar de nuevo</button></form></div>"
         "</div></main>" + FINAL

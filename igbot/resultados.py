@@ -250,7 +250,7 @@ async def pagina(c: Cuenta, rango: str) -> HTMLResponse:
     else:
         cuerpo = ('<div class="tarjeta"><h2>Aún no hay mensajes en este periodo</h2>'
                   '<p class="ayuda">Cuando tu asistente esté encendido y te escriban, aquí verás lo que hizo por ti.</p>'
-                  '<div class="acciones"><a class="boton" href="/panel">Ir a tu asistente</a></div></div>')
+                  '<div class="acciones"><a class="boton" href="/panel/asistente">Ir a tu asistente</a></div></div>')
     if c.imagenes_mes > 0:
         cuerpo += seccion_contenido(d)
     return panel.pagina(

@@ -110,6 +110,20 @@ def test_basico_sin_mensajes_y_con_mensajes(cliente, monkeypatch):
     assert 'class="on">7 días' in client.get("/panel/resultados?dias=999").text
 
 
+def test_inicio_del_panel(cliente):
+    client, c = cliente
+    # Recién conectada (en pausa y sin mensajes): a configurar su asistente.
+    r = client.get("/panel", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/panel/asistente"
+    client.post("/panel/estado", headers={"Origin": "https://bot.skandar.online"}, data={"activo": "1"})
+    assert client.get("/panel", follow_redirects=False).headers["location"] == "/panel/asistente"  # sin mensajes
+    client.portal.call(c.store.add_incoming, "ana", "m1", "hola")
+    assert client.get("/panel", follow_redirects=False).headers["location"] == "/panel/resultados"
+    html = client.get("/panel").text
+    assert html.index(">Resultados</a>") < html.index(">Tu asistente</a>")  # primero en el menú
+    assert 'href="/panel/asistente">Tu asistente</a>' in html
+
+
 def test_community_ve_comentarios_y_publicaciones(cliente, monkeypatch):
     client, c = cliente
     monkeypatch.setattr(c, "imagenes_mes", 4)
