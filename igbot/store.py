@@ -143,7 +143,8 @@ CREATE TABLE IF NOT EXISTS conexiones (
     usuario    TEXT NOT NULL,
     token      TEXT NOT NULL,              -- token de larga duración (60 días)
     expires_at REAL NOT NULL,
-    created_at REAL NOT NULL
+    created_at REAL NOT NULL,
+    slug       TEXT                        -- su carpeta en clientes/ si se dio de alta sola
 );
 
 CREATE TABLE IF NOT EXISTS kv (
@@ -164,6 +165,10 @@ class Store:
         self.db = await aiosqlite.connect(self.path)
         await self.db.execute("PRAGMA journal_mode=WAL")
         await self.db.executescript(SCHEMA)
+        # Bases de antes del panel: la columna slug se agrega aparte.
+        cur = await self.db.execute("PRAGMA table_info(conexiones)")
+        if "slug" not in {row[1] for row in await cur.fetchall()}:
+            await self.db.execute("ALTER TABLE conexiones ADD COLUMN slug TEXT")
         await self.db.commit()
 
     async def close(self) -> None:
@@ -578,8 +583,10 @@ class Store:
         cur = await self.db.execute("SELECT COUNT(*) FROM solicitudes WHERE created_at >= ?", (since,))
         return (await cur.fetchone())[0]
 
-    async def save_conexion(self, ig_id: str, usuario: str, token: str, expires_at: float) -> None:
-        """Si la cuenta se vuelve a conectar, se queda el token nuevo."""
+    async def save_conexion(self, ig_id: str, usuario: str, token: str, expires_at: float) -> bool:
+        """Si la cuenta se vuelve a conectar, se queda el token nuevo. True si es la primera vez."""
+        cur = await self.db.execute("SELECT 1 FROM conexiones WHERE ig_id = ?", (ig_id,))
+        nueva = await cur.fetchone() is None
         await self.db.execute(
             "INSERT INTO conexiones (ig_id, usuario, token, expires_at, created_at) VALUES (?, ?, ?, ?, ?)"
             " ON CONFLICT (ig_id) DO UPDATE SET usuario = excluded.usuario, token = excluded.token,"
@@ -587,6 +594,18 @@ class Store:
             (ig_id, usuario, token, expires_at, time.time()),
         )
         await self.db.commit()
+        return nueva
+
+    async def set_conexion_slug(self, ig_id: str, slug: str) -> None:
+        await self.db.execute("UPDATE conexiones SET slug = ? WHERE ig_id = ?", (slug, ig_id))
+        await self.db.commit()
+
+    async def correo_de(self, usuario: str) -> str:
+        """El correo que dejó en el formulario de /conectar (el más reciente), si lo llenó."""
+        cur = await self.db.execute(
+            "SELECT correo FROM solicitudes WHERE usuario = ? ORDER BY created_at DESC LIMIT 1", (usuario,))
+        row = await cur.fetchone()
+        return row[0] if row else ""
 
     # --- valores sueltos (token de Instagram, etc.) ---
 

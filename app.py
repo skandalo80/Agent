@@ -27,8 +27,8 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse
 
-from igbot import admin, agent, botones, comentarios, conectar, config, limites, reporte
-from igbot.cuenta import Cuenta, cargar, cuenta, usar
+from igbot import admin, agent, botones, comentarios, conectar, config, limites, panel, reporte
+from igbot.cuenta import Cuenta, cargar, cuenta, de_carpeta, usar
 from igbot.dispatcher import Dispatcher
 from igbot.google import Google
 from igbot.instagram import Instagram
@@ -126,11 +126,14 @@ def atender(c: Cuenta):
 
 # Una cola por cuenta (orden por persona) con un tope común de respuestas a la vez.
 shared_slots = asyncio.Semaphore(config.MAX_CONCURRENT)
-dispatchers = {
-    c.slug: Dispatcher(c.store, atender(c), config.DEBOUNCE_SECONDS,
-                       config.MAX_CONCURRENT_PER_ACCOUNT, shared=shared_slots)
-    for c in cuentas
-}
+
+
+def cola(c: Cuenta) -> Dispatcher:
+    return Dispatcher(c.store, atender(c), config.DEBOUNCE_SECONDS,
+                      config.MAX_CONCURRENT_PER_ACCOUNT, shared=shared_slots)
+
+
+dispatchers = {c.slug: cola(c) for c in cuentas}
 
 
 def nombre(c: Cuenta) -> str:
@@ -187,9 +190,35 @@ def fondo() -> list[asyncio.Task]:
     ]
 
 
+def buscar(ig_id: str) -> Cuenta | None:
+    """La cuenta de clientes con ese id (la principal no tiene panel)."""
+    return next((c for c in cuentas[1:] if c.ig_account_id == ig_id), None)
+
+
+async def alta(ig_id: str, usuario: str, token: str) -> Cuenta | None:
+    """Al conectarse por /conectar: su cuenta, que se crea (en pausa) si es nueva."""
+    if ig_id == principal.ig_account_id:
+        return None
+    if not (c := buscar(ig_id)):
+        slug = panel.preparar_carpeta(ig_id, usuario, token, await store.correo_de(usuario),
+                                      {c.slug for c in cuentas})
+        await store.set_conexion_slug(ig_id, slug)
+        c = de_carpeta(slug)
+        c.store = Store(c.db_path)
+        c.instagram = Instagram(c.store)
+        dispatchers[slug] = cola(c)
+        await arrancar(c)
+        await c.store.set("bot_activo", "0")  # no contesta hasta que lo encienda en su panel
+        cuentas.append(c)  # desde aquí le llegan sus avisos
+        log.info("Cuenta nueva desde el panel: @%s (clientes/%s), en pausa", usuario, slug)
+    await c.store.set("account_username", usuario)
+    return c
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     conectar.store, conectar.instagram, conectar.google = store, instagram, google
+    panel.buscar, panel.alta = buscar, alta
     for c in cuentas:
         await arrancar(c)
     loops = fondo()
@@ -207,6 +236,7 @@ app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None
 if not config.CLIENTE:
     # La página de conectar clientes la atiende solo el proceso principal.
     app.include_router(conectar.router)
+    app.include_router(panel.router)
 
 
 @app.get("/health")
@@ -283,7 +313,7 @@ async def owner_replied(user_id: str, mid: str, text: str) -> None:
 background: set[asyncio.Task] = set()
 # Con varias cuentas en la app, un aviso de una cuenta cuyo id no se conoce no
 # se contesta (si no, se contestaría con la cuenta equivocada).
-MULTI_ACCOUNT = bool(config.CLIENTE or config.FORWARD_WEBHOOKS or len(cuentas) > 1)
+MULTI_ACCOUNT = bool(config.CLIENTE or config.FORWARD_WEBHOOKS or len(cuentas) > 1 or conectar.enabled())
 
 
 async def resolver_id(c: Cuenta) -> None:
@@ -383,6 +413,9 @@ async def receive(request: Request):
 async def receive_entry(c: Cuenta, entry: dict) -> None:
     """Un aviso de una cuenta. Corre dentro de usar(c): lo que se lance aquí es de esa cuenta."""
     store, instagram = c.store, c.instagram
+    if not await panel.activo(c):
+        log.info("Aviso para %s, que está en pausa desde su panel; no se contesta", nombre(c))
+        return
     for change in entry.get("changes", []):
         if change.get("field") != "comments":
             continue

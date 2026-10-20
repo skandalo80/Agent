@@ -9,7 +9,9 @@ página skandar.online/conectar guía al cliente:
 3. Pulsa "Conectar tu Instagram" (GET /conectar/instagram): inicia sesión en
    Instagram, autoriza la app y vuelve a /conectar/callback, donde el código
    se cambia por un token de 60 días que se guarda en la tabla `conexiones`.
-Con ese token se da de alta su bot (scripts/alta_cliente.py).
+Con ese token su cuenta se da de alta sola, en pausa, y el cliente entra a su
+panel (/panel, ver panel.py) para configurar y encender su asistente. Iniciar
+sesión en el panel es este mismo flujo.
 """
 import logging
 import re
@@ -21,7 +23,7 @@ import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
-from . import config
+from . import config, panel
 from .cuenta import cuenta
 from .google import Google
 from .instagram import GRAPH, Instagram
@@ -186,13 +188,26 @@ async def callback(request: Request):
     except Exception:
         log.exception("No se pudo cambiar el código por un token")
         return back("/conectar-error")
-    await store.save_conexion(ig_id, usuario, token, expires_at)
+    nueva = await store.save_conexion(ig_id, usuario, token, expires_at)
     log.info("Cuenta conectada: @%s (%s)", usuario, ig_id)
-    await avisar(
-        f"Instagram conectado: @{usuario}",
-        f"@{usuario} conectó su Instagram. Dale de alta en el servidor con:\n"
-        f"python scripts/alta_cliente.py {usuario} <nombre-corto>",
-    )
-    response = back("/conectado")
+    try:
+        c = await panel.alta(ig_id, usuario, token) if panel.alta else None
+    except Exception:
+        log.exception("No se pudo dar de alta a @%s; se hace a mano con scripts/alta_cliente.py", usuario)
+        c = None
+    if nueva:
+        await avisar(
+            f"Instagram conectado: @{usuario}",
+            f"@{usuario} conectó su Instagram"
+            + (". Su asistente quedó en pausa hasta que lo encienda desde su panel." if c else
+               ". Dale de alta en el servidor con:\n"
+               f"python scripts/alta_cliente.py {usuario} <nombre-corto>"),
+        )
+    if c:
+        # Entra directo a su panel para configurar su asistente.
+        response = RedirectResponse(f"{config.PUBLIC_URL}/panel", status_code=303)
+        panel.iniciar_sesion(response, ig_id)
+    else:
+        response = back("/conectado")
     response.delete_cookie(STATE_COOKIE, path="/conectar")
     return response

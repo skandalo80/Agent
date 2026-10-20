@@ -81,6 +81,11 @@ def test_formulario_guarda_la_solicitud_y_avisa(monkeypatch):
 
 def test_oauth_guarda_el_token_de_la_cuenta(monkeypatch):
     avisos = setup(monkeypatch)
+
+    async def sin_panel(*a):
+        return None  # cuenta sin panel (p. ej. la principal): va a la página de "conectado"
+
+    monkeypatch.setattr(bot, "alta", sin_panel)
     with TestClient(bot.app, base_url="https://testserver") as client:
         r = client.get("/conectar/instagram", follow_redirects=False)
         url = urlparse(r.headers["location"])

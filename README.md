@@ -119,7 +119,12 @@ Mientras la app de Meta no tenga App Review, solo se conectan las cuentas invita
 1. El cliente deja su @, nombre y correo. Te llega un DM (si le escribiste al bot en las últimas 24 h) y un correo a `OWNER_EMAIL`.
 2. Tú lo invitas a mano: panel de Meta → Roles de la app → **Instagram Testers** → su @. Le avisas y él acepta en instagram.com → Configuración → Apps y sitios web → Invitaciones de prueba.
 3. Pulsa **Conectar tu Instagram**: inicia sesión, autoriza y el bot guarda su token de 60 días en la tabla `conexiones` de `data/bot.db`. Te vuelve a avisar.
-4. En el servidor: `.venv/bin/python scripts/alta_cliente.py` lista las cuentas conectadas y `.venv/bin/python scripts/alta_cliente.py <usuario> <nombre-corto>` crea `clientes/<nombre-corto>/.env` con su token e id, y dice los pasos que faltan (ver "Varias cuentas de Instagram").
+4. Su cuenta se da de alta sola, **en pausa**, como paquete Básico: `clientes/<su_usuario>/` con su `.env` (token, id, `CLAUDE_MODEL=claude-haiku-5-5`, `GOOGLE_TOOLS=0` y `OWNER_EMAIL` = el correo del formulario) y un `system.md` inicial. No hace falta reiniciar ni tocar `CUENTAS`: al arrancar, el bot carga también las cuentas dadas de alta así.
+5. El cliente cae en su **panel** (`bot.skandar.online/panel`): llena a qué se dedica, horarios, precios, preguntas frecuentes, políticas y qué hacer si piden una persona; elige el tono (amigable, profesional o formal) y pulsa *Generar instrucciones*; las revisa, *Guardar* y *Encender*. Para volver al panel entra otra vez con Instagram (la sesión dura 7 días). Lo que escribe va antes de `prompts/comun.md`, así que no puede quitar las reglas comunes.
+
+Las cuentas de `CUENTAS` (dadas de alta con `scripts/alta_cliente.py`) también pueden entrar al panel: ven su `system.md` actual y lo pueden cambiar. Para ellas la pausa del panel es opcional (si nunca la tocan, contestan).
+
+`GOOGLE_TOOLS=0` en el `.env` de una cuenta le quita agendar en tu calendario, mandar correos y cotizar con tu Google (sigue pudiendo pasar a una persona, que avisa por correo a `OWNER_EMAIL`). Pónselo a cualquier cliente que no deba usar tu Google.
 
 Una sola vez: en el `.env` principal pon `IG_APP_ID` (y `IG_OAUTH_SECRET` si el "Instagram app secret" no es el mismo que `IG_APP_SECRET`), y en el panel de Meta, en *API de Instagram con inicio de sesión de Instagram* → *Configurar inicio de sesión para empresas*, agrega la URL de redirección `https://bot.skandar.online/conectar/callback`.
 
