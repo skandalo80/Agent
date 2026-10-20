@@ -103,8 +103,11 @@ class Cuenta:
     @classmethod
     def desde_env(cls, slug: str, env: Mapping[str, str]) -> "Cuenta":
         """Arma la cuenta con las variables de su .env (ver .env.example)."""
+        plan = PLANES.get(env.get("PLAN", "").strip().lower(), {})
+
         def get(key: str, default: str = "") -> str:
-            return env.get(key) or default
+            # Lo escrito en su .env manda; si no, lo de su PLAN; si no, el valor por omisión.
+            return env.get(key) or plan.get(key) or default
 
         client_dir = f"clientes/{slug}" if slug else ""
         data_dir = f"data/{slug}" if slug else "data"
@@ -173,6 +176,15 @@ class Cuenta:
             mensajes_mes=int(get("MESSAGES_PER_MONTH", "0")),
             posts_mes=int(get("POSTS_PER_MONTH", "0")),
         )
+
+
+# Lo que incluye cada plan (PLAN= en el .env de la cuenta). Cualquier valor escrito
+# en el .env gana sobre esto, para darle a un cliente algo distinto a su plan.
+PLANES = {
+    "basico": {"IMAGES_PER_MONTH": "0", "MESSAGES_PER_MONTH": "1000", "POSTS_PER_MONTH": "0"},
+    "community": {"IMAGES_PER_MONTH": "40", "MESSAGES_PER_MONTH": "2000", "POSTS_PER_MONTH": "12"},
+    "pro_crm": {"IMAGES_PER_MONTH": "80", "MESSAGES_PER_MONTH": "5000", "POSTS_PER_MONTH": "20"},
+}
 
 
 def de_carpeta(slug: str) -> Cuenta:

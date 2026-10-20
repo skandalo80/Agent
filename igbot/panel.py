@@ -138,7 +138,7 @@ def preparar_carpeta(ig_id: str, usuario: str, token: str, correo: str, ocupados
     carpeta.mkdir(parents=True)
     lineas = [f"IG_ACCESS_TOKEN={token}", f"IG_ACCOUNT_ID={ig_id}", f"CLAUDE_MODEL={MODELO_BASICO}",
               # Sin tu agenda ni tu correo: el Básico solo contesta el chat.
-              "GOOGLE_TOOLS=0"]
+              "GOOGLE_TOOLS=0", "PLAN=basico"]
     if correo:
         lineas.append(f"OWNER_EMAIL={correo}")  # a quién avisar cuando piden una persona
     env = carpeta / ".env"
