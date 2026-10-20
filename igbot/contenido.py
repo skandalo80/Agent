@@ -117,6 +117,11 @@ async def marca_de(c: Cuenta) -> dict:
     return json.loads(await c.store.get("marca") or "{}")
 
 
+async def marca_post(c: Cuenta, p: dict) -> dict:
+    """La marca con lo que se cambió solo para ese post (Crear post > Con otra plantilla / Otro diseño libre)."""
+    return {**await marca_de(c), **p.get("marca", {})}
+
+
 def kit(datos: dict) -> imagenes.Marca:
     return imagenes.Marca.de(datos)
 
@@ -261,11 +266,14 @@ def texto_imagen(p: dict, usuario: str) -> imagenes.Texto:
 
 
 async def generar(c: Cuenta, objetivo: str = "", tema: str = "", fotos: list[str] = (), extra: bool = False,
-                  post_id: int | None = None, con_precio: bool = False, modo: str = "") -> int:
-    """Un post nuevo (Claude + imagen) o, con post_id, otra imagen para el mismo post."""
+                  post_id: int | None = None, con_precio: bool = False, modo: str = "",
+                  ajustes: dict | None = None) -> int:
+    """Un post nuevo (Claude + imagen) o, con post_id, otra imagen para el mismo post.
+    `ajustes`: lo de la marca que cambia solo en este post (se guarda con él)."""
     with usar(c):
-        marca = await marca_de(c)
         if post_id is None:
+            ajustes = ajustes or {}
+            marca = {**await marca_de(c), **ajustes}
             fotos = [t for t in fotos if t in marca.get("fotos", [])]
             modo = modo if modo in MODOS else modo_de(marca)
             texto = await escribir(c, objetivo, tema, len(fotos), con_precio, notas_estilo(marca, modo))
@@ -274,9 +282,12 @@ async def generar(c: Cuenta, objetivo: str = "", tema: str = "", fotos: list[str
                  "titulo": texto["titulo"], "subtitulo": texto["subtitulo"], "precio": texto["precio"],
                  "imagen": texto["imagen"], "clave": texto["palabra_clave"],
                  "respuesta": texto["respuesta_comentario"], "dm": texto["mensaje_dm"]}
+            if ajustes:
+                p["marca"] = ajustes
             caption = texto["caption"]
         else:
             p = await pieza(c.store, post_id)
+            marca = await marca_post(c, p)
             modo = "libre" if libre(p) else "plantilla"
         referencias = [archivo(c, t).read_bytes() for t in p.get("fotos", []) if archivo(c, t).is_file()]
         if modo == "libre":
@@ -569,6 +580,90 @@ def opciones_modo(actual: str) -> str:
         for k, (nombre, desc) in MODOS.items())
 
 
+COMO = {  # Crear post > ¿Cómo lo armamos?, según lo que tenga Tu marca: (valor, nombre, descripción)
+    "plantilla": [("marca", "Con mi plantilla", "{plantilla}, con tus colores y tu letra de Tu marca."),
+                  ("plantilla", "Con otra plantilla", "Eliges plantilla, colores, letra y estilo de foto para este post."),
+                  ("libre", "Diseño libre", "El generador diseña el post completo; tú describes el estilo.")],
+    "libre": [("marca", "Con mi diseño libre", "El generador diseña el post completo con el estilo de Tu marca."),
+              ("libre", "Otro diseño libre", "Describe un estilo distinto solo para este post."),
+              ("plantilla", "Con plantilla", "Tu foto con el texto encima; eliges plantilla, colores y letra.")],
+}
+
+
+def como_del_form(f, marca: dict) -> str:
+    """'marca' (lo de Tu marca), 'plantilla' o 'libre' (cambiados solo para este post).
+    Sin 'como' (Esta semana, formularios viejos) vale 'modo': el de la marca es 'marca'."""
+    if f.get("como") in ("marca", "plantilla", "libre"):
+        return f["como"]
+    modo = f.get("modo")
+    return modo if modo in MODOS and modo != modo_de(marca) else "marca"
+
+
+def ajustes_del_form(f, marca: dict, como: str) -> dict:
+    """Lo de la marca que cambia solo en este post."""
+    if como == "libre":
+        texto = str(f.get("estilo_propio", "")).strip()[:MAX_ESTILO]
+        return {"estilo_propio": texto} if texto else {}
+    if como != "plantilla":
+        return {}
+    ajustes = {"plantilla": plantilla_de({"plantilla": f.get("plantilla")} if f.get("plantilla") else marca),
+               "estilo": f.get("estilo") if f.get("estilo") in ESTILOS else estilo_de(marca),
+               "fuente": f.get("fuente") if f.get("fuente") in imagenes.FUENTES else marca.get("fuente", "Inter")}
+    for k, *_ in COLORES:
+        valor = str(f.get(k, "")).strip()
+        valor = valor if valor.startswith("#") else f"#{valor}"
+        if imagenes.HEX.match(valor):
+            ajustes[k] = valor.upper()
+    return ajustes
+
+
+def tarjeta_como(marca: dict, valores: dict) -> str:
+    """Tarjeta 03 de Crear post: tres opciones; las que cambian algo abren su desplegable."""
+    modo = modo_de(marca)
+    actual = valores.get("como") or "marca"
+    m = kit(marca)
+    nombre_plantilla = NOMBRES_PLANTILLA.get(plantilla_de(marca), "Editorial")
+    propio = marca.get("estilo_propio", "").strip()
+    opciones = ""
+    for k, nombre, desc in COMO[modo]:
+        extra = (f'<small class="tuyo">“{escape(propio)}”</small>'
+                 if k == "marca" and modo == "libre" and propio else "")
+        opciones += (f'<label class="opcion"><input type="radio" name="como" value="{k}"{" checked" if k == actual else ""}>'
+                     f'<b>{nombre}</b><span>{desc.format(plantilla=nombre_plantilla)}</span>{extra}</label>')
+    plantillas = "".join(
+        f'<label><input type="radio" name="plantilla" value="{k}"{" checked" if k == plantilla_de(marca) else ""}> {n}</label>'
+        for k, n in NOMBRES_PLANTILLA.items())
+    colores = "".join(
+        f'<label class="mini-color"><input type="color" name="{k}" value="{getattr(m, k).lower()}"> {n}</label>'
+        for k, n, _ in COLORES)
+    fuentes = "".join(
+        f'<label><input type="radio" name="fuente" value="{f}"{" checked" if f == m.fuente else ""}> {f}</label>'
+        for f in imagenes.FUENTES)
+    estilos = "".join(
+        f'<label class="opcion"><input type="radio" name="estilo" value="{k}"{" checked" if k == estilo_de(marca) else ""}>'
+        + (f'<img class="ejemplo" src="/panel/contenido/estilo/{k}.jpg" alt="">' if ejemplo(k) else "")
+        + f"<b>{n}</b><span>{d}</span></label>"
+        for k, (n, d, _) in ESTILOS.items())
+    return (
+        '<div class="tarjeta"><span class="num">03</span><h2>¿Cómo lo armamos?</h2>'
+        f'<div class="opciones">{opciones}</div>'
+        '<div class="desplegable si-como plantilla"><h3>Plantilla solo para este post</h3>'
+        '<p class="ayuda">Empieza con lo de tu marca; cambia lo que quieras.</p>'
+        f'<label>Plantilla</label><div class="chips">{plantillas}</div>'
+        f'<label>Colores</label><div class="mini-colores">{colores}</div>'
+        f'<label>Tipografía</label><div class="chips">{fuentes}</div>'
+        f'<label>Estilo de la foto</label><div class="opciones estilos">{estilos}</div></div>'
+        '<div class="desplegable si-como libre"><h3>Diseño libre solo para este post</h3>'
+        '<label for="estilo_post">Describe el estilo de este post</label>'
+        f'<textarea id="estilo_post" name="estilo_propio" rows="3" maxlength="{MAX_ESTILO}"'
+        ' placeholder="Ej. Fondo blanco, mucha luz, estilo revista, letras grandes en negro.">'
+        f'{escape(valores.get("estilo_propio", "") or (propio if modo == "plantilla" else ""))}</textarea>'
+        '<p class="ayuda" style="margin-top:.5rem">El generador diseña el post completo, con tu texto dentro,'
+        " siguiendo esto.</p></div>"
+        '<p class="ayuda si-como plantilla libre" style="margin-top:.75rem">Esto cambia solo este post. Tu marca se queda igual.</p></div>'
+    )
+
+
 async def nuevo(c: Cuenta, valores: dict | None = None, aviso: str = "", confirmar: bool = False) -> HTMLResponse:
     valores = valores or {}
     marca = await marca_de(c)
@@ -600,8 +695,7 @@ async def nuevo(c: Cuenta, valores: dict | None = None, aviso: str = "", confirm
         f'<label class="check"><input type="checkbox" name="con_precio" value="1"'
         f'{" checked" if valores.get("con_precio") else ""}> Este post lleva precio</label>'
         f'{fotos_html}</div>'
-        '<div class="tarjeta"><span class="num">03</span><h2>¿Cómo lo armamos?</h2>'
-        f'<div class="opciones">{opciones_modo(valores.get("modo") or modo_de(marca))}</div></div>'
+        + tarjeta_como(marca, valores)
         + ("" if confirmar else
            '<div class="acciones"><button class="boton" name="accion" value="generar">Generar propuesta · usa 1 imagen</button></div>')
         + "</form>"
@@ -877,15 +971,19 @@ async def crear(request: Request):
     tema = f.get("tema", "").strip()[:MAX_TEMA]
     fotos = [f[k] for k in sorted(f) if k.startswith("foto_")][:MAX_FOTOS]
     con_precio = f.get("con_precio") == "1"
-    modo = f.get("modo") if f.get("modo") in MODOS else ""
-    valores = {"objetivo": objetivo, "tema": tema, "fotos": fotos, "con_precio": con_precio, "modo": modo}
+    marca = await marca_de(c)
+    como = como_del_form(f, marca)
+    modo = modo_de(marca) if como == "marca" else como
+    ajustes = ajustes_del_form(f, marca, como)
+    valores = {"objetivo": objetivo, "tema": tema, "fotos": fotos, "con_precio": con_precio, "como": como,
+               "estilo_propio": ajustes.get("estilo_propio", "")}
     falta = await falta_cupo(c, f.get("extra") == "1")
     if falta == "plan":
         return sin_plan()
     if falta == "extra":
         return await nuevo(c, valores, confirmar=True)
     return generando(c, lambda: generar(c, objetivo, tema, fotos, extra=f.get("extra") == "1", con_precio=con_precio,
-                                        modo=modo),
+                                        modo=modo, ajustes=ajustes),
                      "/panel/contenido/nuevo", "Escribiendo tu post y generando la imagen…")
 
 
@@ -940,7 +1038,7 @@ async def editar(request: Request, post_id: int):
         if not libre(p):  # en diseño libre el texto está dentro de la imagen: se rehace con "Otra imagen"
             try:
                 await imagenes.rerotular(c.store, post["media_ids"][0], p["plantilla"],
-                                         texto_imagen(p, await panel.usuario(c)), kit(await marca_de(c)))
+                                         texto_imagen(p, await panel.usuario(c)), kit(await marca_post(c, p)))
             except imagenes.ErrorImagen as e:
                 return await editor(c, post_id, str(e))
 
@@ -1054,7 +1152,7 @@ async def muestra_post(request: Request, post_id: int):
              "precio": q.get("precio", "")[:40] if q.get("con_precio") == "1" else ""}
         plantilla = q.get("plantilla") if q.get("plantilla") in imagenes.PLANTILLAS else imagenes.PLANTILLA_INICIAL
         texto = texto_imagen(p, await panel.usuario(c))
-        marca = kit(await marca_de(c))
+        marca = kit(await marca_post(c, await pieza(c.store, post_id)))
     async with imagenes._turno:
         jpg = await asyncio.to_thread(imagenes.rotular, sin_texto.read_bytes(), plantilla, texto, marca)
     return Response(jpg, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=600"})

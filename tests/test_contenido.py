@@ -380,7 +380,7 @@ def test_diseno_libre_con_el_estilo_de_sus_fotos(cliente, monkeypatch):
     assert 'name="modo" value="libre" checked' in r.text
 
     r = client.get("/panel/contenido/nuevo")
-    assert 'name="modo" value="libre" checked' in r.text
+    assert 'name="como" value="marca" checked><b>Con mi diseño libre' in r.text and "celular como protagonista" in r.text
     client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "marca"})
     assert "<estilo_de_la_marca>Fondos oscuros" in llamadas[-1][0]
     prompt, fotos = proveedor.llamadas[-1]
@@ -537,3 +537,35 @@ def test_resumen_del_plan_arriba(cliente, monkeypatch):
     # Sin tope en su plan, sale solo el conteo del mes.
     monkeypatch.setattr(c, "mensajes_mes", 0)
     assert "Mensajes este mes" in client.get("/panel/asistente").text
+
+
+def test_crear_post_con_ajustes_solo_para_ese_post(cliente, monkeypatch):
+    client, c, llamadas, proveedor = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 5)
+    client.post("/panel/contenido/marca", headers=ORIGEN,
+                data={"principal": "#111111", "acento": "#E8590C", "fondo": "#000000", "fuente": "Inter", "peso": "700",
+                      "estilo": "limpio", "plantilla": "editorial", "modo": "plantilla", "accion": "guardar"})
+    r = client.get("/panel/contenido/nuevo")
+    assert "Con mi plantilla" in r.text and "Con otra plantilla" in r.text and "Diseño libre solo para este post" in r.text
+
+    # Otra plantilla: banda, otro acento y estilo premium; la marca no cambia.
+    client.post("/panel/contenido/nuevo", headers=ORIGEN,
+                data={"objetivo": "marca", "como": "plantilla", "plantilla": "banda", "acento": "#2255AA",
+                      "estilo": "premium", "fuente": "Lora", "principal": "#111111", "fondo": "#000000"})
+    p = client.portal.call(contenido.pieza, c.store, 1)
+    assert p["plantilla"] == "banda" and p["marca"]["acento"] == "#2255AA" and p["marca"]["fuente"] == "Lora"
+    assert "Dark background" in proveedor.llamadas[-1][0]  # el estilo premium
+    marca = client.portal.call(contenido.marca_de, c)
+    assert marca["acento"] == "#E8590C" and marca["plantilla"] == "editorial"
+    assert client.portal.call(contenido.marca_post, c, p)["acento"] == "#2255AA"
+
+    # Otro diseño libre, con su propia descripción.
+    client.post("/panel/contenido/nuevo", headers=ORIGEN,
+                data={"objetivo": "marca", "como": "libre", "estilo_propio": "Estilo revista, fondo blanco."})
+    p = client.portal.call(contenido.pieza, c.store, 2)
+    assert p["plantilla"] == "libre" and "Estilo revista" in proveedor.llamadas[-1][0]
+
+    # Con mi plantilla: lo de la marca, sin ajustes guardados.
+    client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "marca", "como": "marca"})
+    p = client.portal.call(contenido.pieza, c.store, 3)
+    assert p["plantilla"] == "editorial" and "marca" not in p

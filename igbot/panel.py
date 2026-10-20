@@ -355,6 +355,12 @@ label.check input{width:auto;margin:0}
 .si-precio{display:none}
 form:has(#con_precio:checked) .si-precio{display:block}
 form:has(input[name=modo][value=libre]:checked) .si-plantilla{display:none}
+.si-como{display:none}form:has(input[name=como][value=plantilla]:checked) .si-como.plantilla,form:has(input[name=como][value=libre]:checked) .si-como.libre{display:block}
+.desplegable{margin-top:1.25rem;padding:1.25rem 1.4rem;border:1px solid var(--linea-clara);border-radius:1.25rem;background:var(--claro)}
+.desplegable h3{font-size:1rem;margin:0 0 .25rem}
+.mini-colores{display:flex;gap:1rem;flex-wrap:wrap;margin-top:.6rem}.mini-color{display:flex;align-items:center;gap:.5rem;margin:0;font-weight:500}
+.mini-color input{width:2.4rem;height:2.4rem;border:1px solid var(--linea-clara);padding:0;border-radius:.6rem;background:none}
+.opcion small.tuyo{display:block;color:var(--negro);font-style:italic;font-weight:400;font-size:.85rem}
 .si-libre{display:none}form:has(input[name=modo][value=libre]:checked) .si-libre{display:block}
 .minis{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-top:.75rem}
 .minis figure{margin:0}.minis figcaption{color:#6e6e73;font-size:.8rem;margin-top:.35rem;line-height:1.3}
