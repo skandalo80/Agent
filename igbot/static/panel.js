@@ -62,3 +62,12 @@ function vigilar(form) {
 }
 
 document.querySelectorAll("form[data-vista]").forEach(vigilar);
+
+// Tarjetas plegables (<details class="plegable">): se acuerda si las cerraste, en este navegador.
+document.querySelectorAll("details.plegable[id]").forEach((d) => {
+  const clave = "plegado:" + d.id;
+  try { if (localStorage.getItem(clave) === "1" && location.hash !== "#" + d.id) d.open = false; } catch (e) { /* sin almacenamiento */ }
+  d.addEventListener("toggle", () => {
+    try { localStorage.setItem(clave, d.open ? "0" : "1"); } catch (e) { /* sin almacenamiento */ }
+  });
+});

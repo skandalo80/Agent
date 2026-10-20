@@ -392,6 +392,13 @@ input[type=file]{font:inherit;font-size:.9rem;margin-top:.75rem;max-width:100%}
 .barra{height:.35rem;border-radius:999px;background:var(--linea-oscura);margin-top:.5rem;overflow:hidden}
 .barra i{display:block;height:100%;background:var(--acento-claro)}
 .avatar{width:2.6rem;height:2.6rem;border-radius:50%;background:var(--claro);display:grid;place-items:center;font-weight:600;flex:none}
+.plegable summary{display:flex;justify-content:space-between;align-items:center;cursor:pointer;list-style:none}
+.plegable summary::-webkit-details-marker{display:none}
+.plegable summary .num{margin:0}
+.plegable summary::after{content:"";width:.55rem;height:.55rem;border-right:2px solid #6e6e73;border-bottom:2px solid #6e6e73;transform:rotate(45deg);margin:0 .3rem .3rem 1rem}
+.plegable[open] summary::after{transform:rotate(-135deg);margin-bottom:-.2rem}
+.plegable summary .resumen{margin-left:auto;color:#6e6e73;font-size:.85rem}
+.plegable[open] summary{margin-bottom:1rem}
 .filtros{display:flex;flex-wrap:wrap;gap:.5rem;margin:.5rem 0 .25rem}
 .filtros a{font-weight:500;font-size:.95rem;border:1px solid var(--linea-clara);border-radius:999px;padding:.45rem 1rem;color:inherit;text-decoration:none}
 .filtros a.on{background:var(--negro);color:var(--claro);border-color:var(--negro)}
@@ -476,13 +483,14 @@ def caja(nombre: str, etiqueta: str, ayuda: str, valor: str, filas: int = 2) -> 
 
 
 async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt: str | None = None,
-                   pares_minimos: int = MIN_PREGUNTAS, nota: str = "", ver: str = "") -> HTMLResponse:
+                   pares_minimos: int = MIN_PREGUNTAS, nota: str = "", ver: str = "",
+                   confirmar: bool = False) -> HTMLResponse:
     """La página del panel. `aviso` sale arriba; `nota`, junto a las instrucciones
     (ahí deja la página "Generar instrucciones", con #instrucciones)."""
     datos = datos if datos is not None else await perfil(c)
     prompt = prompt_actual(c) if prompt is None else prompt
     encendido = await activo(c)
-    formulario = _formulario(c, datos, prompt, pares_minimos, nota)
+    formulario = _formulario(c, datos, prompt, pares_minimos, nota, confirmar)
     return pagina(
         cabecera(salir=True, menu="asistente", cuenta=c)
         + '<section class="oscuro portada compacta"><div class="contenedor">'
@@ -611,11 +619,14 @@ async def recientes(c: Cuenta, ver: str) -> str:
     vacio = {"": "Aún no te escribe nadie. Aquí vas a ver tus chats en cuanto lleguen.",
              "pausa": "Ninguno: tu asistente está contestando en todos tus chats.",
              "sin": "Ninguno: todos tus chats tienen respuesta."}[ver]
-    return ('<div class="tarjeta" id="chats"><span class="num">Conversaciones recientes</span>'
+    # Plegable (<details>): panel.js recuerda en el navegador si la cerró.
+    resumen = f"{cuantos['pausa']} en pausa" if cuantos["pausa"] else f"{cuantos['']} chats"
+    return ('<details class="tarjeta plegable" id="chats" open><summary><span class="num">Conversaciones recientes</span>'
+            f'<span class="resumen">{resumen}</span></summary>'
             f'<p class="ayuda">Lo último que te escribieron. "Tomar este chat" pausa al asistente ahí'
             f" {c.human_pause_hours:g} h para que contestes tú desde Instagram.</p>"
             f'<div class="filtros">{filtros}</div>'
-            + ("".join(html) or f'<p class="ayuda vacio">{vacio}</p>') + "</div>")
+            + ("".join(html) or f'<p class="ayuda vacio">{vacio}</p>') + "</details>")
 
 
 # La cuenta principal (la vendedora, la del .env) usa prompts/system.md, que vive en el
@@ -632,7 +643,7 @@ def principal(c: Cuenta) -> str:
             " (prompts/system.md). Si las cambias y guardas, tu asistente usa las tuyas hasta que las restaures.</div>")
 
 
-def _formulario(c: Cuenta, datos: dict, prompt: str, pares_minimos: int, nota: str) -> str:
+def _formulario(c: Cuenta, datos: dict, prompt: str, pares_minimos: int, nota: str, confirmar: bool = False) -> str:
     pares = preguntas(datos)
     pares += [{"p": "", "r": ""}] * (max(MIN_PREGUNTAS, pares_minimos) - len(pares))
     temas = politicas(datos)
@@ -669,7 +680,13 @@ def _formulario(c: Cuenta, datos: dict, prompt: str, pares_minimos: int, nota: s
         f'<p class="ayuda">Elige cómo habla tu asistente y genera sus instrucciones con todo lo de arriba.</p>'
         f'<div class="tonos">{tonos}</div>'
         f'<div class="acciones"><button class="boton secundario" name="accion" value="generar" formaction="/panel/guardar#instrucciones">Generar instrucciones</button></div>'
-        + (f'<div class="aviso">{escape(nota)}</div>' if nota else "") +
+        + (f'<div class="aviso">{escape(nota)}</div>' if nota else "")
+        + ('<div class="aviso"><b>Ya tienes instrucciones escritas a mano.</b> Generar las reemplaza por unas nuevas'
+           " armadas solo con el formulario y se pierde lo que escribiste. Tus instrucciones siguen abajo sin cambios."
+           '<div class="acciones"><button class="boton" name="accion" value="generar_si"'
+           ' formaction="/panel/guardar#instrucciones">Sí, reemplazarlas</button>'
+           '<a class="boton secundario" href="/panel/asistente#instrucciones">Cancelar</a></div></div>'
+           if confirmar else "") +
         f'<label>Instrucciones de tu asistente</label><p class="ayuda">Puedes editarlas antes de guardar.</p>'
         f'<textarea class="prompt" name="prompt" maxlength="{MAX_PROMPT}">{escape(prompt)}</textarea>'
         f'<div class="acciones"><button class="boton" name="accion" value="guardar">Guardar</button></div></div>'
@@ -729,13 +746,17 @@ async def guardar(request: Request):
         c.prompt_editado().unlink(missing_ok=True)
         log.info("@%s volvió a las instrucciones del servidor", await usuario(c))
         return await panel_de(c, "Listo: tu asistente vuelve a usar las instrucciones del servidor.")
-    if accion not in ("generar", "guardar"):
+    if accion not in ("generar", "generar_si", "guardar"):
         return await panel_de(c, "", datos, prompt)
     datos["faq"] = [q for q in datos["faq"] if q["p"] or q["r"]]
     with usar(c):
-        await c.store.set("perfil", json.dumps(datos, ensure_ascii=False))
         nombre = await usuario(c)
-        if accion == "generar":
+        # Si el cuadro trae instrucciones escritas a mano (no las que salen del formulario
+        # guardado), generar las borraría: primero se pide confirmar.
+        if accion == "generar" and prompt.strip() and prompt.strip() != generar(nombre, await perfil(c)).strip():
+            return await panel_de(c, datos=datos, prompt=prompt, confirmar=True)
+        await c.store.set("perfil", json.dumps(datos, ensure_ascii=False))
+        if accion in ("generar", "generar_si"):
             return await panel_de(c, nota="Listo: revísalas y pulsa Guardar para que tu asistente las use.",
                                   datos=datos, prompt=generar(nombre, datos))
         prompt = prompt.strip() or generar(nombre, datos)

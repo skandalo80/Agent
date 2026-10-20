@@ -145,6 +145,16 @@ def test_la_cuenta_principal_edita_sus_instrucciones_aparte(monkeypatch, tmp_pat
         r = client.get("/panel/asistente")
         assert "Cuenta principal" in r.text and "Generar instrucciones" in r.text and "PROMPT DEL VENDEDOR" in r.text
         assert "Gasto de hoy" in r.text and "Mensajes este mes" not in r.text
+        assert '<details class="tarjeta plegable" id="chats" open>' in r.text
+        # Generar no pisa unas instrucciones escritas a mano sin preguntar.
+        r = client.post("/panel/guardar", headers=ORIGEN,
+                        data={"negocio": "Agentes IA", "accion": "generar", "prompt": "PROMPT DEL VENDEDOR"})
+        assert "Ya tienes instrucciones escritas a mano" in r.text and "PROMPT DEL VENDEDOR" in r.text
+        assert "Sí, reemplazarlas" in r.text and client.portal.call(panel.perfil, bot.principal) == {}
+        r = client.post("/panel/guardar", headers=ORIGEN,
+                        data={"negocio": "Agentes IA", "accion": "generar_si", "prompt": "PROMPT DEL VENDEDOR"})
+        assert "revísalas y pulsa Guardar" in r.text and "EL NEGOCIO\nAgentes IA" in r.text
+        assert not bot.principal.prompt_editado().exists()  # sigue sin guardar nada
         # Lo que guarda va aparte (fuera de git) y manda sobre el del repo hasta que lo restaure.
         r = client.post("/panel/guardar", headers=ORIGEN, data={"accion": "guardar", "prompt": "PROMPT DE LA DEMO"})
         assert Path("prompts/system.md").read_text() == "PROMPT DEL VENDEDOR"
