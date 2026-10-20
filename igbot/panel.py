@@ -7,7 +7,8 @@ contraseñas) y desde ahí:
 - elige un tono (amigable, profesional o formal) y con eso se arman las
   instrucciones de su asistente, que puede revisar y editar antes de guardar,
 - enciende o pausa su asistente;
-- ve los chats en pausa (los atiende una persona) y los reactiva o les da más tiempo.
+- ve sus números del día y sus conversaciones recientes: toma un chat (pausa al
+  asistente ahí para contestar él), reactiva los que están en pausa o los abre en Instagram.
 
 La cuenta principal también se edita aquí (para enseñarlo en una demo): lo que
 guarda va a data/system.md y manda sobre prompts/system.md hasta que lo restaure.
@@ -385,6 +386,16 @@ input[type=file]{font:inherit;font-size:.9rem;margin-top:.75rem;max-width:100%}
 .kpi span{display:block;color:#6e6e73;font-size:.85rem}
 .kpi b{display:block;font-size:2rem;font-weight:600;letter-spacing:-.03em;line-height:1.15;margin:.2rem 0}
 .kpi small{color:#6e6e73;font-size:.85rem}
+.hoy{margin:1rem 0 0;grid-template-columns:repeat(4,1fr)}
+.hoy .kpi{background:var(--grafito);color:var(--claro);border:1px solid var(--linea-oscura)}
+.hoy .kpi b{font-size:1.6rem}.hoy .kpi span,.hoy .kpi small{color:#a1a1a6}
+.barra{height:.35rem;border-radius:999px;background:var(--linea-oscura);margin-top:.5rem;overflow:hidden}
+.barra i{display:block;height:100%;background:var(--acento-claro)}
+.avatar{width:2.6rem;height:2.6rem;border-radius:50%;background:var(--claro);display:grid;place-items:center;font-weight:600;flex:none}
+.filtros{display:flex;flex-wrap:wrap;gap:.5rem;margin:.5rem 0 .25rem}
+.filtros a{font-weight:500;font-size:.95rem;border:1px solid var(--linea-clara);border-radius:999px;padding:.45rem 1rem;color:inherit;text-decoration:none}
+.filtros a.on{background:var(--negro);color:var(--claro);border-color:var(--negro)}
+@media(max-width:560px){.hoy{grid-template-columns:1fr 1fr}.fila:has(.avatar) .datos{flex-basis:calc(100% - 3.6rem)}.fila .avatar+.datos+.chip{margin-left:3.6rem}}
 .grafica{width:100%;height:9rem;display:block;margin-top:1.25rem}
 .ejex{display:flex;color:#6e6e73;font-size:.75rem;margin-top:.35rem}
 .ejex span{flex:1;text-align:center;white-space:nowrap;min-width:0;overflow:visible}
@@ -465,7 +476,7 @@ def caja(nombre: str, etiqueta: str, ayuda: str, valor: str, filas: int = 2) -> 
 
 
 async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt: str | None = None,
-                   pares_minimos: int = MIN_PREGUNTAS, nota: str = "") -> HTMLResponse:
+                   pares_minimos: int = MIN_PREGUNTAS, nota: str = "", ver: str = "") -> HTMLResponse:
     """La página del panel. `aviso` sale arriba; `nota`, junto a las instrucciones
     (ahí deja la página "Generar instrucciones", con #instrucciones)."""
     datos = datos if datos is not None else await perfil(c)
@@ -482,40 +493,129 @@ async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt
         f'<form method="post" action="/panel/estado"><input type="hidden" name="activo" value="{"0" if encendido else "1"}">'
         f'<div class="acciones-estado"><a class="boton secundario" href="/panel/probar#ultimo">Probar mi asistente</a>'
         f'<button class="boton{" secundario" if encendido else ""}">{"Pausar" if encendido else "Encender"}</button></div></form></div>'
+        + await hoy(c) +
         "</div></section>"
         '<main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
-        + await pausas(c)
+        + await recientes(c, ver)
         + ("" if c.slug else principal(c))
         + formulario
         + "</div></main>"
     )
 
 
-async def pausas(c: Cuenta) -> str:
-    """Los chats donde el asistente no contesta porque los atiende una persona (te lo pidió el
-    cliente o le contestaste tú desde Instagram). Se reactivan solos al acabar la pausa."""
-    ahora = time.time()
-    filas = []
-    for user_id, hasta, ultimo in await c.store.paused_list(ahora):
+def hace(t: float) -> str:
+    s = time.time() - t
+    if s < 60:
+        return "hace un momento"
+    if s < 3600:
+        return f"hace {int(s // 60)} min"
+    if s < 86400:
+        return f"hace {int(s // 3600)} h"
+    return "ayer" if s < 2 * 86400 else f"hace {int(s // 86400)} días"
+
+
+async def hoy(c: Cuenta) -> str:
+    """Los números del día, debajo del estado. El gasto en dólares solo lo ve la cuenta principal:
+    a un cliente le diría cuánto cuesta su asistente; él ve sus mensajes del mes."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from . import limites, resultados
+    zona = ZoneInfo(c.timezone)
+    ahora = datetime.now(zona)
+    inicio = ahora.replace(hour=0, minute=0, second=0, microsecond=0)
+    filas = await c.store.message_times(inicio.timestamp(), ahora.timestamp())
+    contestados = [u for u, rol, _, a_mano in filas if rol == "assistant" and not a_mano]
+    respuesta = resultados.conversaciones(filas, c, inicio, 1)["respuesta"]
+    en_pausa = len(await c.store.paused_list(time.time()))
+
+    def kpi(etiqueta: str, valor: str, nota: str, extra: str = "") -> str:
+        return f'<div class="kpi"><span>{etiqueta}</span><b>{valor}</b><small>{nota}</small>{extra}</div>'
+    chats = len(set(contestados))
+    cajas = [
+        kpi("Contestados hoy", str(len(contestados)), f"en {chats} chat{'s' if chats != 1 else ''}"),
+        kpi("Tiempo de respuesta", resultados.duracion(respuesta), "mediana de hoy"),
+        kpi("Chats en pausa", str(en_pausa), "los atiendes tú" if en_pausa else "ninguno"),
+    ]
+    if not c.slug:
         with usar(c):
-            nombre = await c.instagram.username(user_id)
-        horas = max(1, round((hasta - ahora) / 3600))
-        filas.append(
-            '<div class="fila"><div class="datos">'
-            f"<b>{escape(nombre)}</b><span>Vuelve a contestar solo en {horas} h"
-            + (f" · «{escape(ultimo[:80])}»" if ultimo else "") + "</span></div>"
+            gasto = await limites.spent_today(c.store)
+        tope = c.daily_budget_usd
+        barra = (f'<div class="barra"><i style="width:{min(100, gasto / tope * 100):.0f}%"></i></div>'
+                 if tope > 0 else "")
+        cajas.append(kpi("Gasto de hoy", f"US${gasto:.2f}",
+                         f"de US${tope:.2f} al día" if tope > 0 else "sin límite diario", barra))
+    else:
+        mes = inicio.replace(day=1).timestamp()
+        cajas.append(kpi("Mensajes este mes", str(await c.store.client_messages_since(mes)), "de tus clientes"))
+    return f'<div class="hoy kpis">{"".join(cajas)}</div>'
+
+
+MAX_CHATS = 15
+FILTROS = {"": "Todas", "pausa": "En pausa", "sin": "Sin contestar"}
+
+
+async def recientes(c: Cuenta, ver: str) -> str:
+    """Los últimos chats: quién los atiende y los botones para tomarlos, reactivarlos o abrirlos
+    en Instagram. Los que están en pausa salen siempre, aunque sean viejos."""
+    import asyncio
+
+    from .store import MANUAL
+    ahora = time.time()
+    pausados = {u: (hasta, ultimo) for u, hasta, ultimo in await c.store.paused_list(ahora)}
+    chats = {u: (t, rol, texto, ultimo) for u, t, rol, texto, ultimo in await c.store.recent_chats(MAX_CHATS)}
+    for u, (hasta, ultimo) in pausados.items():
+        chats.setdefault(u, (0.0, "user", ultimo, ultimo))
+
+    def estado(u: str, rol: str, texto: str) -> str:
+        if u in pausados:
+            return "pausa"
+        if rol == "user":
+            return "sin"
+        return "tu" if texto.startswith(MANUAL) else "asistente"
+    filas = [(u, *datos, estado(u, datos[1], datos[2])) for u, datos in chats.items()]
+    cuantos = {"": len(filas), "pausa": sum(f[-1] == "pausa" for f in filas), "sin": sum(f[-1] == "sin" for f in filas)}
+    ver = ver if ver in FILTROS else ""
+    if ver:
+        filas = [f for f in filas if f[-1] == ver]
+    with usar(c):
+        nombres = await asyncio.gather(*(c.instagram.username(f[0]) for f in filas))
+    etiquetas = {"pausa": ("En pausa · tú", "acento"), "sin": ("Sin contestar", "rojo"),
+                 "tu": ("Contestaste tú", ""), "asistente": ("Asistente", "verde")}
+    html = []
+    for (u, t, _, _, ultimo, est), nombre in zip(filas, nombres):
+        nombre = nombre if nombre.startswith("@") else "Cliente de Instagram"
+        detalle = f"«{escape(ultimo[:90])}»" if ultimo else "Sin mensajes todavía"
+        if est == "pausa":
+            horas = max(1, round((pausados[u][0] - ahora) / 3600))
+            detalle += f" · vuelve a contestar solo en {horas} h"
+        elif t:
+            detalle += f" · {hace(t)}"
+        texto, color = etiquetas[est]
+        botones = (f'<button class="boton secundario chico" name="accion" value="extender">+{c.human_pause_hours:g} h</button>'
+                   '<button class="boton chico" name="accion" value="reactivar">Reactivar</button>'
+                   if est == "pausa" else
+                   '<button class="boton secundario chico" name="accion" value="tomar">Tomar este chat</button>')
+        abrir = (f'<a class="boton secundario chico" href="https://ig.me/m/{escape(nombre[1:])}" target="_blank"'
+                 ' rel="noopener">Abrir</a>' if nombre.startswith("@") else "")
+        html.append(
+            f'<div class="fila"><span class="avatar">{escape(nombre[1:2].upper() or "?")}</span>'
+            f'<div class="datos"><b>{escape(nombre)}</b><span>{detalle}</span></div>'
+            f'<span class="chip {color}">{texto}</span>'
             '<form method="post" action="/panel/pausas" class="acciones-fila">'
-            f'<input type="hidden" name="usuario" value="{escape(user_id)}">'
-            f'<button class="boton secundario chico" name="accion" value="extender">+{c.human_pause_hours:g} h</button>'
-            '<button class="boton chico" name="accion" value="reactivar">Reactivar</button></form></div>')
-    detalle = ("".join(filas) if filas else
-               '<p class="ayuda" style="margin-bottom:0">Ninguno: tu asistente está contestando en todos tus chats.</p>')
-    return ('<div class="tarjeta" id="pausas"><span class="num">Chats en pausa</span>'
-            + (f'<p class="ayuda">Aquí el asistente no contesta porque los atiende una persona (el cliente pidió'
-               f" hablar con alguien o le contestaste tú desde Instagram). Se reactivan solos a las"
-               f" {c.human_pause_hours:g} h.</p>" if filas else "")
-            + detalle + "</div>")
+            f'<input type="hidden" name="usuario" value="{escape(u)}">{botones}{abrir}</form></div>')
+    filtros = "".join(
+        f'<a href="/panel/asistente{"?ver=" + k if k else ""}#chats" class="{"on" if k == ver else ""}">'
+        f'{nombre}{f" ({cuantos[k]})" if k else ""}</a>' for k, nombre in FILTROS.items())
+    vacio = {"": "Aún no te escribe nadie. Aquí vas a ver tus chats en cuanto lleguen.",
+             "pausa": "Ninguno: tu asistente está contestando en todos tus chats.",
+             "sin": "Ninguno: todos tus chats tienen respuesta."}[ver]
+    return ('<div class="tarjeta" id="chats"><span class="num">Conversaciones recientes</span>'
+            f'<p class="ayuda">Lo último que te escribieron. "Tomar este chat" pausa al asistente ahí'
+            f" {c.human_pause_hours:g} h para que contestes tú desde Instagram.</p>"
+            f'<div class="filtros">{filtros}</div>'
+            + ("".join(html) or f'<p class="ayuda vacio">{vacio}</p>') + "</div>")
 
 
 # La cuenta principal (la vendedora, la del .env) usa prompts/system.md, que vive en el
@@ -607,7 +707,7 @@ async def ver(request: Request):
 @router.get("/asistente")
 async def ver_asistente(request: Request):
     c = cuenta_de_sesion(request)
-    return await panel_de(c) if c else entrar()
+    return await panel_de(c, ver=request.query_params.get("ver", "")) if c else entrar()
 
 
 @router.post("/guardar")
@@ -668,6 +768,15 @@ async def cambiar_pausa(request: Request):
         return RedirectResponse("/panel", status_code=303)
     f = await form(request)
     usuario_chat, accion = f.get("usuario", ""), f.get("accion")
+    if accion == "tomar":
+        if not await c.store.has_chat(usuario_chat):
+            return await panel_de(c, "No encontramos ese chat.")
+        await c.store.pause(usuario_chat, time.time() + c.human_pause_hours * 3600)
+        with usar(c):
+            nombre = await c.instagram.username(usuario_chat)
+        log.info("@%s tomó el chat de %s desde el panel", await usuario(c), usuario_chat)
+        return await panel_de(c, f"Listo: el asistente no le contesta a {nombre} en {c.human_pause_hours:g} h."
+                              " Contéstale tú desde Instagram.")
     if usuario_chat not in {u for u, *_ in await c.store.paused_list(time.time())}:
         return await panel_de(c, "Ese chat ya no estaba en pausa.")
     with usar(c):
