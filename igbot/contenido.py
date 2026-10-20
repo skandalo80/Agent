@@ -361,6 +361,7 @@ async def pagina(c: Cuenta, actual: str, bajada: str, cuerpo: str, aviso: str = 
         "</div></section>"
         '<main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
+        + await panel.pendiente(c, actual)
         + cuerpo + "</div></main>"
     )
 

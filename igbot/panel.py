@@ -398,6 +398,18 @@ label.check input[type=email]{flex:1;max-width:22rem;margin:0}
 .si-fijo{display:none;margin-top:.75rem}form:has(input[name=fuera][value=fijo]:checked) .si-fijo{display:block}
 .semaforo{width:.65rem;height:.65rem;border-radius:50%;flex:none;margin:0 .4rem;background:#30d158}
 .semaforo.sem-aviso{background:#ff9f0a}.semaforo.sem-mal{background:#ff453a}
+.caminos{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem}
+.camino{background:var(--blanco);border-radius:1.5rem;padding:2rem;display:flex;flex-direction:column;border:2px solid transparent}
+.camino.sugerido{border-color:var(--acento)}
+.camino h2{margin:.25rem 0 .5rem}.camino ul{margin:1rem 0 1.5rem;padding:0;list-style:none;color:#3a3a3c}
+.camino li{padding:.45rem 0;border-top:1px solid var(--linea-clara);display:flex;gap:.6rem}
+.camino li:first-child{border-top:0}.camino li b{color:var(--acento);font-weight:600;min-width:1.2rem}
+.camino .acciones{margin-top:auto}
+.tiempo{align-self:flex-start;font-size:.8rem;color:#6e6e73;background:var(--claro);border-radius:999px;padding:.2rem .7rem}
+.sola{max-width:40rem;margin:0 auto}
+.bajada-bienvenida{color:#a1a1a6;font-size:1.15rem;max-width:40rem;margin:.75rem 0 0}
+.despues{margin-top:1.25rem;text-align:center;color:#6e6e73;font-size:.9rem}.despues a{color:inherit}
+@media(max-width:700px){.caminos{grid-template-columns:1fr}}
 .plegable summary{display:flex;justify-content:space-between;align-items:center;cursor:pointer;list-style:none}
 .plegable summary::-webkit-details-marker{display:none}
 .plegable summary .num{margin:0}
@@ -511,6 +523,7 @@ async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt
         "</div></section>"
         '<main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
+        + await pendiente(c, "asistente")
         + await recientes(c, ver)
         + await tarjetas_ajustes(c)
         + ("" if c.slug else principal(c))
@@ -719,9 +732,75 @@ def datos_de(f: dict[str, str]) -> dict:
     return datos
 
 
+# --- bienvenida: la primera vez que entra una cuenta nueva ---
+
+async def asistente_listo(c: Cuenta) -> bool:
+    """Ya guardó sus instrucciones (o llenó el formulario antes de que hubiera bienvenida).
+    La principal usa las del servidor: siempre está lista."""
+    return not c.slug or await c.store.get("asistente_listo") == "1" or bool(await perfil(c))
+
+
+async def marca_lista(c: Cuenta) -> bool:
+    return c.imagenes_mes <= 0 or bool(await c.store.get("marca"))
+
+
+async def pendiente(c: Cuenta, aqui: str) -> str:
+    """Un aviso arriba si le falta configurar la otra parte (no la de la página donde está)."""
+    if aqui != "asistente" and not await asistente_listo(c):
+        return ('<div class="aviso">Te falta configurar <b>Tu asistente</b>: sin eso no contesta tus mensajes.'
+                ' <a href="/panel/asistente">Configurarlo</a></div>')
+    if aqui != "marca" and not await marca_lista(c):
+        return ('<div class="aviso">Te falta configurar <b>Tu marca</b> para que tus posts se vean como tú.'
+                ' <a href="/panel/contenido/marca">Configurarla</a></div>')
+    return ""
+
+
+PASOS_ASISTENTE = ["Cuéntanos de tu negocio: qué ofreces, horarios y precios", "Las preguntas que más te hacen",
+                   "Elige su tono y revisa sus instrucciones", "Pruébalo y enciéndelo"]
+PASOS_MARCA = ["Cómo se arman tus posts", "Colores y tipografía", "El estilo de tus fotos", "Fotos de tu negocio"]
+
+
+def camino(etiqueta: str, titulo: str, desc: str, pasos: list[str], tiempo: str, boton: str, href: str,
+           sugerido: bool) -> str:
+    lis = "".join(f"<li><b>{i}</b>{p}</li>" for i, p in enumerate(pasos, 1))
+    return (f'<div class="camino{" sugerido" if sugerido else ""}"><span class="num">{etiqueta}</span>'
+            f'<span class="tiempo">{tiempo}</span><h2>{titulo}</h2><p class="ayuda">{desc}</p><ul>{lis}</ul>'
+            f'<div class="acciones"><a class="boton{"" if sugerido else " secundario"}" href="{href}">{boton}</a>'
+            "</div></div>")
+
+
+async def bienvenida(c: Cuenta) -> HTMLResponse:
+    """Con contenido (Community y Pro): elige por dónde empezar. Básico: solo su asistente."""
+    asistente_desc = "El que contesta tus mensajes directos por ti, de día y de noche."
+    if c.imagenes_mes > 0:
+        bajada = "Vamos a dejar todo listo. ¿Por dónde quieres empezar? Puedes hacer el otro después; te lo recordamos en el panel."
+        cuerpo = ('<div class="caminos">'
+                  + camino("Recomendado para empezar", "Tu asistente", asistente_desc, PASOS_ASISTENTE, "≈ 10 min",
+                           "Configurar mi asistente", "/panel/asistente", True)
+                  + camino("Contenido", "Tu marca", "Tus colores, tu letra y tus fotos, para que tus posts se vean"
+                           " de la misma casa.", PASOS_MARCA, "≈ 5 min", "Configurar mi marca",
+                           "/panel/contenido/marca", False)
+                  + "</div>")
+    else:
+        bajada = "En 10 minutos dejas tu asistente contestando tus mensajes. Son 4 pasos y puedes guardar y seguir después."
+        cuerpo = ('<div class="sola">' + camino("Tu plan Básico", "Tu asistente", asistente_desc, PASOS_ASISTENTE,
+                                                "≈ 10 min", "Empezar", "/panel/asistente", True) + "</div>")
+    await c.store.set("bienvenida", "1")
+    return pagina(
+        cabecera(salir=True)
+        + '<section class="oscuro portada compacta"><div class="contenedor">'
+        f'<p class="antetitulo">Bienvenido</p><h1>Hola, @{escape(await usuario(c))}<span class="punto">.</span></h1>'
+        f'<p class="bajada-bienvenida">{bajada}</p></div></section>'
+        f'<main><div class="contenedor">{cuerpo}'
+        '<p class="despues"><a href="/panel/asistente">Prefiero verlo todo primero</a></p></div></main>'
+    )
+
+
 async def inicio(c: Cuenta) -> str:
-    """A dónde lleva /panel: a Resultados si el asistente ya trabaja (encendido y con
-    mensajes de clientes); si no, a Tu asistente, para que lo configure y lo encienda."""
+    """A dónde lleva /panel: la primera vez de una cuenta nueva, a la bienvenida; a Resultados
+    si el asistente ya trabaja (encendido y con mensajes de clientes); si no, a Tu asistente."""
+    if c.slug and await c.store.get("bienvenida") != "1" and not (await asistente_listo(c) and await marca_lista(c)):
+        return "/panel/bienvenida"
     if await activo(c) and await c.store.has_client_messages():
         return "/panel/resultados"
     return "/panel/asistente"
@@ -731,6 +810,12 @@ async def inicio(c: Cuenta) -> str:
 async def ver(request: Request):
     c = cuenta_de_sesion(request)
     return RedirectResponse(await inicio(c), status_code=303) if c else entrar()
+
+
+@router.get("/bienvenida")
+async def ver_bienvenida(request: Request):
+    c = cuenta_de_sesion(request)
+    return await bienvenida(c) if c else entrar()
 
 
 @router.get("/asistente")
@@ -775,6 +860,7 @@ async def guardar(request: Request):
         destino = Path(c.prompt_path) if c.slug else c.prompt_editado()
         destino.parent.mkdir(parents=True, exist_ok=True)
         destino.write_text(prompt + "\n", encoding="utf-8")
+    await c.store.set("asistente_listo", "1")
     log.info("@%s guardó las instrucciones de su asistente desde el panel", nombre)
     aviso = "Guardado. Tu asistente ya usa estas instrucciones."
     if not await activo(c):

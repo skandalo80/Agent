@@ -80,6 +80,8 @@ def test_cliente_se_conecta_configura_y_enciende(monkeypatch, tmp_path):
         c = bot.buscar("1784")
         assert c and not c.google_tools
 
+        r = client.get("/panel")  # la primera vez: la bienvenida
+        assert "Hola, @cafe.lunar" in r.text and "Configurar mi asistente" not in r.text and "Empezar" in r.text
         r = client.get("/panel")
         assert "@cafe.lunar" in r.text and "en pausa" in r.text
 
