@@ -254,6 +254,11 @@ main .boton.secundario{background:transparent;color:var(--negro);border-color:va
 .escribiendo span:nth-child(2){animation-delay:.15s}
 .escribiendo span:nth-child(3){animation-delay:.3s}
 @keyframes puntos{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
+.compacta{padding:2.25rem 0 2rem}
+.compacta h1{font-size:clamp(1.9rem,5vw,2.75rem)}
+.compacta .bajada{font-size:1.05rem;margin-top:.5rem}
+.compacta+main{padding-top:1.5rem}
+.ancla{display:block;scroll-margin-top:30vh}
 .vacio{color:#6e6e73;text-align:center;padding:2rem 0}
 .escribir{display:flex;gap:.6rem;margin-top:1rem}
 .escribir input{flex:1}
@@ -484,6 +489,11 @@ async def responder_prueba(c: Cuenta, previos: list[list[str]], texto: str) -> s
         return await agent.run_claude("\n\n".join(partes), agent.system_prompt() + NOTA_PRUEBA, max_turns=1)
 
 
+# Adonde llega la página (#ultimo) al mandar un mensaje: va justo después de
+# "escribiendo…", en la primera parte, para que el navegador baje desde el inicio.
+ANCLA = '<span class="ancla" id="ultimo"></span>'
+
+
 def burbuja(rol: str, texto: str) -> str:
     return f'<div class="burbuja {"cliente" if rol == "user" else "agente"}">{escape(texto)}</div>'
 
@@ -495,7 +505,7 @@ async def prueba_inicio(c: Cuenta, mensajes: list[list[str]], aviso: str = "") -
     return (
         PRINCIPIO
         + cabecera(salir=True)
-        + '<section class="oscuro portada"><div class="contenedor">'
+        + '<section class="oscuro portada compacta"><div class="contenedor">'
         '<p class="antetitulo">Prueba tu asistente</p>'
         f'<h1>@{escape(await usuario(c))}<span class="punto">.</span></h1>'
         '<p class="bajada" style="margin-left:0">Así contestaría tus mensajes. Nada de esto llega a Instagram.</p>'
@@ -506,11 +516,11 @@ async def prueba_inicio(c: Cuenta, mensajes: list[list[str]], aviso: str = "") -
     )
 
 
-async def prueba_fin(c: Cuenta) -> str:
+async def prueba_fin(c: Cuenta, ancla: bool = True) -> str:
     _, usadas = await pruebas_hoy(c)
     return (
-        '<span id="ultimo"></span>'
-        '<form method="post" action="/panel/probar#ultimo" class="escribir">'
+        (ANCLA if ancla else "")
+        + '<form method="post" action="/panel/probar#ultimo" class="escribir">'
         f'<input type="text" name="mensaje" maxlength="{MAX_MENSAJE_PRUEBA}" placeholder="Escribe un mensaje" required autofocus>'
         '<button class="boton" name="accion" value="enviar">Enviar</button></form></div>'
         f'<p class="ayuda" style="margin-top:.75rem">Te quedan {max(MAX_PRUEBAS_DIA - usadas, 0)} mensajes de prueba hoy.</p>'
@@ -554,18 +564,20 @@ async def probar(request: Request):
         # muestra la página nueva) y, cuando Claude contesta, el resto. Caddy no
         # guarda respuestas sin Content-Length, las pasa tal cual van llegando.
         yield (await prueba_inicio(c, previos + [["user", texto]])
-               + '<div class="burbuja agente escribiendo" id="escribiendo"><span></span><span></span><span></span></div>')
+               + '<div class="burbuja agente escribiendo" id="escribiendo"><span></span><span></span><span></span></div>'
+               + ANCLA)
         try:
             respuesta = await responder_prueba(c, previos, texto)
         except Exception:
             log.exception("Falló la prueba del asistente de %s", c.slug)
             yield ('<style>#escribiendo{display:none}</style><div class="aviso">'
                    "Tu asistente no pudo contestar esta vez. Intenta de nuevo en un momento.</div>"
-                   + await prueba_fin(c))
+                   + await prueba_fin(c, ancla=False))
             return
         nuevos = previos + [["user", texto], ["assistant", respuesta]]
         await c.store.set("prueba", json.dumps(nuevos[-MAX_PRUEBA_TURNOS:], ensure_ascii=False))
-        yield "<style>#escribiendo{display:none}</style>" + burbuja("assistant", respuesta) + await prueba_fin(c)
+        yield ("<style>#escribiendo{display:none}</style>" + burbuja("assistant", respuesta)
+               + await prueba_fin(c, ancla=False))
 
     return StreamingResponse(pagina_en_partes(), media_type="text/html; charset=utf-8")
 
