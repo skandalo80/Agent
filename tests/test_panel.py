@@ -158,6 +158,9 @@ def test_probar_mi_asistente(monkeypatch, tmp_path):
         assert "¿Abren hoy?" in r.text and "respuesta 1" in r.text
         # Primero sale "escribiendo…" y, al llegar la respuesta, se oculta.
         assert r.text.index('id="escribiendo"') < r.text.index("#escribiendo{display:none}") < r.text.index("respuesta 1")
+        # El ancla (#ultimo) llega con los puntos, para que el navegador baje mientras espera.
+        assert r.text.count('id="ultimo"') == 1
+        assert r.text.index('id="escribiendo"') < r.text.index('id="ultimo"') < r.text.index("#escribiendo{display:none}")
         prompt, system, mcp = vistos[0]
         # Sus instrucciones guardadas + las reglas comunes, sin herramientas.
         assert system.startswith("Eres el café.") and "REGLAS COMUNES" in system and not mcp
