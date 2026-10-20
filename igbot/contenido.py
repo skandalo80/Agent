@@ -274,7 +274,7 @@ async def generar(c: Cuenta, objetivo: str = "", tema: str = "", fotos: list[str
         if post_id is None:
             ajustes = ajustes or {}
             marca = {**await marca_de(c), **ajustes}
-            fotos = [t for t in fotos if t in marca.get("fotos", [])]
+            fotos = [t for t in fotos if foto_valida(c, marca, t)]
             modo = modo if modo in MODOS else modo_de(marca)
             texto = await escribir(c, objetivo, tema, len(fotos), con_precio, notas_estilo(marca, modo))
             plantilla = imagenes.LIBRE if modo == "libre" else plantilla_de(marca)
@@ -672,18 +672,24 @@ async def nuevo(c: Cuenta, valores: dict | None = None, aviso: str = "", confirm
         f'<label class="opcion"><input type="radio" name="objetivo" value="{k}"{" checked" if k == elegido else ""}>'
         f'<b>{nombre}</b><span>{desc}</span>' + (f"<small>{nota}</small>" if nota else "") + "</label>"
         for k, (nombre, desc, nota, _, _) in OBJETIVOS.items())
-    marcadas = set(valores.get("fotos", []))
+    marcadas = list(valores.get("fotos", []))
+    # Las de su marca y las que subió para este post (si vuelve a la página, p. ej. a confirmar una extra).
+    todas = [t for t in marca.get("fotos", []) if archivo(c, t).is_file()]
+    todas += [t for t in marcadas if t not in todas and foto_valida(c, marca, t)]
     fotos = "".join(
         f'<label class="foto"><input type="checkbox" name="foto_{i}" value="{t}"{" checked" if t in marcadas else ""}>'
         f'<img src="{url_imagen(c, t)}" alt="Foto {i + 1}"></label>'
-        for i, t in enumerate(marca.get("fotos", [])) if archivo(c, t).is_file())
-    fotos_html = ('<label>Usar tus fotos (opcional)</label>'
-                  '<p class="ayuda">Marca las que deben salir: la imagen se hace a partir de tu foto real.</p>'
-                  f'<div class="fotos">{fotos}</div>') if fotos else (
-        '<p class="ayuda" style="margin-top:1.25rem">¿Quieres que salga tu negocio real? '
-        '<a class="enlace" href="/panel/contenido/marca#fotos">Sube sus fotos en Tu marca</a>.</p>')
+        for i, t in enumerate(todas))
+    fotos_html = (('<label>Usar tus fotos (opcional)</label>'
+                   '<p class="ayuda">Marca las que deben salir: la imagen se hace a partir de tu foto real.</p>'
+                   f'<div class="fotos">{fotos}</div>') if fotos else "") + (
+        '<label for="fotos_post">Subir fotos para este post</label>'
+        '<p class="ayuda">Tu producto o tu local: la imagen se hace a partir de ellas. Se usan solo en este post'
+        f' (para todos tus posts, súbelas en <a class="enlace" href="/panel/contenido/marca#fotos">Tu marca</a>).'
+        f" Hasta {MAX_FOTOS}, JPG o PNG.</p>"
+        '<input type="file" id="fotos_post" name="fotos_post" accept="image/jpeg,image/png,image/webp" multiple>')
     cuerpo = (
-        '<form method="post" action="/panel/contenido/nuevo">'
+        '<form method="post" action="/panel/contenido/nuevo" enctype="multipart/form-data">'
         + (tarjeta_extra(c, "generar") if confirmar else "")
         + '<div class="tarjeta"><span class="num">01</span><h2>¿Qué quieres lograr con este post?</h2>'
         '<p class="ayuda">Con esto elegimos el tono, la imagen y la llamada a la acción.</p>'
@@ -934,6 +940,35 @@ def marca_del_form(f, antes: dict) -> dict:
     return datos
 
 
+TOKEN_FOTO = re.compile(r"^[\w-]{24}$")  # secrets.token_urlsafe(18)
+
+
+async def guardar_fotos(c: Cuenta, subidas: list, cupo: int) -> tuple[list[str], int]:
+    """Guarda hasta `cupo` fotos subidas como JPG. Devuelve (tokens, cuántas no se pudieron leer)."""
+    tokens, fallidas = [], 0
+    for subida in subidas:
+        if len(tokens) >= cupo:
+            break
+        data = await subida.read(MAX_FOTO_BYTES + 1)
+        try:
+            if len(data) > MAX_FOTO_BYTES:
+                raise ValueError("muy grande")
+            jpg = await asyncio.to_thread(preparar_foto, data)
+        except Exception:
+            fallidas += 1
+            continue
+        token = secrets.token_urlsafe(18)
+        archivo(c, token).parent.mkdir(parents=True, exist_ok=True)
+        archivo(c, token).write_bytes(jpg)
+        tokens.append(token)
+    return tokens, fallidas
+
+
+def foto_valida(c: Cuenta, marca: dict, token: str) -> bool:
+    """De su marca, o subida solo para un post (Crear post > Subir fotos)."""
+    return token in marca.get("fotos", []) or (bool(TOKEN_FOTO.match(token)) and archivo(c, token).is_file())
+
+
 def preparar_foto(data: bytes) -> bytes:
     """Una foto de producto como JPG de hasta 1600 px (para la referencia de Gemini)."""
     img = ImageOps.exif_transpose(Image.open(io.BytesIO(data))).convert("RGB")
@@ -966,12 +1001,16 @@ async def crear(request: Request):
     panel.de_aqui(request)
     if not (c := panel.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
-    f = await panel.form(request)
+    f = await request.form()  # puede traer fotos subidas solo para este post
     objetivo = f.get("objetivo") if f.get("objetivo") in OBJETIVOS else OBJETIVO_INICIAL
-    tema = f.get("tema", "").strip()[:MAX_TEMA]
-    fotos = [f[k] for k in sorted(f) if k.startswith("foto_")][:MAX_FOTOS]
+    tema = str(f.get("tema", "")).strip()[:MAX_TEMA]
+    fotos = [str(f[k]) for k in sorted(set(f.keys())) if k.startswith("foto_")][:MAX_FOTOS]
     con_precio = f.get("con_precio") == "1"
     marca = await marca_de(c)
+    subidas = [s for s in f.getlist("fotos_post") if getattr(s, "filename", "")]
+    if subidas:
+        tokens, _ = await guardar_fotos(c, subidas, MAX_FOTOS - len(fotos))
+        fotos += tokens
     como = como_del_form(f, marca)
     modo = modo_de(marca) if como == "marca" else como
     ajustes = ajustes_del_form(f, marca, como)
@@ -1089,23 +1128,9 @@ async def guardar_marca(request: Request):
         aviso = "Listo: quitamos esa foto."
     nuevas = [s for s in f.getlist("fotos") if getattr(s, "filename", "")]
     if nuevas:
-        subidas, fallidas = 0, 0
-        for subida in nuevas:
-            if len(datos["fotos"]) >= MAX_FOTOS:
-                break
-            data = await subida.read(MAX_FOTO_BYTES + 1)
-            try:
-                if len(data) > MAX_FOTO_BYTES:
-                    raise ValueError("muy grande")
-                jpg = await asyncio.to_thread(preparar_foto, data)
-            except Exception:
-                fallidas += 1
-                continue
-            token = secrets.token_urlsafe(18)
-            archivo(c, token).parent.mkdir(parents=True, exist_ok=True)
-            archivo(c, token).write_bytes(jpg)
-            datos["fotos"].append(token)
-            subidas += 1
+        tokens, fallidas = await guardar_fotos(c, nuevas, MAX_FOTOS - len(datos["fotos"]))
+        datos["fotos"] += tokens
+        subidas = len(tokens)
         aviso = f"Listo: {subidas} foto{'s' if subidas != 1 else ''} nueva{'s' if subidas != 1 else ''}."
         if fallidas:
             aviso += f" {fallidas} no se pudieron leer (usa JPG o PNG de hasta 10 MB)."

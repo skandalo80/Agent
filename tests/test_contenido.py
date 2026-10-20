@@ -578,3 +578,18 @@ def test_configura_tu_asistente_va_plegado(cliente):
     client.portal.call(c.store.set, "asistente_listo", "0")
     client.portal.call(c.store.set, "perfil", "")
     assert '<details class="grupo plegable" id="configura" open>' in client.get("/panel/asistente").text
+
+
+def test_subir_fotos_solo_para_un_post(cliente, monkeypatch):
+    client, c, llamadas, proveedor = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 5)
+    r = client.get("/panel/contenido/nuevo")
+    assert 'name="fotos_post"' in r.text and 'enctype="multipart/form-data"' in r.text
+    client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "producto"},
+                files={"fotos_post": ("bolsa.png", png(), "image/png")})
+    p = client.portal.call(contenido.pieza, c.store, 1)
+    assert len(p["fotos"]) == 1 and len(proveedor.llamadas[-1][1]) == 1
+    assert client.portal.call(contenido.marca_de, c).get("fotos", []) == []  # Tu marca no cambia
+    # Un token inventado no sirve para leer otro archivo.
+    client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "producto", "foto_0": "../../.env"})
+    assert client.portal.call(contenido.pieza, c.store, 2)["fotos"] == []
