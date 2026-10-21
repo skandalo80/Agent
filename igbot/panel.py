@@ -554,9 +554,11 @@ details.mas{margin-top:1rem}details.mas summary{cursor:pointer;color:var(--acent
 .detalle summary::after{content:"›";margin-left:.35rem;display:inline-block;transition:transform .15s}.detalle[open] summary::after{transform:rotate(90deg)}
 .detalle p{margin:.45rem 0}.detalle .texto-post{white-space:pre-wrap}
 .chip.acento{background:#fff4ed;color:var(--acento);border-color:transparent}
-/* Cada objetivo de post con su color: tonos suaves de la misma familia, para distinguirlos de un vistazo. */
-.chip.obj-estrella{background:#fdf3e1;color:#a5590a}.chip.obj-crecer{background:#fdeef0;color:#b4344d}
-.chip.obj-explicar{background:#f2eefb;color:#6b4fb0}.chip.obj-historia{background:#e8f4f3;color:#2f7a78}
+/* Cada objetivo de post en lila, con una diferencia muy sutil entre ellos: el color fuerte es del
+   estado (publicado, programado, borrador), no del objetivo. */
+.chip.obj-marca{background:#f5f2fb;color:#6e5aa0}.chip.obj-estrella{background:#f1ecfa;color:#634c98}
+.chip.obj-crecer{background:#eee8f8;color:#5b4492}.chip.obj-explicar{background:#f3effa;color:#68539c}
+.chip.obj-historia{background:#f6f3fb;color:#7462a4}
 .titulo-seccion{display:flex;justify-content:space-between;align-items:flex-end;gap:1rem;margin-bottom:1rem}
 .titulo-seccion h2{margin:0}
 .acciones-fila{display:flex;gap:.5rem;flex:none}
@@ -612,6 +614,9 @@ label.check input[type=email]{flex:1;max-width:22rem;margin:0}
 .plegable[open] summary::after{transform:rotate(-135deg);margin-bottom:-.2rem}
 .plegable summary .resumen{margin-left:auto;color:#6e6e73;font-size:.85rem}
 .plegable[open] summary{margin-bottom:1rem}
+.seccion summary .titulo-sec .num{margin:0 0 .35rem}.seccion summary h2{margin:0}
+.guardar-todo{position:sticky;bottom:1rem;z-index:2;align-items:center;gap:1rem;margin:1.25rem 0;padding:.9rem 1.25rem;background:var(--blanco);border:1px solid var(--linea-clara);border-radius:999px;box-shadow:0 6px 24px rgba(0,0,0,.08)}
+.guardar-todo .ayuda{margin:0}
 .grupo>summary{background:var(--blanco);border-radius:1.5rem;padding:1.5rem 2rem;margin-bottom:1.25rem}
 .grupo>summary .num{margin-bottom:.2rem}.grupo>summary .resumen{display:block;margin:0;font-size:.95rem}
 .grupo[open]>summary{margin-bottom:1.25rem}
@@ -1070,19 +1075,33 @@ def _formulario(c: Cuenta, datos: dict, prompt: str, pares_minimos: int, nota: s
         '<form method="post" action="/panel/guardar">'
         # Enter en un campo no debe quitar una pregunta: el primer botón del formulario solo recarga.
         '<button class="oculto" name="accion" value="vista" tabindex="-1" aria-hidden="true">Actualizar</button>'
-        f'<div class="tarjeta"><span class="num">01</span><h2>Tu negocio</h2>{negocio}</div>'
-        f'<div class="tarjeta" id="preguntas"><span class="num">02</span><h2>Preguntas frecuentes</h2>'
-        f'<p class="ayuda">Lo que más te preguntan, con la respuesta que darías tú.</p>'
-        f'<input type="hidden" name="faq_n" value="{len(pares)}">{faq}'
-        f'<div class="acciones"><button class="boton secundario" name="accion" value="agregar" formaction="/panel/guardar#preguntas">+ Agregar pregunta</button></div></div>'
-        f'<div class="tarjeta"><span class="num">03</span><h2>Políticas</h2>'
-        f'<p class="ayuda">Llena solo las que apliquen a tu negocio.</p>{pol}</div>'
-        f'<div class="tarjeta"><span class="num">04</span><h2>Atención personal</h2>'
-        f'{caja(HUMANO[0], HUMANO[1], HUMANO[2], datos.get(HUMANO[0], ""), HUMANO[3])}</div>'
-        f'<div class="tarjeta" id="instrucciones"><span class="num">05</span><h2>Tono e instrucciones</h2>'
-        + (tono_cliente(tonos, prompt, nota, quedan) if c.slug else tono_principal(tonos, prompt, nota, confirmar))
-        + "</div></form>"
+        + seccion("negocio", "01", "Tu negocio", negocio)
+        + seccion("preguntas", "02", "Preguntas frecuentes",
+                  '<p class="ayuda">Lo que más te preguntan, con la respuesta que darías tú.</p>'
+                  f'<input type="hidden" name="faq_n" value="{len(pares)}">{faq}'
+                  '<div class="acciones"><button class="boton secundario" name="accion" value="agregar"'
+                  ' formaction="/panel/guardar#preguntas">+ Agregar pregunta</button></div>',
+                  plural_(sum(1 for q in pares if q["p"].strip()), "pregunta", "preguntas"))
+        + seccion("politicas", "03", "Políticas", f'<p class="ayuda">Llena solo las que apliquen a tu negocio.</p>{pol}')
+        + seccion("atencion", "04", "Atención personal",
+                  caja(HUMANO[0], HUMANO[1], HUMANO[2], datos.get(HUMANO[0], ""), HUMANO[3]))
+        + seccion("instrucciones", "05", "Tono e instrucciones",
+                  tono_cliente(tonos, prompt, nota, quedan) if c.slug else tono_principal(tonos, prompt, nota, confirmar))
+        # Un solo Guardar, fuera de las secciones: se ve aunque estén cerradas.
+        + '<div class="acciones guardar-todo"><button class="boton" name="accion" value="guardar">Guardar</button>'
+        '<span class="ayuda">Guarda las secciones 01 a 05.</span></div></form>'
     )
+
+
+def seccion(id_: str, num: str, titulo: str, cuerpo: str, resumen: str = "") -> str:
+    """Una parte de Configura tu asistente que se abre y se cierra (panel.js recuerda si la cerraste)."""
+    return (f'<details class="tarjeta plegable seccion" id="{id_}" open><summary><span class="titulo-sec">'
+            f'<span class="num">{num}</span><h2>{titulo}</h2></span>'
+            + (f'<span class="resumen">{resumen}</span>' if resumen else "") + f"</summary>{cuerpo}</details>")
+
+
+def plural_(n: int, uno: str, varios: str) -> str:
+    return f"{n} {uno if n == 1 else varios}"
 
 
 def tono_cliente(tonos: str, instrucciones: str, nota: str, quedan: int) -> str:
@@ -1103,7 +1122,6 @@ def tono_cliente(tonos: str, instrucciones: str, nota: str, quedan: int) -> str:
         + '<label for="prompt">Instrucciones para tu asistente (opcional)</label>'
         '<p class="ayuda">Ej.: saluda por su nombre, contesta en dos o tres frases y siempre invita a visitar la tienda.</p>'
         f'<textarea id="prompt" name="prompt" rows="8" maxlength="{MAX_INSTRUCCIONES}">{escape(instrucciones)}</textarea>'
-        '<div class="acciones"><button class="boton" name="accion" value="guardar">Guardar</button></div>'
     )
 
 
@@ -1122,7 +1140,6 @@ def tono_principal(tonos: str, prompt: str, nota: str, confirmar: bool) -> str:
            if confirmar else "") +
         f'<label>Instrucciones de tu asistente</label><p class="ayuda">Puedes editarlas antes de guardar.</p>'
         f'<textarea class="prompt" name="prompt" maxlength="{MAX_PROMPT}">{escape(prompt)}</textarea>'
-        f'<div class="acciones"><button class="boton" name="accion" value="guardar">Guardar</button></div>'
     )
 
 
