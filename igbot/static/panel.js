@@ -98,3 +98,13 @@ document.querySelectorAll(".hamburguesa, .lateral .cerrar, .velo").forEach((a) =
 document.addEventListener("click", (e) => {
   document.querySelectorAll("details.perfil[open]").forEach((d) => { if (!d.contains(e.target)) d.open = false; });
 });
+
+// Tu marca: el nombre, la frase y el color principal se ven al momento en la vista previa del perfil.
+document.querySelectorAll("form[data-vista]").forEach((form) => {
+  form.addEventListener("input", (e) => {
+    const t = e.target;
+    form.querySelectorAll('[data-espejo="' + t.name + '"]').forEach((el) => { el.textContent = t.value; });
+    if (t.name === "principal") form.querySelectorAll('[data-fondo="principal"]').forEach((el) => { el.style.background = t.value; });
+    if (t.name === "nombre" && t.value.trim()) form.querySelectorAll("[data-inicial]").forEach((el) => { el.textContent = t.value.trim()[0].toUpperCase(); });
+  });
+});

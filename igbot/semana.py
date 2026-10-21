@@ -27,8 +27,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 
 from . import config, imagenes, panel, tools
 from .admin import PANEL
-from .contenido import (ESTADOS, HORA_SUGERIDA, OBJETIVOS, cuando, falta_cupo, generar, guardar_pieza, pagina,
-                        pieza, sin_plan, url_imagen)
+from .contenido import (ESTADOS, HORA_SUGERIDA, OBJETIVOS, cuando, falta_cupo, generar, guardar_pieza, negocio_de,
+                        pagina, pieza, sin_plan, url_imagen)
 from .cuenta import Cuenta, usar
 
 log = logging.getLogger("igbot.semana")
@@ -231,7 +231,7 @@ async def planear(c: Cuenta) -> list[dict]:
 
     datos = await temas(c)
     lista = "\n".join(f"- {t['tema']} ({personas(t['personas'])}): {t['ejemplo']}" for t in datos["temas"])
-    negocio = panel.prompt_actual(c)[:8000] or "(El cliente aún no llena la información de su negocio.)"
+    negocio = await negocio_de(c)
     prompt = (f"<negocio>\n{negocio}\n</negocio>\n\n<temas>\n{lista or 'Sin mensajes esta semana.'}\n</temas>\n\n"
               f"<hoy>{tools.now():%Y-%m-%d}</hoy>")
     respuesta = await agent.run_claude(prompt, PLAN_SISTEMA, max_turns=1, model=config.CONTENT_MODEL)
