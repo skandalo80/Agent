@@ -649,9 +649,11 @@ class Store:
                 f"SELECT COUNT(DISTINCT user_id) FROM messages WHERE role = 'user' AND {clients} AND {window}",
                 since, until),
             "nuevas": await one(
-                f"SELECT COUNT(*) FROM (SELECT user_id, MIN(created_at) AS first FROM messages"
-                f" WHERE role = 'user' AND {clients} GROUP BY user_id) WHERE first >= ? AND first < ?",
-                since, until),
+                # Escribieron en el periodo y nunca antes (sin recorrer toda la historia).
+                f"SELECT COUNT(DISTINCT m.user_id) FROM messages m WHERE m.role = 'user' AND m.{clients}"
+                " AND m.created_at >= ? AND m.created_at < ? AND NOT EXISTS (SELECT 1 FROM messages x"
+                " WHERE x.user_id = m.user_id AND x.role = 'user' AND x.created_at < ?)",
+                since, until, since),
             "recibidos": await one(
                 f"SELECT COUNT(*) FROM messages WHERE role = 'user' AND {clients} AND {window}", since, until),
             "respuestas_bot": await one(
@@ -670,14 +672,17 @@ class Store:
             "SELECT 1 FROM messages WHERE role = 'user' AND user_id NOT LIKE 'admin:%' LIMIT 1")
         return await cur.fetchone() is not None
 
-    async def message_times(self, since: float, until: float) -> list[tuple[str, str, float, int]]:
-        """(usuario, rol, hora, 1 si contestó una persona) de los mensajes con clientes, en orden."""
+    async def message_times(self, since: float, until: float, chunk: int = 1000):
+        """(usuario, rol, hora, 1 si contestó una persona) de los mensajes con clientes, en orden.
+        Llegan de `chunk` en `chunk`: quien los recorre nunca tiene todos en memoria."""
         cur = await self.db.execute(
             "SELECT user_id, role, created_at, text LIKE ? FROM messages WHERE user_id NOT LIKE 'admin:%'"
             " AND created_at >= ? AND created_at < ? ORDER BY id",
             (MANUAL + "%", since, until),
         )
-        return list(await cur.fetchall())
+        while filas := await cur.fetchmany(chunk):
+            for fila in filas:
+                yield fila
 
     async def meetings_between(self, start_iso: str, end_iso: str) -> int:
         """Reuniones activas en ese rango (las fechas van en la zona del negocio, como se guardan)."""

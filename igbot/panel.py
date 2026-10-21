@@ -870,15 +870,13 @@ async def hoy(c: Cuenta) -> str:
     zona = ZoneInfo(c.timezone)
     ahora = datetime.now(zona)
     inicio = ahora.replace(hour=0, minute=0, second=0, microsecond=0)
-    filas = await c.store.message_times(inicio.timestamp(), ahora.timestamp())
-    contestados = [u for u, rol, _, a_mano in filas if rol == "assistant" and not a_mano]
-    respuesta = resultados.conversaciones(filas, c, inicio, 1)["respuesta"]
+    stats = await resultados.conversaciones(c.store.message_times(inicio.timestamp(), ahora.timestamp()), c, inicio, 1)
     en_pausa = len(await c.store.paused_list(time.time()))
 
-    chats = len(set(contestados))
+    chats = stats["chats_contestados"]
     cajas = [
-        kpi("Contestados hoy", str(len(contestados)), f"en {chats} chat{'s' if chats != 1 else ''}"),
-        kpi("Tiempo de respuesta", resultados.duracion(respuesta), "mediana de hoy"),
+        kpi("Contestados hoy", str(stats["contestados"]), f"en {chats} chat{'s' if chats != 1 else ''}"),
+        kpi("Tiempo de respuesta", resultados.duracion(stats["respuesta"]), "mediana de hoy"),
         kpi("Chats en pausa", str(en_pausa), "los atiendes tú" if en_pausa else "ninguno"),
     ]
     if not c.slug:

@@ -14,7 +14,6 @@ Claude. Los números se guardan CACHE_SEGUNDOS en memoria para que recargar la
 página no repita las consultas. Las gráficas son SVG hechas aquí (el CSP del
 bot no deja JavaScript; sus estilos están en panel.ESTILO); el detalle de cada barra sale al pasar el cursor.
 """
-import statistics
 import time
 from collections import Counter
 from datetime import datetime, timedelta
@@ -62,16 +61,34 @@ def dias_de_horario(c: Cuenta) -> str:
     return f"{nombres} {inicio // 60}:{inicio % 60:02d}–{fin // 60}:{fin % 60:02d}"
 
 
-def conversaciones(filas: list[tuple[str, str, float, int]], c: Cuenta, inicio: datetime, dias: int) -> dict:
-    """Lo que sale de recorrer los mensajes en orden: por día, por hora, tiempos y quién atendió."""
+def mediana(cuantas: Counter) -> float | None:
+    """La mediana de unas duraciones contadas por segundo (así no se guarda cada una)."""
+    n = sum(cuantas.values())
+    if not n:
+        return None
+    medio, vistos = [], 0
+    for d in sorted(cuantas):
+        antes, vistos = vistos, vistos + cuantas[d]
+        medio += [d] * max(0, min(vistos, n // 2 + 1) - max(antes, (n - 1) // 2))
+        if vistos > n // 2:
+            break
+    return sum(medio) / len(medio)
+
+
+async def conversaciones(filas, c: Cuenta, inicio: datetime, dias: int) -> dict:
+    """Lo que sale de recorrer los mensajes en orden: por día, por hora, tiempos y quién atendió.
+    `filas` llega por partes (Store.message_times), así que nunca están todos en memoria; solo se
+    guardan contadores y quién está esperando respuesta."""
     zona = inicio.tzinfo
     por_dia = [0] * dias
     por_hora = [0] * 24
     esperando: dict[str, float] = {}  # el primer mensaje del cliente que sigue sin respuesta
-    tiempos: list[float] = []
-    fuera = 0
+    tiempos: Counter = Counter()  # segundos de espera -> cuántas respuestas
+    fuera = contestados = 0
+    escribieron: set[str] = set()
     atendidas_a_mano: set[str] = set()
-    for usuario, rol, t, a_mano in filas:
+    con_respuesta: set[str] = set()
+    async for usuario, rol, t, a_mano in filas:
         if rol == "user":
             momento = datetime.fromtimestamp(t, zona)
             dia = (momento.date() - inicio.date()).days
@@ -79,20 +96,27 @@ def conversaciones(filas: list[tuple[str, str, float, int]], c: Cuenta, inicio: 
                 por_dia[dia] += 1
             por_hora[momento.hour] += 1
             esperando.setdefault(usuario, t)
+            escribieron.add(usuario)
         elif a_mano:
             atendidas_a_mano.add(usuario)
             esperando.pop(usuario, None)
-        elif usuario in esperando:
-            desde = esperando.pop(usuario)
-            tiempos.append(t - desde)
-            if not en_horario(datetime.fromtimestamp(desde, zona), c):
-                fuera += 1
+        else:
+            contestados += 1
+            con_respuesta.add(usuario)
+            if usuario in esperando:
+                desde = esperando.pop(usuario)
+                tiempos[round(t - desde)] += 1
+                if not en_horario(datetime.fromtimestamp(desde, zona), c):
+                    fuera += 1
     return {
         "por_dia": por_dia,
         "por_hora": por_hora,
-        "respuesta": statistics.median(tiempos) if tiempos else None,
+        "respuesta": mediana(tiempos),
         "fuera": fuera,
         "a_mano": atendidas_a_mano,
+        "escribieron": escribieron,
+        "contestados": contestados,
+        "chats_contestados": len(con_respuesta),
     }
 
 
@@ -103,10 +127,9 @@ async def calcular(c: Cuenta, rango: str) -> dict:
     inicio = ahora.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=dias - 1)
     since, until = inicio.timestamp(), ahora.timestamp()
     store = c.store
-    filas = await store.message_times(since, until)
     numeros = await store.week_stats(since, until)
-    conv = conversaciones(filas, c, inicio, dias)
-    escribieron = {u for u, rol, *_ in filas if rol == "user"}
+    conv = await conversaciones(store.message_times(since, until), c, inicio, dias)
+    escribieron = conv.pop("escribieron")
     con_persona = (conv.pop("a_mano") | {u for u, *_ in await store.events("humano", since, until)}) & escribieron
     datos = {
         **numeros, **conv,
@@ -123,7 +146,7 @@ async def calcular(c: Cuenta, rango: str) -> dict:
             publicas=sum(r for _, _, r in normales),
             palabras=Counter(w for m, _, _ in normales for w in m.split("; ") if w).most_common(6),
             publicadas=await store.week_published(since, until),
-            programadas=len(await store.posts(("programada",))),
+            programadas=await store.posts_count(("programada",), 0),
         )
     return datos
 
