@@ -716,8 +716,8 @@ async def tarjeta_post(c: Cuenta, p: dict, sel: str) -> str:
     fija = post and post["status"] in BLOQUEADOS
     return (f'<a class="post-cam{" sel" if str(p["k"]) == sel else ""}" href="/panel/contenido/campanas?post={p["k"]}#detalle"'
             f'{"" if fija else f' draggable="true" data-k="{p["k"]}"'}>{mini}'
-            f'<span class="etq-cam t-{p["tipo"]}">{tema_de(p["tipo"])[0]}</span>'
             f'<span class="t">{escape(p["titulo"])}</span>'
+            f'<span class="fmt-cam">{tema_de(p["tipo"])[0]}</span>'
             f'<span class="fmt-cam">{FORMATOS[formato_de(p)][0]}</span>'
             + ({"repite": '<span class="rol-cam rep">Repite</span>',
                 "prueba": '<span class="rol-cam prob">Sigue probando</span>'}.get(p.get("rol"), ""))
