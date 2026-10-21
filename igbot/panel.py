@@ -488,6 +488,40 @@ form:has(input[name=modo][value=libre]:checked) .si-plantilla{display:none}
 .mini-color input{width:2.4rem;height:2.4rem;border:1px solid var(--linea-clara);padding:0;border-radius:.6rem;background:none}
 .opcion small.tuyo{display:block;color:var(--negro);font-style:italic;font-weight:400;font-size:.85rem}
 .si-libre{display:none}form:has(input[name=modo][value=libre]:checked) .si-libre{display:block}
+/* Página de marca: los datos a la izquierda y la vista previa (perfil o un post) a la derecha. */
+.marca-pagina{display:grid;grid-template-columns:minmax(0,1fr) 22rem;gap:1.5rem;align-items:start}
+.marca-pagina .lado{position:sticky;top:1.5rem}
+@media(max-width:1100px){.marca-pagina{grid-template-columns:1fr}.marca-pagina .lado{position:static;order:-1}}
+.pares{display:grid;grid-template-columns:1fr 1fr;gap:1rem}@media(max-width:640px){.pares{grid-template-columns:1fr}}
+.suave{font-weight:400;color:var(--gris)}
+.logo-sube{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap}.logo-sube input[type=file]{flex:1;min-width:10rem;font-size:.85rem}
+.avatar-marca{width:3.2rem;height:3.2rem;border-radius:50%;flex:none;display:grid;place-items:center;color:var(--blanco);font-weight:700;font-size:1.2rem;object-fit:cover;background:var(--negro)}
+.chips label:has(input[type=checkbox]:checked){background:var(--negro);color:var(--claro);border-color:var(--negro)}
+.paleta{display:grid;grid-template-columns:repeat(3,1fr);gap:.8rem;margin-top:.75rem}
+.swatch{margin:0;border:1px solid var(--linea-clara);border-radius:1rem;overflow:hidden;cursor:pointer;background:var(--blanco)}
+.swatch input[type=color]{display:block;width:100%;height:4.5rem;border:0;padding:0;background:none;cursor:pointer;-webkit-appearance:none;appearance:none;border-bottom:1px solid var(--linea-clara)}
+.swatch input[type=color]::-webkit-color-swatch-wrapper{padding:0}.swatch input[type=color]::-webkit-color-swatch{border:0}.swatch input[type=color]::-moz-color-swatch{border:0}
+.swatch>span{display:block;padding:.6rem .8rem;font-size:.9rem}.swatch b{display:block}.swatch .hex{margin:0}
+details.mas{margin-top:1rem}details.mas summary{cursor:pointer;color:var(--acento);font-size:.9rem;font-weight:500}
+.color-uso{margin-top:1rem}.color-uso .ayuda{margin:.15rem 0 .35rem}
+.letras{display:grid;grid-template-columns:repeat(auto-fill,minmax(6.5rem,1fr));gap:.6rem;margin-top:.75rem}
+.letra{position:relative;margin:0;border:1px solid var(--linea-clara);border-radius:.9rem;padding:.8rem .5rem;text-align:center;font-size:1.5rem;cursor:pointer;background:var(--blanco)}
+.letra input{position:absolute;opacity:0;pointer-events:none}
+.letra small{display:block;font:400 .75rem "Inter",system-ui,sans-serif;color:var(--gris);margin-top:.15rem}
+.letra:has(input:checked){border-color:var(--acento);box-shadow:inset 0 0 0 1px var(--acento);background:#fff4ed}
+.pestanas-mini{display:flex;gap:.25rem;background:var(--claro);border-radius:999px;padding:.25rem;margin:.5rem 0 1rem}
+.pestanas-mini input{position:absolute;opacity:0;pointer-events:none}
+.pestanas-mini label{flex:1;margin:0;text-align:center;padding:.4rem .6rem;border-radius:999px;font-size:.88rem;font-weight:500;color:#6e6e73;cursor:pointer}
+.pestanas-mini input:checked+label{background:var(--blanco);color:var(--negro);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.vp-post{display:none}.lado:has(#vp-post:checked) .vp-post{display:block}.lado:has(#vp-post:checked) .vp-perfil{display:none}
+.ig{border:1px solid var(--linea-clara);border-radius:1rem;padding:1rem}
+.ig-arriba{display:flex;align-items:center;gap:.8rem}.ig-arriba b{display:block;font-size:.95rem}
+.ig-nombre{display:block;font-size:.85rem;color:#3a3a3c}
+.ig-bio{font-size:.85rem;color:#3a3a3c;margin:.6rem 0 .8rem;line-height:1.4}
+.ig-cuadricula{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;border-radius:.4rem;overflow:hidden}
+.ig-cuadricula>*{width:100%;aspect-ratio:4/5;object-fit:cover;display:block;background:var(--claro)}
+.ig-cuadricula .nuevo{outline:2px solid var(--acento);outline-offset:-2px}
+.ayuda.chica{font-size:.8rem;margin-top:.6rem}
 .minis{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-top:.75rem}
 .minis figure{margin:0}.minis figcaption{color:#6e6e73;font-size:.8rem;margin-top:.35rem;line-height:1.3}
 .pieza.cargando{opacity:.45;transition:opacity .2s}

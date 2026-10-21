@@ -431,8 +431,8 @@ def test_orden_de_tu_marca_y_miniaturas(cliente, monkeypatch):
     client, c, *_ = cliente
     monkeypatch.setattr(c, "imagenes_mes", 5)
     r = client.get("/panel/contenido/marca")
-    orden = [r.text.index(t) for t in ("Cómo se arman tus posts", "Paleta de colores", "Tipografía de títulos",
-                                        "Estilo de tus fotos", "Fotos de tu negocio")]
+    orden = [r.text.index(t) for t in ("Identidad", "<h2>Colores", "<h2>Tipografía", "Fotos y estilo",
+                                        "Cómo se arman tus posts", "Vista previa")]
     assert orden == sorted(orden)
     assert 'data-plantilla="marco"' in r.text and 'data-plantilla="banda"' in r.text
     assert "plantilla=marco" in r.text and client.get("/panel/contenido/muestra.jpg?plantilla=banda").status_code == 200
@@ -672,3 +672,27 @@ def test_menu_js_antes_de_pintar(cliente):
     assert menu < html.index("</head>")  # sin defer y en el <head>: se pliega antes de pintar
     r = client.get("/panel/static/menu.js")
     assert r.status_code == 200 and "menu-plegado" in r.text
+
+
+def test_identidad_de_marca(cliente, monkeypatch):
+    client, c, *_ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 5)
+    r = client.post("/panel/contenido/marca", headers=ORIGEN, data={
+        "nombre": "  Café   Lunar ", "frase": "Café de especialidad.",
+        "caracter": ["Cercana", "Premium", "Natural", "Clásica", "Otro"], "accion": "guardar"})
+    assert r.status_code == 200
+    marca = client.portal.call(contenido.marca_de, c)
+    assert marca["nombre"] == "Café Lunar" and marca["caracter"] == ["Cercana", "Premium", "Natural"]
+    assert 'data-espejo="nombre">Café Lunar<' in r.text and 'data-espejo="frase">Café de especialidad.<' in r.text
+    negocio = client.portal.call(contenido.negocio_de, c)
+    assert "Nombre de la marca: Café Lunar" in negocio and "Carácter: Cercana, Premium, Natural" in negocio
+    # Logo: se sube, sale en la vista previa y se puede quitar.
+    png = io.BytesIO()
+    Image.new("RGB", (64, 64), "#123456").save(png, "PNG")
+    r = client.post("/panel/contenido/marca", headers=ORIGEN, data={"nombre": "Café Lunar", "accion": "guardar"},
+                    files={"logo": ("logo.png", png.getvalue(), "image/png")})
+    assert "Listo: guardamos tu logo." in r.text and 'alt="Tu logo"' in r.text
+    logo = client.portal.call(contenido.marca_de, c)["logo"]
+    assert contenido.archivo(c, logo).is_file()
+    r = client.post("/panel/contenido/marca", headers=ORIGEN, data={"accion": "quitar_logo"})
+    assert "quitamos tu logo" in r.text and not contenido.archivo(c, logo).is_file()
