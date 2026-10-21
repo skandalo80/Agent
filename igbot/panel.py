@@ -346,7 +346,8 @@ main .boton.secundario{background:transparent;color:var(--negro);border-color:va
 .compacta .hoy{margin-top:auto;grid-template-columns:repeat(auto-fit,minmax(11rem,1fr))}.compacta .hoy .kpi{padding:.9rem 1.15rem}
 .titulo-fila{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap}
 .oscuro .boton.ajuste{padding:.55rem 1.1rem;font-size:.9rem}
-.oscuro .boton.ajuste.on{background:var(--claro);color:var(--negro)}
+.oscuro .boton.ajuste.on,.oscuro .acciones-estado .boton.on{background:var(--claro);color:var(--negro)}
+.boton .semaforo{display:inline-block;margin:0 .5rem 0 0;vertical-align:.05em}
 .compacta h1{font-size:clamp(1.8rem,4vw,2.4rem)}
 .compacta .bajada{font-size:1.05rem;margin-top:.5rem}
 .compacta+main{padding-top:1.5rem}
@@ -602,20 +603,32 @@ def caja(nombre: str, etiqueta: str, ayuda: str, valor: str, filas: int = 2) -> 
 
 async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt: str | None = None,
                    pares_minimos: int = MIN_PREGUNTAS, nota: str = "", ver: str = "",
-                   confirmar: bool = False) -> HTMLResponse:
+                   confirmar: bool = False, vista: str = "", abrir: bool = False) -> HTMLResponse:
     """La página del panel. `aviso` sale arriba; `nota`, junto a las instrucciones
     (ahí deja la página "Generar instrucciones", con #instrucciones)."""
     # El formulario va plegado; abierto si aún no lo configura o si viene de editarlo (Guardar, Generar...).
-    abierto = datos is not None or prompt is not None or bool(nota) or confirmar or not await asistente_listo(c)
+    abierto = (abrir or datos is not None or prompt is not None or bool(nota) or confirmar
+               or not await asistente_listo(c))
     datos = datos if datos is not None else await perfil(c)
     if prompt is None:  # el cliente ve solo su tono e instrucciones; el prompt completo se arma aparte
         prompt = datos.get("instrucciones", "") if c.slug else prompt_actual(c)
     encendido = await activo(c)
+    from . import ajustes  # ajustes usa este módulo
+    estado_conexion, tarjeta_conexion = await ajustes.conexion(c)
+
+    def boton_vista(clave: str, nombre: str) -> str:
+        # Conexión se abre en su propia vista; pulsarlo otra vez regresa.
+        on = clave == vista
+        href = "/panel/asistente" if on else f"/panel/asistente?vista={clave}"
+        luz = f'<span class="semaforo sem-{estado_conexion}"></span>' if clave == "conexion" else ""
+        return f'<a class="boton secundario{" on" if on else ""}" href="{href}">{luz}{nombre}</a>'
+
+    cuerpo = tarjeta_conexion if vista == "conexion" else None
     formulario = (f'<details class="grupo plegable" id="configura"{" open" if abierto else ""}>'
                   '<summary><div><span class="num">Configura tu asistente</span>'
-                  '<span class="resumen">Tu negocio, preguntas, políticas, tono e instrucciones</span></div></summary>'
+                  '<span class="resumen">Tu negocio, preguntas, políticas, tono, horario y avisos</span></div></summary>'
                   + _formulario(c, datos, prompt, pares_minimos, nota, confirmar, await ayudas_restantes(c))
-                  + "</details>")
+                  + ajustes.tarjeta(c) + "</details>")
     return pagina(
         cabecera(salir=True, menu="asistente", cuenta=c)
         + '<section class="oscuro portada compacta"><div class="contenedor">'
@@ -624,7 +637,8 @@ async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt
         f'<div class="estado"><div><span class="luz{" on" if encendido else ""}"></span>'
         f'{"Está contestando tus mensajes." if encendido else REVISION if c.en_revision else "Está en pausa: no contesta mensajes."}</div>'
         f'<form method="post" action="/panel/estado"><input type="hidden" name="activo" value="{"0" if encendido else "1"}">'
-        f'<div class="acciones-estado"><a class="boton secundario" href="/panel/probar#ultimo">Probar mi asistente</a>'
+        '<div class="acciones-estado">' + boton_vista("conexion", "Conexión")
+        + '<a class="boton secundario" href="/panel/probar#ultimo">Probar mi asistente</a>'
         + ("" if c.en_revision else
            f'<button class="boton{" secundario" if encendido else ""}">{"Pausar" if encendido else "Encender"}</button>')
         + '</div></form></div>'
@@ -632,18 +646,16 @@ async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt
         "</div></section>"
         '<main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
-        + await pendiente(c, "asistente")
-        + await recientes(c, ver)
-        + await tarjetas_ajustes(c)
-        + ("" if c.slug else principal(c))
-        + formulario
+        + (cuerpo if cuerpo is not None else
+           await pendiente(c, "asistente")
+           + ("" if estado_conexion == "ok" else
+              '<div class="aviso">Hay algo que revisar en tu conexión.'
+              ' <a class="enlace" href="/panel/asistente?vista=conexion">Ver conexión</a></div>')
+           + await recientes(c, ver)
+           + ("" if c.slug else principal(c))
+           + formulario)
         + "</div></main>"
     )
-
-
-async def tarjetas_ajustes(c: Cuenta) -> str:
-    from . import ajustes  # ajustes usa este módulo
-    return ajustes.tarjeta(c) + await ajustes.conexion(c)
 
 
 def hace(t: float) -> str:
@@ -709,7 +721,11 @@ async def hoy(c: Cuenta) -> str:
 
 
 MAX_CHATS = 15
-FILTROS = {"": "Todas", "pausa": "En pausa", "sin": "Sin contestar"}
+# "Abiertas": escribieron en las últimas 24 h (la ventana en que Instagram deja contestar) y el
+# asistente no está en pausa ahí. "Pidieron una persona": en pausa porque el asistente los pasó contigo.
+FILTROS = {"": "Todas", "abiertas": "Abiertas", "persona": "Pidieron una persona", "pausa": "En pausa",
+           "sin": "Sin contestar"}
+VENTANA = 24 * 3600
 
 
 async def recientes(c: Cuenta, ver: str) -> str:
@@ -723,27 +739,37 @@ async def recientes(c: Cuenta, ver: str) -> str:
     chats = {u: (t, rol, texto, ultimo) for u, t, rol, texto, ultimo in await c.store.recent_chats(MAX_CHATS)}
     for u, (hasta, ultimo) in pausados.items():
         chats.setdefault(u, (0.0, "user", ultimo, ultimo))
+    # Quién pidió una persona: el asistente lo pasó contigo (pasar_a_humano) durante su pausa actual.
+    motivos = {u: d.get("motivo", "") for u, d, _ in
+               await c.store.events("humano", ahora - c.human_pause_hours * 3600 - 60, ahora + 1) if u in pausados}
 
     def estado(u: str, rol: str, texto: str) -> str:
         if u in pausados:
-            return "pausa"
+            return "persona" if u in motivos else "pausa"
         if rol == "user":
             return "sin"
         return "tu" if texto.startswith(MANUAL) else "asistente"
+
+    def en(f: tuple, filtro: str) -> bool:
+        est = f[-1]
+        return {"": True, "pausa": est in ("pausa", "persona"), "abiertas": est not in ("pausa", "persona")
+                and f[1] >= ahora - VENTANA}.get(filtro, est == filtro)
     filas = [(u, *datos, estado(u, datos[1], datos[2])) for u, datos in chats.items()]
-    cuantos = {"": len(filas), "pausa": sum(f[-1] == "pausa" for f in filas), "sin": sum(f[-1] == "sin" for f in filas)}
+    cuantos = {k: sum(en(f, k) for f in filas) for k in FILTROS}
     ver = ver if ver in FILTROS else ""
-    if ver:
-        filas = [f for f in filas if f[-1] == ver]
+    filas = [f for f in filas if en(f, ver)]
     with usar(c):
         nombres = await asyncio.gather(*(c.instagram.username(f[0]) for f in filas))
-    etiquetas = {"pausa": ("En pausa · tú", "acento"), "sin": ("Sin contestar", "rojo"),
+    etiquetas = {"pausa": ("En pausa · tú", "acento"), "persona": ("Pidió una persona", "rojo"),
+                 "sin": ("Sin contestar", "rojo"),
                  "tu": ("Contestaste tú", ""), "asistente": ("Asistente", "verde")}
     html = []
     for (u, t, _, _, ultimo, est), nombre in zip(filas, nombres):
         nombre = nombre if nombre.startswith("@") else "Cliente de Instagram"
         detalle = f"«{escape(ultimo[:90])}»" if ultimo else "Sin mensajes todavía"
-        if est == "pausa":
+        if est == "persona" and motivos[u]:
+            detalle = f"Motivo: {escape(motivos[u][:120])} · " + detalle
+        if est in ("pausa", "persona"):
             horas = max(1, round((pausados[u][0] - ahora) / 3600))
             detalle += f" · vuelve a contestar solo en {horas} h"
         elif t:
@@ -751,7 +777,7 @@ async def recientes(c: Cuenta, ver: str) -> str:
         texto, color = etiquetas[est]
         botones = (f'<button class="boton secundario chico" name="accion" value="extender">+{c.human_pause_hours:g} h</button>'
                    '<button class="boton chico" name="accion" value="reactivar">Reactivar</button>'
-                   if est == "pausa" else
+                   if est in ("pausa", "persona") else
                    '<button class="boton secundario chico" name="accion" value="tomar">Tomar este chat</button>')
         abrir = (f'<a class="boton secundario chico" href="https://ig.me/m/{escape(nombre[1:])}" target="_blank"'
                  ' rel="noopener">Abrir</a>' if nombre.startswith("@") else "")
@@ -765,10 +791,13 @@ async def recientes(c: Cuenta, ver: str) -> str:
         f'<a href="/panel/asistente{"?ver=" + k if k else ""}#chats" class="{"on" if k == ver else ""}">'
         f'{nombre}{f" ({cuantos[k]})" if k else ""}</a>' for k, nombre in FILTROS.items())
     vacio = {"": "Aún no te escribe nadie. Aquí vas a ver tus chats en cuanto lleguen.",
+             "abiertas": "Ninguna: nadie te ha escrito en las últimas 24 horas.",
+             "persona": "Nadie: ningún chat está esperando a que le contestes tú.",
              "pausa": "Ninguno: tu asistente está contestando en todos tus chats.",
              "sin": "Ninguno: todos tus chats tienen respuesta."}[ver]
     # Plegable (<details>): panel.js recuerda en el navegador si la cerró.
-    resumen = f"{cuantos['pausa']} en pausa" if cuantos["pausa"] else f"{cuantos['']} chats"
+    resumen = (f"{cuantos['persona']} piden una persona" if cuantos["persona"] else
+               f"{cuantos['pausa']} en pausa" if cuantos["pausa"] else f"{cuantos['']} chats")
     return ('<details class="tarjeta plegable" id="chats" open><summary><span class="num">Conversaciones recientes</span>'
             f'<span class="resumen">{resumen}</span></summary>'
             f'<p class="ayuda">Lo último que te escribieron. "Tomar este chat" pausa al asistente ahí'
@@ -974,7 +1003,9 @@ async def ver_bienvenida(request: Request):
 @router.get("/asistente")
 async def ver_asistente(request: Request):
     c = cuenta_de_sesion(request)
-    return await panel_de(c, ver=request.query_params.get("ver", "")) if c else entrar()
+    q = request.query_params
+    vista = q.get("vista") if q.get("vista") == "conexion" else ""
+    return await panel_de(c, ver=q.get("ver", ""), vista=vista) if c else entrar()
 
 
 @router.post("/guardar")
