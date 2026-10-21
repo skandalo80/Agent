@@ -698,7 +698,6 @@ ICONOS = {
 SUBMENU = {
     "asistente": [("chats", "Conversaciones", "/panel/asistente"),
                   ("configura", "Configura tu asistente", "/panel/asistente/configura"),
-                  ("conexion", "Conexión", "/panel/asistente/conexion"),
                   ("probar", "Probar mi asistente", "/panel/probar#ultimo")],
     "contenido": [("semana", "Esta semana", "/panel/contenido/semana"), ("calendario", "Calendario", "/panel/contenido"),
                   ("ideas", "Comentarios y DMs", "/panel/contenido/ideas"),
@@ -711,7 +710,8 @@ def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None, 
     """Con `menu` (la sección en la que está): el menú lateral, plegable a solo íconos y con el
     botón de hamburguesa en el celular. Contenido sale solo si el plan de `cuenta` lo tiene.
     Con `perfil` (su @usuario), abajo va su menú de perfil en vez de solo Salir.
-    `luces`: un semáforo junto a una parte del submenú (p. ej. {"conexion": "ok"}).
+    `luces`: un semáforo junto a una parte del submenú o del menú de perfil (p. ej. {"conexion": "ok"}).
+    `sub` también marca la parte activa del menú de perfil (Conexión vive ahí).
     Sin menú (la entrada y las páginas de espera): la barra de arriba de siempre."""
     boton = ('<form method="post" action="/panel/salir"><button class="salir">Salir</button></form>'
              if salir else "")
@@ -744,12 +744,13 @@ def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None, 
         f'<button class="plegar" type="button" data-plegar aria-label="Plegar o fijar el menú" title="Plegar o fijar">'
         f'{ICONOS["plegar"]}</button><a class="cerrar" href="#" aria-label="Cerrar menú">×</a></div>'
         f'<nav class="lat-nav">{"".join(secciones)}</nav>'
-        + menu_perfil(perfil, cuenta, foto) + '</aside>'
+        + menu_perfil(perfil, cuenta, foto, sub, luces or {}) + '</aside>'
         '<a class="velo" href="#" aria-label="Cerrar menú"></a>'
     )
 
 
-def menu_perfil(perfil: str, cuenta: Cuenta | None, foto: str = "") -> str:
+def menu_perfil(perfil: str, cuenta: Cuenta | None, foto: str = "", sub: str = "",
+                luces: dict[str, str] | None = None) -> str:
     salir = ('<form method="post" action="/panel/salir"{}><button class="{}" title="Salir">{}</button></form>')
     if not perfil:
         return salir.format(' class="lat-pie"', "lat-item", f'{ICONOS["salir"]}<span class="txt">Salir</span>')
@@ -759,13 +760,14 @@ def menu_perfil(perfil: str, cuenta: Cuenta | None, foto: str = "") -> str:
     # El logo de Tu marca si ya subió uno; si no, la inicial.
     avatar = (f'<img class="lat-avatar" src="{escape(foto)}" alt="">' if foto else
               f'<span class="lat-avatar">{usuario_[:1].upper()}</span>')
+    luz = f' <span class="semaforo sem-{luces["conexion"]}"></span>' if "conexion" in (luces or {}) else ""
     # <details>: abre y cierra sin JavaScript; panel.js lo cierra al hacer clic fuera.
     return ('<div class="lat-pie"><details class="perfil">'
             f'<summary class="lat-item" title="@{usuario_}">{avatar}'
             f'<span class="txt">@{usuario_}<small>Tu cuenta</small></span></summary>'
             f'<div class="perfil-menu"><div class="quien">Conectado como @{usuario_}</div>'
             f'<a href="https://www.instagram.com/{usuario_}/" target="_blank" rel="noopener">Ver mi Instagram</a>'
-            '<a href="/panel/asistente/conexion">Conexión</a>'
+            f'<a href="/panel/conexion"{ACTIVA if sub == "conexion" else ""}>Conexión{luz}</a>'
             '<a href="/panel/asistente/configura#ajustes">Horario y avisos</a>'
             f'{marca}'
             + salir.format("", "", "Salir") + "</div></details></div>")
@@ -824,13 +826,14 @@ async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt
                      "</a></div></div>")
                   + ("" if estado_conexion == "ok" else
                      '<div class="aviso">Hay algo que revisar en tu conexión.'
-                     ' <a class="enlace" href="/panel/asistente/conexion">Ver conexión</a></div>')
+                     ' <a class="enlace" href="/panel/conexion">Ver conexión</a></div>')
                   + await recientes(c, ver, buscar, hoja))
     return pagina(
-        cabecera(salir=True, menu="asistente", cuenta=c, sub=vista or "chats", perfil=await usuario(c), foto=await foto_perfil(c),
+        # Conexión es de tu cuenta (está en el menú de perfil), no de una sección.
+        cabecera(salir=True, menu="cuenta" if vista == "conexion" else "asistente", cuenta=c, sub=vista or "chats", perfil=await usuario(c), foto=await foto_perfil(c),
                  luces={"conexion": estado_conexion})
         + (f'<section class="oscuro portada compacta delgada"><div class="contenedor">'
-           f'<p class="antetitulo">Tu asistente · {titulo}</p>'
+           f'<p class="antetitulo">{"Tu cuenta" if vista == "conexion" else "Tu asistente"} · {titulo}</p>'
            f'<h1>@{escape(await usuario(c))}<span class="punto">.</span></h1>'
            f'<p class="bajada" style="margin-left:0">{bajada}</p></div></section>'
            if titulo else
@@ -1227,17 +1230,40 @@ async def ver_asistente(request: Request):
     c = cuenta_de_sesion(request)
     q = request.query_params
     if q.get("vista") == "conexion":  # enlaces viejos
-        return RedirectResponse("/panel/asistente/conexion", status_code=303)
+        return RedirectResponse("/panel/conexion", status_code=303)
     vista = "configura" if q.get("vista") == "configura" else ""
     hoja = int(q["p"]) if q.get("p", "").isdigit() else 1
     return await panel_de(c, ver=q.get("ver", ""), vista=vista, abrir=q.get("abrir") == "1",
                           buscar=q.get("q", ""), hoja=hoja) if c else entrar()
 
 
-@router.get("/asistente/conexion")
+@router.get("/conexion")
 async def ver_conexion(request: Request):
     c = cuenta_de_sesion(request)
     return await panel_de(c, vista="conexion") if c else entrar()
+
+
+@router.get("/asistente/conexion")  # su dirección anterior
+async def conexion_vieja():
+    return RedirectResponse("/panel/conexion", status_code=303)
+
+
+async def no_encontrada(request: Request) -> HTMLResponse:
+    """La página 404 del panel: con el menú lateral si hay sesión."""
+    c = cuenta_de_sesion(request)
+    menu = (cabecera(salir=True, menu="ninguna", cuenta=c, perfil=await usuario(c), foto=await foto_perfil(c))
+            if c else cabecera())
+    destino = ("/panel", "Ir a mi panel") if c else ("/panel", "Entrar a mi panel")
+    respuesta = pagina(
+        menu + '<section class="oscuro portada compacta delgada"><div class="contenedor">'
+        '<p class="antetitulo">Error 404</p><h1>Esta página no existe<span class="punto">.</span></h1>'
+        '<p class="bajada" style="margin-left:0">Puede que el enlace esté mal escrito o que la página ya no exista.</p>'
+        '</div></section><main><div class="contenedor"><div class="tarjeta"><h2>¿A dónde quieres ir?</h2>'
+        f'<div class="acciones"><a class="boton" href="{destino[0]}">{destino[1]}</a>'
+        f'<a class="boton secundario" href="{config.SITE_URL}">Ir a skandar.online</a></div></div>'
+        "</div></main>")
+    respuesta.status_code = 404
+    return respuesta
 
 
 @router.get("/asistente/configura")

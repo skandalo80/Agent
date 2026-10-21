@@ -19,6 +19,13 @@ ORIGEN = {"Origin": "https://bot.skandar.online"}
 REVISAR = panel.revisar_instrucciones  # la de verdad (conftest la cambia por una que aprueba todo)
 
 
+def test_404_sin_sesion():
+    with TestClient(bot.app, base_url="https://testserver") as client:
+        r = client.get("/panel/contenido/nada")
+        assert r.status_code == 404 and "Esta página no existe" in r.text and "Entrar a mi panel" in r.text
+        assert client.get("/otra-cosa").json() == {"detail": "Not Found"}  # fuera del panel, igual que antes
+
+
 def test_generar_arma_las_instrucciones_con_el_tono():
     texto = panel.generar("cafe.lunar", {"negocio": "Cafetería en Puebla", "precios": "Latte $55", "tono": "formal"})
     assert texto.startswith("Eres el asistente de Instagram de @cafe.lunar.")
@@ -172,7 +179,7 @@ def test_la_cuenta_principal_edita_sus_instrucciones_aparte(monkeypatch, tmp_pat
         assert "PROMPT DEL VENDEDOR" in configura
         r = client.get("/panel/asistente")
         assert "Gasto de hoy" in r.text and "Mensajes este mes" not in r.text
-        assert "Límite de gasto" in client.get("/panel/asistente/conexion").text
+        assert "Límite de gasto" in client.get("/panel/conexion").text
         assert '<details class="tarjeta plegable" id="chats" open>' in r.text
         # Generar no pisa unas instrucciones escritas a mano sin preguntar.
         r = client.post("/panel/guardar", headers=ORIGEN,
