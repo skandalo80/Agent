@@ -1,5 +1,6 @@
 """Página de conectar clientes: formulario y OAuth de Instagram, sin red."""
 import os
+import time
 from urllib.parse import parse_qs, urlparse
 
 os.environ.update(IG_VERIFY_TOKEN="vt", IG_APP_SECRET="secreto", IG_ACCESS_TOKEN="tok", DB_PATH=":memory:")
@@ -90,13 +91,14 @@ def test_oauth_guarda_el_token_de_la_cuenta(monkeypatch):
         r = client.get("/conectar/instagram", follow_redirects=False)
         url = urlparse(r.headers["location"])
         q = parse_qs(url.query)
-        assert url.netloc == "www.instagram.com"
+        assert url.netloc == "api.instagram.com"
         assert q["redirect_uri"] == ["https://console.skandar.online/conectar/callback"]
         state = q["state"][0]
 
-        # Sin la cookie (enlace armado por alguien más) no se conecta nada.
+        # Un state que no firmamos (enlace armado por alguien más) no conecta nada.
         other = TestClient(bot.app, base_url="https://testserver")
-        r = other.get(f"/conectar/callback?code=abc&state={state}", follow_redirects=False)
+        falso = state[:-4] + ("0000" if not state.endswith("0000") else "1111")
+        r = other.get(f"/conectar/callback?code=abc&state={falso}", follow_redirects=False)
         assert r.headers["location"].endswith("/conectar-error")
 
         r = client.get(f"/conectar/callback?code=abc%23_&state={state}", follow_redirects=False)
@@ -105,6 +107,32 @@ def test_oauth_guarda_el_token_de_la_cuenta(monkeypatch):
         assert any("@cafe.lunar conectó" in t for _, t in avisos)
 
         r = client.get("/conectar/callback?error=access_denied", follow_redirects=False)
+        assert r.headers["location"].endswith("/conectar-error")
+
+        # Cada state sirve una vez.
+        r = other.get(f"/conectar/callback?code=abc&state={state}", follow_redirects=False)
+        assert r.headers["location"].endswith("/conectar-error")
+
+
+def test_oauth_vuelve_en_otro_navegador(monkeypatch):
+    """En el cel Instagram regresa en su propio navegador, sin la cookie: vale el state firmado."""
+    setup(monkeypatch)
+
+    async def sin_panel(*a):
+        return None
+
+    monkeypatch.setattr(bot, "alta", sin_panel)
+    with TestClient(bot.app, base_url="https://testserver") as client:
+        r = client.get("/conectar/instagram", follow_redirects=False)
+        state = parse_qs(urlparse(r.headers["location"]).query)["state"][0]
+        otro = TestClient(bot.app, base_url="https://testserver")
+        r = otro.get(f"/conectar/callback?code=abc&state={state}", follow_redirects=False)
+        assert r.headers["location"] == "https://skandar.online/conectado"
+
+        # Uno firmado hace más de 15 minutos ya no sirve.
+        viejo = f"{int(time.time()) - 1000}.xyz"
+        r = otro.get(f"/conectar/callback?code=abc&state={viejo}.{conectar.firmar(viejo)}",
+                     follow_redirects=False)
         assert r.headers["location"].endswith("/conectar-error")
 
 
