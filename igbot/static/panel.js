@@ -136,3 +136,39 @@ document.querySelectorAll(".lat-item[data-sub]").forEach((item) => {
     item.setAttribute("aria-expanded", sub.classList.contains("cerrado") ? "false" : "true");
   });
 });
+
+// Campañas: arrastrar un post a otro día (si ahí hay uno, se intercambian). Sin esto, el día se cambia en el panel del post.
+(() => {
+  const dias = document.querySelectorAll(".dia-cam[data-dia]");
+  if (!dias.length) return;
+  let arrastrado = null;
+  document.querySelectorAll('.post-cam[draggable="true"]').forEach((p) => {
+    p.addEventListener("dragstart", (e) => {
+      arrastrado = p;
+      p.classList.add("arrastrando");
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", p.dataset.k);
+    });
+    p.addEventListener("dragend", () => {
+      p.classList.remove("arrastrando");
+      dias.forEach((d) => d.classList.remove("sobre"));
+    });
+  });
+  dias.forEach((d) => {
+    d.addEventListener("dragover", (e) => {
+      if (!arrastrado) return;
+      e.preventDefault();
+      d.classList.add("sobre");
+    });
+    d.addEventListener("dragleave", () => d.classList.remove("sobre"));
+    d.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      d.classList.remove("sobre");
+      if (!arrastrado || arrastrado.closest(".dia-cam") === d) return;
+      const datos = new URLSearchParams({accion: "mover", k: arrastrado.dataset.k, dia: d.dataset.dia});
+      const r = await fetch("/panel/contenido/campanas", {method: "POST", body: datos, credentials: "same-origin"});
+      if (r.ok) location.reload();
+      else alert(await r.text() || "No se pudo mover el post.");
+    });
+  });
+})();

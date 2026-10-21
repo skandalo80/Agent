@@ -645,6 +645,55 @@ label.check input[type=email]{flex:1;max-width:22rem;margin:0}
 .leyenda i.fuera{background:#c7c7cc}
 .tarjeta .kpis{margin:1rem 0 0}
 .tarjeta .kpi{background:var(--claro)}
+/* Contenido > Campañas */
+.pasos-cam{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:1rem}
+.paso-cam{display:flex;align-items:center;gap:.5rem;padding:.4rem .85rem;border-radius:999px;border:1px solid var(--linea-oscura);color:var(--gris);font-size:.88rem}
+.paso-cam b{display:grid;place-items:center;width:1.35rem;height:1.35rem;border-radius:50%;background:var(--linea-oscura);font-size:.72rem;color:var(--claro)}
+.paso-cam.hecho{color:var(--claro)}.paso-cam.actual{color:var(--blanco);border-color:var(--blanco)}.paso-cam.actual b{background:var(--blanco);color:var(--negro)}
+.seccion summary .resumen-cam{margin:0 0 0 auto;padding-right:1rem}
+.fila-cam{display:grid;grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:1rem;margin:1rem 0}
+.fila-cam input,.fila-cam select{width:100%;font:inherit;font-size:1rem;padding:.65rem .8rem;border:1px solid var(--linea-clara);border-radius:.85rem;background:var(--claro);color:var(--negro)}
+.mezcla-cam{display:grid;grid-template-columns:repeat(auto-fill,minmax(14rem,1fr));gap:.6rem;margin:.6rem 0}
+.tipo-cam{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.55rem .7rem;border:1px solid var(--linea-clara);border-radius:.85rem;background:var(--blanco)}
+.tipo-cam input{width:4.2rem;font:inherit;padding:.35rem .5rem;border:1px solid var(--linea-clara);border-radius:.6rem;text-align:center}
+.tipo-cam.cero{opacity:.6}
+.etq-cam{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.72rem;font-weight:600;padding:.12rem .5rem;border-radius:999px;width:max-content}
+.t-marca{background:#f5f2fb;color:#6e5aa0}.t-dato{background:#f1ecfa;color:#634c98}.t-producto{background:#eee8f8;color:#5b4492}
+.t-imagen{background:#f3effa;color:#68539c}.t-detras{background:#f6f3fb;color:#7462a4}.t-promo{background:#efe9f9;color:#56408c}
+.semana-cam{display:flex;justify-content:space-between;align-items:baseline;margin:1.25rem 0 .5rem}.semana-cam h3{margin:0;font-size:1rem}
+.semana-cam span{color:var(--gris);font-size:.85rem}
+.cal-cam{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:.5rem}
+.dia-cam{min-height:9rem;border-radius:.9rem;background:var(--claro);padding:.45rem;display:flex;flex-direction:column;gap:.4rem;border:2px solid transparent}
+.dia-cam .fecha{font-size:.75rem;color:var(--gris);font-weight:600;padding:.1rem .2rem}
+.dia-cam.libre{background:repeating-linear-gradient(45deg,var(--claro),var(--claro) 8px,#eeeef0 8px,#eeeef0 16px)}
+.dia-cam.fuera{opacity:.35}
+.dia-cam.sobre{border:2px dashed #a78bfa;background:#f5f3ff}
+.post-cam{background:var(--blanco);border:1px solid var(--linea-clara);border-radius:.75rem;padding:.5rem .55rem;display:flex;flex-direction:column;gap:.3rem;text-decoration:none;color:var(--negro)}
+.post-cam[draggable=true]{cursor:grab}.post-cam.arrastrando{opacity:.4}
+.post-cam .t{font-size:.84rem;font-weight:600;line-height:1.25}
+.post-cam .pie{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:.3rem;font-size:.72rem;color:var(--gris)}
+.post-cam .hora{border:1px solid var(--linea-clara);border-radius:.45rem;padding:0 .35rem;color:var(--negro)}
+.post-cam .chip{font-size:.68rem;padding:.05rem .4rem}
+.post-cam.sel{outline:2px solid var(--negro);outline-offset:1px}
+.mini-cam{width:100%;aspect-ratio:4/5;object-fit:cover;border-radius:.5rem}
+.sinimg{white-space:nowrap;overflow:hidden}
+.barra-cam{margin-top:1.25rem;background:var(--negro);color:var(--blanco);border-radius:1rem;padding:.9rem 1.1rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+.barra-cam p{margin:0;font-size:.92rem;color:#d4d4d8}.barra-cam b{color:var(--blanco)}.barra-cam .acciones{margin:0}
+.barra-cam .boton:not(.secundario){background:var(--blanco);color:var(--negro)}.barra-cam .boton.secundario{background:transparent;color:var(--blanco);border-color:var(--blanco)}
+.velo-cam{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:60}
+.cajon-cam{position:fixed;top:0;right:0;bottom:0;width:27rem;max-width:100%;background:var(--blanco);z-index:61;overflow:auto;padding:1.5rem;box-shadow:-20px 0 40px rgba(0,0,0,.15)}
+.cajon-cam h2{margin:.5rem 2rem 0 0}.cajon-cam label{margin-top:.85rem}
+.cerrar-cam{position:absolute;top:1rem;right:1.1rem;font-size:1.5rem;color:var(--gris);text-decoration:none}
+.img-cam{display:block;width:100%;max-height:18rem;object-fit:contain;background:var(--claro);border-radius:.9rem;margin:.75rem 0 .25rem}
+.img-cam.vacia{height:11rem;border:1.5px dashed var(--linea-clara);display:grid;place-items:center;align-content:center;gap:.4rem;text-align:center;color:var(--gris);font-size:.9rem;background:var(--claro)}
+.img-cam.vacia small{font-size:.78rem}
+.dos-cam{display:grid;grid-template-columns:1fr 1fr;gap:.6rem}
+.dos-cam select,.dos-cam input{width:100%;font:inherit;font-size:1rem;padding:.6rem .7rem;border:1px solid var(--linea-clara);border-radius:.8rem;background:var(--claro);color:var(--negro)}
+.cajon-cam .acciones{flex-wrap:wrap;gap:.5rem}
+.cajon-cam .boton{background:var(--negro);color:var(--claro)}.cajon-cam .boton.secundario{background:transparent;color:var(--negro);border-color:var(--linea-clara)}
+.cajon-cam .boton[disabled]{opacity:.45;cursor:default}
+@media(max-width:760px){.cal-cam{grid-template-columns:1fr}.dia-cam{min-height:0}.dia-cam.libre,.dia-cam.fuera{display:none}
+.mini-cam{width:4.5rem}.seccion summary .resumen-cam{display:none}}
 """
 
 
@@ -705,7 +754,8 @@ SUBMENU = {
     "asistente": [("chats", "Conversaciones", "/panel/asistente"),
                   ("configura", "Configura tu asistente", "/panel/asistente/configura"),
                   ("probar", "Probar tu asistente", "/panel/probar#ultimo")],
-    "contenido": [("semana", "Esta semana", "/panel/contenido/semana"), ("calendario", "Calendario", "/panel/contenido"),
+    "contenido": [("semana", "Esta semana", "/panel/contenido/semana"), ("campanas", "Campañas", "/panel/contenido/campanas"),
+                  ("calendario", "Calendario", "/panel/contenido"),
                   ("ideas", "Contenido sugerido", "/panel/contenido/ideas"),
                   ("nuevo", "Crear post", "/panel/contenido/nuevo"), ("marca", "Tu marca", "/panel/contenido/marca")],
 }

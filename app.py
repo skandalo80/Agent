@@ -29,7 +29,7 @@ from fastapi.exception_handlers import http_exception_handler
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
-from igbot import (admin, agent, ajustes, botones, comentarios, conectar, config, contenido, limites, panel, reporte, resultados,
+from igbot import (admin, agent, ajustes, botones, campanas, comentarios, conectar, config, contenido, limites, panel, reporte, resultados,
                    semana)
 from igbot.cuenta import Cuenta, cargar, cuenta, de_carpeta, usar
 from igbot.dispatcher import Dispatcher
@@ -249,6 +249,7 @@ if not config.CLIENTE:
     app.include_router(ajustes.router)
     app.include_router(contenido.router)
     app.include_router(semana.router)
+    app.include_router(campanas.router)
     app.include_router(resultados.router)
 
     @app.exception_handler(StarletteHTTPException)
