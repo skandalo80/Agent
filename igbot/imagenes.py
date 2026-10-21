@@ -402,22 +402,86 @@ async def crear_pieza(store: Store, user_id: str, idea: str, plantilla: str, tex
             crudo = await proveedor.generar(prompt, list(fotos))
         async with _turno:
             base = await asyncio.to_thread(_jpg, crudo)
-            # En diseño libre el texto ya viene en el diseño: no se rotula.
-            final = base if plantilla == LIBRE else await asyncio.to_thread(rotular, base, plantilla, texto, marca)
+            # En diseño libre el texto ya viene en el diseño, y una foto sin título va tal cual: no se rotula.
+            final = (base if plantilla == LIBRE or not texto.titulo
+                     else await asyncio.to_thread(rotular, base, plantilla, texto, marca))
     except Exception:
         await devolver(store, tipo)
         raise
     await limites.add_cost(config.IMAGE_COST_USD)
+    hecha = await _guardar(store, user_id, final, None if plantilla == LIBRE else base,
+                           f"{type(proveedor).__name__.lower()}:{getattr(proveedor, 'model', '')}")
+    await store.add_event(user_id, "imagen", {"tipo": tipo, "media": hecha["media_id"], "plantilla": plantilla})
+    log.info("Pieza %s (%s) para %s", hecha["media_id"], tipo, user_id)
+    return {**hecha, "tipo": tipo}
+
+
+async def _guardar(store: Store, user_id: str, final: bytes, base: bytes | None, origen: str) -> dict:
     token = secrets.token_urlsafe(18)
     pieza, sin_texto = _archivos(token)
     pieza.parent.mkdir(parents=True, exist_ok=True)
-    if plantilla != LIBRE:  # sin texto, para poder cambiarlo gratis después
+    if base is not None:  # sin texto, para poder cambiarlo gratis después
         sin_texto.write_bytes(base)
     pieza.write_bytes(final)
-    media_id = await store.add_media(user_id, token, f"{type(proveedor).__name__.lower()}:{getattr(proveedor, 'model', '')}")
-    await store.add_event(user_id, "imagen", {"tipo": tipo, "media": media_id, "plantilla": plantilla})
-    log.info("Pieza %s (%s) para %s", media_id, tipo, user_id)
-    return {"media_id": media_id, "token": token, "tipo": tipo}
+    return {"media_id": await store.add_media(user_id, token, origen), "token": token}
+
+
+async def crear_local(store: Store, user_id: str, como: str, *args) -> dict:
+    """Una pieza hecha aquí, sin generador (solo_texto o collage): no usa el cupo de imágenes."""
+    hacer = {"texto": solo_texto, "collage": collage}[como]
+    async with _turno:
+        final = await asyncio.to_thread(hacer, *args)
+    hecha = await _guardar(store, user_id, final, None, f"panel:{como}")
+    log.info("Pieza %s (%s, sin cupo) para %s", hecha["media_id"], como, user_id)
+    return {**hecha, "tipo": "local"}
+
+
+# --- piezas sin generador ---
+
+def solo_texto(texto: Texto, marca: Marca | None = None, etiqueta: str = "") -> bytes:
+    """Una frase o un dato sobre el fondo de la marca: la etiqueta arriba en el acento, el título grande
+    y el subtítulo debajo, centrados a lo alto."""
+    m = marca or Marca()
+    fondo = _rgb(m.fondo)
+    color, secundario = (_rgb(m.principal), (100, 100, 105)) if _claro(fondo) else ((255, 255, 255), (220, 220, 224))
+    img = Image.new("RGB", (ANCHO, ALTO), fondo)
+    d = ImageDraw.Draw(img)
+    ancho = ANCHO - 2 * MARGEN
+    fuente_et = _fuente(30, 600, m.fuente)
+    alto_et = (fuente_et.size + 36) if etiqueta else 0
+    y = (ALTO - alto_et - _alto_textos(ancho, Texto(texto.titulo, texto.subtitulo), m, tam_titulo=104)) // 2
+    if etiqueta:
+        d.text((MARGEN, y), etiqueta.upper(), font=fuente_et, fill=_rgb(m.acento))
+        y += alto_et
+    _textos(d, MARGEN, y, ancho, Texto(texto.titulo, texto.subtitulo), m, color, secundario, _rgb(m.acento),
+            tam_titulo=104)
+    _firma(d, texto, m, secundario)
+    out = io.BytesIO()
+    img.save(out, "JPEG", quality=90, optimize=True)
+    return out.getvalue()
+
+
+def collage(fotos: list[bytes]) -> bytes:
+    """De 2 a 4 fotos en una cuadrícula con separación blanca: 2 una sobre otra, 3 una grande arriba y dos
+    abajo, 4 en cuadrícula de 2x2."""
+    if not 2 <= len(fotos) <= 4:
+        raise ErrorImagen("El collage necesita de 2 a 4 fotos.")
+    imgs = [ImageOps.exif_transpose(Image.open(io.BytesIO(f))) for f in fotos]
+    hueco, mitad_x, mitad_y = 10, (ANCHO - 10) // 2, (ALTO - 10) // 2
+    if len(imgs) == 2:
+        cajas = [(0, 0, ANCHO, mitad_y), (0, mitad_y + hueco, ANCHO, ALTO - mitad_y - hueco)]
+    elif len(imgs) == 3:
+        cajas = [(0, 0, ANCHO, mitad_y), (0, mitad_y + hueco, mitad_x, ALTO - mitad_y - hueco),
+                 (mitad_x + hueco, mitad_y + hueco, ANCHO - mitad_x - hueco, ALTO - mitad_y - hueco)]
+    else:
+        cajas = [(x, y, w, h) for y, h in ((0, mitad_y), (mitad_y + hueco, ALTO - mitad_y - hueco))
+                 for x, w in ((0, mitad_x), (mitad_x + hueco, ANCHO - mitad_x - hueco))]
+    img = Image.new("RGB", (ANCHO, ALTO), (255, 255, 255))
+    for foto, (x, y, w, h) in zip(imgs, cajas):
+        img.paste(_cubrir(foto, w, h), (x, y))
+    out = io.BytesIO()
+    img.save(out, "JPEG", quality=90, optimize=True)
+    return out.getvalue()
 
 
 async def rerotular(store: Store, media_id: int, plantilla: str, texto: Texto, marca: Marca | None = None) -> None:
