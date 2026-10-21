@@ -899,7 +899,6 @@ async def hoy(c: Cuenta) -> str:
     return f'<div class="hoy kpis">{"".join(cajas)}</div>'
 
 
-MAX_CHATS = 500  # los más recientes que se pueden recorrer por páginas o buscar
 POR_HOJA = 10
 # "Abiertas": escribieron en las últimas 24 h (la ventana en que Instagram deja contestar) y el
 # asistente no está en pausa ahí. "Pidieron una persona": en pausa porque el asistente los pasó contigo.
@@ -939,55 +938,37 @@ async def recientes(c: Cuenta, ver: str, buscar: str = "", hoja: int = 1) -> str
     reactivarlos o abrirlos en Instagram. Los que están en pausa salen siempre, aunque sean viejos."""
     import asyncio
 
-    from .store import MANUAL
     ahora = time.time()
-    pausados = {u: (hasta, ultimo) for u, hasta, ultimo in await c.store.paused_list(ahora)}
-    chats = {u: (t, rol, texto, ultimo) for u, t, rol, texto, ultimo in await c.store.recent_chats(MAX_CHATS)}
-    for u, (hasta, ultimo) in pausados.items():
-        chats.setdefault(u, (0.0, "user", ultimo, ultimo))
-    # Quién pidió una persona: el asistente lo pasó contigo (pasar_a_humano) durante su pausa actual.
-    motivos = {u: d.get("motivo", "") for u, d, _ in
-               await c.store.events("humano", ahora - c.human_pause_hours * 3600 - 60, ahora + 1) if u in pausados}
-
-    def estado(u: str, rol: str, texto: str) -> str:
-        if u in pausados:
-            return "persona" if u in motivos else "pausa"
-        if rol == "user":
-            return "sin"
-        return "tu" if texto.startswith(MANUAL) else "asistente"
-
-    def en(f: tuple, filtro: str) -> bool:
-        est = f[-1]
-        return {"": True, "pausa": est in ("pausa", "persona"), "abiertas": est not in ("pausa", "persona")
-                and f[1] >= ahora - VENTANA}.get(filtro, est == filtro)
-    filas = [(u, *datos, estado(u, datos[1], datos[2])) for u, datos in chats.items()]
-    cuantos = {k: sum(en(f, k) for f in filas) for k in FILTROS}
     ver = ver if ver in FILTROS else ""
-    filas = [f for f in filas if en(f, ver)]
     buscar = buscar.strip()[:60]
-    if buscar:
-        # Busca en el @usuario (el que ya se conoce, sin preguntarle a Instagram) y en los mensajes.
-        conocidos = await asyncio.gather(*(c.store.get(f"username:{f[0]}") for f in filas))
-        b = buscar.lower().lstrip("@")
-        filas = [f for f, n in zip(filas, conocidos)
-                 if b in (n or "").lower() or b in f[3].lower() or b in f[4].lower()]
-    total = max(1, -(-len(filas) // POR_HOJA))
-    hoja = min(max(1, hoja), total)
-    encontrados = len(filas)
-    filas = filas[(hoja - 1) * POR_HOJA:hoja * POR_HOJA]
+    # Quién pidió una persona: el asistente lo pasó contigo (pasar_a_humano) durante su pausa actual.
+    humano_desde = ahora - c.human_pause_hours * 3600 - 60
+
+    async def pagina(n: int):
+        return await c.store.chats_page(ahora, ahora - VENTANA, humano_desde, ver, buscar.lstrip("@"),
+                                        POR_HOJA, (n - 1) * POR_HOJA)
+    # La base filtra, busca y corta: solo llegan aquí los 10 chats de la página.
+    filas, cuantos, encontrados = await pagina(max(1, hoja))
+    total = max(1, -(-encontrados // POR_HOJA))
+    if hoja > total or hoja < 1:
+        hoja = min(max(1, hoja), total)
+        filas, cuantos, encontrados = await pagina(hoja)
+    suyos = {f[0] for f in filas if f[-1] == "persona"}
+    motivos = {u: d.get("motivo", "") for u, d, _ in await c.store.events("humano", humano_desde, ahora + 1)
+               if u in suyos} if suyos else {}
     with usar(c):
         nombres = await asyncio.gather(*(c.instagram.username(f[0]) for f in filas))
     etiquetas = {"pausa": ("En pausa · tú", "acento"), "persona": ("Pidió una persona", "rojo"),
                  "sin": ("Sin contestar", "rojo"),
                  "tu": ("Contestaste tú", ""), "asistente": ("Asistente", "verde")}
     html = []
-    for (u, t, _, _, ultimo, est), nombre in zip(filas, nombres):
+    for (u, t, _, _, ultimo, hasta, est), nombre in zip(filas, nombres):
         nombre = nombre if nombre.startswith("@") else "Cliente de Instagram"
         detalle = f"«{escape(ultimo[:90])}»" if ultimo else "Sin mensajes todavía"
-        if est == "persona" and motivos[u]:
+        if est == "persona" and motivos.get(u):
             detalle = f"Motivo: {escape(motivos[u][:120])} · " + detalle
         if est in ("pausa", "persona"):
-            horas = max(1, round((pausados[u][0] - ahora) / 3600))
+            horas = max(1, round((hasta - ahora) / 3600))
             detalle += f" · vuelve a contestar solo en {horas} h"
         elif t:
             detalle += f" · {hace(t)}"
