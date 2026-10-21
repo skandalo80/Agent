@@ -913,8 +913,9 @@ def enlace_chats(ver: str, buscar: str = "", hoja: int = 1) -> str:
     return "/panel/asistente" + ("?" + q if q else "") + "#chats"
 
 
-def paginas(actual: int, total: int, ver: str, buscar: str) -> str:
-    """‹ 1 2 3 … 9 ›: la primera, la última y las de junto a la actual; lo demás, puntitos."""
+def paginas(actual: int, total: int, enlace) -> str:
+    """‹ 1 2 3 … 9 ›: la primera, la última y las de junto a la actual; lo demás, puntitos.
+    `enlace(n)` da la dirección de la página n."""
     if total <= 1:
         return ""
     numeros = sorted({1, total, *range(max(1, actual - 1), min(total, actual + 1) + 1)})
@@ -923,11 +924,11 @@ def paginas(actual: int, total: int, ver: str, buscar: str) -> str:
         if n - antes > 1:
             partes.append('<span class="puntos">…</span>')
         partes.append(f'<span class="on" aria-current="page">{n}</span>' if n == actual else
-                      f'<a href="{escape(enlace_chats(ver, buscar, n))}">{n}</a>')
+                      f'<a href="{escape(enlace(n))}">{n}</a>')
         antes = n
 
     def flecha(n: int, signo: str, nombre: str) -> str:
-        return (f'<a href="{escape(enlace_chats(ver, buscar, n))}" aria-label="{nombre}">{signo}</a>'
+        return (f'<a href="{escape(enlace(n))}" aria-label="{nombre}">{signo}</a>'
                 if 1 <= n <= total else f'<span class="apagada" aria-hidden="true">{signo}</span>')
     return (f'<nav class="paginas" aria-label="Páginas">{flecha(actual - 1, "‹", "Anterior")}'
             f'{"".join(partes)}{flecha(actual + 1, "›", "Siguiente")}</nav>')
@@ -1012,7 +1013,7 @@ async def recientes(c: Cuenta, ver: str, buscar: str = "", hoja: int = 1) -> str
             f" {c.human_pause_hours:g} h para que contestes tú desde Instagram.</p>"
             f'<div class="filtros">{filtros}</div>{busqueda}{cuenta}'
             + ("".join(html) or f'<p class="ayuda vacio">{vacio}</p>')
-            + paginas(hoja, total, ver, buscar) + "</details>")
+            + paginas(hoja, total, lambda n: enlace_chats(ver, buscar, n)) + "</details>")
 
 
 # La cuenta principal (la vendedora, la del .env) usa prompts/system.md, que vive en el

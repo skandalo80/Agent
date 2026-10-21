@@ -415,14 +415,14 @@ async def resumen(c: Cuenta) -> str:
         incluidas, extra = await imagenes.usadas(c.store)
         ahora = tools.now()
     mes = ahora.replace(day=1, hour=0, minute=0, second=0, microsecond=0).timestamp()
-    posts = await c.store.posts(("programada", "publicando", "publicada"))
-    del_mes = [p for p in posts if (p["publish_at"] or p["created_at"]) >= mes]
-    programados = sorted(p["publish_at"] for p in posts if p["status"] == "programada")
-    publicados = sum(p["status"] == "publicada" for p in del_mes)
+    # Se cuentan en la base, sin cargar todos los posts.
+    del_mes = await c.store.posts_count(("programada", "publicando", "publicada"), mes)
+    programados = [p["publish_at"] for p in await c.store.posts(("programada",))]
+    publicados = await c.store.posts_count(("publicada",), mes)
     if c.posts_mes > 0:
-        caja_posts = panel.restantes("Posts restantes", len(del_mes), c.posts_mes, "posts")
+        caja_posts = panel.restantes("Posts restantes", del_mes, c.posts_mes, "posts")
     else:
-        caja_posts = panel.kpi("Posts este mes", str(len(del_mes)), "programados y publicados")
+        caja_posts = panel.kpi("Posts este mes", str(del_mes), "programados y publicados")
     with usar(c):
         proximo = f"el próximo: {cuando(programados[0])}" if programados else "ninguno por ahora"
     return ('<div class="hoy kpis">' + caja_posts
@@ -502,22 +502,56 @@ async def filas(c: Cuenta, posts: list[dict]) -> str:
     return "".join(out)
 
 
-DE_INSTAGRAM_TTL = 600  # los posts subidos desde la app se piden a Instagram cada 10 min como mucho
-_de_instagram: dict[str, tuple[float, list[dict]]] = {}
+DE_INSTAGRAM_TTL = 600  # cada página de posts de Instagram se pide cada 10 min como mucho
+POR_HOJA = 10
+# (cuenta, página) -> (hora, posts) y (cuenta, página) -> (hora, cursor para pedir esa página).
+_de_instagram: dict[tuple[str, int], tuple[float, list[dict]]] = {}
+_cursores: dict[tuple[str, int], tuple[float, str]] = {}
+_total_instagram: dict[str, tuple[float, int]] = {}
+
+
+def _vigente(guardado: dict, clave):
+    dato = guardado.get(clave)
+    return dato[1] if dato and time.monotonic() - dato[0] < DE_INSTAGRAM_TTL else None
+
+
+async def hoja_instagram(c: Cuenta, hoja: int) -> list[dict]:
+    """Los 10 posts de una página de Instagram (también los subidos desde la app), del más nuevo
+    al más viejo. Solo pide esa página; para llegar a una lejana avanza de 100 en 100 pidiendo
+    solo los ids, y recuerda los cursores para no repetirlo."""
+    if (posts := _vigente(_de_instagram, (c.slug, hoja))) is not None:
+        return posts
+    k = max((n for n in range(2, hoja + 1) if _vigente(_cursores, (c.slug, n))), default=1)
+    after = _vigente(_cursores, (c.slug, k)) or ""
+    while k < hoja:
+        paso = min(10, hoja - k)
+        ids, after = await c.instagram.media_page(paso * POR_HOJA, after, "id")
+        if not after:
+            return []
+        k += paso
+        _cursores[(c.slug, k)] = (time.monotonic(), after)
+    posts, siguiente = await c.instagram.media_page(POR_HOJA, after)
+    _de_instagram[(c.slug, hoja)] = (time.monotonic(), posts)
+    if siguiente:
+        _cursores[(c.slug, hoja + 1)] = (time.monotonic(), siguiente)
+    return posts
+
+
+async def total_instagram(c: Cuenta) -> int:
+    if (n := _vigente(_total_instagram, c.slug)) is not None:
+        return n
+    n = await c.instagram.media_count()
+    _total_instagram[c.slug] = (time.monotonic(), n)
+    return n
 
 
 async def de_instagram(c: Cuenta) -> list[dict]:
-    """Los últimos posts de la cuenta en Instagram, también los subidos desde la app."""
-    guardado = _de_instagram.get(c.slug)
-    if guardado and time.monotonic() - guardado[0] < DE_INSTAGRAM_TTL:
-        return guardado[1]
+    """Los últimos 10 posts de la cuenta en Instagram ([] si Instagram no contesta)."""
     try:
-        posts = await c.instagram.recent_media(12)
+        return await hoja_instagram(c, 1)
     except Exception as e:  # sin Instagram la página sale igual, solo con los posts del panel
         log.warning("No se pudieron leer los posts de Instagram de %s: %s", c.slug, e)
         return []
-    _de_instagram[c.slug] = (time.monotonic(), posts)
-    return posts
 
 
 def fila_instagram(m: dict, ts: float) -> str:
@@ -532,28 +566,47 @@ def fila_instagram(m: dict, ts: float) -> str:
             f'<span class="chip">Publicado</span>{ver}{boton_insights(m.get("id", ""))}</div>')
 
 
-async def publicados_html(c: Cuenta) -> str:
-    """Publicados del panel y de la app de Instagram juntos, del más nuevo al más viejo."""
-    del_panel = (await c.store.posts(("publicada",), user_id=PANEL))[-12:]
-    enlaces = {shortcode(p["permalink"]) for p in del_panel} - {""}
-    en_instagram = await de_instagram(c)
-    ids = {shortcode(m["permalink"]): m.get("id", "") for m in en_instagram if m.get("permalink")}
+def enlace_publicados(hoja: int) -> str:
+    return "/panel/contenido" + (f"?p={hoja}" if hoja > 1 else "") + "#publicados"
+
+
+async def publicados_html(c: Cuenta, hoja: int = 1) -> tuple[str, int]:
+    """Una página (10) de lo publicado, con sus números abajo, y cuántos hay en total. Sale de
+    Instagram, así incluye lo subido desde la app; lo que salió del panel lleva su ficha. Si
+    Instagram no contesta, sale lo publicado desde el panel. Solo se carga la página que se ve."""
+    try:
+        total = await total_instagram(c)
+        paginas_ = max(1, -(-total // POR_HOJA))
+        hoja = min(max(1, hoja), paginas_)
+        en_instagram = await hoja_instagram(c, hoja)
+    except Exception as e:
+        log.warning("No se pudieron leer los posts de Instagram de %s: %s", c.slug, e)
+        _, total = await c.store.published_page(PANEL, 0, 0)
+        paginas_ = max(1, -(-total // POR_HOJA))
+        hoja = min(max(1, hoja), paginas_)
+        del_panel, _ = await c.store.published_page(PANEL, POR_HOJA, (hoja - 1) * POR_HOJA)
+        return (await filas(c, del_panel) + panel.paginas(hoja, paginas_, enlace_publicados)), total
+    codigos = [k for m in en_instagram if (k := shortcode(m.get("permalink", "")))]
+    # Lo del panel que sale en esta página, y (en la primera) lo que acaba de salir y que
+    # Instagram todavía no lista porque su página se pidió hace unos minutos.
+    del_panel = await c.store.published_with(PANEL, codigos, time.time() - DE_INSTAGRAM_TTL if hoja == 1 else 1e18)
+    por_codigo = {shortcode(p["permalink"]): p for p in del_panel if p["permalink"]}
     lista = []
-    for post in del_panel:
-        media = await c.store.media(post["media_ids"][0]) if post["media_ids"] else None
-        html = fila(c, post, await pieza(c.store, post["id"]), media[0] if media else "",
-                    ids.get(shortcode(post["permalink"] or ""), ""))
-        lista.append((post["publish_at"] or 0, html))
     for m in en_instagram:
-        if m.get("permalink") and shortcode(m["permalink"]) in enlaces:
-            continue
         try:
             ts = datetime.strptime(m["timestamp"], "%Y-%m-%dT%H:%M:%S%z").timestamp()
         except (KeyError, ValueError):
             continue
-        lista.append((ts, fila_instagram(m, ts)))
+        if post := por_codigo.pop(shortcode(m.get("permalink", "")), None):
+            media = await c.store.media(post["media_ids"][0]) if post["media_ids"] else None
+            lista.append((ts, fila(c, post, await pieza(c.store, post["id"]), media[0] if media else "", m.get("id", ""))))
+        else:
+            lista.append((ts, fila_instagram(m, ts)))
+    for post in (por_codigo.values() if hoja == 1 else ()):
+        media = await c.store.media(post["media_ids"][0]) if post["media_ids"] else None
+        lista.append((post["publish_at"] or 0, fila(c, post, await pieza(c.store, post["id"]), media[0] if media else "")))
     lista.sort(key=lambda x: x[0], reverse=True)
-    return "".join(html for _, html in lista[:12])
+    return "".join(html for _, html in lista) + panel.paginas(hoja, paginas_, enlace_publicados), total
 
 
 def plegable(id_: str, titulo: str, n: int, cuerpo: str, clase: str = "") -> str:
@@ -563,12 +616,12 @@ def plegable(id_: str, titulo: str, n: int, cuerpo: str, clase: str = "") -> str
             f"{cuenta}</summary>{cuerpo}</details>")
 
 
-async def calendario(c: Cuenta, aviso: str = "") -> HTMLResponse:
+async def calendario(c: Cuenta, aviso: str = "", hoja: int = 1) -> HTMLResponse:
     with usar(c):
         pendientes = await c.store.posts(("programada", "publicando", "fallida", "borrador"), user_id=PANEL)
         programados = [p for p in pendientes if p["status"] != "borrador"]
         borradores = [p for p in pendientes if p["status"] == "borrador"]
-        publicados = await publicados_html(c)
+        publicados, n_publicados = await publicados_html(c, hoja)
         cuerpo = ""
         if not pendientes:
             cuerpo += ('<div class="tarjeta"><h2>Aún no tienes posts</h2>'
@@ -583,8 +636,8 @@ async def calendario(c: Cuenta, aviso: str = "") -> HTMLResponse:
             cuerpo += plegable("borradores", "Borradores", len(borradores),
                                '<p class="ayuda">No salen hasta que los apruebes.</p>' + await filas(c, borradores))
         if publicados:
-            cuerpo += plegable("publicados", "Ya publicados", 0,
-                               '<p class="ayuda">Los últimos 12 de tu Instagram, también los que subiste desde la app.</p>'
+            cuerpo += plegable("publicados", "Ya publicados", n_publicados,
+                               '<p class="ayuda">Todo lo de tu Instagram, también lo que subiste desde la app.</p>'
                                + publicados, clase="antiguos")
         if pendientes:
             cuerpo += '<div class="acciones"><a class="boton" href="/panel/contenido/nuevo">+ Crear post</a></div>'
@@ -603,9 +656,14 @@ METRICAS = [  # (métrica de Instagram, cómo se le dice al cliente, qué es)
 
 
 async def pagina_insights(c: Cuenta, media_id: str) -> HTMLResponse:
-    m = next((m for m in await de_instagram(c) if m.get("id") == media_id), None)
+    # Se busca en las páginas que ya se vieron; si no, se le pregunta a Instagram (solo da las suyas).
+    m = next((m for (slug, _), (_, posts) in list(_de_instagram.items()) if slug == c.slug
+              for m in posts if m.get("id") == media_id), None)
     if not m:
-        raise HTTPException(status_code=404)
+        try:
+            m = await c.instagram.media_info(media_id)
+        except Exception:
+            raise HTTPException(status_code=404)
     titulo = recortar((m.get("caption") or "").strip().split("\n")[0]) or "Post de Instagram"
     try:
         datos = await c.instagram.media_insights(media_id)
@@ -1135,7 +1193,8 @@ def preparar_foto(data: bytes) -> bytes:
 async def ver(request: Request):
     if not (c := panel.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
-    return await calendario(c) if c.imagenes_mes > 0 else sin_plan()
+    p = request.query_params.get("p", "")
+    return await calendario(c, hoja=int(p) if p.isdigit() else 1) if c.imagenes_mes > 0 else sin_plan()
 
 
 @router.get("/nuevo")

@@ -570,6 +570,32 @@ class Store:
         cur = await self.db.execute(sql + " ORDER BY publish_at, id", args)
         return [self._post(r) for r in await cur.fetchall()]
 
+    async def published_page(self, user_id: str, limit: int, offset: int) -> tuple[list[dict], int]:
+        """Una página de lo publicado (de lo más nuevo a lo más viejo) y cuántos hay en total."""
+        cur = await self.db.execute("SELECT COUNT(*) FROM posts WHERE status = 'publicada' AND user_id = ?",
+                                    (user_id,))
+        total = (await cur.fetchone())[0]
+        cur = await self.db.execute(
+            f"SELECT {self.POST_FIELDS} FROM posts WHERE status = 'publicada' AND user_id = ?"
+            " ORDER BY publish_at DESC, id DESC LIMIT ? OFFSET ?", (user_id, limit, offset))
+        return [self._post(r) for r in await cur.fetchall()], total
+
+    async def published_with(self, user_id: str, codes: list[str], since: float) -> list[dict]:
+        """Lo publicado cuyo link lleva alguno de esos códigos de Instagram, o que salió desde `since`."""
+        donde = " OR ".join(["instr(permalink, ?) > 0"] * len(codes) + ["publish_at >= ?"])
+        cur = await self.db.execute(
+            f"SELECT {self.POST_FIELDS} FROM posts WHERE status = 'publicada' AND user_id = ? AND ({donde})"
+            " ORDER BY publish_at DESC, id DESC", (user_id, *codes, since))
+        return [self._post(r) for r in await cur.fetchall()]
+
+    async def posts_count(self, statuses: tuple[str, ...], since: float) -> int:
+        """Cuántos posts con esos estados salen (o se crearon, si no tienen hora) desde `since`."""
+        marks = ",".join("?" * len(statuses))
+        cur = await self.db.execute(
+            f"SELECT COUNT(*) FROM posts WHERE status IN ({marks}) AND COALESCE(NULLIF(publish_at, 0), created_at) >= ?",
+            (*statuses, since))
+        return (await cur.fetchone())[0]
+
     async def update_post(self, post_id: int, caption: str | None = None, publish_at: float | None = None,
                           media_ids: list[int] | None = None) -> None:
         """Cambia el texto, la hora o las fotos de una publicación que aún no sale."""

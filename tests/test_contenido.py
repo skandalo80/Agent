@@ -35,10 +35,16 @@ class ConPosts(FakeInstagram):
         return f"@{user_id}"
 
     async def recent_media(self, limit=12):
+        return (await self.media_page(limit))[0]
+
+    async def media_count(self):
+        return 2
+
+    async def media_page(self, limit, after="", fields=""):
         return [{"id": "1", "caption": "Desde la app\nSegunda línea", "media_url": "https://scontent.cdninstagram.com/a.jpg",
                  "permalink": "https://www.instagram.com/p/DESDEAPP/", "timestamp": "2099-01-01T10:00:00+0000"},
                 {"id": "2", "caption": "Del panel", "permalink": "https://www.instagram.com/p/ABC123/",
-                 "timestamp": "2020-01-01T10:00:00+0000"}]
+                 "timestamp": "2020-01-01T10:00:00+0000"}][:limit], ""
 
 
 def png() -> bytes:
@@ -63,6 +69,8 @@ def cliente(monkeypatch, tmp_path):
     setup(monkeypatch)
     monkeypatch.setattr(bot, "Instagram", lambda store: ConPosts())
     monkeypatch.setattr(contenido, "_de_instagram", {})
+    monkeypatch.setattr(contenido, "_cursores", {})
+    monkeypatch.setattr(contenido, "_total_instagram", {})
     monkeypatch.setattr(bot, "cuentas", list(bot.cuentas))
     monkeypatch.setattr(bot, "dispatchers", dict(bot.dispatchers))
     monkeypatch.setattr(bot.principal, "ig_account_id", "negocio")
@@ -243,12 +251,45 @@ def test_si_instagram_falla_la_pagina_sale(cliente, monkeypatch):
     client, c, *_ = cliente
     monkeypatch.setattr(c, "imagenes_mes", 3)
 
-    async def falla(limit=12):
+    async def falla(*a, **k):
         raise RuntimeError("caído")
 
-    monkeypatch.setattr(c.instagram, "recent_media", falla)
+    monkeypatch.setattr(c.instagram, "media_count", falla)
+    monkeypatch.setattr(c.instagram, "media_page", falla)
     r = client.get("/panel/contenido")
     assert r.status_code == 200 and "Aún no tienes posts" in r.text
+
+
+def test_ya_publicados_de_10_en_10(cliente, monkeypatch):
+    """Solo se pide a Instagram la página que se ve; para saltar lejos avanza pidiendo solo ids."""
+    client, c, *_ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 3)
+    todos = [{"id": str(i), "caption": f"Post {i:02d}", "permalink": f"https://www.instagram.com/p/P{i:02d}/",
+              "timestamp": f"2026-01-{31 - i // 2:02d}T{10 + i % 2}:00:00+0000"} for i in range(35)]
+    pedidos = []
+
+    async def media_count():
+        return len(todos)
+
+    async def media_page(limit, after="", fields=""):
+        pedidos.append((limit, after, fields))
+        i = int(after or 0)
+        return todos[i:i + limit], str(i + limit) if i + limit < len(todos) else ""
+
+    monkeypatch.setattr(c.instagram, "media_count", media_count)
+    monkeypatch.setattr(c.instagram, "media_page", media_page)
+    r = client.get("/panel/contenido")
+    assert r.text.count("Desde Instagram") == 10 and "Post 00" in r.text and "Post 10" not in r.text
+    assert 'href="/panel/contenido?p=4#publicados"' in r.text and '<span class="resumen">35</span>' in r.text
+    pedidos.clear()
+    r = client.get("/panel/contenido?p=4")
+    assert r.text.count("Desde Instagram") == 5 and "Post 30" in r.text and "Post 29" not in r.text
+    # Desde la página 2 (su cursor ya se conocía): ids sin fotos hasta llegar, luego solo 10.
+    assert pedidos == [(20, "10", "id"), (10, "30", "")]
+    pedidos.clear()
+    assert "Post 30" in client.get("/panel/contenido?p=4").text and pedidos == []  # ya estaba
+    assert "Post 20" in client.get("/panel/contenido?p=3").text and pedidos == [(10, "10", "id"), (10, "20", "")]
+    assert "Post 30" in client.get("/panel/contenido?p=99").text  # se queda en la última
 
 
 def test_script_y_fuentes(cliente):
