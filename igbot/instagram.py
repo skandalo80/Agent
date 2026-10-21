@@ -103,6 +103,8 @@ class Instagram:
         r.raise_for_status()
         link = r.json().get("permalink", "")
         await self.store.set(key, link)
+        if link:  # para leer sus Insights después (Campañas > reporte)
+            await self.store.set(f"media_de:{link}", media_id)
         return link
 
     async def media_insights(self, media_id: str) -> dict[str, int]:

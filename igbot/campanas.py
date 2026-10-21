@@ -15,7 +15,8 @@
    editor.
 
 La campaña vive en el kv "campana" de la cuenta (una a la vez). Los posts que ya
-tienen imagen son posts normales: siguen en Calendario aunque empiece otra campaña.
+tienen imagen son posts normales: siguen en Calendario aunque empiece otra campaña, y la
+campaña anterior pasa a "Tus campañas", de donde se descarga su reporte (informe.py).
 Lo que escribe el cliente son datos, no instrucciones: va entre etiquetas.
 """
 import json
@@ -23,13 +24,14 @@ import logging
 import random
 import re
 import time
+import unicodedata
 from datetime import date, datetime, timedelta
 from html import escape
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse
 
-from . import config, imagenes, panel, semana, tools
+from . import config, imagenes, informe, panel, semana, tools
 from .admin import PANEL
 from .contenido import (ESTADOS, ESTILO_REFERENCIA, ESTILOS, MAX_CAPTION, archivo, cuando, estilo_de, falta_cupo,
                         guardar_pieza, kit, libre, marca_de, modo_de, negocio_de, notas_estilo, plantilla_de, sin_plan,
@@ -764,6 +766,7 @@ async def pagina_campana(c: Cuenta, aviso: str = "", sel: str = "", nueva: bool 
             p = buscar_post(camp, sel) if sel else None
             cajon = await detalle(c, camp, p, quedan_ia) if p else ""
             await guardar(c, camp)  # por si se descartó algún post en Calendario
+            cuerpo += await tus_campanas(c, camp)
         else:
             base = {"nombre": "", "inicio": lunes_que_viene().isoformat(), "semanas": SEMANAS_INICIAL,
                     "publicar": "lun-sab", "tema": ""}
@@ -773,8 +776,9 @@ async def pagina_campana(c: Cuenta, aviso: str = "", sel: str = "", nueva: bool 
                            nueva=nueva or bool(form and form.get("nueva")), fotos=fotos, resultados=resultados,
                            sugerido=sugerido)
             if (nueva or form) and guardada.get("posts"):
-                cuerpo = ('<div class="aviso">Al proponer el calendario de la nueva campaña, la anterior deja de verse'
-                          " aquí. Los posts que ya tienen imagen siguen en Calendario.</div>" + cuerpo)
+                cuerpo = ('<div class="aviso">Al proponer el calendario de la nueva campaña, la anterior pasa a Tus'
+                          " campañas, abajo. Los posts que ya tienen imagen siguen en Calendario.</div>" + cuerpo)
+            cuerpo += await tus_campanas(c, guardada)
             cajon = ""
     return panel.pagina(
         panel.cabecera(salir=True, menu="contenido", cuenta=c, sub="campanas", perfil=await panel.usuario(c),
@@ -782,6 +786,36 @@ async def pagina_campana(c: Cuenta, aviso: str = "", sel: str = "", nueva: bool 
         + cabeza({} if form else camp) + '<main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
         + await panel.pendiente(c, "campanas") + cuerpo + "</div></main>" + cajon)
+
+
+async def tus_campanas(c: Cuenta, actual: dict) -> str:
+    """El historial con casillas para descargar el reporte de una o varias."""
+    lista = await informe.todas(c, actual)
+    if not lista:
+        return ""
+    posts = await c.store.posts_by_id([p["post_id"] for x in lista for p in x["posts"]])
+    filas, marcada = [], False
+    for x in lista:
+        n = sum(1 for p in x["posts"] if p["post_id"] in posts and posts[p["post_id"]]["status"] == "publicada")
+        ini, fin = date.fromisoformat(x["inicio"]), informe.fin_de(x)
+        cuando = f"{ini.day} {MESES[ini.month - 1]} – {fin.day} {MESES[fin.month - 1]} {fin.year}"
+        publicados = (f"{n} post{'s' if n != 1 else ''} publicado{'s' if n != 1 else ''}" if n
+                      else "Aún sin posts publicados")
+        marcar = bool(n) and not marcada
+        marcada |= marcar
+        filas.append(f'<label class="fila-cam{"" if n else " apagada"}">'
+                     f'<input type="checkbox" name="c" value="{x["id"]}"{" checked" if marcar else ""}'
+                     f'{"" if n else " disabled"}>'
+                     f'<span class="datos"><b>{escape(x["nombre"])}</b><span>{cuando} · {publicados}</span></span>'
+                     + ('<span class="chip">Actual</span>' if x.get("actual") else "") + "</label>")
+    return ('<form method="get" action="/panel/contenido/campanas/reporte" class="tarjeta" id="tus-campanas">'
+            '<span class="titulo-sec"><h2>Tus campañas</h2></span>'
+            '<p class="ayuda">Marca una o varias y descarga su reporte: los posts de mayor a menor impacto, con su'
+            " alcance, likes, comentarios, guardados y compartidos, y qué tema, formato y horario funcionó mejor."
+            " Los números se leen de Instagram al momento.</p>"
+            f'<div class="lista-cam">{"".join(filas)}</div>'
+            f'<div class="acciones"><button class="boton"{"" if marcada else " disabled"}>Descargar reporte (PDF)</button>'
+            f'<span class="ayuda">Hasta {informe.MAX_REPORTE} campañas. Tarda unos segundos.</span></div></form>')
 
 
 def tarjeta_extra(accion: str, k: str) -> str:
@@ -837,6 +871,29 @@ async def ver(request: Request):
     return await pagina_campana(c, sel=q.get("post", ""), nueva=q.get("nueva") == "1")
 
 
+@router.get("/campanas/reporte")
+async def reporte(request: Request):
+    if not (c := panel.cuenta_de_sesion(request)):
+        return RedirectResponse("/panel", status_code=303)
+    if c.imagenes_mes <= 0:
+        return sin_plan()
+    pedidas = set(request.query_params.getlist("c"))
+    with usar(c):
+        camps = [x for x in await informe.todas(c, await leer(c)) if str(x["id"]) in pedidas]
+        if not camps:
+            return await pagina_campana(c, "Elige al menos una campaña para el reporte.")
+        if len(camps) > informe.MAX_REPORTE:
+            return await pagina_campana(c, f"Elige hasta {informe.MAX_REPORTE} campañas por reporte.")
+        contenido_pdf = await informe.pdf(c, camps, await marca_de(c), await panel.usuario(c))
+    if len(camps) == 1:
+        ascii_ = unicodedata.normalize("NFKD", camps[0]["nombre"].lower()).encode("ascii", "ignore").decode()
+        nombre = "reporte-" + re.sub(r"[^a-z0-9]+", "-", ascii_).strip("-")[:40]
+    else:
+        nombre = f"reporte-{len(camps)}-campanas"
+    return Response(contenido_pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{nombre.rstrip("-")}.pdf"'})
+
+
 @router.post("/campanas")
 async def accion(request: Request):
     panel.de_aqui(request)
@@ -865,6 +922,8 @@ async def accion(request: Request):
             with usar(c):
                 await usar_ia(c)
                 hecha = await proponer(c, nueva)
+                if f.get("nueva") == "1":
+                    await informe.archivar(c, camp)
                 await guardar(c, hecha)
             yield "/panel/contenido/campanas"
 
