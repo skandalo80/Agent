@@ -607,6 +607,16 @@ label.check input[type=email]{flex:1;max-width:22rem;margin:0}
 .filtros{display:flex;flex-wrap:wrap;gap:.5rem;margin:.5rem 0 .25rem}
 .filtros a{font-weight:500;font-size:.95rem;border:1px solid var(--linea-clara);border-radius:999px;padding:.45rem 1rem;color:inherit;text-decoration:none}
 .filtros a.on{background:var(--negro);color:var(--claro);border-color:var(--negro)}
+.buscar-chats{display:flex;gap:.5rem;align-items:center;margin:.75rem 0 .25rem;max-width:32rem}
+.buscar-chats input{flex:1;min-width:0;font:inherit;font-size:.95rem;padding:.5rem .9rem;border:1px solid var(--linea-clara);border-radius:999px;background:#fff}
+.cuantos{margin:.5rem 0 0}
+.paginas{display:flex;justify-content:center;align-items:center;gap:.35rem;margin:1.25rem 0 .25rem;flex-wrap:wrap}
+.paginas a,.paginas span{min-width:2.25rem;height:2.25rem;display:inline-flex;align-items:center;justify-content:center;border-radius:999px;font-size:.95rem;font-weight:500;color:inherit;text-decoration:none}
+.paginas a{border:1px solid var(--linea-clara)}
+.paginas a:hover{background:#f2f2f4}
+.paginas .on{background:var(--negro);color:var(--claro)}
+.paginas .apagada{opacity:.3}
+.paginas .puntos{min-width:1.25rem}
 @media(max-width:560px){.hoy{grid-template-columns:1fr 1fr}.fila:has(.avatar) .datos{flex-basis:calc(100% - 3.6rem)}.fila .avatar+.datos+.chip{margin-left:3.6rem}}
 .grafica{width:100%;height:9rem;display:block;margin-top:1.25rem}
 .ejex{display:flex;color:#6e6e73;font-size:.75rem;margin-top:.35rem}
@@ -767,7 +777,8 @@ def caja(nombre: str, etiqueta: str, ayuda: str, valor: str, filas: int = 2) -> 
 
 async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt: str | None = None,
                    pares_minimos: int = MIN_PREGUNTAS, nota: str = "", ver: str = "",
-                   confirmar: bool = False, vista: str = "", abrir: bool = False) -> HTMLResponse:
+                   confirmar: bool = False, vista: str = "", abrir: bool = False, buscar: str = "",
+                   hoja: int = 1) -> HTMLResponse:
     """Tu asistente. Tres vistas, cada una con su dirección: las conversaciones (/panel/asistente),
     "configura" (el formulario, /panel/asistente/configura) y "conexion". `aviso` sale arriba;
     `nota`, junto a las instrucciones (ahí deja la página "Generar instrucciones", con #instrucciones)."""
@@ -800,7 +811,7 @@ async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt
                   + ("" if estado_conexion == "ok" else
                      '<div class="aviso">Hay algo que revisar en tu conexión.'
                      ' <a class="enlace" href="/panel/asistente/conexion">Ver conexión</a></div>')
-                  + await recientes(c, ver))
+                  + await recientes(c, ver, buscar, hoja))
     return pagina(
         cabecera(salir=True, menu="asistente", cuenta=c, sub=vista or "chats", perfil=await usuario(c),
                  luces={"conexion": estado_conexion})
@@ -888,7 +899,8 @@ async def hoy(c: Cuenta) -> str:
     return f'<div class="hoy kpis">{"".join(cajas)}</div>'
 
 
-MAX_CHATS = 15
+MAX_CHATS = 500  # los más recientes que se pueden recorrer por páginas o buscar
+POR_HOJA = 10
 # "Abiertas": escribieron en las últimas 24 h (la ventana en que Instagram deja contestar) y el
 # asistente no está en pausa ahí. "Pidieron una persona": en pausa porque el asistente los pasó contigo.
 FILTROS = {"": "Todas", "abiertas": "Abiertas", "persona": "Pidieron una persona", "pausa": "En pausa",
@@ -896,9 +908,35 @@ FILTROS = {"": "Todas", "abiertas": "Abiertas", "persona": "Pidieron una persona
 VENTANA = 24 * 3600
 
 
-async def recientes(c: Cuenta, ver: str) -> str:
-    """Los últimos chats: quién los atiende y los botones para tomarlos, reactivarlos o abrirlos
-    en Instagram. Los que están en pausa salen siempre, aunque sean viejos."""
+def enlace_chats(ver: str, buscar: str = "", hoja: int = 1) -> str:
+    from urllib.parse import urlencode
+    q = urlencode({k: v for k, v in (("ver", ver), ("q", buscar), ("p", hoja if hoja > 1 else "")) if v})
+    return "/panel/asistente" + ("?" + q if q else "") + "#chats"
+
+
+def paginas(actual: int, total: int, ver: str, buscar: str) -> str:
+    """‹ 1 2 3 … 9 ›: la primera, la última y las de junto a la actual; lo demás, puntitos."""
+    if total <= 1:
+        return ""
+    numeros = sorted({1, total, *range(max(1, actual - 1), min(total, actual + 1) + 1)})
+    partes, antes = [], 0
+    for n in numeros:
+        if n - antes > 1:
+            partes.append('<span class="puntos">…</span>')
+        partes.append(f'<span class="on" aria-current="page">{n}</span>' if n == actual else
+                      f'<a href="{escape(enlace_chats(ver, buscar, n))}">{n}</a>')
+        antes = n
+
+    def flecha(n: int, signo: str, nombre: str) -> str:
+        return (f'<a href="{escape(enlace_chats(ver, buscar, n))}" aria-label="{nombre}">{signo}</a>'
+                if 1 <= n <= total else f'<span class="apagada" aria-hidden="true">{signo}</span>')
+    return (f'<nav class="paginas" aria-label="Páginas">{flecha(actual - 1, "‹", "Anterior")}'
+            f'{"".join(partes)}{flecha(actual + 1, "›", "Siguiente")}</nav>')
+
+
+async def recientes(c: Cuenta, ver: str, buscar: str = "", hoja: int = 1) -> str:
+    """Los últimos chats, de 10 en 10, con buscador: quién los atiende y los botones para tomarlos,
+    reactivarlos o abrirlos en Instagram. Los que están en pausa salen siempre, aunque sean viejos."""
     import asyncio
 
     from .store import MANUAL
@@ -926,6 +964,17 @@ async def recientes(c: Cuenta, ver: str) -> str:
     cuantos = {k: sum(en(f, k) for f in filas) for k in FILTROS}
     ver = ver if ver in FILTROS else ""
     filas = [f for f in filas if en(f, ver)]
+    buscar = buscar.strip()[:60]
+    if buscar:
+        # Busca en el @usuario (el que ya se conoce, sin preguntarle a Instagram) y en los mensajes.
+        conocidos = await asyncio.gather(*(c.store.get(f"username:{f[0]}") for f in filas))
+        b = buscar.lower().lstrip("@")
+        filas = [f for f, n in zip(filas, conocidos)
+                 if b in (n or "").lower() or b in f[3].lower() or b in f[4].lower()]
+    total = max(1, -(-len(filas) // POR_HOJA))
+    hoja = min(max(1, hoja), total)
+    encontrados = len(filas)
+    filas = filas[(hoja - 1) * POR_HOJA:hoja * POR_HOJA]
     with usar(c):
         nombres = await asyncio.gather(*(c.instagram.username(f[0]) for f in filas))
     etiquetas = {"pausa": ("En pausa · tú", "acento"), "persona": ("Pidió una persona", "rojo"),
@@ -956,13 +1005,23 @@ async def recientes(c: Cuenta, ver: str) -> str:
             '<form method="post" action="/panel/pausas" class="acciones-fila">'
             f'<input type="hidden" name="usuario" value="{escape(u)}">{botones}{abrir}</form></div>')
     filtros = "".join(
-        f'<a href="/panel/asistente{"?ver=" + k if k else ""}#chats" class="{"on" if k == ver else ""}">'
+        f'<a href="{escape(enlace_chats(k, buscar))}" class="{"on" if k == ver else ""}">'
         f'{nombre}{f" ({cuantos[k]})" if k else ""}</a>' for k, nombre in FILTROS.items())
     vacio = {"": "Aún no te escribe nadie. Aquí vas a ver tus chats en cuanto lleguen.",
              "abiertas": "Ninguna: nadie te ha escrito en las últimas 24 horas.",
              "persona": "Nadie: ningún chat está esperando a que le contestes tú.",
              "pausa": "Ninguno: tu asistente está contestando en todos tus chats.",
              "sin": "Ninguno: todos tus chats tienen respuesta."}[ver]
+    if buscar:
+        vacio = f"No encontramos chats con «{escape(buscar)}»."
+    busqueda = ('<form method="get" action="/panel/asistente#chats" class="buscar-chats" role="search">'
+                + (f'<input type="hidden" name="ver" value="{ver}">' if ver else "")
+                + f'<input type="search" name="q" value="{escape(buscar)}" placeholder="Buscar un cliente o un mensaje"'
+                ' aria-label="Buscar un cliente o un mensaje" maxlength="60">'
+                '<button class="boton secundario chico">Buscar</button>'
+                + (f'<a class="enlace" href="{escape(enlace_chats(ver))}">Borrar</a>' if buscar else "") + "</form>")
+    cuenta = (f'<p class="ayuda cuantos">{encontrados} {"chat" if encontrados == 1 else "chats"}'
+              + (f" · página {hoja} de {total}" if total > 1 else "") + "</p>") if encontrados else ""
     # Plegable (<details>): panel.js recuerda en el navegador si la cerró.
     resumen = (f"{cuantos['persona']} piden una persona" if cuantos["persona"] else
                f"{cuantos['pausa']} en pausa" if cuantos["pausa"] else f"{cuantos['']} chats")
@@ -970,8 +1029,9 @@ async def recientes(c: Cuenta, ver: str) -> str:
             f'<span class="resumen">{resumen}</span></summary>'
             f'<p class="ayuda">Lo último que te escribieron. "Tomar este chat" pausa al asistente ahí'
             f" {c.human_pause_hours:g} h para que contestes tú desde Instagram.</p>"
-            f'<div class="filtros">{filtros}</div>'
-            + ("".join(html) or f'<p class="ayuda vacio">{vacio}</p>') + "</details>")
+            f'<div class="filtros">{filtros}</div>{busqueda}{cuenta}'
+            + ("".join(html) or f'<p class="ayuda vacio">{vacio}</p>')
+            + paginas(hoja, total, ver, buscar) + "</details>")
 
 
 # La cuenta principal (la vendedora, la del .env) usa prompts/system.md, que vive en el
@@ -1175,7 +1235,9 @@ async def ver_asistente(request: Request):
     if q.get("vista") == "conexion":  # enlaces viejos
         return RedirectResponse("/panel/asistente/conexion", status_code=303)
     vista = "configura" if q.get("vista") == "configura" else ""
-    return await panel_de(c, ver=q.get("ver", ""), vista=vista, abrir=q.get("abrir") == "1") if c else entrar()
+    hoja = int(q["p"]) if q.get("p", "").isdigit() else 1
+    return await panel_de(c, ver=q.get("ver", ""), vista=vista, abrir=q.get("abrir") == "1",
+                          buscar=q.get("q", ""), hoja=hoja) if c else entrar()
 
 
 @router.get("/asistente/conexion")
