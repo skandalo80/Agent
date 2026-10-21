@@ -404,7 +404,7 @@ def generando(c: Cuenta, trabajo, volver: str, mensaje: str) -> StreamingRespons
 # --- páginas ---
 
 # Las secciones de Contenido (en el menú lateral); su nombre sale arriba de cada página.
-NOMBRE_SECCION = {"semana": "Esta semana", "calendario": "Calendario", "ideas": "Contenido sugerido",
+NOMBRE_SECCION = {"semana": "Esta semana", "campanas": "Campañas", "calendario": "Calendario", "ideas": "Contenido sugerido",
                   "nuevo": "Crear post", "marca": "Tu marca"}
 
 
