@@ -556,6 +556,14 @@ class Store:
         cur = await self.db.execute(f"SELECT {self.POST_FIELDS} FROM posts WHERE id = ?", (post_id,))
         return self._post(await cur.fetchone())
 
+    async def posts_by_id(self, ids: list[int]) -> dict[int, dict]:
+        """Varios posts de un jalón, por id (los que ya no existen no vienen)."""
+        if not ids:
+            return {}
+        cur = await self.db.execute(
+            f"SELECT {self.POST_FIELDS} FROM posts WHERE id IN ({','.join('?' * len(ids))})", tuple(ids))
+        return {p["id"]: p for p in map(self._post, await cur.fetchall())}
+
     async def posts(self, statuses: tuple[str, ...], due_before: float | None = None,
                     user_id: str | None = None) -> list[dict]:
         marks = ",".join("?" * len(statuses))

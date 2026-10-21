@@ -4,8 +4,10 @@ import io
 import json
 import os
 import re
+import time
 from collections import Counter
 from datetime import date, timedelta
+from functools import partial
 
 os.environ.update(IG_VERIFY_TOKEN="vt", IG_APP_SECRET="secreto", IG_ACCESS_TOKEN="tok", DB_PATH=":memory:")
 
@@ -265,3 +267,84 @@ def test_del_form():
     datos = campanas.del_form({"semanas": "9", "inicio": "mal", "t_dato": "1", "f_texto": "1", "f_carrusel": "1"})
     assert datos["semanas"] == 3 and datos["temas"] == ["dato"] and datos["formatos"] == ["texto"]
     assert campanas.falta_en(datos) == "Elige de 2 a 6 temas."
+
+
+def test_tus_campanas_y_reporte(cliente, monkeypatch):
+    """La campaña anterior pasa a Tus campañas y el reporte ordena sus posts por tasa de interacción."""
+    from igbot import informe
+
+    client, c, *_ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 4)
+    monkeypatch.setattr(informe, "_insights", {})
+    llamadas = []
+    import app as bot
+    fake = claude_de_campana(llamadas)
+
+    async def claude(prompt, system, **kw):
+        if "analista de redes" in system:
+            llamadas.append((prompt, system))
+            return json.dumps({"conclusiones": ["La foto sola ganó.", "Publica de noche.", "Aún es una señal."]})
+        return await fake(prompt, system, **kw)
+
+    monkeypatch.setattr(bot.agent, "run_claude", claude)
+    assert "Tus campañas" not in client.get("/panel/contenido/campanas").text
+
+    client.post("/panel/contenido/campanas", headers=ORIGEN, data=datos_campana())
+    client.post("/panel/contenido/campanas", headers=ORIGEN, data={"accion": "generar_todas"})
+    camp = leer(client, c)
+    # Se publicaron hace una semana; el de en medio, sin link (Instagram no lo regresó).
+    ids = [p["post_id"] for p in camp["posts"]]
+    hace = time.time() - 7 * 86400
+    for i, post_id in enumerate(ids):
+        client.portal.call(partial(c.store.update_post, post_id, publish_at=hace + i))
+        client.portal.call(c.store.set_post, post_id, "publicada", f"https://www.instagram.com/p/COD{i}/" if i != 1 else "")
+    client.portal.call(c.store.set, "media_de:https://www.instagram.com/p/COD0/", "m0")  # guardado al publicar
+
+    paginas = []
+
+    async def media_page(limit, after="", fields=""):  # COD2 es viejo: se busca en Instagram
+        paginas.append(fields)
+        return [{"id": "m2", "permalink": "https://www.instagram.com/p/COD2/"}], ""
+
+    async def media_insights(media_id):
+        return {"m0": {"reach": 100, "likes": 10, "comments": 0, "saved": 0, "shares": 0},
+                "m2": {"reach": 100, "likes": 10, "comments": 2, "saved": 2, "shares": 1}}[media_id]
+
+    monkeypatch.setattr(c.instagram, "media_page", media_page)
+    monkeypatch.setattr(c.instagram, "media_insights", media_insights, raising=False)
+
+    r = client.get("/panel/contenido/campanas")
+    assert "Tus campañas" in r.text and "3 posts publicados" in r.text and "Actual" in r.text
+
+    # Una campaña nueva: la de Otoño queda en el historial, con lo que se probó.
+    client.post("/panel/contenido/campanas", headers=ORIGEN, data=datos_campana(nueva="1", nombre="Navidad"))
+    pasadas = client.portal.call(informe.historial, c)
+    assert [x["nombre"] for x in pasadas] == ["Otoño"] and len(pasadas[0]["posts"]) == 3
+    r = client.get("/panel/contenido/campanas")
+    assert "Otoño" in r.text and "Navidad" in r.text and f'value="{pasadas[0]["id"]}" checked' in r.text
+    assert "Aún sin posts publicados" in r.text
+
+    def filas():
+        with usar(c):
+            return informe.filas(c, pasadas)
+    renglones = client.portal.call(filas)
+    assert [f["tasa"] for f in renglones] == [15.0, 10.0, None]  # (10 + 2 + 2 + 1) / 100; sin link, sin números
+    assert paginas == ["id,permalink"] and client.portal.call(c.store.get, "media_de:https://www.instagram.com/p/COD2/") == "m2"
+    assert all(f["maduro"] for f in renglones) and informe.por(renglones, "formato")[0][1] == 15.0
+
+    r = client.get(f"/panel/contenido/campanas/reporte?c={pasadas[0]['id']}")
+    assert r.headers["content-type"] == "application/pdf" and r.content.startswith(b"%PDF")
+    assert 'filename="reporte-otono.pdf"' in r.headers["content-disposition"]
+    assert "Foto" in llamadas[-1][0] or "titular" in llamadas[-1][0].lower()  # las conclusiones parten de los números
+    n = len(llamadas)
+    client.get(f"/panel/contenido/campanas/reporte?c={pasadas[0]['id']}")
+    assert len(llamadas) == n  # mismos números: no se le vuelve a preguntar a Claude
+
+    assert "Elige al menos una campaña" in client.get("/panel/contenido/campanas/reporte?c=999").text
+
+
+def test_tasa_de_interaccion():
+    from igbot import informe
+    assert informe.tasa({"reach": 200, "likes": 10, "comments": 5, "saved": 2, "shares": 1, "views": 900}) == 9.0
+    assert informe.tasa({"reach": 0, "likes": 3}) is None and informe.tasa(None) is None
+    assert [informe.franja(h) for h in ("09:00", "14:00", "20:00", "")] == ["manana", "mediodia", "noche", "noche"]

@@ -25,6 +25,8 @@ def _rgb(color: str) -> tuple[int, int, int]:
 class Cotizacion(FPDF):
     """Hoja carta con encabezado del negocio, pie de página y bloques de la cotización."""
 
+    etiqueta = "COTIZACIÓN"
+
     def __init__(self, negocio: str, contacto: str, folio: str, acento: str = ""):
         super().__init__(format="Letter")
         self.negocio, self.contacto, self.folio = negocio, contacto, folio
@@ -50,7 +52,7 @@ class Cotizacion(FPDF):
         self.cell(self.epw / 2, 6, self.negocio)
         self.font(8, color=GRIS)
         self.set_char_spacing(0.6)
-        self.cell(self.epw / 2, 6, "COTIZACIÓN", align="R", new_x="LMARGIN", new_y="NEXT")
+        self.cell(self.epw / 2, 6, self.etiqueta, align="R", new_x="LMARGIN", new_y="NEXT")
         self.set_char_spacing(0)
         self.font(9, color=GRIS)
         self.cell(self.epw / 2, 5, self.contacto)
