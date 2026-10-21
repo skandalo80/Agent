@@ -455,3 +455,14 @@ def test_repetir_completa_lo_poco_probado():
             "franja": [("noche", 6.0, 6)]}
     plan, resumen = campanas.repetir(18, gano, campanas.universo(0, gano), "equilibrado", 3)
     assert resumen["prueba"]["tema"] == ["marca"]  # 1 post: va antes que los nunca probados
+
+
+def test_otro_collage_cambia():
+    import random
+    azar = random.Random(1)
+    antes = ["a", "b"]
+    for fotos in (["a", "b"], ["a", "b", "c", "d", "e"]):
+        for _ in range(20):
+            nuevas = campanas.otro_collage(fotos, antes, azar)
+            assert nuevas != antes and 2 <= len(nuevas) <= 4 and set(nuevas) <= set(fotos)
+            antes = nuevas

@@ -465,6 +465,16 @@ def fotos_marca(c: Cuenta, marca: dict) -> list[str]:
     return [t for t in marca.get("fotos", []) if archivo(c, t).is_file()]
 
 
+def otro_collage(fotos: list[str], antes: list[str], azar: random.Random | None = None) -> list[str]:
+    """De 2 a 4 fotos de Tu marca en otro orden o con otras fotos que el collage anterior (para "Otra imagen")."""
+    azar = azar or random.Random()
+    for _ in range(12):
+        nuevas = azar.sample(fotos, azar.randint(MIN_FOTOS_COLLAGE, min(4, len(fotos))))
+        if nuevas != antes:
+            return nuevas
+    return nuevas
+
+
 async def generar_imagen(c: Cuenta, p: dict, extra: bool) -> int:
     """La pieza de un post de la campaña según su formato: crea (o actualiza) su post en borrador, como
     Crear post. Solo texto y collage se arman aquí, sin el generador ni el cupo."""
@@ -484,10 +494,12 @@ async def generar_imagen(c: Cuenta, p: dict, extra: bool) -> int:
             hecha = await imagenes.crear_local(c.store, PANEL, "texto", texto_imagen(pieza_, usuario), kit(marca),
                                                tema_de(p["tipo"])[0])
         elif formato == "collage":
-            fotos = fotos_marca(c, marca)[:4]
-            if len(fotos) < MIN_FOTOS_COLLAGE:
+            todas = fotos_marca(c, marca)
+            if len(todas) < MIN_FOTOS_COLLAGE:
                 raise imagenes.ErrorImagen(f"Para el collage sube al menos {MIN_FOTOS_COLLAGE} fotos de producto en"
                                            " Tu marca, o cambia el formato de este post.")
+            fotos = otro_collage(todas, p.get("collage") or [])
+            p["collage"] = fotos
             hecha = await imagenes.crear_local(c.store, PANEL, "collage", [archivo(c, t).read_bytes() for t in fotos])
         else:
             if libre(pieza_):
