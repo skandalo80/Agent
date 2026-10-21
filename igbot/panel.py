@@ -666,6 +666,8 @@ PRINCIPIO = (
     '<meta name="viewport" content="width=device-width, initial-scale=1">'
     '<meta name="robots" content="noindex"><meta name="referrer" content="same-origin">'
     '<meta name="theme-color" content="#0a0a0a">'
+    '<link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" href="/favicon-32.png" sizes="32x32">'
+    '<link rel="apple-touch-icon" href="/apple-touch-icon.png">'
     '<title>Tu asistente · Agentes IA by Skandar</title>'
     f"<style>{ESTILO}{FUENTES_CSS}</style>"
     # Solo JavaScript propio (CSP script-src 'self'): la vista previa al momento en Contenido.

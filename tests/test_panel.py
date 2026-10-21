@@ -21,6 +21,13 @@ REVISAR = panel.revisar_instrucciones  # la de verdad (conftest la cambia por un
 
 def test_404_sin_sesion():
     with TestClient(bot.app, base_url="https://testserver") as client:
+        # El ícono de la pestaña (el de skandar.online) y la raíz, que lleva al panel.
+        r = client.get("/favicon.ico")
+        assert r.status_code == 200 and r.headers["content-type"] == "image/x-icon"
+        assert client.get("/apple-touch-icon.png").headers["content-type"] == "image/png"
+        assert client.get("/", follow_redirects=False).headers["location"] == "/panel"
+        assert 'rel="icon" href="/favicon.ico"' in client.get("/panel").text
+        assert "privacidad" in client.get("/privacy").text
         r = client.get("/panel/contenido/nada")
         assert r.status_code == 404 and "Esta página no existe" in r.text and "Entrar a mi panel" in r.text
         assert client.get("/otra-cosa").json() == {"detail": "Not Found"}  # fuera del panel, igual que antes
