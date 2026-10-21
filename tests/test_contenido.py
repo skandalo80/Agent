@@ -468,7 +468,12 @@ def test_ajustes_y_conexion(cliente, monkeypatch):
     ajustes._revision.clear()
     r = client.get("/panel/asistente")
     assert 'id="ajustes"' in r.text and 'name="pausa" value="12" checked' in r.text
-    assert "Conexión" in r.text and "Recibiendo mensajes" in r.text and "Gasto de hoy" not in r.text
+    # Conexión es un botón de la barra (con su semáforo) que abre su propia vista.
+    assert re.search(r'href="/panel/asistente\?vista=conexion"><span class="semaforo sem-\w+"></span>Conexión', r.text)
+    assert "Recibiendo mensajes" not in r.text and 'id="conexion"' not in r.text
+    r = client.get("/panel/asistente?vista=conexion")
+    assert "Recibiendo mensajes" in r.text and 'id="ajustes"' not in r.text and "Gasto de hoy" not in r.text
+    assert 'secundario on" href="/panel/asistente">' in r.text  # pulsarlo otra vez regresa
     assert "Límite de gasto" not in r.text  # el gasto solo lo ve la cuenta principal
 
     datos = {"pausa": "24", "dias": ["1", "2", "3", "4", "5", "6"], "desde": "10:00", "hasta": "19:30",
@@ -501,6 +506,8 @@ def test_conexion_avisa_si_falta_el_permiso_de_estadisticas(cliente, monkeypatch
         raise RuntimeError("Instagram respondió 400")
     monkeypatch.setattr(c.instagram, "media_insights", sin_permiso, raising=False)
     r = client.get("/panel/asistente")
+    assert "Hay algo que revisar en tu conexión" in r.text and "sem-aviso" in r.text
+    r = client.get("/panel/asistente?vista=conexion")
     assert "Estadísticas: falta" in r.text and 'href="/conectar/instagram"' in r.text and "Hay algo que revisar" in r.text
 
 
@@ -634,3 +641,24 @@ def test_precio_escrito_y_fotos_para_ver_antes_de_generar(cliente, monkeypatch):
     assert "<precio_del_dueño>Desde $990 MXN</precio_del_dueño>" in llamadas[-1][0]
     p = client.portal.call(contenido.pieza, c.store, 1)
     assert p["precio"] == "Desde $990 MXN" and p["fotos"] == [token]
+
+
+def test_filtros_abiertas_y_pidieron_una_persona(cliente):
+    import time
+    client, c, *_ = cliente
+    store = c.store
+    client.portal.call(store.add_incoming, "beto", "m1", "¿Tienen lugar mañana?")
+    client.portal.call(store.add_incoming, "caro", "m2", "Quiero hablar con alguien")
+    # El asistente pasó a caro con una persona (pasar_a_humano): pausa + evento con el motivo.
+    client.portal.call(store.pause, "caro", time.time() + 12 * 3600)
+    client.portal.call(store.add_event, "caro", "humano", {"motivo": "Quiere negociar el precio"})
+    client.portal.call(store.pause, "dani", time.time() + 3600)  # este lo tomó el dueño
+
+    r = client.get("/panel/asistente")
+    assert "Abiertas (1)" in r.text and "Pidieron una persona (1)" in r.text and "En pausa (2)" in r.text
+    assert "1 piden una persona" in r.text
+    r = client.get("/panel/asistente?ver=persona")
+    assert "@caro" in r.text and "Pidió una persona" in r.text and "Motivo: Quiere negociar el precio" in r.text
+    assert "@beto" not in r.text and "@dani" not in r.text and "Reactivar" in r.text
+    r = client.get("/panel/asistente?ver=abiertas")
+    assert "@beto" in r.text and "@caro" not in r.text and "@dani" not in r.text

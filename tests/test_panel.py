@@ -169,7 +169,8 @@ def test_la_cuenta_principal_edita_sus_instrucciones_aparte(monkeypatch, tmp_pat
 
         r = client.get("/panel/asistente")
         assert "Cuenta principal" in r.text and "Generar instrucciones" in r.text and "PROMPT DEL VENDEDOR" in r.text
-        assert "Gasto de hoy" in r.text and "Mensajes este mes" not in r.text and "Límite de gasto" in r.text
+        assert "Gasto de hoy" in r.text and "Mensajes este mes" not in r.text
+        assert "Límite de gasto" in client.get("/panel/asistente?vista=conexion").text
         assert '<details class="tarjeta plegable" id="chats" open>' in r.text
         # Generar no pisa unas instrucciones escritas a mano sin preguntar.
         r = client.post("/panel/guardar", headers=ORIGEN,

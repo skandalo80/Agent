@@ -84,9 +84,9 @@ def tarjeta(c: Cuenta) -> str:
     dm = ('<label class="check"><input type="checkbox" name="aviso_dm" value="1"'
           f'{" checked" if c.aviso_dm else ""}> DM a mi Instagram personal</label>' if c.admin_ig_ids else "")
     return (
-        '<details class="tarjeta plegable" id="ajustes" open><summary><span class="num">Ajustes</span>'
-        f'<span class="resumen">Pausa de {c.human_pause_hours:g} h</span></summary>'
-        '<form method="post" action="/panel/ajustes"><h2>Cómo trabaja tu asistente</h2>'
+        # Va dentro de "Configura tu asistente", después del formulario de instrucciones (es otro form).
+        '<div class="tarjeta" id="ajustes"><span class="num">06</span><h2>Horario y avisos</h2>'
+        '<form method="post" action="/panel/ajustes#ajustes">'
         "<label>Cuando contestas tú un chat, el asistente se calla por</label>"
         f'<div class="chips">{pausas}</div>'
         '<p class="ayuda">Pasado ese tiempo vuelve a contestar solo. Siempre puedes reactivarlo antes desde'
@@ -110,7 +110,7 @@ def tarjeta(c: Cuenta) -> str:
         f"{dm}"
         f'<label class="check"><input type="checkbox" name="aviso_correo" value="1"{" checked" if c.aviso_correo else ""}>'
         f' Correo a <input type="email" name="correo" value="{escape(c.owner_email)}" aria-label="Correo"></label></div>'
-        '<div class="acciones"><button class="boton">Guardar ajustes</button></div></form></details>'
+        '<div class="acciones"><button class="boton">Guardar ajustes</button></div></form></div>'
     )
 
 
@@ -138,7 +138,8 @@ async def permiso_estadisticas(c: Cuenta) -> bool | None:
     return ok
 
 
-async def conexion(c: Cuenta) -> str:
+async def conexion(c: Cuenta) -> tuple[str, str]:
+    """(estado: ok, aviso o mal; la tarjeta). El estado colorea el botón Conexión del panel."""
     from . import limites
     ahora = time.time()
     filas = []
@@ -180,11 +181,10 @@ async def conexion(c: Cuenta) -> str:
              + (": el asistente no contesta hasta mañana" if lleno else ""))
     peor = "mal" if any(e == "mal" for e, _ in filas) else "aviso" if any(e == "aviso" for e, _ in filas) else "ok"
     titulo = {"ok": "Todo funcionando", "aviso": "Hay algo que revisar", "mal": "Algo no está funcionando"}[peor]
-    return (f'<details class="tarjeta plegable" id="conexion"{"" if peor == "ok" else " open"}>'
-            f'<summary><span class="num">Conexión</span><span class="resumen">{titulo}</span></summary>'
-            f"<h2>{titulo}</h2>"
-            '<p class="ayuda">Así sabes que tu asistente está recibiendo y contestando todo.</p>'
-            + "".join(h for _, h in filas) + "</details>")
+    return peor, ('<div class="tarjeta" id="conexion"><span class="num">Conexión</span>'
+                  f"<h2>{titulo}</h2>"
+                  '<p class="ayuda">Así sabes que tu asistente está recibiendo y contestando todo.</p>'
+                  + "".join(h for _, h in filas) + "</div>")
 
 
 @router.post("/ajustes")
@@ -198,4 +198,4 @@ async def guardar(request: Request):
     await c.store.set("ajustes", json.dumps(datos, ensure_ascii=False))
     aplicar(c, datos)
     log.info("@%s cambió sus ajustes desde el panel", await panel.usuario(c))
-    return await panel.panel_de(c, "Guardado: tu asistente ya trabaja con estos ajustes.")
+    return await panel.panel_de(c, "Guardado: tu asistente ya trabaja con estos ajustes.", abrir=True)
