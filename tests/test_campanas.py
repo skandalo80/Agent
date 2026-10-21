@@ -354,3 +354,104 @@ def test_clases_sin_choque():
     """Cada clase de CSS de Campañas se define en un solo bloque (fila-cam es la del formulario)."""
     from igbot import panel
     assert len(re.findall(r"^\.fila-cam\{", panel.ESTILO, re.M)) == 1 and ".hist-cam{" in panel.ESTILO
+
+
+def test_repetir_reparte_con_la_mezcla():
+    gano = {"tema": [("dato", 6.8, 3), ("pregunta", 5.9, 3), ("ensena", 4.1, 3), ("marca", 9.9, 1)],
+            "formato": [("foto", 6.2, 4), ("texto", 5.5, 4)], "franja": [("noche", 6.0, 6), ("manana", 3.9, 6)]}
+    universo = campanas.universo(0, gano)
+    plan, resumen = campanas.repetir(18, gano, universo, "equilibrado", 7)
+    temas = Counter(t for t, *_ in plan)
+    assert temas["dato"] == 13 and temas["pregunta"] == 4 and sum(temas.values()) == 18
+    assert "marca" not in resumen["repite"].values()  # 9.9 pero con 1 post: no cuenta como ganador
+    assert resumen["repite"] == {"tema": "dato", "formato": "foto", "franja": "noche"}
+    assert all(k not in ("dato", "pregunta") for k in resumen["prueba"]["tema"])
+    assert "collage" not in universo["formato"]  # sin fotos en Tu marca
+    nuevos = [p for p in plan if p[3] == "prueba"]
+    assert nuevos and len(nuevos) < 18 // 2
+
+    # Más seguro casi no prueba; en una dimensión sin ganador se sigue explorando todo.
+    plan, resumen = campanas.repetir(18, {**gano, "franja": [("noche", 6.0, 2)]}, universo, "seguro", 7)
+    assert Counter(t for t, *_ in plan)["dato"] == round(18 * .8)
+    assert "franja" not in resumen["repite"] and all(p[3] == "prueba" for p in plan)
+    assert {h for *_, h, _ in plan} == set(campanas.HORARIOS)
+
+
+def test_repetir_lo_que_funciono(cliente, monkeypatch):
+    """Con 12 posts con resultados se puede repetir: la forma que ganó, sin repetir asuntos ni preguntas."""
+    from igbot import informe
+
+    client, c, *_ = cliente
+    import app as bot
+    monkeypatch.setattr(c, "imagenes_mes", 40)
+    monkeypatch.setattr(informe, "_insights", {})
+    llamadas = []
+    fake = claude_de_campana(llamadas)
+
+    async def claude(prompt, system, **kw):  # todos dicen responder a una pregunta: solo 1 de cada 4 cuenta
+        texto = json.loads(await fake(prompt, system, **kw))
+        for p in texto.get("posts", []):
+            p["responde"] = "Leche vegetal" if "<lo_que_preguntan>" in prompt else ""
+        return json.dumps(texto)
+
+    monkeypatch.setattr(bot.agent, "run_claude", claude)
+
+    async def temas(c):
+        return {"temas": [{"tema": "Horario de fin de semana", "personas": 9, "objetivo": "", "ejemplo": "", "idea": ""},
+                          {"tema": "Leche vegetal", "personas": 5, "objetivo": "", "ejemplo": "", "idea": ""}],
+                "elogios": [], "mensajes": 30}
+
+    monkeypatch.setattr(campanas.semana, "temas", temas)
+
+    # Una campaña anterior con 12 posts publicados hace una semana: gana Dato curioso, en foto sola, de noche.
+    hace = time.time() - 7 * 86400
+    posts, numeros = [], {}
+    for i in range(12):
+        tema, formato, hora = (("dato", "foto", "20:00") if i % 2 else ("producto", "titular", "09:00"))
+        post_id = client.portal.call(c.store.add_post, "cafe", [], f"Post {i}", hace + i)
+        link = f"https://www.instagram.com/p/OLD{i}/"
+        client.portal.call(c.store.set_post, post_id, "publicada", link)
+        client.portal.call(c.store.set, f"media_de:{link}", f"m{i}")
+        numeros[f"m{i}"] = {"reach": 100, "likes": 8 if i % 2 else 2, "comments": 0, "saved": 0, "shares": 0}
+        posts.append({"post_id": post_id, "tipo": tema, "formato": formato, "hora": hora, "titulo": f"Asunto viejo {i}",
+                      "responde": "Horario de fin de semana" if i == 0 else ""})
+    client.portal.call(c.store.set, "campanas_pasadas", json.dumps(
+        [{"id": 1, "nombre": "Otoño", "inicio": "2026-09-07", "semanas": 2, "modo": "explorar", "posts": posts}]))
+
+    async def media_insights(media_id):
+        return numeros[media_id]
+
+    monkeypatch.setattr(c.instagram, "media_insights", media_insights, raising=False)
+
+    r = client.get("/panel/contenido/campanas")
+    assert 'name="modo" value="repetir">' in r.text and "Lo que funcionó en tus campañas" in r.text
+    assert "Señal media · 12 posts con resultados" in r.text and "8.0% · 6 posts" in r.text
+    assert 'name="mezcla" value="equilibrado" checked' in r.text and "tus 12 posts anteriores" in r.text
+
+    client.post("/panel/contenido/campanas", headers=ORIGEN,
+                data={**datos_campana(semanas="2", publicar="lun-sab", clientes="1"), "modo": "repetir",
+                      "mezcla": "equilibrado"})
+    prompt, sistema = llamadas[-1]
+    assert "<ya_publicado>\n- Asunto viejo 0" in prompt and "como máximo 3 posts" in sistema
+    assert "Leche vegetal" in prompt and "Horario de fin de semana" not in prompt  # ya la respondió
+    camp = leer(client, c)
+    assert camp["modo"] == "repetir" and len(camp["posts"]) == 12
+    assert Counter(p["tipo"] for p in camp["posts"])["dato"] == round(12 * .7)
+    assert {p["rol"] for p in camp["posts"]} == {"repite", "prueba"}
+    assert sum(1 for p in camp["posts"] if p["responde"]) == 3  # 12 posts: máximo 1 de cada 4
+    r = client.get("/panel/contenido/campanas")
+    assert "Repite:</span>" in r.text and "Sigue probando" in r.text and 'class="rol-cam rep">Repite' in r.text
+    assert "con lo que mejor le funcionó" in r.text
+
+    # Sin resultados suficientes no se puede repetir aunque lo pidan.
+    client.portal.call(c.store.set, "campanas_pasadas", "[]")
+    r = client.post("/panel/contenido/campanas", headers=ORIGEN,
+                    data={**datos_campana(nueva="1"), "modo": "repetir"})
+    assert "Todavía no hay resultados suficientes" in r.text
+
+
+def test_repetir_completa_lo_poco_probado():
+    gano = {"tema": [("dato", 6.8, 3), ("pregunta", 5.9, 3), ("marca", 9.9, 1)], "formato": [("foto", 6.2, 4)],
+            "franja": [("noche", 6.0, 6)]}
+    plan, resumen = campanas.repetir(18, gano, campanas.universo(0, gano), "equilibrado", 3)
+    assert resumen["prueba"]["tema"] == ["marca"]  # 1 post: va antes que los nunca probados
