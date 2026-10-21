@@ -78,10 +78,11 @@ document.querySelectorAll("details.plegable[id]").forEach((d) => {
 
 // Menú lateral: el botón « lo pliega a solo íconos (o lo fija abierto otra vez) y se acuerda en este navegador.
 // En el celular, la hamburguesa lo abre encima de la página; la × o tocar fuera lo cierran.
+// (menu.js ya lo dejó plegado antes de pintar la página, si así lo guardaste.)
 const raiz = document.documentElement;
-try { if (localStorage.getItem("menu:plegado") === "1") raiz.classList.add("menu-plegado"); } catch (e) { /* sin almacenamiento */ }
 document.querySelectorAll("[data-plegar]").forEach((b) => {
   b.addEventListener("click", () => {
+    raiz.classList.add("menu-anima");
     const plegado = raiz.classList.toggle("menu-plegado");
     try { localStorage.setItem("menu:plegado", plegado ? "1" : "0"); } catch (e) { /* sin almacenamiento */ }
   });

@@ -307,32 +307,34 @@ header .contenedor{display:flex;justify-content:space-between;align-items:center
 .salir:hover{color:var(--claro)}
 /* Menú lateral: fijo a la izquierda; plegado (html.menu-plegado) se queda en solo íconos;
    en el celular se esconde y lo abre la hamburguesa. Abajo, el menú de perfil. */
-body:has(>.lateral){padding-left:15rem}
-.lateral{position:fixed;inset:0 auto 0 0;width:15rem;background:var(--grafito);color:var(--claro);border-right:1px solid #2c2c2e;display:flex;flex-direction:column;padding:.9rem .75rem;z-index:30;transition:width .18s ease}
+body:has(>.lateral){padding-left:17rem}
+.lateral{position:fixed;inset:0 auto 0 0;width:17rem;background:var(--grafito);color:var(--claro);border-right:1px solid #2c2c2e;display:flex;flex-direction:column;padding:1rem .85rem;z-index:30}
+/* Solo anima al plegarlo con el botón (menu-anima), no al cargar cada página. */
+html.menu-anima .lateral{transition:width .18s ease}html.menu-anima body:has(>.lateral){transition:padding-left .18s ease}
 .lat-cabeza{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:0 .35rem .9rem;border-bottom:1px solid #333336;margin-bottom:.9rem}
 .lateral .marca{display:flex;align-items:center;gap:.6rem;color:var(--claro);overflow:hidden;line-height:1.15}
-.lateral .marca small{display:block;font-size:.72rem;font-weight:400;opacity:.6}
-.logo{flex:none;width:2rem;height:2rem;border-radius:.6rem;background:var(--claro);color:var(--negro);display:grid;place-items:center;font-weight:700}
+.lateral .marca{font-size:1.05rem}.lateral .marca small{display:block;font-size:.8rem;font-weight:400;opacity:.6}
+.logo{flex:none;width:2.4rem;height:2.4rem;border-radius:.7rem;font-size:1.1rem;background:var(--claro);color:var(--negro);display:grid;place-items:center;font-weight:700}
 .plegar,.cerrar{flex:none;background:none;border:0;color:var(--gris);cursor:pointer;padding:.3rem;border-radius:.5rem;display:grid;place-items:center;text-decoration:none;font-size:1.5rem;line-height:1}
 .plegar:hover,.cerrar:hover{color:var(--claro);background:#2c2c2e}
 .cerrar{display:none}
 .lat-nav{display:flex;flex-direction:column;gap:.2rem;flex:1;overflow-y:auto}
-.lat-item{display:flex;align-items:center;gap:.75rem;padding:.65rem .75rem;border-radius:.8rem;color:#a1a1a6;text-decoration:none;font:inherit;font-size:.95rem;background:none;border:0;cursor:pointer;width:100%;white-space:nowrap}
+.lat-item{display:flex;align-items:center;gap:.85rem;padding:.8rem .9rem;border-radius:.85rem;color:#a1a1a6;text-decoration:none;font:inherit;font-size:1.05rem;background:none;border:0;cursor:pointer;width:100%;white-space:nowrap}
 .lat-item svg{flex:none}
 .lat-item:hover{color:var(--claro);background:#28282a}
 .lat-item.on{color:var(--claro);background:#333336}
-.lat-sub{display:flex;flex-direction:column;margin:.15rem 0 .5rem 1.6rem;padding-left:.9rem;border-left:1px solid #3a3a3c}
-.lat-sub a{color:#a1a1a6;text-decoration:none;font-size:.88rem;padding:.4rem .6rem;border-radius:.6rem;white-space:nowrap}
+.lat-sub{display:flex;flex-direction:column;margin:.2rem 0 .6rem 1.85rem;padding-left:.9rem;border-left:1px solid #3a3a3c}
+.lat-sub a{color:#a1a1a6;text-decoration:none;font-size:.97rem;padding:.5rem .7rem;border-radius:.6rem;white-space:nowrap}
 .lat-sub a:hover,.lat-sub a.on{color:var(--claro);background:#2c2c2e}
 .lat-pie{border-top:1px solid #333336;padding-top:.75rem;margin:0}
-html.menu-plegado body:has(>.lateral){padding-left:4.5rem}
-html.menu-plegado .lateral{width:4.5rem}
+html.menu-plegado body:has(>.lateral){padding-left:5.25rem}
+html.menu-plegado .lateral{width:5.25rem}
 html.menu-plegado .lateral .txt,html.menu-plegado .lat-sub{display:none}
 html.menu-plegado .lat-cabeza{flex-direction:column}
 html.menu-plegado .plegar svg{transform:rotate(180deg)}
 .perfil{position:relative}
 .perfil>summary{list-style:none}.perfil>summary::-webkit-details-marker{display:none}
-.lat-avatar{flex:none;width:1.75rem;height:1.75rem;border-radius:50%;background:var(--acento);color:var(--blanco);display:grid;place-items:center;font-size:.8rem;font-weight:600;margin-left:-.1rem}
+.lat-avatar{flex:none;width:2rem;height:2rem;border-radius:50%;background:var(--acento);color:var(--blanco);display:grid;place-items:center;font-size:.8rem;font-weight:600;margin-left:-.1rem}
 .perfil .txt small{display:block;font-size:.75rem;color:var(--gris)}
 .perfil-menu{position:absolute;left:0;right:0;bottom:calc(100% + .4rem);background:#2c2c2e;border:1px solid #3a3a3c;border-radius:.9rem;padding:.35rem;box-shadow:0 12px 40px rgba(0,0,0,.5);display:flex;flex-direction:column}
 .perfil-menu a,.perfil-menu button{display:block;text-align:left;color:var(--claro);text-decoration:none;font:inherit;font-size:.9rem;padding:.55rem .75rem;border-radius:.6rem;background:none;border:0;cursor:pointer;width:100%}
@@ -345,7 +347,7 @@ header.movil{display:none}
 @media(max-width:900px){body:has(>.lateral),html.menu-plegado body:has(>.lateral){padding-left:0}
 header.movil{display:flex;align-items:center;gap:.9rem;height:3.25rem;padding:0 1.25rem;background:var(--negro);color:var(--claro);border-bottom:1px solid var(--linea-oscura)}
 .hamburguesa{display:flex;flex-direction:column;gap:4px;padding:.4rem}.hamburguesa span{width:20px;height:2px;background:var(--claro);border-radius:2px}
-.lateral,html.menu-plegado .lateral{width:16rem;transform:translateX(-100%);transition:transform .2s ease}
+.lateral,html.menu-plegado .lateral{width:17rem;transform:translateX(-100%);transition:transform .2s ease}
 html.menu-plegado .lateral .txt{display:inline}html.menu-plegado .lat-sub{display:flex}html.menu-plegado .lat-cabeza{flex-direction:row}
 html.menu-plegado .perfil-menu{left:0;right:0;bottom:calc(100% + .4rem);width:auto}
 .lateral:target,html.menu-abierto .lateral{transform:none}
@@ -596,6 +598,7 @@ FUENTES_CSS = "".join(
 
 # La versión de panel.js va en su dirección: al cambiar el archivo, el navegador no usa la vieja de su caché.
 VERSION_JS = hashlib.sha256((STATIC / "panel.js").read_bytes()).hexdigest()[:10]
+VERSION_MENU = hashlib.sha256((STATIC / "menu.js").read_bytes()).hexdigest()[:10]
 PRINCIPIO = (
     '<!doctype html><html lang="es"><head><meta charset="utf-8">'
     '<meta name="viewport" content="width=device-width, initial-scale=1">'
@@ -604,6 +607,8 @@ PRINCIPIO = (
     '<title>Tu asistente · Agentes IA by Skandar</title>'
     f"<style>{ESTILO}{FUENTES_CSS}</style>"
     # Solo JavaScript propio (CSP script-src 'self'): la vista previa al momento en Contenido.
+    # menu.js sin defer: pliega el menú antes de pintar la página (si no, se ve abrirse y cerrarse).
+    f'<script src="/panel/static/menu.js?v={VERSION_MENU}"></script>'
     f'<script src="/panel/static/panel.js?v={VERSION_JS}" defer></script></head><body>'
 )
 FINAL = "</body></html>"
@@ -620,7 +625,7 @@ MENU = {"resultados": ("Resultados", "/panel/resultados"), "asistente": ("Tu asi
 
 # Íconos del menú lateral (trazo simple, color del texto).
 def _icono(trazos: str) -> str:
-    return ('<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"'
+    return ('<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"'
             f' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{trazos}</svg>')
 
 
@@ -1380,6 +1385,12 @@ async def probar(request: Request):
 
 
 ARCHIVO_FUENTE = re.compile(r"^(Inter|Montserrat|Poppins|PlayfairDisplay|Lora)-(Regular|SemiBold|Bold)\.ttf$")
+
+
+@router.get("/static/menu.js")
+def script_menu():
+    return FileResponse(STATIC / "menu.js", media_type="text/javascript",
+                        headers={"Cache-Control": "public, max-age=31536000, immutable"})
 
 
 @router.get("/static/panel.js")
