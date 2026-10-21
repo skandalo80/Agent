@@ -118,6 +118,22 @@ class Instagram:
                                  fields="id,caption,media_type,media_url,thumbnail_url,permalink,timestamp")
         return data.get("data", [])
 
+    MEDIA_FIELDS = "id,caption,media_type,media_url,thumbnail_url,permalink,timestamp"
+
+    async def media_page(self, limit: int, after: str = "", fields: str = MEDIA_FIELDS) -> tuple[list[dict], str]:
+        """Una página de las publicaciones de la cuenta, de la más nueva a la más vieja, y el
+        cursor para pedir la siguiente ("" si ya no hay más)."""
+        data = await self._graph("GET", "me/media", limit=limit, fields=fields, **({"after": after} if after else {}))
+        paging = data.get("paging", {})
+        return data.get("data", []), paging.get("cursors", {}).get("after", "") if paging.get("next") else ""
+
+    async def media_count(self) -> int:
+        """Cuántas publicaciones tiene la cuenta."""
+        return int((await self._graph("GET", "me", fields="media_count")).get("media_count", 0))
+
+    async def media_info(self, media_id: str) -> dict:
+        return await self._graph("GET", media_id, fields="id,caption")
+
     async def subscribe(self, fields: str) -> None:
         """Suscribe esta cuenta a los avisos del webhook (p. ej. 'messages,comments')."""
         r = await self.http.post(
