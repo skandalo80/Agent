@@ -305,6 +305,44 @@ header .contenedor{display:flex;justify-content:space-between;align-items:center
 .marca{font-weight:600;font-size:.95rem;text-decoration:none;letter-spacing:-.01em}
 .salir{background:none;border:0;color:var(--gris);font:inherit;font-size:.85rem;cursor:pointer;padding:0}
 .salir:hover{color:var(--claro)}
+/* Menú lateral: fijo a la izquierda; plegado (html.menu-plegado) solo íconos y se abre al pasar
+   el mouse; en el celular se esconde y lo abre la hamburguesa. */
+body:has(>.lateral){padding-left:15rem}
+.lateral{position:fixed;inset:0 auto 0 0;width:15rem;background:var(--negro);color:var(--claro);border-right:1px solid var(--linea-oscura);display:flex;flex-direction:column;padding:.9rem .75rem;z-index:30;transition:width .18s ease}
+.lat-cabeza{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:0 .35rem .9rem;border-bottom:1px solid var(--linea-oscura);margin-bottom:.9rem}
+.lateral .marca{display:flex;align-items:center;gap:.6rem;color:var(--claro);overflow:hidden;line-height:1.15}
+.lateral .marca small{display:block;font-size:.72rem;font-weight:400;opacity:.6}
+.logo{flex:none;width:2rem;height:2rem;border-radius:.6rem;background:var(--claro);color:var(--negro);display:grid;place-items:center;font-weight:700}
+.plegar,.cerrar{flex:none;background:none;border:0;color:var(--gris);cursor:pointer;padding:.3rem;border-radius:.5rem;display:grid;place-items:center;text-decoration:none;font-size:1.5rem;line-height:1}
+.plegar:hover,.cerrar:hover{color:var(--claro);background:var(--grafito)}
+.cerrar{display:none}
+.lat-nav{display:flex;flex-direction:column;gap:.2rem;flex:1;overflow-y:auto}
+.lat-item{display:flex;align-items:center;gap:.75rem;padding:.65rem .75rem;border-radius:.8rem;color:#a1a1a6;text-decoration:none;font:inherit;font-size:.95rem;background:none;border:0;cursor:pointer;width:100%;white-space:nowrap}
+.lat-item svg{flex:none}
+.lat-item:hover{color:var(--claro);background:#161618}
+.lat-item.on{color:var(--claro);background:var(--grafito)}
+.lat-sub{display:flex;flex-direction:column;margin:.15rem 0 .5rem 1.6rem;padding-left:.9rem;border-left:1px solid var(--linea-oscura)}
+.lat-sub a{color:#a1a1a6;text-decoration:none;font-size:.88rem;padding:.4rem .6rem;border-radius:.6rem;white-space:nowrap}
+.lat-sub a:hover,.lat-sub a.on{color:var(--claro);background:#161618}
+.lat-pie{border-top:1px solid var(--linea-oscura);padding-top:.75rem;margin:0}
+html.menu-plegado body:has(>.lateral){padding-left:4.5rem}
+html.menu-plegado .lateral{width:4.5rem}
+html.menu-plegado .lateral .txt,html.menu-plegado .lat-sub{display:none}
+html.menu-plegado .lat-cabeza{flex-direction:column}
+html.menu-plegado .plegar svg{transform:rotate(180deg)}
+@media(hover:hover) and (min-width:901px){html.menu-plegado .lateral:hover{width:15rem;box-shadow:0 0 40px rgba(0,0,0,.45)}
+html.menu-plegado .lateral:hover .txt{display:inline}html.menu-plegado .lateral:hover .lat-sub{display:flex}
+html.menu-plegado .lateral:hover .lat-cabeza{flex-direction:row}}
+header.movil{display:none}
+.velo{display:none}
+@media(max-width:900px){body:has(>.lateral),html.menu-plegado body:has(>.lateral){padding-left:0}
+header.movil{display:flex;align-items:center;gap:.9rem;height:3.25rem;padding:0 1.25rem;background:var(--negro);color:var(--claro);border-bottom:1px solid var(--linea-oscura)}
+.hamburguesa{display:flex;flex-direction:column;gap:4px;padding:.4rem}.hamburguesa span{width:20px;height:2px;background:var(--claro);border-radius:2px}
+.lateral,html.menu-plegado .lateral{width:16rem;transform:translateX(-100%);transition:transform .2s ease}
+html.menu-plegado .lateral .txt{display:inline}html.menu-plegado .lat-sub{display:flex}html.menu-plegado .lat-cabeza{flex-direction:row}
+.lateral:target,html.menu-abierto .lateral{transform:none}
+.lateral:target~.velo,html.menu-abierto .velo{display:block;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:20}
+.plegar{display:none}.cerrar{display:grid}}
 .oscuro{background:var(--negro);color:var(--claro)}
 .portada{padding:5rem 0 4rem}
 .entrar{min-height:calc(100vh - 3.25rem);display:flex;align-items:center;text-align:center}
@@ -570,18 +608,65 @@ MENU = {"resultados": ("Resultados", "/panel/resultados"), "asistente": ("Tu asi
         "contenido": ("Contenido", "/panel/contenido")}
 
 
-def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None) -> str:
-    """`menu`: la sección en la que está. Contenido sale solo si el plan de `cuenta` lo tiene."""
+# Íconos del menú lateral (trazo simple, color del texto).
+def _icono(trazos: str) -> str:
+    return ('<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"'
+            f' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{trazos}</svg>')
+
+
+ICONOS = {
+    "resultados": _icono('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'),
+    "asistente": _icono('<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/>'),
+    "contenido": _icono('<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/>'
+                        '<path d="m21 15-5-5L5 21"/>'),
+    "salir": _icono('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>'),
+    "plegar": _icono('<path d="m11 17-5-5 5-5M18 17l-5-5 5-5"/>'),
+}
+SUBMENU = {
+    "asistente": [("chats", "Conversaciones", "/panel/asistente#chats"),
+                  ("configura", "Configura tu asistente", "/panel/asistente#configura"),
+                  ("conexion", "Conexión", "/panel/asistente?vista=conexion"),
+                  ("probar", "Probar mi asistente", "/panel/probar#ultimo")],
+    "contenido": [("semana", "Esta semana", "/panel/contenido/semana"), ("calendario", "Calendario", "/panel/contenido"),
+                  ("ideas", "Comentarios y DMs", "/panel/contenido/ideas"),
+                  ("nuevo", "Crear post", "/panel/contenido/nuevo"), ("marca", "Tu marca", "/panel/contenido/marca")],
+}
+
+
+def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None, sub: str = "") -> str:
+    """Con `menu` (la sección en la que está): el menú lateral, plegable a solo íconos y con el
+    botón de hamburguesa en el celular. Contenido sale solo si el plan de `cuenta` lo tiene.
+    Sin menú (la entrada y las páginas de espera): la barra de arriba de siempre."""
     boton = ('<form method="post" action="/panel/salir"><button class="salir">Salir</button></form>'
              if salir else "")
-    enlaces = "".join(f'<a href="{href}"{ACTIVA if k == menu else ""}>{nombre}</a>'
-                      for k, (nombre, href) in MENU.items()
-                      if k != "contenido" or cuenta is None or cuenta.imagenes_mes > 0)
     # Con sesión, el logo lleva al inicio del panel; sin sesión, a la página principal.
     inicio_marca = "/panel" if salir else config.SITE_URL
-    return (f'<header><div class="contenedor"><a class="marca" href="{inicio_marca}">Agentes IA by Skandar</a>'
-            + (f'<nav class="menu">{enlaces}</nav>' if menu else "")
-            + f"{boton}</div></header>")
+    if not menu:
+        return (f'<header><div class="contenedor"><a class="marca" href="{inicio_marca}">Agentes IA by Skandar</a>'
+                f"{boton}</div></header>")
+    secciones = []
+    for k, (nombre, href) in MENU.items():
+        if k == "contenido" and cuenta is not None and cuenta.imagenes_mes <= 0:
+            continue
+        secciones.append(f'<a class="lat-item{" on" if k == menu else ""}" href="{href}" title="{nombre}">'
+                         f'{ICONOS[k]}<span class="txt">{nombre}</span></a>')
+        if k == menu and k in SUBMENU:
+            secciones.append('<div class="lat-sub">' + "".join(
+                f'<a href="{h}"{ACTIVA if s == sub else ""}>{n}</a>' for s, n, h in SUBMENU[k]) + "</div>")
+    # Sin JavaScript también abre en el celular: la hamburguesa apunta a #lateral (:target).
+    return (
+        '<header class="movil"><a class="hamburguesa" href="#lateral" aria-label="Abrir menú">'
+        '<span></span><span></span><span></span></a>'
+        '<a class="marca" href="/panel">Agentes IA by Skandar</a></header>'
+        '<aside class="lateral" id="lateral"><div class="lat-cabeza">'
+        '<a class="marca" href="/panel"><span class="logo">S</span><span class="txt">Agentes IA<small>by Skandar</small></span></a>'
+        f'<button class="plegar" type="button" data-plegar aria-label="Plegar o fijar el menú" title="Plegar o fijar">'
+        f'{ICONOS["plegar"]}</button><a class="cerrar" href="#" aria-label="Cerrar menú">×</a></div>'
+        f'<nav class="lat-nav">{"".join(secciones)}</nav>'
+        '<form method="post" action="/panel/salir" class="lat-pie"><button class="lat-item" title="Salir">'
+        f'{ICONOS["salir"]}<span class="txt">Salir</span></button></form></aside>'
+        '<a class="velo" href="#" aria-label="Cerrar menú"></a>'
+    )
 
 
 def entrar() -> HTMLResponse:
@@ -632,7 +717,7 @@ async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt
                   + _formulario(c, datos, prompt, pares_minimos, nota, confirmar, await ayudas_restantes(c))
                   + ajustes.tarjeta(c) + "</details>")
     return pagina(
-        cabecera(salir=True, menu="asistente", cuenta=c)
+        cabecera(salir=True, menu="asistente", cuenta=c, sub=vista)
         + '<section class="oscuro portada compacta"><div class="contenedor">'
         '<p class="antetitulo">Tu asistente</p>'
         f'<h1>@{escape(await usuario(c))}<span class="punto">.</span></h1>'
@@ -1186,7 +1271,7 @@ async def prueba_inicio(c: Cuenta, mensajes: list[list[str]], aviso: str = "") -
         '<p class="vacio">Escribe como si fueras un cliente. Usa las instrucciones que guardaste.</p>')
     return (
         PRINCIPIO
-        + cabecera(salir=True, menu="asistente", cuenta=c)
+        + cabecera(salir=True, menu="asistente", cuenta=c, sub="probar")
         + '<section class="oscuro portada compacta"><div class="contenedor">'
         '<p class="antetitulo">Prueba tu asistente</p>'
         f'<h1>@{escape(await usuario(c))}<span class="punto">.</span></h1>'
