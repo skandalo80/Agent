@@ -85,7 +85,8 @@ def tarjeta(c: Cuenta) -> str:
           f'{" checked" if c.aviso_dm else ""}> DM a mi Instagram personal</label>' if c.admin_ig_ids else "")
     return (
         # Va dentro de "Configura tu asistente", después del formulario de instrucciones (es otro form).
-        '<div class="tarjeta" id="ajustes"><span class="num">06</span><h2>Horario y avisos</h2>'
+        '<details class="tarjeta plegable seccion" id="ajustes" open><summary><span class="titulo-sec">'
+        '<span class="num">06</span><h2>Horario y avisos</h2></span></summary>'
         '<form method="post" action="/panel/ajustes#ajustes">'
         "<label>Cuando contestas tú un chat, el asistente se calla por</label>"
         f'<div class="chips">{pausas}</div>'
@@ -110,7 +111,7 @@ def tarjeta(c: Cuenta) -> str:
         f"{dm}"
         f'<label class="check"><input type="checkbox" name="aviso_correo" value="1"{" checked" if c.aviso_correo else ""}>'
         f' Correo a <input type="email" name="correo" value="{escape(c.owner_email)}" aria-label="Correo"></label></div>'
-        '<div class="acciones"><button class="boton">Guardar ajustes</button></div></form></div>'
+        '<div class="acciones"><button class="boton">Guardar ajustes</button></div></form></details>'
     )
 
 

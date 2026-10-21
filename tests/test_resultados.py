@@ -1,6 +1,7 @@
 """Resultados en el panel: números de las conversaciones, gráficas y bloque de contenido."""
 import os
 import time
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -24,26 +25,46 @@ def t(dia: int, hora: int, minuto: int = 0, segundo: int = 0) -> float:
     return datetime(2026, 10, dia, hora, minuto, segundo, tzinfo=MX).timestamp()
 
 
-def test_conversaciones_tiempos_horario_y_personas(monkeypatch):
+def test_conversaciones_tiempos_horario_y_personas(monkeypatch, tmp_path):
+    import asyncio
+
+    from igbot.store import MANUAL, Store
     c = cuenta()
     monkeypatch.setattr(c, "business_hours", "09:00-18:00")
     monkeypatch.setattr(c, "business_days", [1, 2, 3, 4, 5])
     filas = [
-        ("ana", "user", t(19, 10), 0),  # lunes 10:00, en horario
-        ("ana", "user", t(19, 10, 0, 5), 0),  # se juntan: cuenta desde el primero
-        ("ana", "assistant", t(19, 10, 0, 20), 0),
-        ("beto", "user", t(19, 23), 0),  # lunes 23:00, fuera de horario
-        ("beto", "assistant", t(19, 23, 1), 0),
-        ("carla", "user", t(25, 12), 0),  # domingo: fuera de horario
-        ("carla", "assistant", t(25, 12, 0, 40), 1),  # la atendió una persona
-        ("dani", "assistant", t(20, 9), 0),  # DM por un comentario: no responde a nada
+        ("ana", "user", t(19, 10), "hola"),  # lunes 10:00, en horario
+        ("ana", "user", t(19, 10, 0, 5), "?"),  # se juntan: cuenta desde el primero
+        ("ana", "assistant", t(19, 10, 0, 20), "hola"),
+        ("beto", "user", t(19, 23), "hola"),  # lunes 23:00, fuera de horario
+        ("beto", "assistant", t(19, 23, 1), "hola"),
+        ("carla", "user", t(25, 12), "hola"),  # domingo: fuera de horario
+        ("carla", "assistant", t(25, 12, 0, 40), MANUAL + " ya voy"),  # la atendió una persona
+        ("dani", "assistant", t(20, 9), "info"),  # DM por un comentario: no responde a nada
+        ("eva", "user", t(18, 10), "antes"),  # antes del periodo: no cuenta
+        ("admin:yo", "user", t(19, 11), "prueba"),  # el dueño probando: no cuenta
     ]
-    d = resultados.conversaciones(filas, c, datetime(2026, 10, 19, tzinfo=MX), 7)
+
+    async def calcular():
+        store = Store(str(tmp_path / "x.db"))
+        await store.open()
+        await store.db.executemany("INSERT INTO messages (user_id, role, text, created_at) VALUES (?, ?, ?, ?)",
+                                   [(u, r, x, ts) for u, r, ts, x in filas])
+        await store.db.commit()
+        # De 2 en 2 para probar que se recorren por partes.
+        d = await resultados.conversaciones(store.message_times(t(19, 0), t(26, 0), chunk=2), c,
+                                            datetime(2026, 10, 19, tzinfo=MX), 7)
+        await store.close()
+        return d
+
+    d = asyncio.run(calcular())
+    assert d["escribieron"] == {"ana", "beto", "carla"} and d["contestados"] == 3 and d["chats_contestados"] == 3
     assert d["por_dia"] == [3, 0, 0, 0, 0, 0, 1]
     assert d["por_hora"][10] == 2 and d["por_hora"][23] == 1 and d["por_hora"][12] == 1
     assert d["respuesta"] == 40  # mediana de 20 s y 60 s (la de la persona no cuenta)
     assert d["fuera"] == 1  # solo la de beto: a carla no le contestó el asistente
     assert d["a_mano"] == {"carla"}
+    assert resultados.mediana(Counter({5: 1, 9: 2, 100: 1})) == 9 and resultados.mediana(Counter()) is None
     assert resultados.dias_de_horario(c) == "lun–vie 9:00–18:00"
 
 

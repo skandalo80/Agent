@@ -374,7 +374,7 @@ def generando(c: Cuenta, trabajo, volver: str, mensaje: str) -> StreamingRespons
     """Sin JavaScript: primero la página con "generando…" y, al terminar, el salto al editor."""
 
     async def partes():
-        yield (panel.PRINCIPIO + panel.cabecera(salir=True, menu="contenido", cuenta=c, perfil=await panel.usuario(c))
+        yield (panel.PRINCIPIO + panel.cabecera(salir=True, menu="contenido", cuenta=c, perfil=await panel.usuario(c), foto=await panel.foto_perfil(c))
                + '<main><div class="contenedor"><div class="tarjeta" id="generando"><div class="generando">'
                '<div class="escribiendo"><span></span><span></span><span></span></div>'
                f"<div><h2>{escape(mensaje)}</h2>"
@@ -439,7 +439,7 @@ async def pagina(c: Cuenta, actual: str, bajada: str, cuerpo: str, aviso: str = 
     crear = ("" if actual == "nuevo" else
              '<a class="boton secundario ajuste" href="/panel/contenido/nuevo">+ Crear post</a>')
     return panel.pagina(
-        panel.cabecera(salir=True, menu="contenido", cuenta=c, sub=actual, perfil=await panel.usuario(c))
+        panel.cabecera(salir=True, menu="contenido", cuenta=c, sub=actual, perfil=await panel.usuario(c), foto=await panel.foto_perfil(c))
         + f'<section class="oscuro portada compacta{"" if con_resumen else " delgada"}"><div class="contenedor">'
         f'<p class="antetitulo">Contenido · {NOMBRE_SECCION.get(actual, "Calendario")}</p>'
         f'<div class="titulo-fila"><h1>@{escape(await panel.usuario(c))}<span class="punto">.</span></h1>{crear}</div>'

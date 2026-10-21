@@ -25,6 +25,8 @@ from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.exception_handlers import http_exception_handler
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 
 from igbot import (admin, agent, ajustes, botones, comentarios, conectar, config, contenido, limites, panel, reporte, resultados,
@@ -248,6 +250,13 @@ if not config.CLIENTE:
     app.include_router(contenido.router)
     app.include_router(semana.router)
     app.include_router(resultados.router)
+
+    @app.exception_handler(StarletteHTTPException)
+    async def pagina_404(request: Request, exc: StarletteHTTPException):
+        """En el panel, una página 404 de verdad (con su menú) en vez del JSON de FastAPI."""
+        if exc.status_code == 404 and request.url.path.startswith(("/panel", "/conectar")):
+            return await panel.no_encontrada(request)
+        return await http_exception_handler(request, exc)
 
 
 @app.get("/health")

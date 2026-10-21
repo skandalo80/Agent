@@ -534,13 +534,20 @@ def test_ajustes_y_conexion(cliente, monkeypatch):
     r = client.get("/panel/asistente")
     assert 'id="ajustes"' not in r.text  # Horario y avisos va en Configura
     # Conexión va en el menú lateral (con su semáforo) y abre su propia vista.
-    assert re.search(r'href="/panel/asistente/conexion">Conexión <span class="semaforo sem-\w+"></span>', r.text)
+    assert re.search(r'href="/panel/conexion">Conexión <span class="semaforo sem-\w+"></span>', r.text)
     assert "Recibiendo mensajes" not in r.text and 'id="conexion"' not in r.text
-    r = client.get("/panel/asistente/conexion")
+    r = client.get("/panel/conexion")
     assert "Recibiendo mensajes" in r.text and 'id="ajustes"' not in r.text and "Gasto de hoy" not in r.text
-    assert '<a href="/panel/asistente/conexion" class="on">' in r.text and "compacta delgada" in r.text
+    assert '<a href="/panel/conexion" class="on">' in r.text and "compacta delgada" in r.text
     assert "Volver a tus conversaciones" not in r.text
-    assert client.get("/panel/asistente?vista=conexion", follow_redirects=False).headers["location"] == "/panel/asistente/conexion"
+    assert client.get("/panel/asistente?vista=conexion", follow_redirects=False).headers["location"] == "/panel/conexion"
+    # Ya no está en el submenú de Tu asistente: vive en el menú de tu cuenta, abajo.
+    assert "Tu cuenta · Conexión" in r.text and 'class="lat-item on"' not in r.text
+    assert r.text.index('href="/panel/conexion"') > r.text.index('class="perfil"')
+    assert client.get("/panel/asistente/conexion", follow_redirects=False).headers["location"] == "/panel/conexion"
+    # Una dirección que no existe: página 404 con el menú, no el JSON de FastAPI.
+    r = client.get("/panel/no-existe")
+    assert r.status_code == 404 and "Esta página no existe" in r.text and 'class="perfil"' in r.text
     assert "Límite de gasto" not in r.text  # el gasto solo lo ve la cuenta principal
 
     datos = {"pausa": "24", "dias": ["1", "2", "3", "4", "5", "6"], "desde": "10:00", "hasta": "19:30",
@@ -574,7 +581,7 @@ def test_conexion_avisa_si_falta_el_permiso_de_estadisticas(cliente, monkeypatch
     monkeypatch.setattr(c.instagram, "media_insights", sin_permiso, raising=False)
     r = client.get("/panel/asistente")
     assert "Hay algo que revisar en tu conexión" in r.text and "sem-aviso" in r.text
-    r = client.get("/panel/asistente/conexion")
+    r = client.get("/panel/conexion")
     assert "Estadísticas: falta" in r.text and 'href="/conectar/instagram"' in r.text and "Hay algo que revisar" in r.text
 
 
@@ -766,8 +773,11 @@ def test_identidad_de_marca(cliente, monkeypatch):
     assert "Listo: guardamos tu logo." in r.text and 'alt="Tu logo"' in r.text
     logo = client.portal.call(contenido.marca_de, c)["logo"]
     assert contenido.archivo(c, logo).is_file()
+    # También sale en el círculo de tu cuenta, abajo en el menú lateral, en todas las páginas.
+    assert f'<img class="lat-avatar" src="/media/{c.media_slug}/{logo}.jpg?v=' in client.get("/panel/asistente").text
     r = client.post("/panel/contenido/marca", headers=ORIGEN, data={"accion": "quitar_logo"})
     assert "quitamos tu logo" in r.text and not contenido.archivo(c, logo).is_file()
+    assert '<img class="lat-avatar"' not in r.text and '<span class="lat-avatar">' in r.text
 
 
 def test_menu_lateral_despliega_secciones(cliente, monkeypatch):

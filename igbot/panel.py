@@ -284,6 +284,17 @@ async def usuario(c: Cuenta) -> str:
     return await c.store.get("account_username") or c.slug
 
 
+async def foto_perfil(c: Cuenta) -> str:
+    """La dirección del logo de Tu marca (para el menú lateral), o "" si no hay."""
+    import json
+    from pathlib import Path
+    token = json.loads(await c.store.get("marca") or "{}").get("logo", "")
+    path = Path(c.media_dir) / f"{token}.jpg"
+    if not token or not path.is_file():
+        return ""
+    return f"/media/{c.media_slug}/{token}.jpg?v={int(path.stat().st_mtime)}"
+
+
 def prompt_actual(c: Cuenta) -> str:
     path = c.ruta_prompt()
     return path.read_text(encoding="utf-8") if path.is_file() else ""
@@ -334,7 +345,7 @@ html.menu-plegado .lat-cabeza{flex-direction:column}
 html.menu-plegado .plegar svg{transform:rotate(180deg)}
 .perfil{position:relative}
 .perfil>summary{list-style:none}.perfil>summary::-webkit-details-marker{display:none}
-.lat-avatar{flex:none;width:2rem;height:2rem;border-radius:50%;background:var(--acento);color:var(--blanco);display:grid;place-items:center;font-size:.8rem;font-weight:600;margin-left:-.1rem}
+.lat-avatar{flex:none;width:2rem;height:2rem;border-radius:50%;object-fit:cover;background:var(--acento);color:var(--blanco);display:grid;place-items:center;font-size:.8rem;font-weight:600;margin-left:-.1rem}
 .perfil .txt small{display:block;font-size:.75rem;color:var(--gris)}
 .perfil-menu{position:absolute;left:0;right:0;bottom:calc(100% + .4rem);background:#2c2c2e;border:1px solid #3a3a3c;border-radius:.9rem;padding:.35rem;box-shadow:0 12px 40px rgba(0,0,0,.5);display:flex;flex-direction:column}
 .perfil-menu a,.perfil-menu button{display:block;text-align:left;color:var(--claro);text-decoration:none;font:inherit;font-size:.9rem;padding:.55rem .75rem;border-radius:.6rem;background:none;border:0;cursor:pointer;width:100%}
@@ -543,9 +554,11 @@ details.mas{margin-top:1rem}details.mas summary{cursor:pointer;color:var(--acent
 .detalle summary::after{content:"›";margin-left:.35rem;display:inline-block;transition:transform .15s}.detalle[open] summary::after{transform:rotate(90deg)}
 .detalle p{margin:.45rem 0}.detalle .texto-post{white-space:pre-wrap}
 .chip.acento{background:#fff4ed;color:var(--acento);border-color:transparent}
-/* Cada objetivo de post con su color: tonos suaves de la misma familia, para distinguirlos de un vistazo. */
-.chip.obj-estrella{background:#fdf3e1;color:#a5590a}.chip.obj-crecer{background:#fdeef0;color:#b4344d}
-.chip.obj-explicar{background:#f2eefb;color:#6b4fb0}.chip.obj-historia{background:#e8f4f3;color:#2f7a78}
+/* Cada objetivo de post en lila, con una diferencia muy sutil entre ellos: el color fuerte es del
+   estado (publicado, programado, borrador), no del objetivo. */
+.chip.obj-marca{background:#f5f2fb;color:#6e5aa0}.chip.obj-estrella{background:#f1ecfa;color:#634c98}
+.chip.obj-crecer{background:#eee8f8;color:#5b4492}.chip.obj-explicar{background:#f3effa;color:#68539c}
+.chip.obj-historia{background:#f6f3fb;color:#7462a4}
 .titulo-seccion{display:flex;justify-content:space-between;align-items:flex-end;gap:1rem;margin-bottom:1rem}
 .titulo-seccion h2{margin:0}
 .acciones-fila{display:flex;gap:.5rem;flex:none}
@@ -601,6 +614,9 @@ label.check input[type=email]{flex:1;max-width:22rem;margin:0}
 .plegable[open] summary::after{transform:rotate(-135deg);margin-bottom:-.2rem}
 .plegable summary .resumen{margin-left:auto;color:#6e6e73;font-size:.85rem}
 .plegable[open] summary{margin-bottom:1rem}
+.seccion summary .titulo-sec .num{margin:0 0 .35rem}.seccion summary h2{margin:0}
+.guardar-todo{position:sticky;bottom:1rem;z-index:2;align-items:center;gap:1rem;margin:1.25rem 0;padding:.9rem 1.25rem;background:var(--blanco);border:1px solid var(--linea-clara);border-radius:999px;box-shadow:0 6px 24px rgba(0,0,0,.08)}
+.guardar-todo .ayuda{margin:0}
 .grupo>summary{background:var(--blanco);border-radius:1.5rem;padding:1.5rem 2rem;margin-bottom:1.25rem}
 .grupo>summary .num{margin-bottom:.2rem}.grupo>summary .resumen{display:block;margin:0;font-size:.95rem}
 .grupo[open]>summary{margin-bottom:1.25rem}
@@ -687,7 +703,6 @@ ICONOS = {
 SUBMENU = {
     "asistente": [("chats", "Conversaciones", "/panel/asistente"),
                   ("configura", "Configura tu asistente", "/panel/asistente/configura"),
-                  ("conexion", "Conexión", "/panel/asistente/conexion"),
                   ("probar", "Probar mi asistente", "/panel/probar#ultimo")],
     "contenido": [("semana", "Esta semana", "/panel/contenido/semana"), ("calendario", "Calendario", "/panel/contenido"),
                   ("ideas", "Comentarios y DMs", "/panel/contenido/ideas"),
@@ -696,11 +711,12 @@ SUBMENU = {
 
 
 def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None, sub: str = "",
-             perfil: str = "", luces: dict[str, str] | None = None) -> str:
+             perfil: str = "", luces: dict[str, str] | None = None, foto: str = "") -> str:
     """Con `menu` (la sección en la que está): el menú lateral, plegable a solo íconos y con el
     botón de hamburguesa en el celular. Contenido sale solo si el plan de `cuenta` lo tiene.
     Con `perfil` (su @usuario), abajo va su menú de perfil en vez de solo Salir.
-    `luces`: un semáforo junto a una parte del submenú (p. ej. {"conexion": "ok"}).
+    `luces`: un semáforo junto a una parte del submenú o del menú de perfil (p. ej. {"conexion": "ok"}).
+    `sub` también marca la parte activa del menú de perfil (Conexión vive ahí).
     Sin menú (la entrada y las páginas de espera): la barra de arriba de siempre."""
     boton = ('<form method="post" action="/panel/salir"><button class="salir">Salir</button></form>'
              if salir else "")
@@ -733,25 +749,30 @@ def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None, 
         f'<button class="plegar" type="button" data-plegar aria-label="Plegar o fijar el menú" title="Plegar o fijar">'
         f'{ICONOS["plegar"]}</button><a class="cerrar" href="#" aria-label="Cerrar menú">×</a></div>'
         f'<nav class="lat-nav">{"".join(secciones)}</nav>'
-        + menu_perfil(perfil, cuenta) + '</aside>'
+        + menu_perfil(perfil, cuenta, foto, sub, luces or {}) + '</aside>'
         '<a class="velo" href="#" aria-label="Cerrar menú"></a>'
     )
 
 
-def menu_perfil(perfil: str, cuenta: Cuenta | None) -> str:
+def menu_perfil(perfil: str, cuenta: Cuenta | None, foto: str = "", sub: str = "",
+                luces: dict[str, str] | None = None) -> str:
     salir = ('<form method="post" action="/panel/salir"{}><button class="{}" title="Salir">{}</button></form>')
     if not perfil:
         return salir.format(' class="lat-pie"', "lat-item", f'{ICONOS["salir"]}<span class="txt">Salir</span>')
     usuario_ = escape(perfil)
     marca = ('<a href="/panel/contenido/marca">Tu marca</a>'
              if cuenta is not None and cuenta.imagenes_mes > 0 else "")
+    # El logo de Tu marca si ya subió uno; si no, la inicial.
+    avatar = (f'<img class="lat-avatar" src="{escape(foto)}" alt="">' if foto else
+              f'<span class="lat-avatar">{usuario_[:1].upper()}</span>')
+    luz = f' <span class="semaforo sem-{luces["conexion"]}"></span>' if "conexion" in (luces or {}) else ""
     # <details>: abre y cierra sin JavaScript; panel.js lo cierra al hacer clic fuera.
     return ('<div class="lat-pie"><details class="perfil">'
-            f'<summary class="lat-item" title="@{usuario_}"><span class="lat-avatar">{usuario_[:1].upper()}</span>'
+            f'<summary class="lat-item" title="@{usuario_}">{avatar}'
             f'<span class="txt">@{usuario_}<small>Tu cuenta</small></span></summary>'
             f'<div class="perfil-menu"><div class="quien">Conectado como @{usuario_}</div>'
             f'<a href="https://www.instagram.com/{usuario_}/" target="_blank" rel="noopener">Ver mi Instagram</a>'
-            '<a href="/panel/asistente/conexion">Conexión</a>'
+            f'<a href="/panel/conexion"{ACTIVA if sub == "conexion" else ""}>Conexión{luz}</a>'
             '<a href="/panel/asistente/configura#ajustes">Horario y avisos</a>'
             f'{marca}'
             + salir.format("", "", "Salir") + "</div></details></div>")
@@ -810,13 +831,14 @@ async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt
                      "</a></div></div>")
                   + ("" if estado_conexion == "ok" else
                      '<div class="aviso">Hay algo que revisar en tu conexión.'
-                     ' <a class="enlace" href="/panel/asistente/conexion">Ver conexión</a></div>')
+                     ' <a class="enlace" href="/panel/conexion">Ver conexión</a></div>')
                   + await recientes(c, ver, buscar, hoja))
     return pagina(
-        cabecera(salir=True, menu="asistente", cuenta=c, sub=vista or "chats", perfil=await usuario(c),
+        # Conexión es de tu cuenta (está en el menú de perfil), no de una sección.
+        cabecera(salir=True, menu="cuenta" if vista == "conexion" else "asistente", cuenta=c, sub=vista or "chats", perfil=await usuario(c), foto=await foto_perfil(c),
                  luces={"conexion": estado_conexion})
         + (f'<section class="oscuro portada compacta delgada"><div class="contenedor">'
-           f'<p class="antetitulo">Tu asistente · {titulo}</p>'
+           f'<p class="antetitulo">{"Tu cuenta" if vista == "conexion" else "Tu asistente"} · {titulo}</p>'
            f'<h1>@{escape(await usuario(c))}<span class="punto">.</span></h1>'
            f'<p class="bajada" style="margin-left:0">{bajada}</p></div></section>'
            if titulo else
@@ -870,15 +892,13 @@ async def hoy(c: Cuenta) -> str:
     zona = ZoneInfo(c.timezone)
     ahora = datetime.now(zona)
     inicio = ahora.replace(hour=0, minute=0, second=0, microsecond=0)
-    filas = await c.store.message_times(inicio.timestamp(), ahora.timestamp())
-    contestados = [u for u, rol, _, a_mano in filas if rol == "assistant" and not a_mano]
-    respuesta = resultados.conversaciones(filas, c, inicio, 1)["respuesta"]
+    stats = await resultados.conversaciones(c.store.message_times(inicio.timestamp(), ahora.timestamp()), c, inicio, 1)
     en_pausa = len(await c.store.paused_list(time.time()))
 
-    chats = len(set(contestados))
+    chats = stats["chats_contestados"]
     cajas = [
-        kpi("Contestados hoy", str(len(contestados)), f"en {chats} chat{'s' if chats != 1 else ''}"),
-        kpi("Tiempo de respuesta", resultados.duracion(respuesta), "mediana de hoy"),
+        kpi("Contestados hoy", str(stats["contestados"]), f"en {chats} chat{'s' if chats != 1 else ''}"),
+        kpi("Tiempo de respuesta", resultados.duracion(stats["respuesta"]), "mediana de hoy"),
         kpi("Chats en pausa", str(en_pausa), "los atiendes tú" if en_pausa else "ninguno"),
     ]
     if not c.slug:
@@ -1055,19 +1075,33 @@ def _formulario(c: Cuenta, datos: dict, prompt: str, pares_minimos: int, nota: s
         '<form method="post" action="/panel/guardar">'
         # Enter en un campo no debe quitar una pregunta: el primer botón del formulario solo recarga.
         '<button class="oculto" name="accion" value="vista" tabindex="-1" aria-hidden="true">Actualizar</button>'
-        f'<div class="tarjeta"><span class="num">01</span><h2>Tu negocio</h2>{negocio}</div>'
-        f'<div class="tarjeta" id="preguntas"><span class="num">02</span><h2>Preguntas frecuentes</h2>'
-        f'<p class="ayuda">Lo que más te preguntan, con la respuesta que darías tú.</p>'
-        f'<input type="hidden" name="faq_n" value="{len(pares)}">{faq}'
-        f'<div class="acciones"><button class="boton secundario" name="accion" value="agregar" formaction="/panel/guardar#preguntas">+ Agregar pregunta</button></div></div>'
-        f'<div class="tarjeta"><span class="num">03</span><h2>Políticas</h2>'
-        f'<p class="ayuda">Llena solo las que apliquen a tu negocio.</p>{pol}</div>'
-        f'<div class="tarjeta"><span class="num">04</span><h2>Atención personal</h2>'
-        f'{caja(HUMANO[0], HUMANO[1], HUMANO[2], datos.get(HUMANO[0], ""), HUMANO[3])}</div>'
-        f'<div class="tarjeta" id="instrucciones"><span class="num">05</span><h2>Tono e instrucciones</h2>'
-        + (tono_cliente(tonos, prompt, nota, quedan) if c.slug else tono_principal(tonos, prompt, nota, confirmar))
-        + "</div></form>"
+        + seccion("negocio", "01", "Tu negocio", negocio)
+        + seccion("preguntas", "02", "Preguntas frecuentes",
+                  '<p class="ayuda">Lo que más te preguntan, con la respuesta que darías tú.</p>'
+                  f'<input type="hidden" name="faq_n" value="{len(pares)}">{faq}'
+                  '<div class="acciones"><button class="boton secundario" name="accion" value="agregar"'
+                  ' formaction="/panel/guardar#preguntas">+ Agregar pregunta</button></div>',
+                  plural_(sum(1 for q in pares if q["p"].strip()), "pregunta", "preguntas"))
+        + seccion("politicas", "03", "Políticas", f'<p class="ayuda">Llena solo las que apliquen a tu negocio.</p>{pol}')
+        + seccion("atencion", "04", "Atención personal",
+                  caja(HUMANO[0], HUMANO[1], HUMANO[2], datos.get(HUMANO[0], ""), HUMANO[3]))
+        + seccion("instrucciones", "05", "Tono e instrucciones",
+                  tono_cliente(tonos, prompt, nota, quedan) if c.slug else tono_principal(tonos, prompt, nota, confirmar))
+        # Un solo Guardar, fuera de las secciones: se ve aunque estén cerradas.
+        + '<div class="acciones guardar-todo"><button class="boton" name="accion" value="guardar">Guardar</button>'
+        '<span class="ayuda">Guarda las secciones 01 a 05.</span></div></form>'
     )
+
+
+def seccion(id_: str, num: str, titulo: str, cuerpo: str, resumen: str = "") -> str:
+    """Una parte de Configura tu asistente que se abre y se cierra (panel.js recuerda si la cerraste)."""
+    return (f'<details class="tarjeta plegable seccion" id="{id_}" open><summary><span class="titulo-sec">'
+            f'<span class="num">{num}</span><h2>{titulo}</h2></span>'
+            + (f'<span class="resumen">{resumen}</span>' if resumen else "") + f"</summary>{cuerpo}</details>")
+
+
+def plural_(n: int, uno: str, varios: str) -> str:
+    return f"{n} {uno if n == 1 else varios}"
 
 
 def tono_cliente(tonos: str, instrucciones: str, nota: str, quedan: int) -> str:
@@ -1088,7 +1122,6 @@ def tono_cliente(tonos: str, instrucciones: str, nota: str, quedan: int) -> str:
         + '<label for="prompt">Instrucciones para tu asistente (opcional)</label>'
         '<p class="ayuda">Ej.: saluda por su nombre, contesta en dos o tres frases y siempre invita a visitar la tienda.</p>'
         f'<textarea id="prompt" name="prompt" rows="8" maxlength="{MAX_INSTRUCCIONES}">{escape(instrucciones)}</textarea>'
-        '<div class="acciones"><button class="boton" name="accion" value="guardar">Guardar</button></div>'
     )
 
 
@@ -1107,7 +1140,6 @@ def tono_principal(tonos: str, prompt: str, nota: str, confirmar: bool) -> str:
            if confirmar else "") +
         f'<label>Instrucciones de tu asistente</label><p class="ayuda">Puedes editarlas antes de guardar.</p>'
         f'<textarea class="prompt" name="prompt" maxlength="{MAX_PROMPT}">{escape(prompt)}</textarea>'
-        f'<div class="acciones"><button class="boton" name="accion" value="guardar">Guardar</button></div>'
     )
 
 
@@ -1215,17 +1247,40 @@ async def ver_asistente(request: Request):
     c = cuenta_de_sesion(request)
     q = request.query_params
     if q.get("vista") == "conexion":  # enlaces viejos
-        return RedirectResponse("/panel/asistente/conexion", status_code=303)
+        return RedirectResponse("/panel/conexion", status_code=303)
     vista = "configura" if q.get("vista") == "configura" else ""
     hoja = int(q["p"]) if q.get("p", "").isdigit() else 1
     return await panel_de(c, ver=q.get("ver", ""), vista=vista, abrir=q.get("abrir") == "1",
                           buscar=q.get("q", ""), hoja=hoja) if c else entrar()
 
 
-@router.get("/asistente/conexion")
+@router.get("/conexion")
 async def ver_conexion(request: Request):
     c = cuenta_de_sesion(request)
     return await panel_de(c, vista="conexion") if c else entrar()
+
+
+@router.get("/asistente/conexion")  # su dirección anterior
+async def conexion_vieja():
+    return RedirectResponse("/panel/conexion", status_code=303)
+
+
+async def no_encontrada(request: Request) -> HTMLResponse:
+    """La página 404 del panel: con el menú lateral si hay sesión."""
+    c = cuenta_de_sesion(request)
+    menu = (cabecera(salir=True, menu="ninguna", cuenta=c, perfil=await usuario(c), foto=await foto_perfil(c))
+            if c else cabecera())
+    destino = ("/panel", "Ir a mi panel") if c else ("/panel", "Entrar a mi panel")
+    respuesta = pagina(
+        menu + '<section class="oscuro portada compacta delgada"><div class="contenedor">'
+        '<p class="antetitulo">Error 404</p><h1>Esta página no existe<span class="punto">.</span></h1>'
+        '<p class="bajada" style="margin-left:0">Puede que el enlace esté mal escrito o que la página ya no exista.</p>'
+        '</div></section><main><div class="contenedor"><div class="tarjeta"><h2>¿A dónde quieres ir?</h2>'
+        f'<div class="acciones"><a class="boton" href="{destino[0]}">{destino[1]}</a>'
+        f'<a class="boton secundario" href="{config.SITE_URL}">Ir a skandar.online</a></div></div>'
+        "</div></main>")
+    respuesta.status_code = 404
+    return respuesta
 
 
 @router.get("/asistente/configura")
@@ -1410,7 +1465,7 @@ async def prueba_inicio(c: Cuenta, mensajes: list[list[str]], aviso: str = "") -
         '<p class="vacio">Escribe como si fueras un cliente. Usa las instrucciones que guardaste.</p>')
     return (
         PRINCIPIO
-        + cabecera(salir=True, menu="asistente", cuenta=c, sub="probar", perfil=await usuario(c))
+        + cabecera(salir=True, menu="asistente", cuenta=c, sub="probar", perfil=await usuario(c), foto=await foto_perfil(c))
         + '<section class="oscuro portada compacta delgada"><div class="contenedor">'
         '<p class="antetitulo">Tu asistente · Probar</p>'
         f'<h1>@{escape(await usuario(c))}<span class="punto">.</span></h1>'
