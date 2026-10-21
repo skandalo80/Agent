@@ -327,6 +327,103 @@ class Reporte(Cotizacion):
         self.ln(4)
 
 
+def poner_logo(doc: Cotizacion, c: Cuenta, marca: dict) -> None:
+    logo = Path(c.media_dir) / f"{marca.get('logo', '')}.jpg"
+    if marca.get("logo") and logo.is_file():
+        with Image.open(logo) as im:
+            im.thumbnail((400, 400))
+            doc.image(im.convert("RGB"), x=doc.l_margin, y=doc.get_y(), h=16)
+        doc.ln(22)
+
+
+class Propuesta(Cotizacion):
+    etiqueta = "PROPUESTA DE CAMPAÑA"
+
+    def post(self, n: int, cuando: str, titulo: str, etiquetas: str, texto: str, foto: Path | None, idea: str) -> None:
+        """Un post: la imagen (o el aviso de que falta) a la izquierda y su texto a la derecha."""
+        ancho_foto, alto_foto = 30, 37.5
+        if self.get_y() > self.page_break_trigger - alto_foto - 6:
+            self.add_page()
+        y = self.get_y() + 3
+        if foto:
+            self.image(miniatura(foto), x=self.l_margin, y=y, w=ancho_foto, h=alto_foto)
+        else:
+            self.set_fill_color(240, 240, 243)
+            self.rect(self.l_margin, y, ancho_foto, alto_foto, style="F", round_corners=True, corner_radius=1.5)
+            self.set_xy(self.l_margin + 2.5, y + 3)
+            self.font(6.8, bold=True, color=GRIS)
+            self.multi_cell(ancho_foto - 5, 3.4, "IMAGEN PENDIENTE", new_x="LEFT", new_y="NEXT")
+            self.font(6.8, color=GRIS)
+            self.multi_cell(ancho_foto - 5, 3.2, idea[:140] + ("…" if len(idea) > 140 else ""), new_x="LEFT",
+                            new_y="NEXT")
+        x, ancho = self.l_margin + ancho_foto + 6, self.epw - ancho_foto - 6
+        self.set_xy(x, y)
+        self.font(7.5, bold=True, color=GRIS)
+        self.set_char_spacing(0.4)
+        self.cell(ancho, 4.5, f"{n}. {cuando}".upper(), new_x="LEFT", new_y="NEXT")
+        self.set_char_spacing(0)
+        self.font(11.5, bold=True, color=NEGRO)
+        self.multi_cell(ancho, 5.6, titulo, new_x="LEFT", new_y="NEXT")
+        self.font(8, color=GRIS)
+        self.cell(ancho, 5, etiquetas, new_x="LEFT", new_y="NEXT")
+        self.set_xy(x, self.get_y() + 0.8)  # ln() regresaría al margen, encima de la foto
+        self.font(9)
+        self.multi_cell(ancho, 4.6, texto[:600] + ("…" if len(texto) > 600 else ""), new_x="LEFT", new_y="NEXT")
+        self.set_xy(self.l_margin, max(self.get_y(), y + alto_foto) + 4)
+        self.rule()
+
+
+async def propuesta(c: Cuenta, camp: dict, marca: dict, cuenta: str) -> bytes:
+    """La campaña que se está armando, para mandarla a la marca antes de publicar: qué sale cada día,
+    con su imagen si ya la tiene, y su texto."""
+    from .campanas import FORMATOS, MESES, PUBLICAR, fecha_larga, formato_de, tema_de
+
+    inicio, fin = date.fromisoformat(camp["inicio"]), fin_de(camp)
+    doc = Propuesta(f"@{cuenta.lstrip('@')}", f"{fecha(inicio)} – {fecha(fin)}", fecha(tools.now().date()),
+                    marca.get("acento", ""))
+    doc.alias_nb_pages()
+    poner_logo(doc, c, marca)
+    posts = camp.get("posts", [])
+    doc.titulo("Propuesta de campaña", camp["nombre"],
+               (camp.get("tema") or "") + ("\n" if camp.get("tema") else "")
+               + f"Del {fecha(inicio)} al {fecha(fin)}.")
+    temas = {p["tipo"] for p in posts}
+    formatos = {formato_de(p) for p in posts}
+    doc.datos([("Posts", cifra(len(posts))), ("Publica", PUBLICAR.get(camp.get("publicar"), ("",))[0] or "—"),
+               ("Temas", cifra(len(temas))), ("Formatos", cifra(len(formatos)))])
+    publicados = await c.store.posts_by_id([p["post_id"] for p in posts if p.get("post_id")])
+    semana_actual = None
+    for n, p in enumerate(sorted(posts, key=lambda p: (p["dia"], p["hora"])), 1):
+        dia = date.fromisoformat(p["dia"])
+        semana = (dia - inicio).days // 7 + 1
+        if semana != semana_actual:
+            semana_actual = semana
+            lunes = inicio + timedelta(days=7 * (semana - 1))
+            hasta = min(lunes + timedelta(days=6), fin)
+            if doc.get_y() > doc.page_break_trigger - 60:
+                doc.add_page()
+            doc.ln(4)
+            doc.font(12, bold=True, color=NEGRO)
+            doc.cell(doc.epw * .5, 7, f"Semana {semana}")
+            doc.font(9, color=GRIS)
+            doc.cell(doc.epw * .5, 7, f"{lunes.day} {MESES[lunes.month - 1]} – {hasta.day} {MESES[hasta.month - 1]}",
+                     align="R", new_x="LMARGIN", new_y="NEXT")
+            doc.rule(NEGRO, 0.3)
+        post = publicados.get(p.get("post_id"))
+        media = await c.store.media(post["media_ids"][0]) if post and post["media_ids"] else None
+        foto = Path(c.media_dir) / f"{media[0]}.jpg" if media else None
+        etiquetas = f"{tema_de(p['tipo'])[0]} · {FORMATOS[formato_de(p)][0]}" + (
+            f" · Responde: {p['responde']}" if p.get("responde") else "")
+        doc.post(n, f"{fecha_larga(p['dia'])} · {p['hora']}", p.get("titulo") or "", etiquetas,
+                 (post or {}).get("caption") or p.get("caption", ""), foto if foto and foto.is_file() else None,
+                 p.get("idea", ""))
+    doc.ln(6)
+    doc.seccion("¿Te gusta? ¿Cambiamos algo?", [
+        "Podemos mover cualquier post a otro día u hora, cambiar su formato o su texto, o pedir otra idea.",
+        "Las imágenes que dicen «Imagen pendiente» se generan cuando el calendario quede aprobado."])
+    return doc.bytes()
+
+
 async def pdf(c: Cuenta, camps: list[dict], marca: dict, cuenta: str) -> bytes:
     from .campanas import FORMATOS, HORARIOS, TEMAS, tema_de
 
@@ -340,12 +437,7 @@ async def pdf(c: Cuenta, camps: list[dict], marca: dict, cuenta: str) -> bytes:
     doc = Reporte(f"@{cuenta.lstrip('@')}", f"{fecha(inicio)} – {fecha(fin)}", fecha(hoy), marca.get("acento", ""))
     doc.alias_nb_pages()
 
-    logo = Path(c.media_dir) / f"{marca.get('logo', '')}.jpg"
-    if marca.get("logo") and logo.is_file():
-        with Image.open(logo) as im:
-            im.thumbnail((400, 400))
-            doc.image(im.convert("RGB"), x=doc.l_margin, y=doc.get_y(), h=16)
-        doc.ln(22)
+    poner_logo(doc, c, marca)
     nombre = camps[0]["nombre"] if len(camps) == 1 else f"{len(camps)} campañas"
     doc.titulo("Resultados", nombre,
                " · ".join(x["nombre"] for x in camps) if len(camps) > 1 else

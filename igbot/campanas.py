@@ -465,6 +465,16 @@ def fotos_marca(c: Cuenta, marca: dict) -> list[str]:
     return [t for t in marca.get("fotos", []) if archivo(c, t).is_file()]
 
 
+def otro_collage(fotos: list[str], antes: list[str], azar: random.Random | None = None) -> list[str]:
+    """De 2 a 4 fotos de Tu marca en otro orden o con otras fotos que el collage anterior (para "Otra imagen")."""
+    azar = azar or random.Random()
+    for _ in range(12):
+        nuevas = azar.sample(fotos, azar.randint(MIN_FOTOS_COLLAGE, min(4, len(fotos))))
+        if nuevas != antes:
+            return nuevas
+    return nuevas
+
+
 async def generar_imagen(c: Cuenta, p: dict, extra: bool) -> int:
     """La pieza de un post de la campaña según su formato: crea (o actualiza) su post en borrador, como
     Crear post. Solo texto y collage se arman aquí, sin el generador ni el cupo."""
@@ -484,10 +494,12 @@ async def generar_imagen(c: Cuenta, p: dict, extra: bool) -> int:
             hecha = await imagenes.crear_local(c.store, PANEL, "texto", texto_imagen(pieza_, usuario), kit(marca),
                                                tema_de(p["tipo"])[0])
         elif formato == "collage":
-            fotos = fotos_marca(c, marca)[:4]
-            if len(fotos) < MIN_FOTOS_COLLAGE:
+            todas = fotos_marca(c, marca)
+            if len(todas) < MIN_FOTOS_COLLAGE:
                 raise imagenes.ErrorImagen(f"Para el collage sube al menos {MIN_FOTOS_COLLAGE} fotos de producto en"
                                            " Tu marca, o cambia el formato de este post.")
+            fotos = otro_collage(todas, p.get("collage") or [])
+            p["collage"] = fotos
             hecha = await imagenes.crear_local(c.store, PANEL, "collage", [archivo(c, t).read_bytes() for t in fotos])
         else:
             if libre(pieza_):
@@ -697,15 +709,15 @@ async def tarjeta_post(c: Cuenta, p: dict, sel: str) -> str:
     if post:
         estado, color = ESTADOS.get(post["status"], (post["status"], ""))
         media = await c.store.media(post["media_ids"][0]) if post["media_ids"] else None
-        mini = f'<img class="mini-cam" src="{url_imagen(c, media[0])}" alt="">' if media else ""
+        mini = f'<img class="mini-cam" src="{url_imagen(c, media[0])}" alt="" draggable="false">' if media else ""
         marca_estado = f'<span class="chip {color}">{estado}</span>'
     else:
         mini, marca_estado = "", '<span class="sinimg">sin imagen</span>'
     fija = post and post["status"] in BLOQUEADOS
     return (f'<a class="post-cam{" sel" if str(p["k"]) == sel else ""}" href="/panel/contenido/campanas?post={p["k"]}#detalle"'
             f'{"" if fija else f' draggable="true" data-k="{p["k"]}"'}>{mini}'
-            f'<span class="etq-cam t-{p["tipo"]}">{tema_de(p["tipo"])[0]}</span>'
             f'<span class="t">{escape(p["titulo"])}</span>'
+            f'<span class="fmt-cam">{tema_de(p["tipo"])[0]}</span>'
             f'<span class="fmt-cam">{FORMATOS[formato_de(p)][0]}</span>'
             + ({"repite": '<span class="rol-cam rep">Repite</span>',
                 "prueba": '<span class="rol-cam prob">Sigue probando</span>'}.get(p.get("rol"), ""))
@@ -730,7 +742,7 @@ async def calendario(c: Cuenta, camp: dict, sel: str) -> str:
             fuera = dia < inicio or dia > fin
             posts = "".join([await tarjeta_post(c, p, sel) for p in por_dia.get(iso, [])])
             clase = " fuera" if fuera else "" if iso in publica or posts else " libre"
-            celdas.append(f'<div class="dia-cam{clase}"' + ("" if fuera else f' data-dia="{iso}"') + ">"
+            celdas.append(f'<div class="dia-cam{clase}"' + ("" if fuera else f' id="d-{iso}" data-dia="{iso}"') + ">"
                           f'<span class="fecha">{fecha_corta(iso)}</span>{posts}</div>')
         hasta = d + timedelta(days=6)
         semanas.append(f'<div class="semana-cam"><h3>Semana {n}</h3><span>{d.day} {MESES[d.month - 1]} –'
@@ -872,6 +884,8 @@ async def barra(c: Cuenta, camp: dict) -> str:
                 if sin == 1 else "")
                + (f'<button class="boton chico secundario" name="accion" value="aprobar_todas">Aprobar {borradores}'
                   f' con imagen</button>' if borradores else ""))
+    botones += ('<a class="boton chico secundario" href="/panel/contenido/campanas/propuesta">Descargar propuesta'
+                " (PDF)</a>")
     return ('<form method="post" action="/panel/contenido/campanas" class="barra-cam">'
             f"<p><b>{len(posts)} posts</b> · {len(posts) - sin} con imagen · {aprobados} aprobado{'s' if aprobados != 1 else ''} · tu plan:"
             f" {incluidas + extra} de {c.imagenes_mes} imágenes este mes</p>"
@@ -1012,6 +1026,28 @@ async def ver(request: Request):
     return await pagina_campana(c, sel=q.get("post", ""), nueva=q.get("nueva") == "1")
 
 
+@router.get("/campanas/propuesta")
+async def descargar_propuesta(request: Request):
+    """La campaña que se está armando en PDF, para mandarla a la marca antes de publicar."""
+    if not (c := panel.cuenta_de_sesion(request)):
+        return RedirectResponse("/panel", status_code=303)
+    if c.imagenes_mes <= 0:
+        return sin_plan()
+    with usar(c):
+        camp = await leer(c)
+        if not camp.get("posts"):
+            return RedirectResponse("/panel/contenido/campanas", status_code=303)
+        contenido_pdf = await informe.propuesta(c, camp, await marca_de(c), await panel.usuario(c))
+    return Response(contenido_pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="propuesta-{archivo_de(camp["nombre"])}.pdf"'})
+
+
+def archivo_de(nombre: str) -> str:
+    """El nombre de la campaña para el nombre del archivo: sin acentos ni símbolos."""
+    ascii_ = unicodedata.normalize("NFKD", nombre.lower()).encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]+", "-", ascii_).strip("-")[:40] or "campana"
+
+
 @router.get("/campanas/reporte")
 async def reporte(request: Request):
     if not (c := panel.cuenta_de_sesion(request)):
@@ -1026,13 +1062,9 @@ async def reporte(request: Request):
         if len(camps) > informe.MAX_REPORTE:
             return await pagina_campana(c, f"Elige hasta {informe.MAX_REPORTE} campañas por reporte.")
         contenido_pdf = await informe.pdf(c, camps, await marca_de(c), await panel.usuario(c))
-    if len(camps) == 1:
-        ascii_ = unicodedata.normalize("NFKD", camps[0]["nombre"].lower()).encode("ascii", "ignore").decode()
-        nombre = "reporte-" + re.sub(r"[^a-z0-9]+", "-", ascii_).strip("-")[:40]
-    else:
-        nombre = f"reporte-{len(camps)}-campanas"
+    nombre = f"reporte-{archivo_de(camps[0]['nombre'])}" if len(camps) == 1 else f"reporte-{len(camps)}-campanas"
     return Response(contenido_pdf, media_type="application/pdf",
-                    headers={"Content-Disposition": f'attachment; filename="{nombre.rstrip("-")}.pdf"'})
+                    headers={"Content-Disposition": f'attachment; filename="{nombre}.pdf"'})
 
 
 @router.post("/campanas")
@@ -1080,15 +1112,16 @@ async def accion(request: Request):
     if not camp.get("posts"):
         return RedirectResponse("/panel/contenido/campanas", status_code=303)
 
-    if que == "mover":  # lo manda el arrastre (panel.js)
-        p = buscar_post(camp, f.get("k", ""))
-        if not p:
-            return Response(status_code=404)
+    if que == "mover":  # lo manda el arrastre (panel.js), como formulario: la CSP no deja usar fetch
+        if not (p := buscar_post(camp, f.get("k", ""))):
+            return RedirectResponse("/panel/contenido/campanas", status_code=303)
         with usar(c):
             error = await mover(c, camp, p, f.get("dia", ""))
             if not error:
                 await guardar(c, camp)
-        return Response(error, status_code=409 if error else 204, media_type="text/plain")
+        if error:
+            return await pagina_campana(c, error)
+        return RedirectResponse(f"/panel/contenido/campanas#d-{p['dia']}", status_code=303)
 
     if que == "generar_todas":
         pendientes = [p for p in camp["posts"] if not await estado_post(c, p)]

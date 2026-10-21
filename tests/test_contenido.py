@@ -165,7 +165,7 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     assert client.get("/panel/contenido/post/99/muestra.jpg").status_code == 404
     editado = {"plantilla": "marco", "titulo": "Cartera Atelier", "subtitulo": "", "precio": "$1,190 MXN",
                "con_precio": "1",
-               "caption": "Nuevo texto #cartera", "clave": "precio", "respuesta": "¡Listo!", "dm": "Cuesta $1,190."}
+               "caption": "Nuevo texto #cartera", "clave_0": "precio", "respuesta_0": "¡Listo!", "dm_0": "Cuesta $1,190."}
     r = client.post("/panel/contenido/post/1", headers=ORIGEN, data={**editado, "accion": "actualizar"})
     assert "texto nuevo" in r.text
     assert Path(f"data/cafe_lunar/media/{token}.jpg").read_bytes() != antes
@@ -185,6 +185,21 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     assert post["caption"] == "Nuevo texto #cartera"
     assert client.portal.call(contenido.pieza, c.store, 1)["precio"] == "$1,190 MXN"
 
+    # Varias reglas de palabra clave: se agrega una con "Agregar regla +" y se puede quitar.
+    r = client.get("/panel/contenido/post/1")
+    assert "Agregar regla +" in r.text and 'name="clave_0"' in r.text and "data-confirma=" in r.text
+    r = client.post("/panel/contenido/post/1", headers=ORIGEN,
+                    data={**editado, "clave_nueva": "envío", "respuesta_nueva": "Va por DM", "dm_nueva": "Enviamos a todo MX.",
+                          "accion": "regla"})
+    assert "Regla guardada: «ENVÍO»." in r.text and "Regla 2 · ENVÍO" in r.text
+    assert [x["clave"] for x in contenido.reglas_de(client.portal.call(contenido.pieza, c.store, 1))] == ["PRECIO", "ENVÍO"]
+    r = client.post("/panel/contenido/post/1", headers=ORIGEN,
+                    data={**editado, "clave_1": "ENVÍO", "dm_1": "Enviamos a todo MX.", "accion": "quitar_regla_1"})
+    assert "Regla quitada." in r.text
+    r = client.post("/panel/contenido/post/1", headers=ORIGEN,
+                    data={**editado, "clave_nueva": "envio", "dm_nueva": "Enviamos.", "accion": "guardar"})
+    assert len(contenido.reglas_de(client.portal.call(contenido.pieza, c.store, 1))) == 2
+
     # Le toca salir: se publica sin mandarle DM a nadie y la palabra clave ya responde comentarios.
     publicadas = []
 
@@ -203,7 +218,8 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     assert publicadas and publicadas[0][0][0].endswith(f"/media/cafe_lunar/{token}.jpg")
     assert c.instagram.sent == []
     reglas = client.portal.call(contenido.reglas, c.store)
-    assert [(r.post, r.keywords, r.dm, r.public) for r in reglas] == [("ABC123", ["PRECIO"], "Cuesta $1,190.", "¡Listo!")]
+    assert [(r.post, r.keywords, r.dm, r.public) for r in reglas] == [("ABC123", ["PRECIO"], "Cuesta $1,190.", "¡Listo!"),
+                                                                    ("ABC123", ["ENVIO"], "Enviamos.", "")]
     r = client.get("/panel/contenido")
     assert "Ya publicados" in r.text and r.text.count("instagram.com/p/ABC123") == 1
     assert "instagram.com/p/DESDEAPP" in r.text and "Desde Instagram" in r.text

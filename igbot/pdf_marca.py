@@ -100,7 +100,7 @@ class Cotizacion(FPDF):
             self.cell(ancho - 4, 4, etiqueta.upper(), new_x="LEFT", new_y="NEXT")
             self.set_char_spacing(0)
             self.font(10)
-            self.multi_cell(ancho - 4, 5, valor or "-", new_x="LEFT", new_y="NEXT")
+            self.multi_cell(ancho - 4, 5, valor or "-", align="L", new_x="LEFT", new_y="NEXT")
         self.set_xy(self.l_margin, max(self.get_y(), y + 9) + 7)
 
     def tabla(self, filas: list[tuple[str, str]], encabezado=("Concepto", "Importe")) -> None:
