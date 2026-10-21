@@ -663,13 +663,13 @@ label.check input[type=email]{flex:1;max-width:22rem;margin:0}
 p.cli-cam{margin:.5rem 0 0;font-size:.78rem;border-radius:.6rem;padding:.3rem .6rem;width:auto}
 .clientes-cam{margin-top:1rem}
 .lista-cam{margin:.5rem 0 1rem}
-.fila-cam{display:flex;gap:.9rem;align-items:center;padding:.85rem 0;border-top:1px solid var(--linea-clara);margin:0;font-weight:400;cursor:pointer}
-.fila-cam:last-child{border-bottom:1px solid var(--linea-clara)}
-.fila-cam input{width:1.1rem;height:1.1rem;margin:0;accent-color:var(--negro);flex:none}
-.fila-cam .datos{flex:1;min-width:0}
-.fila-cam .datos b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.fila-cam .datos span{display:block;color:#6e6e73;font-size:.9rem}
-.fila-cam.apagada{cursor:default}.fila-cam.apagada b{color:#a1a1aa}
+.hist-cam{display:flex;gap:.9rem;align-items:center;padding:.85rem 0;border-top:1px solid var(--linea-clara);margin:0;font-weight:400;cursor:pointer}
+.hist-cam:last-child{border-bottom:1px solid var(--linea-clara)}
+.hist-cam input{width:1.1rem;height:1.1rem;margin:0;accent-color:var(--negro);flex:none}
+.hist-cam .datos{flex:1;min-width:0}
+.hist-cam .datos b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hist-cam .datos span{display:block;color:#6e6e73;font-size:.9rem}
+.hist-cam.apagada{cursor:default}.hist-cam.apagada b{color:#a1a1aa}
 #tus-campanas .acciones{align-items:center}
 .prueba-cam{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;margin:.6rem 0 0;font-size:.85rem;color:var(--gris)}
 .obj-cam{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin:.5rem 0 1rem}

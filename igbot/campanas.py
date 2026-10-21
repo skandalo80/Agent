@@ -803,7 +803,7 @@ async def tus_campanas(c: Cuenta, actual: dict) -> str:
                       else "Aún sin posts publicados")
         marcar = bool(n) and not marcada
         marcada |= marcar
-        filas.append(f'<label class="fila-cam{"" if n else " apagada"}">'
+        filas.append(f'<label class="hist-cam{"" if n else " apagada"}">'
                      f'<input type="checkbox" name="c" value="{x["id"]}"{" checked" if marcar else ""}'
                      f'{"" if n else " disabled"}>'
                      f'<span class="datos"><b>{escape(x["nombre"])}</b><span>{cuando} · {publicados}</span></span>'
