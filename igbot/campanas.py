@@ -14,6 +14,10 @@
    pieza crea un post en borrador (el mismo de Crear post), que aprueba aquí o desde el
    editor.
 
+Con 12 posts con resultados se puede "Repetir lo que funcionó": la siguiente campaña lleva la
+forma que ganó (tema, formato y horario, con la tasa de interacción de informe.py), nunca el
+mismo asunto, y siempre deja una parte para seguir probando (MEZCLAS).
+
 La campaña vive en el kv "campana" de la cuenta (una a la vez). Los posts que ya
 tienen imagen son posts normales: siguen en Calendario aunque empiece otra campaña, y la
 campaña anterior pasa a "Tus campañas", de donde se descarga su reporte (informe.py).
@@ -93,6 +97,15 @@ SEMANAS = (1, 2, 3)
 SEMANAS_INICIAL = 3
 MIN_FOTOS_COLLAGE = 2
 CON_RESULTADOS = 12  # posts publicados hace 3 días o más para "Repetir lo que funcionó"
+MIN_PROBADO = 3  # veces que se probó algo para que cuente como ganador
+MEZCLAS = {  # clave: (cómo se le dice, % de lo que ganó, % del segundo lugar, % de algo nuevo)
+    "seguro": ("Más seguro", 80, 15, 5),
+    "equilibrado": ("Equilibrado", 70, 20, 10),
+    "explorar": ("Más exploración", 50, 30, 20),
+}
+MEZCLA_INICIAL = "equilibrado"
+CLIENTES_CADA = 4  # como máximo 1 de cada 4 posts responde a lo que preguntan sus clientes
+MAX_YA_HECHO = 60  # títulos anteriores que ve Claude para no repetir asuntos
 DIAS = ("Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom")
 MESES = ("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic")
 HORA = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
@@ -115,7 +128,8 @@ Formatos: {formatos}
 Reglas:
 - Respeta el tema y el formato de cada línea. Si un tema se repite, cada post de ese tema es distinto.
 - Si hay <tema>, la campaña gira alrededor de él.
-- Si hay <lo_que_preguntan> (lo que más le preguntaron sus clientes por mensaje y en comentarios), al menos la mitad de los posts responden a esas dudas, sobre todo los de Enseña algo, Dato curioso, Producto en acción y Pregunta a tu comunidad. En esos, "responde" es el tema que contestan (tal cual viene); en los demás, "".
+- Si hay <lo_que_preguntan> (lo que más le preguntaron sus clientes por mensaje y en comentarios), como máximo {tope} posts responden a esas dudas, sobre todo de Enseña algo, Dato curioso, Producto en acción o Pregunta a tu comunidad. En esos, "responde" es el tema que contestan (tal cual viene); en los demás, "".
+- Si hay <ya_publicado> (títulos de sus campañas anteriores), ningún post repite el asunto de esos títulos: aunque el tema y el formato sean los mismos, cada post dice algo nuevo.
 - Si hay <lo_que_dicen> (cosas buenas que dijeron sus clientes), úsalo en "Lo que dicen tus clientes", parafraseado y sin nombres. No inventes otras.
 {reglas}
 
@@ -197,7 +211,8 @@ def del_form(f: dict) -> dict:
     semanas = int(f["semanas"]) if f.get("semanas", "").isdigit() and int(f["semanas"]) in SEMANAS else SEMANAS_INICIAL
     return {"nombre": f.get("nombre", "").strip()[:MAX_NOMBRE] or "Mi campaña", "inicio": inicio,
             "semanas": semanas, "publicar": f.get("publicar") if f.get("publicar") in PUBLICAR else "lun-sab",
-            "tema": f.get("tema", "").strip()[:MAX_TEMA], "modo": "explorar",
+            "tema": f.get("tema", "").strip()[:MAX_TEMA], "modo": "repetir" if f.get("modo") == "repetir" else "explorar",
+            "mezcla": f.get("mezcla") if f.get("mezcla") in MEZCLAS else MEZCLA_INICIAL,
             "temas": [k for k in TEMAS if f.get(f"t_{k}") == "1"],
             "formatos": [k for k in FORMATOS if f.get(f"f_{k}") == "1"],
             "horarios": [k for k in HORARIOS if f.get(f"h_{k}") == "1"], "clientes": f.get("clientes") == "1"}
@@ -205,6 +220,8 @@ def del_form(f: dict) -> dict:
 
 def falta_en(datos: dict) -> str:
     """Por qué no se puede proponer con lo que marcó, o ''."""
+    if datos.get("modo") == "repetir":  # temas, formatos y horarios los pone lo que funcionó
+        return ""
     if not MIN_TEMAS <= len(datos["temas"]) <= MAX_TEMAS:
         return f"Elige de {MIN_TEMAS} a {MAX_TEMAS} temas."
     if not datos["formatos"]:
@@ -240,6 +257,46 @@ def repartir(n: int, temas: list[str], formatos: list[str], horarios: list[str],
     return list(zip(orden[:n], parejo(formatos), parejo(horarios)))
 
 
+def repetir(n: int, gano: dict, universo: dict, mezcla: str, semilla: int = 0) -> tuple[list[tuple], dict]:
+    """(tema, formato, horario, rol) para n posts de una campaña de Repetir lo que funcionó.
+
+    En cada dimensión, la mezcla elegida (p. ej. 70/20/10) reparte lo que ganó, el segundo lugar y
+    algo que casi no se ha probado. Solo cuenta como ganador lo que se probó MIN_PROBADO veces; si
+    en una dimensión nada llega, esa dimensión sigue explorando. rol = "prueba" si el post lleva
+    algo nuevo en alguna dimensión. También devuelve qué se repite y qué se prueba, para mostrarlo."""
+    azar = random.Random(semilla)
+    _, p1, p2, _ = MEZCLAS.get(mezcla, MEZCLAS[MEZCLA_INICIAL])
+    columnas, resumen = [], {"repite": {}, "prueba": {}}
+    for dim in ("tema", "formato", "franja"):
+        probados = [k for k, _, veces_ in gano.get(dim, []) if veces_ >= MIN_PROBADO and k in universo[dim]]
+        # Lo nuevo: primero lo que ya se probó un poco (para completar su prueba), luego lo nunca probado.
+        poco = [k for k, _, veces_ in gano.get(dim, []) if veces_ < MIN_PROBADO and k in universo[dim]]
+        nuevos = poco + [k for k in universo[dim] if k not in probados and k not in poco]
+        if not probados:
+            valores = [(universo[dim][i % len(universo[dim])], True) for i in range(n)]
+        else:
+            primero, segundo = probados[0], probados[1] if len(probados) > 1 else probados[0]
+            nuevos = nuevos or probados[2:] or [segundo]
+            a, b = round(n * p1 / 100), round(n * p2 / 100)
+            a = min(a, n - 1) if n > 1 else n  # siempre queda algo para seguir probando
+            b = min(b, n - a)
+            valores = [(primero, False)] * a + [(segundo, False)] * b + [(nuevos[i % len(nuevos)], True)
+                                                                       for i in range(n - a - b)]
+            resumen["repite"][dim] = primero
+        azar.shuffle(valores)
+        resumen["prueba"][dim] = sorted({k for k, nuevo in valores if nuevo}, key=universo[dim].index)
+        columnas.append(valores)
+    plan = [(t[0], f[0], h[0], "prueba" if t[1] or f[1] or h[1] else "repite") for t, f, h in zip(*columnas)]
+    return plan, resumen
+
+
+def universo(fotos: int, gano: dict) -> dict:
+    """Lo que se puede usar en cada dimensión al repetir (los temas extra solo si ya se probaron)."""
+    temas = list(TEMAS_INICIALES) + [k for k, *_ in gano.get("tema", []) if k in TEMAS and k not in TEMAS_INICIALES]
+    return {"tema": temas, "formato": [k for k in FORMATOS if k != "collage" or fotos >= MIN_FOTOS_COLLAGE],
+            "franja": list(HORARIOS)}
+
+
 async def ia_restantes(c: Cuenta) -> int:
     with usar(c):
         clave = f"campana_ia:{tools.now():%Y-%m-%d}"
@@ -267,8 +324,12 @@ def limpio(x: dict) -> dict:
             "idea": str(x.get("idea") or "").strip()[:MAX_IDEA]}
 
 
-async def proponer(c: Cuenta, camp: dict) -> dict:
-    """Llena con Claude los días libres de la campaña (los posts con imagen se quedan donde están)."""
+async def proponer(c: Cuenta, camp: dict, anteriores: list[dict] | None = None, gano: dict | None = None,
+                   fotos: int = 0) -> dict:
+    """Llena con Claude los días libres de la campaña (los posts con imagen se quedan donde están).
+
+    `anteriores` son sus campañas (informe.todas), para no repetir asuntos ni preguntas ya
+    respondidas; `gano`, lo que funcionó (informe.ganadores), si la campaña es de repetir."""
     from . import agent  # import tardío: agent importa el SDK
 
     fijos = [p for p in camp.get("posts", []) if p.get("post_id")]
@@ -276,17 +337,27 @@ async def proponer(c: Cuenta, camp: dict) -> dict:
     libres = [d for d in dias_de(camp) if d not in ocupados]
     if not libres:
         return camp
-    plan = dict(zip(libres, repartir(len(libres), camp.get("temas") or list(TEMAS_INICIALES),
-                                     camp.get("formatos") or [FORMATO_VIEJO], camp.get("horarios") or ["noche"],
-                                     int(camp.get("creada", 0)))))
+    semilla = int(camp.get("creada", 0))
+    if camp.get("modo") == "repetir" and gano:
+        reparto, camp["reparto"] = repetir(len(libres), gano, universo(fotos, gano), camp.get("mezcla", ""), semilla)
+        plan = {d: (t, f, h, rol) for d, (t, f, h, rol) in zip(libres, reparto)}
+    else:
+        plan = {d: (t, f, h, "") for d, (t, f, h) in zip(libres, repartir(
+            len(libres), camp.get("temas") or list(TEMAS_INICIALES), camp.get("formatos") or [FORMATO_VIEJO],
+            camp.get("horarios") or ["noche"], semilla))}
     lineas = "\n".join(f"- {d} ({fecha_larga(d)}) | tema: {TEMAS[t][0]} | formato: {FORMATOS[f][0]}"
-                        for d, (t, f, _) in plan.items())
+                        for d, (t, f, *_) in plan.items())
+    titulos, respondidas = informe.ya_hecho(anteriores or [])
+    ya = "\n".join(f"- {escape(t)}" for t in titulos[:MAX_YA_HECHO])
+    tope = max(1, len(libres) // CLIENTES_CADA)
     prompt = (f"<negocio>\n{await negocio_de(c)}\n</negocio>\n\n<campaña>{escape(camp['nombre'])}</campaña>\n"
               f"<tema>{escape(camp['tema']) or 'Sin tema: un poco de todo del negocio.'}</tema>\n\n"
-              + (await de_tus_clientes(c) if camp.get("clientes") else "")
+              + (await de_tus_clientes(c, respondidas) if camp.get("clientes") else "")
+              + (f"<ya_publicado>\n{ya}\n</ya_publicado>\n\n" if ya else "")
               + f"<posts>\n{lineas}\n</posts>")
     sistema = SISTEMA.format(temas=" ".join(f"{v[0]}: {v[2]}" for v in TEMAS.values()),
-                             formatos=" ".join(f"{v[0]}: {v[2]}" for v in FORMATOS.values()), reglas=REGLAS)
+                             formatos=" ".join(f"{v[0]}: {v[2]}" for v in FORMATOS.values()), reglas=REGLAS,
+                             tope=tope)
     respuesta = _json(await agent.run_claude(prompt, sistema, max_turns=1, model=config.CONTENT_MODEL))
     nuevos, usados = [], set()
     siguiente = max([p["k"] for p in camp.get("posts", [])] + [0]) + 1
@@ -298,13 +369,16 @@ async def proponer(c: Cuenta, camp: dict) -> dict:
             dia = next((d for d in libres if d not in usados), "")
             if not dia:
                 break
-        tema, formato, horario = plan[dia]
+        tema, formato, horario, rol = plan[dia]
         texto = limpio(x)
         if not (texto["titulo"] and texto["caption"] and (texto["idea"] or formato in SIN_IDEA)):
             continue
         usados.add(dia)
+        responde = str(x.get("responde") or "").strip()[:80]
+        if responde and sum(1 for p in nuevos if p["responde"]) >= tope:
+            responde = ""  # más de 1 de cada 4: el post se queda, pero ya no cuenta como de tus clientes
         nuevos.append({"k": siguiente, "tipo": tema, "formato": formato, "dia": dia, "hora": HORARIOS[horario][1],
-                       **texto, "responde": str(x.get("responde") or "").strip()[:80], "post_id": None})
+                       **texto, "responde": responde, "rol": rol, "post_id": None})
         siguiente += 1
     if not nuevos:
         raise imagenes.ErrorImagen("No se pudo armar la campaña esta vez; intenta de nuevo.")
@@ -312,11 +386,14 @@ async def proponer(c: Cuenta, camp: dict) -> dict:
     return camp
 
 
-async def de_tus_clientes(c: Cuenta) -> str:
-    """Lo que más le preguntaron y lo bueno que le dijeron (Contenido sugerido, últimos 7 días), para el prompt."""
+async def de_tus_clientes(c: Cuenta, respondidas: list[str] = ()) -> str:
+    """Lo que más le preguntaron y lo bueno que le dijeron (Contenido sugerido, últimos 7 días), para el
+    prompt, sin las preguntas que ya respondió en otra campaña."""
     datos = await semana.temas(c)
+    ya = {r.casefold() for r in respondidas}
     preguntan = "\n".join(f"- {escape(t['tema'])} ({semana.personas(t['personas'])})"
-                          + (f": «{escape(t['ejemplo'])}»" if t["ejemplo"] else "") for t in datos["temas"])
+                          + (f": «{escape(t['ejemplo'])}»" if t["ejemplo"] else "") for t in datos["temas"]
+                          if t["tema"].casefold() not in ya)
     dicen = "\n".join(f"- {escape(e)}" for e in datos.get("elogios", []))
     return ((f"<lo_que_preguntan>\n{preguntan}\n</lo_que_preguntan>\n\n" if preguntan else "")
             + (f"<lo_que_dicen>\n{dicen}\n</lo_que_dicen>\n\n" if dicen else ""))
@@ -480,12 +557,57 @@ def de_clientes(camp: dict, sugerido: dict) -> str:
     return ('<label class="check clientes-cam"><input type="checkbox" name="clientes" value="1"'
             f'{" checked" if camp.get("clientes", True) else ""}> Usar lo que te preguntan y comentan tus clientes'
             "</label>"
-            f'<p class="ayuda">{vista} Lo que dicen bien de ti va en "Lo que dicen tus clientes", sin nombres.</p>')
+            f'<p class="ayuda">Máximo 1 de cada {CLIENTES_CADA} posts, sin repetir preguntas que ya respondiste. {vista}'
+            ' Lo que dicen bien de ti va en "Lo que dicen tus clientes", sin nombres.</p>')
+
+
+def nombre_de(dim: str, k: str) -> str:
+    return (tema_de(k)[0] if dim == "tema" else FORMATOS[k][0] if dim == "formato" else
+            f"{HORARIOS[k][0]} · {HORARIOS[k][1]}")
+
+
+def lo_que_funciono(gano: dict, anteriores: int) -> str:
+    """Repetir lo que funcionó: qué ganó, cuánto repetir y las reglas para no caer siempre en lo mismo."""
+    cols = []
+    for dim, titulo in (("tema", "Tema"), ("formato", "Formato"), ("franja", "Horario")):
+        lista = [g for g in gano.get(dim, []) if dim != "formato" or g[0] in FORMATOS]
+        tope = max([t for _, t, n in lista if n >= MIN_PROBADO] or [1])
+        filas = "".join(
+            f'<div class="g-fila{" top" if i == 0 and n >= MIN_PROBADO else ""}{" poco" if n < MIN_PROBADO else ""}">'
+            f"<b>{escape(nombre_de(dim, k))}</b><small>"
+            + (f"{t:.1f}% · {n} posts" if n >= MIN_PROBADO else f"{n} post{'s' if n != 1 else ''}, falta probar")
+            + f'</small><span class="b"><i style="width:{round(100 * t / tope) if n >= MIN_PROBADO else 0}%"></i></span></div>'
+            for i, (k, t, n) in enumerate(sorted(lista, key=lambda g: (g[2] < MIN_PROBADO, -g[1]))))
+        cols.append(f'<div class="gano-col"><h4>{titulo}</h4>{filas or "<small>Sin resultados todavía.</small>"}</div>')
+    poco = [nombre_de(dim, k) for dim in ("tema", "formato") for k, _, n in gano.get(dim, [])
+            if n < MIN_PROBADO and (dim != "formato" or k in FORMATOS)]
+    mezclas = "".join(
+        f'<label class="mz"><input type="radio" name="mezcla" value="{k}"{" checked" if k == MEZCLA_INICIAL else ""}>'
+        f"<span><b>{v[0]}</b>{v[1]}% lo que ganó · {v[2]}% segundo lugar · {v[3]}% nuevo</span></label>"
+        for k, v in MEZCLAS.items())
+    return ('<div class="gano"><div class="gano-cab"><h3>Lo que funcionó en tus campañas</h3>'
+            f'<span class="senal">{informe.senal(gano["posts"])} · {gano["posts"]} posts con resultados</span></div>'
+            '<p class="ayuda">Tasa de interacción por alcance promedio de los posts con 3 días o más publicados. Solo'
+            f" cuenta como ganador lo que se probó al menos {MIN_PROBADO} veces.</p>"
+            f'<div class="gano-cols">{"".join(cols)}</div></div>'
+            "<label>Cuánto repetir</label>"
+            '<p class="ayuda">Siempre queda una parte para seguir probando, por si algo nuevo funciona mejor.</p>'
+            f'<div class="mezcla-rep">{mezclas}</div>'
+            '<ul class="reglas-rep"><li>Se repite la forma (tema, formato y horario), con asuntos nuevos: no vuelve a'
+            " salir nada de lo que ya publicaste"
+            + (f" en tus {anteriores} posts anteriores" if anteriores else "") + ".</li>"
+            + (f'<li>{escape(" y ".join(poco[:2]) if len(poco) <= 2 else ", ".join(poco[:3]))} casi no se'
+               f" ha{'n' if len(poco) > 1 else ''} probado: tiene{'n' if len(poco) > 1 else ''} prioridad en la parte nueva.</li>"
+               if poco else "")
+            + f"<li>Lo que preguntan tus clientes: máximo 1 de cada {CLIENTES_CADA} posts, y sin repetir preguntas que"
+            " ya respondiste.</li></ul>")
 
 
 def paso1(camp: dict, quedan: int, abierto: bool, nueva: bool = False, fotos: int = 0, resultados: int = 0,
-          sugerido: dict | None = None) -> str:
+          sugerido: dict | None = None, gano: dict | None = None, anteriores: int = 0) -> str:
     hay = bool(camp.get("posts"))
+    puede = resultados >= CON_RESULTADOS and bool(gano)
+    rep_ = puede and camp.get("modo") == "repetir"
     temas = camp.get("temas") or list(TEMAS_INICIALES)
     formatos = camp.get("formatos") or [k for k in FORMATOS if k != "collage" or fotos >= MIN_FOTOS_COLLAGE]
     horarios = camp.get("horarios") or list(HORARIOS)
@@ -520,15 +642,19 @@ def paso1(camp: dict, quedan: int, abierto: bool, nueva: bool = False, fotos: in
         '<form method="post" action="/panel/contenido/campanas" class="form-cam">'
         + ('<input type="hidden" name="nueva" value="1">' if nueva else "")
         + '<label>¿Qué quieres lograr?</label><div class="obj-cam">'
-        '<label class="obj on"><input type="radio" name="modo" value="explorar" checked><span><b>Explorar</b>'
-        "<small>Prueba un poco de todo: temas, formatos y horarios distintos, para descubrir qué le gusta a tu"
-        " audiencia.</small></span></label>"
-        '<label class="obj apagada"><input type="radio" name="modo" value="repetir" disabled><span>'
-        "<b>Repetir lo que funcionó</b><small>Arma la campaña con lo que tuvo más impacto en tus campañas anteriores,"
-        " y sigue probando un poco.</small>"
-        f'<em>Te falta{"n" if falta != 1 else ""} {falta} post{"s" if falta != 1 else ""} con resultados</em>'
-        f'<span class="barrita-cam"><i style="width:{round(100 * min(resultados, CON_RESULTADOS) / CON_RESULTADOS)}%"></i>'
-        "</span></span></label></div>"
+        f'<label class="obj"><input type="radio" name="modo" value="explorar"{"" if rep_ else " checked"}><span>'
+        "<b>Explorar</b><small>Prueba un poco de todo: temas, formatos y horarios distintos, para descubrir qué le gusta"
+        " a tu audiencia.</small></span></label>"
+        + (f'<label class="obj"><input type="radio" name="modo" value="repetir"{" checked" if rep_ else ""}><span>'
+           "<b>Repetir lo que funcionó</b><small>Arma la campaña con lo que tuvo más interacción en tus campañas"
+           " anteriores, y sigue probando un poco.</small></span></label>" if puede else
+           '<label class="obj apagada"><input type="radio" name="modo" value="repetir" disabled><span>'
+           "<b>Repetir lo que funcionó</b><small>Arma la campaña con lo que tuvo más interacción en tus campañas"
+           " anteriores, y sigue probando un poco.</small>"
+           f'<em>Te falta{"n" if falta != 1 else ""} {falta} post{"s" if falta != 1 else ""} con resultados</em>'
+           f'<span class="barrita-cam"><i style="width:{round(100 * min(resultados, CON_RESULTADOS) / CON_RESULTADOS)}%">'
+           "</i></span></span></label>")
+        + "</div>"
         '<div class="fila-cam">'
         f'<div><label for="c-nombre">Nombre</label><input type="text" id="c-nombre" name="nombre" maxlength="{MAX_NOMBRE}"'
         f' value="{escape(camp.get("nombre", ""))}" placeholder="Ej. Explorar otoño"></div>'
@@ -541,7 +667,8 @@ def paso1(camp: dict, quedan: int, abierto: bool, nueva: bool = False, fotos: in
         f'<textarea id="c-tema" name="tema" rows="2" maxlength="{MAX_TEMA}" placeholder="Ej. Temporada de otoño:'
         f' latte de calabaza y pan de muerto. Queremos más visitas entre semana.">{escape(camp.get("tema", ""))}</textarea>'
         + de_clientes(camp, sugerido or {})
-        + "<label>Temas que quieres probar</label>"
+        + (f'<div class="solo-rep">{lo_que_funciono(gano, anteriores)}</div>' if puede else "")
+        + '<div class="solo-exp"><label>Temas que quieres probar</label>'
         f'<p class="ayuda">Elige de {MIN_TEMAS} a {MAX_TEMAS}. "Lo que dicen tus clientes" solo usa reseñas que vengan en'
         " la información de tu negocio o en el tema.</p>"
         f'<div class="ops-cam">{cajas_temas}</div>'
@@ -556,7 +683,7 @@ def paso1(camp: dict, quedan: int, abierto: bool, nueva: bool = False, fotos: in
         f'<div><b data-r="temas">{len(temas)} temas</b><span data-r="temas-x">{veces(dias, len(temas))}</span></div>'
         f'<div><b data-r="formatos">{len(formatos)} formatos</b><span data-r="formatos-x">{veces(dias, len(formatos))}'
         "</span></div>"
-        f'<div><b data-r="imagenes">~{imgs} imágenes</b><span>de tu cupo, al generarlas al final</span></div></div>'
+        f'<div><b data-r="imagenes">~{imgs} imágenes</b><span>de tu cupo, al generarlas al final</span></div></div></div>'
         f'<div class="acciones"><button class="boton" name="accion" value="proponer"{"" if quedan else " disabled"}>'
         f"{boton}</button>"
         '<span class="ayuda" style="margin:0">No usa imágenes: solo arma textos e ideas.'
@@ -580,6 +707,8 @@ async def tarjeta_post(c: Cuenta, p: dict, sel: str) -> str:
             f'<span class="etq-cam t-{p["tipo"]}">{tema_de(p["tipo"])[0]}</span>'
             f'<span class="t">{escape(p["titulo"])}</span>'
             f'<span class="fmt-cam">{FORMATOS[formato_de(p)][0]}</span>'
+            + ({"repite": '<span class="rol-cam rep">Repite</span>',
+                "prueba": '<span class="rol-cam prob">Sigue probando</span>'}.get(p.get("rol"), ""))
             + ('<span class="cli-cam">De tus clientes</span>' if p.get("responde") else "")
             + f'<span class="pie"><span class="hora">{p["hora"]}</span>{marca_estado}</span></a>')
 
@@ -615,7 +744,16 @@ async def calendario(c: Cuenta, camp: dict, sel: str) -> str:
 
 
 def se_prueba(camp: dict) -> str:
-    """Cuántos temas, formatos y horarios distintos tiene la campaña (solo en las de explorar)."""
+    """Cuántos temas, formatos y horarios distintos tiene la campaña, o qué repite y qué sigue probando."""
+    if camp.get("modo") == "repetir" and camp.get("reparto"):
+        r = camp["reparto"]
+        etiquetas = lambda d: "".join(f'<span class="etq-cam">{escape(nombre_de(dim, k))}</span>'  # noqa: E731
+                                      for dim in ("tema", "formato", "franja") for k in d.get(dim, []))
+        repite = {dim: [k] for dim, k in r.get("repite", {}).items()}
+        prueba = {dim: [k for k in ks if k not in repite.get(dim, [])] for dim, ks in r.get("prueba", {}).items()}
+        return ('<p class="prueba-cam"><span>Repite:</span>' + etiquetas(repite)
+                + ('<span style="margin-left:.6rem">Sigue probando:</span>' + etiquetas(prueba)
+                   if any(prueba.values()) else "") + "</p>")
     if camp.get("modo") != "explorar":
         return ""
     posts = camp["posts"]
@@ -703,6 +841,7 @@ def cabeza(camp: dict) -> str:
         ini = date.fromisoformat(camp["inicio"])
         bajada = (f"{ini.day} {MESES[ini.month - 1]} – {fin.day} {MESES[fin.month - 1]} · {len(posts)} posts ·"
                   + (" para descubrir qué le gusta a tu audiencia." if camp.get("modo") == "explorar"
+                     else " con lo que mejor le funcionó a tu audiencia." if camp.get("modo") == "repetir"
                      else " un poco de todo para que tu cuenta se vea viva."))
         titulo = escape(camp["nombre"])
         nueva = '<a class="boton secundario ajuste" href="/panel/contenido/campanas?nueva=1">+ Nueva campaña</a>'
@@ -739,14 +878,11 @@ async def barra(c: Cuenta, camp: dict) -> str:
             f'<div class="acciones">{botones}</div></form>')
 
 
-async def con_resultados(c: Cuenta, camp: dict) -> int:
-    """Posts de la campaña publicados hace 3 días o más (los que ya dicen algo de su impacto)."""
-    hace = time.time() - 3 * 86400
-    n = 0
-    for p in camp.get("posts", []):
-        post = await estado_post(c, p)
-        n += bool(post and post["status"] == "publicada" and post["publish_at"] and post["publish_at"] <= hace)
-    return n
+async def con_resultados(c: Cuenta, camps: list[dict]) -> int:
+    """Posts de sus campañas publicados hace 3 días o más (los que ya dicen algo de cómo les fue)."""
+    hace = time.time() - informe.MADURO
+    posts = await c.store.posts_by_id([p["post_id"] for x in camps for p in x["posts"]])
+    return sum(1 for p in posts.values() if p["status"] == "publicada" and 0 < (p["publish_at"] or 0) <= hace)
 
 
 async def pagina_campana(c: Cuenta, aviso: str = "", sel: str = "", nueva: bool = False,
@@ -756,7 +892,8 @@ async def pagina_campana(c: Cuenta, aviso: str = "", sel: str = "", nueva: bool 
     quedan_ia = await ia_restantes(c)
     with usar(c):
         fotos = len(fotos_marca(c, await marca_de(c)))
-        resultados = await con_resultados(c, guardada)
+        anteriores = await informe.todas(c, guardada)
+        resultados = await con_resultados(c, anteriores)
         sugerido = await ya_sugerido(c)
         if camp.get("posts") and not form:
             cuerpo = paso1(camp, quedan_ia, abierto=False, fotos=fotos, resultados=resultados, sugerido=sugerido)
@@ -772,9 +909,13 @@ async def pagina_campana(c: Cuenta, aviso: str = "", sel: str = "", nueva: bool 
                     "publicar": "lun-sab", "tema": ""}
             # Si el formulario no pasó, vuelve con lo que marcó.
             datos = {**base, **(form or ({} if nueva else camp))}
+            # Lo que funcionó lee Instagram: solo cuando ya hay resultados suficientes y se ve el formulario.
+            gano = await informe.ganadores(c, anteriores) if resultados >= CON_RESULTADOS else None
+            if gano:  # los que de verdad tienen números (sin el permiso de estadísticas no hay)
+                resultados = gano["posts"]
             cuerpo = paso1({k: v for k, v in datos.items() if k != "posts"}, quedan_ia, abierto=True,
                            nueva=nueva or bool(form and form.get("nueva")), fotos=fotos, resultados=resultados,
-                           sugerido=sugerido)
+                           sugerido=sugerido, gano=gano, anteriores=sum(len(x["posts"]) for x in anteriores))
             if (nueva or form) and guardada.get("posts"):
                 cuerpo = ('<div class="aviso">Al proponer el calendario de la nueva campaña, la anterior pasa a Tus'
                           " campañas, abajo. Los posts que ya tienen imagen siguen en Calendario.</div>" + cuerpo)
@@ -912,6 +1053,12 @@ async def accion(request: Request):
                 datos["formatos"].remove("collage")
         if falta := falta_en(datos):
             return await pagina_campana(c, falta, form={**datos, "nueva": f.get("nueva") == "1"})
+        with usar(c):
+            anteriores = await informe.todas(c, camp)
+            if datos["modo"] == "repetir" and await con_resultados(c, anteriores) < CON_RESULTADOS:
+                return await pagina_campana(c, "Todavía no hay resultados suficientes para repetir lo que funcionó.",
+                                            form={**datos, "modo": "explorar", "nueva": f.get("nueva") == "1"})
+            fotos = len(fotos_marca(c, await marca_de(c)))
         if not await ia_restantes(c):
             return await pagina_campana(c, "Por hoy ya no quedan propuestas; mañana puedes pedir más.")
         # Proponer de nuevo deja los posts que ya tienen imagen; una campaña nueva empieza en blanco.
@@ -921,7 +1068,8 @@ async def accion(request: Request):
         async def trabajo():
             with usar(c):
                 await usar_ia(c)
-                hecha = await proponer(c, nueva)
+                gano = await informe.ganadores(c, anteriores) if nueva["modo"] == "repetir" else None
+                hecha = await proponer(c, nueva, anteriores, gano, fotos)
                 if f.get("nueva") == "1":
                     await informe.archivar(c, camp)
                 await guardar(c, hecha)

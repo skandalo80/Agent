@@ -178,6 +178,29 @@ def por(renglones: list[dict], clave: str) -> list[tuple[str, float, int]]:
     return sorted(((k, round(sum(v) / len(v), 1), len(v)) for k, v in grupos.items()), key=lambda x: -x[1])
 
 
+async def ganadores(c: Cuenta, camps: list[dict]) -> dict:
+    """Tasa promedio por tema, formato y horario de todas las campañas (para Repetir lo que funcionó)."""
+    renglones = await filas(c, camps)
+    return {"posts": sum(1 for f in renglones if f["maduro"] and f["tasa"] is not None),
+            **{k: por(renglones, k) for k in ("tema", "formato", "franja")}}
+
+
+def ya_hecho(camps: list[dict]) -> tuple[list[str], list[str]]:
+    """Los títulos que ya salieron en sus campañas y las preguntas de clientes que ya respondieron."""
+    titulos, respondidas = [], []
+    for x in camps:
+        for p in x["posts"]:
+            if p.get("titulo") and p["titulo"] not in titulos:
+                titulos.append(p["titulo"])
+            if p.get("responde") and p["responde"] not in respondidas:
+                respondidas.append(p["responde"])
+    return titulos, respondidas
+
+
+def senal(posts: int) -> str:
+    return "Señal débil" if posts < 12 else "Señal media" if posts <= 24 else "Señal fuerte"
+
+
 async def conclusiones(c: Cuenta, datos: dict) -> list[str]:
     """Tres conclusiones de Claude a partir de los números (se guardan: los mismos números, el mismo texto)."""
     from . import agent  # import tardío: agent importa el SDK
