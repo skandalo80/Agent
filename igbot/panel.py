@@ -659,6 +659,9 @@ label.check input[type=email]{flex:1;max-width:22rem;margin:0}
 .t-ensena{background:#f2eefb;color:#5f4a96}.t-pregunta{background:#f4f0fb;color:#6b569f}.t-clientes{background:#f0ebf9;color:#5a4590}.t-fecha{background:#f5f1fb;color:#705da2}
 .fmt-cam{display:inline-flex;align-items:center;gap:.3rem;font-size:.72rem;color:var(--gris)}
 .fmt-cam:before{content:"";width:.5rem;height:.5rem;border-radius:.15rem;background:#d4d4d8}
+.cli-cam{display:inline-block;width:max-content;max-width:100%;font-size:.7rem;font-weight:600;color:#6d28d9;background:#faf8ff;border:1px solid #ddd6fe;border-radius:999px;padding:.05rem .45rem;margin:0}
+p.cli-cam{margin:.5rem 0 0;font-size:.78rem;border-radius:.6rem;padding:.3rem .6rem;width:auto}
+.clientes-cam{margin-top:1rem}
 .prueba-cam{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;margin:.6rem 0 0;font-size:.85rem;color:var(--gris)}
 .obj-cam{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin:.5rem 0 1rem}
 .obj-cam .obj{display:flex;gap:.75rem;align-items:flex-start;border:1.5px solid var(--linea-clara);border-radius:1rem;padding:1rem 1.1rem;background:var(--blanco);margin:0;font-weight:400;cursor:pointer}

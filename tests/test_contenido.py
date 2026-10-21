@@ -375,7 +375,8 @@ def test_chats_de_10_en_10_con_buscador(cliente):
 
 TEMAS = {"temas": [{"tema": "Horario de fin de semana", "personas": 4, "ejemplo": "¿Abren el sábado?",
                     "objetivo": "explicar", "idea": "Post con el horario del sábado"},
-                   {"tema": "x", "personas": "muchas", "objetivo": "otro"}]}
+                   {"tema": "x", "personas": "muchas", "objetivo": "otro"}],
+          "elogios": ["Les encanta la atención", 3, ""]}
 PLAN = {"posts": [{"objetivo": "explicar", "tema": "Horario del sábado", "por_que": "Te preguntaron 4 veces."},
                   {"objetivo": "marca", "tema": "Quiénes somos", "por_que": "Para que te conozcan."},
                   {"objetivo": "estrella", "tema": "El facial", "por_que": "Es lo que más te piden."}]}
@@ -410,6 +411,8 @@ def test_comentarios_y_dms(con_mensajes):
     assert model == "claude-haiku-5-5"
     client.get("/panel/contenido/ideas")
     assert len(llamadas) == 1  # una vez al día
+    from igbot import semana
+    assert client.portal.call(semana.temas, c)["elogios"] == ["Les encanta la atención"]
     r = client.get("/panel/contenido/nuevo?objetivo=explicar&tema=Post+con+el+horario+del+s%C3%A1bado")
     assert "Post con el horario del sábado</textarea>" in r.text and 'value="explicar" checked' in r.text
 

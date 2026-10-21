@@ -28,7 +28,8 @@ def claude_de_campana(llamadas):
         if "Armas una campaña" in system:
             return json.dumps({"posts": [
                 {"dia": d, "titulo": f"Post {i + 1}", "subtitulo": "", "caption": f"Texto {i + 1} #cafe",
-                 "idea": "" if formato == "Solo texto" else f"Foto {i + 1}"}
+                 "idea": "" if formato == "Solo texto" else f"Foto {i + 1}",
+                 "responde": "Horario de fin de semana" if i == 0 and "<lo_que_preguntan>" in prompt else ""}
                 for i, (d, formato) in enumerate(LINEA.findall(prompt))]})
         if "otra versión" in system:
             return json.dumps({"titulo": "Otra idea", "subtitulo": "", "caption": "Texto nuevo", "idea": "Foto nueva"})
@@ -158,6 +159,36 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
     client.post("/panel/contenido/campanas", headers=ORIGEN, data=datos_campana(nueva="1", nombre="Navidad"))
     camp = leer(client, c)
     assert camp["nombre"] == "Navidad" and not any(p["post_id"] for p in camp["posts"])
+
+
+def test_lo_que_preguntan_tus_clientes(cliente, monkeypatch):
+    client, c, *_ = cliente
+    import app as bot
+    monkeypatch.setattr(c, "imagenes_mes", 4)
+    llamadas = []
+    monkeypatch.setattr(bot.agent, "run_claude", claude_de_campana(llamadas))
+
+    async def temas(c):
+        return {"temas": [{"tema": "Horario de fin de semana", "personas": 9, "objetivo": "explicar",
+                           "ejemplo": "¿Abren el <domingo>?", "idea": ""}],
+                "elogios": ["El latte está buenísimo"], "mensajes": 30}
+
+    monkeypatch.setattr(campanas.semana, "temas", temas)
+    assert 'name="clientes" value="1" checked' in client.get("/panel/contenido/campanas").text
+    client.post("/panel/contenido/campanas", headers=ORIGEN, data=datos_campana(clientes="1"))
+    prompt = llamadas[-1][0]
+    assert "<lo_que_preguntan>" in prompt and "Horario de fin de semana (9 personas)" in prompt
+    assert "&lt;domingo&gt;" in prompt and "<lo_que_dicen>\n- El latte está buenísimo" in prompt
+    camp = leer(client, c)
+    assert camp["clientes"] and camp["posts"][0]["responde"] == "Horario de fin de semana"
+    r = client.get("/panel/contenido/campanas")
+    assert r.text.count('class="cli-cam">De tus clientes') == 1
+    assert "Responde a lo que te preguntan: Horario de fin de semana" in client.get(
+        f"/panel/contenido/campanas?post={camp['posts'][0]['k']}").text
+
+    # Sin la casilla no se manda.
+    client.post("/panel/contenido/campanas", headers=ORIGEN, data=datos_campana(nueva="1"))
+    assert "<lo_que_preguntan>" not in llamadas[-1][0] and not leer(client, c)["clientes"]
 
 
 def test_cupo_extra_y_sin_plan(cliente, monkeypatch):
