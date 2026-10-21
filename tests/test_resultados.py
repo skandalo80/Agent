@@ -87,8 +87,8 @@ def test_sin_sesion_va_al_panel():
 
 def test_basico_sin_mensajes_y_con_mensajes(cliente, monkeypatch):
     client, c = cliente
-    assert 'href="/panel/resultados">Resultados</a>' in client.get("/panel/asistente").text  # todos los planes
-    assert "Contenido</a>" not in client.get("/panel").text
+    assert 'href="/panel/resultados" title="Resultados"' in client.get("/panel/asistente").text  # todos los planes
+    assert 'title="Contenido"' not in client.get("/panel").text
     assert "Aún no hay mensajes" in client.get("/panel/resultados").text
 
     async def conversar():
@@ -104,7 +104,7 @@ def test_basico_sin_mensajes_y_con_mensajes(cliente, monkeypatch):
     html = client.get("/panel/resultados").text
     assert "1 de 2 sin ayuda" in html and "50%" in html
     assert ">1 respuesta<" in html
-    assert html.count("<svg") == 2 and "no cuenta" not in html
+    assert html.split("<main")[1].count("<svg") == 2 and "no cuenta" not in html
     assert "De comentario a mensaje" not in html  # Básico: sin bloque de contenido
     assert 'class="on">30 días' in client.get("/panel/resultados?dias=30").text
     assert 'class="on">7 días' in client.get("/panel/resultados?dias=999").text
@@ -123,8 +123,8 @@ def test_inicio_del_panel(cliente):
     client.portal.call(c.store.add_incoming, "ana", "m1", "hola")
     assert client.get("/panel", follow_redirects=False).headers["location"] == "/panel/resultados"
     html = client.get("/panel").text
-    assert html.index(">Resultados</a>") < html.index(">Tu asistente</a>")  # primero en el menú
-    assert 'href="/panel/asistente">Tu asistente</a>' in html
+    assert html.index(" title=\"Resultados\"") < html.index(" title=\"Tu asistente\"")  # primero en el menú
+    assert 'href="/panel/asistente" title="Tu asistente"' in html
 
 
 def test_community_ve_comentarios_y_publicaciones(cliente, monkeypatch):
@@ -143,6 +143,6 @@ def test_community_ve_comentarios_y_publicaciones(cliente, monkeypatch):
 
     client.portal.call(actividad)
     html = client.get("/panel/resultados").text
-    assert 'href="/panel/contenido">Contenido</a>' in html
+    assert 'href="/panel/contenido" title="Contenido"' in html
     assert "De comentario a mensaje" in html and "PRECIO · 1" in html and "Spam ocultado" in html
     assert "1 publicada · 1 programada" in html and "https://www.instagram.com/p/X/" in html

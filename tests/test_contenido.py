@@ -88,7 +88,7 @@ def cliente(monkeypatch, tmp_path):
 def test_sin_contenido_en_el_plan(cliente):
     client, c, *_ = cliente
     assert c.imagenes_mes == 0
-    assert "Contenido</a>" not in client.get("/panel").text  # el menú solo sale si su plan lo tiene
+    assert 'title="Contenido"' not in client.get("/panel").text  # el menú solo sale si su plan lo tiene
     assert "solo incluye el asistente" in client.get("/panel/contenido").text
     r = client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "marca"})
     assert "solo incluye el asistente" in r.text
@@ -97,7 +97,7 @@ def test_sin_contenido_en_el_plan(cliente):
 def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     client, c, llamadas, proveedor = cliente
     monkeypatch.setattr(c, "imagenes_mes", 2)
-    assert 'href="/panel/contenido">Contenido</a>' in client.get("/panel/asistente").text
+    assert 'href="/panel/contenido" title="Contenido"' in client.get("/panel/asistente").text
     r = client.get("/panel/contenido")
     assert "Aún no tienes posts" in r.text and "DESDEAPP" in r.text  # lo de la app sale aunque no haya del panel
     assert "Este post lleva precio" in client.get("/panel/contenido/nuevo").text
