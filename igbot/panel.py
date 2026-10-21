@@ -40,7 +40,7 @@ from urllib.parse import parse_qs
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
 
-from . import config
+from . import config, imagenes
 from .cuenta import Cuenta, usar
 
 log = logging.getLogger("igbot.panel")
@@ -486,8 +486,6 @@ input[type=color].muestra::-webkit-color-swatch-wrapper{padding:0}
 input[type=color].muestra::-webkit-color-swatch{border:0;border-radius:.75rem}
 input[type=color].muestra::-moz-color-swatch{border:0;border-radius:.75rem}
 .hex{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.85rem;font-weight:400;color:#6e6e73;margin-left:.35rem}
-label.pantone{font-size:.8rem;font-weight:500;color:#6e6e73;margin-top:.2rem}
-label.pantone span{font-weight:400}
 input.chico{max-width:9rem;padding:.4rem .7rem;font-size:.85rem}
 .opcion img.ejemplo{width:100%;aspect-ratio:4/5;object-fit:cover;border-radius:.7rem;display:block;margin-bottom:.6rem}
 label.check{display:flex;gap:.5rem;align-items:center;font-weight:500;cursor:pointer}
@@ -515,7 +513,9 @@ form:has(input[name=modo][value=libre]:checked) .si-plantilla{display:none}
 .swatch{margin:0;border:1px solid var(--linea-clara);border-radius:1rem;overflow:hidden;cursor:pointer;background:var(--blanco)}
 .swatch input[type=color]{display:block;width:100%;height:4.5rem;border:0;padding:0;background:none;cursor:pointer;-webkit-appearance:none;appearance:none;border-bottom:1px solid var(--linea-clara)}
 .swatch input[type=color]::-webkit-color-swatch-wrapper{padding:0}.swatch input[type=color]::-webkit-color-swatch{border:0}.swatch input[type=color]::-moz-color-swatch{border:0}
-.swatch>span{display:block;padding:.6rem .8rem;font-size:.9rem}.swatch b{display:block}.swatch .hex{margin:0}
+.swatch>span{display:block;padding:.6rem .8rem;font-size:.9rem}.swatch b{display:block}
+.swatch input.hex{width:100%;margin:.15rem 0 0;padding:.3rem .5rem;font:inherit;font-family:ui-monospace,Menlo,monospace;font-size:.85rem;text-transform:uppercase;border:1px solid transparent;border-radius:.5rem;background:var(--claro)}
+.swatch input.hex:hover,.swatch input.hex:focus{border-color:var(--linea-clara);background:var(--blanco)}
 details.mas{margin-top:1rem}details.mas summary{cursor:pointer;color:var(--acento);font-size:.9rem;font-weight:500}
 .color-uso{margin-top:1rem}.color-uso .ayuda{margin:.15rem 0 .35rem}
 .letras{display:grid;grid-template-columns:repeat(auto-fill,minmax(6.5rem,1fr));gap:.6rem;margin-top:.75rem}
@@ -615,7 +615,7 @@ label.check input[type=email]{flex:1;max-width:22rem;margin:0}
 .plegable summary .resumen{margin-left:auto;color:#6e6e73;font-size:.85rem}
 .plegable[open] summary{margin-bottom:1rem}
 .seccion summary .titulo-sec .num{margin:0 0 .35rem}.seccion summary h2{margin:0}
-.guardar-todo{position:sticky;bottom:1rem;z-index:2;align-items:center;gap:1rem;margin:1.25rem 0;padding:.9rem 1.25rem;background:var(--blanco);border:1px solid var(--linea-clara);border-radius:999px;box-shadow:0 6px 24px rgba(0,0,0,.08)}
+.guardar-todo{align-items:center;gap:1rem;margin:1.25rem 0 0}
 .guardar-todo .ayuda{margin:0}
 .grupo>summary{background:var(--blanco);border-radius:1.5rem;padding:1.5rem 2rem;margin-bottom:1.25rem}
 .grupo>summary .num{margin-bottom:.2rem}.grupo>summary .resumen{display:block;margin:0;font-size:.95rem}
@@ -654,8 +654,7 @@ STATIC = Path(__file__).resolve().parent / "static"
 FUENTES_CSS = "".join(
     f"@font-face{{font-family:'{familia}';src:url(/panel/static/fuentes/{archivo}-{peso_nombre}.ttf);"
     f"font-weight:{peso};font-display:swap}}"
-    for familia, archivo in (("Montserrat", "Montserrat"), ("Poppins", "Poppins"),
-                             ("Playfair Display", "PlayfairDisplay"), ("Lora", "Lora"), ("Inter", "Inter"))
+    for familia, archivo in imagenes.FUENTES.items()
     for peso, peso_nombre in ((400, "Regular"), (600, "SemiBold"), (700, "Bold"))
 )
 
@@ -703,9 +702,9 @@ ICONOS = {
 SUBMENU = {
     "asistente": [("chats", "Conversaciones", "/panel/asistente"),
                   ("configura", "Configura tu asistente", "/panel/asistente/configura"),
-                  ("probar", "Probar mi asistente", "/panel/probar#ultimo")],
+                  ("probar", "Probar tu asistente", "/panel/probar#ultimo")],
     "contenido": [("semana", "Esta semana", "/panel/contenido/semana"), ("calendario", "Calendario", "/panel/contenido"),
-                  ("ideas", "Comentarios y DMs", "/panel/contenido/ideas"),
+                  ("ideas", "Contenido sugerido", "/panel/contenido/ideas"),
                   ("nuevo", "Crear post", "/panel/contenido/nuevo"), ("marca", "Tu marca", "/panel/contenido/marca")],
 }
 
@@ -773,7 +772,6 @@ def menu_perfil(perfil: str, cuenta: Cuenta | None, foto: str = "", sub: str = "
             f'<div class="perfil-menu"><div class="quien">Conectado como @{usuario_}</div>'
             f'<a href="https://www.instagram.com/{usuario_}/" target="_blank" rel="noopener">Ver mi Instagram</a>'
             f'<a href="/panel/conexion"{ACTIVA if sub == "conexion" else ""}>Conexión{luz}</a>'
-            '<a href="/panel/asistente/configura#ajustes">Horario y avisos</a>'
             f'{marca}'
             + salir.format("", "", "Salir") + "</div></details></div>")
 
@@ -819,15 +817,16 @@ async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt
         titulo, bajada = "Configura", "Tu negocio, preguntas, políticas, tono, horario y avisos."
         cuerpo = (("" if c.slug else principal(c))
                   + '<div class="grupo" id="configura">'
-                  + _formulario(c, datos, prompt, pares_minimos, nota, confirmar, await ayudas_restantes(c))
-                  + ajustes.tarjeta(c) + "</div>")
+                  + _formulario(c, datos, prompt, pares_minimos, nota, confirmar, await ayudas_restantes(c),
+                                ajustes.tarjeta(c))
+                  + "</div>")
     else:
         titulo = bajada = ""
         cuerpo = (await pendiente(c, "asistente")
                   + ("" if await asistente_listo(c) else
                      '<div class="tarjeta"><h2>Configura tu asistente para empezar</h2>'
                      '<p class="ayuda">Cuéntale de tu negocio, tus precios y tus horarios: con eso contesta por ti.</p>'
-                     '<div class="acciones"><a class="boton" href="/panel/asistente/configura">Configurar mi asistente'
+                     '<div class="acciones"><a class="boton" href="/panel/asistente/configura">Configurar tu asistente'
                      "</a></div></div>")
                   + ("" if estado_conexion == "ok" else
                      '<div class="aviso">Hay algo que revisar en tu conexión.'
@@ -1051,7 +1050,7 @@ def principal(c: Cuenta) -> str:
 
 
 def _formulario(c: Cuenta, datos: dict, prompt: str, pares_minimos: int, nota: str, confirmar: bool = False,
-                quedan: int = 0) -> str:
+                quedan: int = 0, horario: str = "") -> str:
     pares = preguntas(datos)
     pares += [{"p": "", "r": ""}] * (max(MIN_PREGUNTAS, pares_minimos) - len(pares))
     temas = politicas(datos)
@@ -1087,9 +1086,10 @@ def _formulario(c: Cuenta, datos: dict, prompt: str, pares_minimos: int, nota: s
                   caja(HUMANO[0], HUMANO[1], HUMANO[2], datos.get(HUMANO[0], ""), HUMANO[3]))
         + seccion("instrucciones", "05", "Tono e instrucciones",
                   tono_cliente(tonos, prompt, nota, quedan) if c.slug else tono_principal(tonos, prompt, nota, confirmar))
-        # Un solo Guardar, fuera de las secciones: se ve aunque estén cerradas.
+        + horario
+        # Un solo Guardar, hasta abajo y fuera de las secciones: guarda todo, aunque estén cerradas.
         + '<div class="acciones guardar-todo"><button class="boton" name="accion" value="guardar">Guardar</button>'
-        '<span class="ayuda">Guarda las secciones 01 a 05.</span></div></form>'
+        '<span class="ayuda">Guarda todo lo de esta página.</span></div></form>'
     )
 
 
@@ -1200,9 +1200,9 @@ async def bienvenida(c: Cuenta) -> HTMLResponse:
         bajada = "Vamos a dejar todo listo. ¿Por dónde quieres empezar? Puedes hacer el otro después; te lo recordamos en el panel."
         cuerpo = ('<div class="caminos">'
                   + camino("Recomendado para empezar", "Tu asistente", asistente_desc, PASOS_ASISTENTE, "≈ 10 min",
-                           "Configurar mi asistente", "/panel/asistente", True)
+                           "Configurar tu asistente", "/panel/asistente", True)
                   + camino("Contenido", "Tu marca", "Tus colores, tu letra y tus fotos, para que tus posts se vean"
-                           " de la misma casa.", PASOS_MARCA, "≈ 5 min", "Configurar mi marca",
+                           " de la misma casa.", PASOS_MARCA, "≈ 5 min", "Configurar tu marca",
                            "/panel/contenido/marca", False)
                   + "</div>")
     else:
@@ -1297,6 +1297,9 @@ async def guardar(request: Request):
     f = await form(request)
     datos = datos_de(f)
     accion = f.get("accion", "")
+    if accion == "guardar" and "pausa" in f:  # Horario y avisos (06) va en el mismo formulario
+        from . import ajustes
+        await ajustes.guardar_del_form(c, await request.form())
     prompt = f.get("prompt", "")[:MAX_PROMPT]
     # Agregar o quitar una pregunta solo redibuja la página: nada se guarda todavía.
     if accion == "agregar":
@@ -1543,7 +1546,7 @@ async def probar(request: Request):
     return StreamingResponse(pagina_en_partes(), media_type="text/html; charset=utf-8")
 
 
-ARCHIVO_FUENTE = re.compile(r"^(Inter|Montserrat|Poppins|PlayfairDisplay|Lora)-(Regular|SemiBold|Bold)\.ttf$")
+ARCHIVO_FUENTE = re.compile(rf"^({'|'.join(imagenes.FUENTES.values())})-(Regular|SemiBold|Bold)\.ttf$")
 
 
 @router.get("/static/menu.js")
