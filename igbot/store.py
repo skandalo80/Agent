@@ -258,6 +258,10 @@ class Store:
         await self.db.commit()
         return cur.rowcount == 1
 
+    async def comments_since(self, since: float) -> int:
+        cur = await self.db.execute("SELECT COUNT(*) FROM comments WHERE created_at >= ?", (since,))
+        return (await cur.fetchone())[0]
+
     async def comment_result(self, comment_id: str, matched: str, dm_sent: bool, replied: bool) -> None:
         await self.db.execute(
             "UPDATE comments SET matched = ?, dm_sent = ?, replied = ? WHERE comment_id = ?",

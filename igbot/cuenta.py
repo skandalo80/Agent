@@ -82,6 +82,8 @@ class Cuenta:
     imagenes_mes: int
     mensajes_mes: int = 0
     posts_mes: int = 0
+    max_comments_per_day: int = 300
+    en_revision: bool = False
     # Su base y su cliente de Instagram; los pone app.py al arrancar.
     store: Any = field(default=None, repr=False, compare=False)
     instagram: Any = field(default=None, repr=False, compare=False)
@@ -175,6 +177,12 @@ class Cuenta:
             # Solo se muestran en el panel: pasarse no corta nada, se ve como extra.
             mensajes_mes=int(get("MESSAGES_PER_MONTH", "0")),
             posts_mes=int(get("POSTS_PER_MONTH", "0")),
+            # Comentarios al día que Claude revisa (spam y variantes de las palabras clave).
+            # Pasando de aquí solo cuentan las palabras clave escritas tal cual.
+            max_comments_per_day=int(get("MAX_COMMENTS_PER_DAY", "300")),
+            # Cuenta grande recién conectada: no puede encender su asistente hasta que
+            # se revise y se quite esta línea de su .env (ver conectar.py).
+            en_revision=_bool(get("EN_REVISION")),
         )
 
 

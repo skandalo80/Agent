@@ -27,8 +27,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 
 from . import config, imagenes, panel, tools
 from .admin import PANEL
-from .contenido import (HORA_SUGERIDA, OBJETIVOS, cuando, falta_cupo, generar, guardar_pieza, pagina,
-                        pieza, recortar, sin_plan, url_imagen)
+from .contenido import (ESTADOS, HORA_SUGERIDA, OBJETIVOS, cuando, falta_cupo, generar, guardar_pieza, pagina,
+                        pieza, sin_plan, url_imagen)
 from .cuenta import Cuenta, usar
 
 log = logging.getLogger("igbot.semana")
@@ -167,19 +167,21 @@ async def propuestas(c: Cuenta) -> list[tuple[dict, dict, str]]:
 
 def tarjeta(c: Cuenta, post: dict, p: dict, token: str) -> str:
     aprobado = post["status"] != "borrador"
-    estado = {"borrador": "Borrador", "programada": "Programado", "publicando": "Publicando…",
-              "publicada": "Publicado", "fallida": "No salió"}.get(post["status"], post["status"])
+    estado, color = ESTADOS.get(post["status"], (post["status"], ""))
     imagen = f'<img class="pieza" src="{url_imagen(c, token)}" alt="{escape(p.get("titulo", ""))}">' if token else ""
     botones = (f'<a class="boton secundario chico" href="/panel/contenido/post/{post["id"]}">Editar</a>'
                + ("" if aprobado else
                   f'<button class="boton chico" name="aprobar" value="{post["id"]}">Aprobar</button>'))
     return (
         f'<div class="propuesta">{imagen}<div class="cuerpo">'
-        f'<div class="arriba"><span class="chip acento">{escape(OBJETIVOS.get(p.get("objetivo"), ("",))[0])}</span>'
-        f'<span class="chip{" verde" if aprobado else ""}">{estado}</span></div>'
+        f'<div class="arriba"><span class="chip acento obj-{escape(p.get("objetivo", ""))}">'
+        f'{escape(OBJETIVOS.get(p.get("objetivo"), ("",))[0])}</span>'
+        f'<span class="chip {color}">{estado}</span></div>'
         f'<b>{escape(cuando(post["publish_at"]))}</b>'
+        # El porqué y el texto del post, plegados para que las tarjetas queden parejas.
+        + '<details class="detalle"><summary>Ver por qué y el texto</summary>'
         + (f'<p class="por-que">{escape(p["por_que"])}</p>' if p.get("por_que") else "")
-        + f'<p>{escape(recortar(post["caption"], 160))}</p>'
+        + f'<p class="texto-post">{escape(post["caption"])}</p></details>'
         + (f'<p class="ayuda">Comentan <b>{escape(p["clave"])}</b> y reciben un DM</p>' if p.get("clave") else "")
         + f'<div class="acciones">{botones}</div></div></div>')
 

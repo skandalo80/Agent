@@ -17,7 +17,7 @@ ACCOUNT_KEYS = {
     "DB_PATH", "PROMPT_PATH", "CATALOG_PATH", "QUOTES_DIR",
     "SHEET_CATALOG", "SHEET_INVENTORY", "STORE_RULES_PATH", "SHEET_COMMENTS",
     "ADMIN_IG_IDS", "REPORT_EMAIL", "BUTTONS_PATH", "HIDE_SPAM", "GOOGLE_TOOLS",
-    "IMAGES_PER_MONTH", "MESSAGES_PER_MONTH", "POSTS_PER_MONTH", "PLAN",
+    "IMAGES_PER_MONTH", "MESSAGES_PER_MONTH", "POSTS_PER_MONTH", "PLAN", "EN_REVISION",
 }
 if CLIENTE:
     load_dotenv(f"{CLIENT_DIR}/.env")
@@ -43,6 +43,10 @@ FORWARD_WEBHOOKS = [u.strip() for u in os.getenv("FORWARD_WEBHOOKS", "").split("
 COMMENTS_MODEL = os.getenv("COMMENTS_MODEL", "claude-haiku-5-5")
 # Segundos que se reutiliza lo leído de las hojas antes de volver a pedirlo.
 SHEETS_CACHE_SECONDS = float(os.getenv("SHEETS_CACHE_SECONDS", "300"))
+# Una cuenta que se conecta con más seguidores o publicaciones que esto no puede
+# encender su asistente sola: queda en revisión (EN_REVISION=1 en su .env).
+CUENTA_GRANDE_SEGUIDORES = int(os.getenv("CUENTA_GRANDE_SEGUIDORES", "10000"))
+CUENTA_GRANDE_POSTS = int(os.getenv("CUENTA_GRANDE_POSTS", "1000"))
 # Dirección pública del bot, para mandar el PDF por DM (Instagram lo descarga de ahí).
 PUBLIC_URL = os.getenv("PUBLIC_URL", "").rstrip("/")
 

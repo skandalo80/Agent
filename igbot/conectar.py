@@ -163,13 +163,15 @@ async def exchange(code: str) -> tuple[str, float]:
         return data["access_token"], time.time() + float(data.get("expires_in", 60 * 24 * 3600))
 
 
-async def whoami(token: str) -> tuple[str, str]:
+async def whoami(token: str) -> tuple[str, str, int, int]:
+    """Id, usuario, seguidores y publicaciones de la cuenta del token."""
     async with httpx.AsyncClient(timeout=15) as http:
-        r = await http.get(f"{GRAPH}/{config.API_VERSION}/me",
-                           params={"fields": "user_id,username", "access_token": token})
+        r = await http.get(f"{GRAPH}/{config.API_VERSION}/me", params={
+            "fields": "user_id,username,followers_count,media_count", "access_token": token})
         check(r)
         data = r.json()
-        return str(data["user_id"]), data["username"]
+        return (str(data["user_id"]), data["username"],
+                int(data.get("followers_count") or 0), int(data.get("media_count") or 0))
 
 
 @router.get("/callback")
@@ -185,22 +187,26 @@ async def callback(request: Request):
         return back("/conectar-error")
     try:
         token, expires_at = await exchange(p["code"].removesuffix("#_"))
-        ig_id, usuario = await whoami(token)
+        ig_id, usuario, seguidores, posts = await whoami(token)
     except Exception:
         log.exception("No se pudo cambiar el código por un token")
         return back("/conectar-error")
     nueva = await store.save_conexion(ig_id, usuario, token, expires_at)
-    log.info("Cuenta conectada: @%s (%s)", usuario, ig_id)
+    log.info("Cuenta conectada: @%s (%s), %d seguidores, %d publicaciones", usuario, ig_id, seguidores, posts)
+    # Con mucho movimiento no se enciende sola: se revisa antes (costo y carga del servidor).
+    grande = seguidores > config.CUENTA_GRANDE_SEGUIDORES or posts > config.CUENTA_GRANDE_POSTS
     try:
-        c = await panel.alta(ig_id, usuario, token) if panel.alta else None
+        c = await panel.alta(ig_id, usuario, token, grande) if panel.alta else None
     except Exception:
         log.exception("No se pudo dar de alta a @%s; se hace a mano con scripts/alta_cliente.py", usuario)
         c = None
     if nueva:
         await avisar(
             f"Instagram conectado: @{usuario}",
-            f"@{usuario} conectó su Instagram"
-            + (". Su asistente quedó en pausa hasta que lo encienda desde su panel." if c else
+            f"@{usuario} conectó su Instagram ({seguidores:,} seguidores, {posts:,} publicaciones)"
+            + (f". Es una cuenta grande: quedó en revisión y no puede encender su asistente. Para"
+               f" habilitarla, quita EN_REVISION=1 de clientes/{c.slug}/.env y reinicia." if c and c.en_revision else
+               ". Su asistente quedó en pausa hasta que lo encienda desde su panel." if c else
                ". Dale de alta en el servidor con:\n"
                f"python scripts/alta_cliente.py {usuario} <nombre-corto>"),
         )

@@ -198,11 +198,12 @@ def buscar(ig_id: str) -> Cuenta | None:
     return next((c for c in cuentas if ig_id and c.ig_account_id == ig_id), None)
 
 
-async def alta(ig_id: str, usuario: str, token: str) -> Cuenta | None:
-    """Al conectarse por /conectar: su cuenta, que se crea (en pausa) si es nueva."""
+async def alta(ig_id: str, usuario: str, token: str, grande: bool = False) -> Cuenta | None:
+    """Al conectarse por /conectar: su cuenta, que se crea (en pausa) si es nueva.
+    Si es `grande`, además queda en revisión (no puede encenderse sola)."""
     if not (c := buscar(ig_id)):
         slug = panel.preparar_carpeta(ig_id, usuario, token, await store.correo_de(usuario),
-                                      {c.slug for c in cuentas})
+                                      {c.slug for c in cuentas}, revision=grande)
         await store.set_conexion_slug(ig_id, slug)
         c = de_carpeta(slug)
         c.store = Store(c.db_path)
