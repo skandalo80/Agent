@@ -348,3 +348,9 @@ def test_tasa_de_interaccion():
     assert informe.tasa({"reach": 200, "likes": 10, "comments": 5, "saved": 2, "shares": 1, "views": 900}) == 9.0
     assert informe.tasa({"reach": 0, "likes": 3}) is None and informe.tasa(None) is None
     assert [informe.franja(h) for h in ("09:00", "14:00", "20:00", "")] == ["manana", "mediodia", "noche", "noche"]
+
+
+def test_clases_sin_choque():
+    """Cada clase de CSS de Campañas se define en un solo bloque (fila-cam es la del formulario)."""
+    from igbot import panel
+    assert len(re.findall(r"^\.fila-cam\{", panel.ESTILO, re.M)) == 1 and ".hist-cam{" in panel.ESTILO
