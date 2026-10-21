@@ -305,34 +305,41 @@ header .contenedor{display:flex;justify-content:space-between;align-items:center
 .marca{font-weight:600;font-size:.95rem;text-decoration:none;letter-spacing:-.01em}
 .salir{background:none;border:0;color:var(--gris);font:inherit;font-size:.85rem;cursor:pointer;padding:0}
 .salir:hover{color:var(--claro)}
-/* Menú lateral: fijo a la izquierda; plegado (html.menu-plegado) solo íconos y se abre al pasar
-   el mouse; en el celular se esconde y lo abre la hamburguesa. */
+/* Menú lateral: fijo a la izquierda; plegado (html.menu-plegado) se queda en solo íconos;
+   en el celular se esconde y lo abre la hamburguesa. Abajo, el menú de perfil. */
 body:has(>.lateral){padding-left:15rem}
-.lateral{position:fixed;inset:0 auto 0 0;width:15rem;background:var(--negro);color:var(--claro);border-right:1px solid var(--linea-oscura);display:flex;flex-direction:column;padding:.9rem .75rem;z-index:30;transition:width .18s ease}
-.lat-cabeza{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:0 .35rem .9rem;border-bottom:1px solid var(--linea-oscura);margin-bottom:.9rem}
+.lateral{position:fixed;inset:0 auto 0 0;width:15rem;background:var(--grafito);color:var(--claro);border-right:1px solid #2c2c2e;display:flex;flex-direction:column;padding:.9rem .75rem;z-index:30;transition:width .18s ease}
+.lat-cabeza{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:0 .35rem .9rem;border-bottom:1px solid #333336;margin-bottom:.9rem}
 .lateral .marca{display:flex;align-items:center;gap:.6rem;color:var(--claro);overflow:hidden;line-height:1.15}
 .lateral .marca small{display:block;font-size:.72rem;font-weight:400;opacity:.6}
 .logo{flex:none;width:2rem;height:2rem;border-radius:.6rem;background:var(--claro);color:var(--negro);display:grid;place-items:center;font-weight:700}
 .plegar,.cerrar{flex:none;background:none;border:0;color:var(--gris);cursor:pointer;padding:.3rem;border-radius:.5rem;display:grid;place-items:center;text-decoration:none;font-size:1.5rem;line-height:1}
-.plegar:hover,.cerrar:hover{color:var(--claro);background:var(--grafito)}
+.plegar:hover,.cerrar:hover{color:var(--claro);background:#2c2c2e}
 .cerrar{display:none}
 .lat-nav{display:flex;flex-direction:column;gap:.2rem;flex:1;overflow-y:auto}
 .lat-item{display:flex;align-items:center;gap:.75rem;padding:.65rem .75rem;border-radius:.8rem;color:#a1a1a6;text-decoration:none;font:inherit;font-size:.95rem;background:none;border:0;cursor:pointer;width:100%;white-space:nowrap}
 .lat-item svg{flex:none}
-.lat-item:hover{color:var(--claro);background:#161618}
-.lat-item.on{color:var(--claro);background:var(--grafito)}
-.lat-sub{display:flex;flex-direction:column;margin:.15rem 0 .5rem 1.6rem;padding-left:.9rem;border-left:1px solid var(--linea-oscura)}
+.lat-item:hover{color:var(--claro);background:#28282a}
+.lat-item.on{color:var(--claro);background:#333336}
+.lat-sub{display:flex;flex-direction:column;margin:.15rem 0 .5rem 1.6rem;padding-left:.9rem;border-left:1px solid #3a3a3c}
 .lat-sub a{color:#a1a1a6;text-decoration:none;font-size:.88rem;padding:.4rem .6rem;border-radius:.6rem;white-space:nowrap}
-.lat-sub a:hover,.lat-sub a.on{color:var(--claro);background:#161618}
-.lat-pie{border-top:1px solid var(--linea-oscura);padding-top:.75rem;margin:0}
+.lat-sub a:hover,.lat-sub a.on{color:var(--claro);background:#2c2c2e}
+.lat-pie{border-top:1px solid #333336;padding-top:.75rem;margin:0}
 html.menu-plegado body:has(>.lateral){padding-left:4.5rem}
 html.menu-plegado .lateral{width:4.5rem}
 html.menu-plegado .lateral .txt,html.menu-plegado .lat-sub{display:none}
 html.menu-plegado .lat-cabeza{flex-direction:column}
 html.menu-plegado .plegar svg{transform:rotate(180deg)}
-@media(hover:hover) and (min-width:901px){html.menu-plegado .lateral:hover{width:15rem;box-shadow:0 0 40px rgba(0,0,0,.45)}
-html.menu-plegado .lateral:hover .txt{display:inline}html.menu-plegado .lateral:hover .lat-sub{display:flex}
-html.menu-plegado .lateral:hover .lat-cabeza{flex-direction:row}}
+.perfil{position:relative}
+.perfil>summary{list-style:none}.perfil>summary::-webkit-details-marker{display:none}
+.lat-avatar{flex:none;width:1.75rem;height:1.75rem;border-radius:50%;background:var(--acento);color:var(--blanco);display:grid;place-items:center;font-size:.8rem;font-weight:600;margin-left:-.1rem}
+.perfil .txt small{display:block;font-size:.75rem;color:var(--gris)}
+.perfil-menu{position:absolute;left:0;right:0;bottom:calc(100% + .4rem);background:#2c2c2e;border:1px solid #3a3a3c;border-radius:.9rem;padding:.35rem;box-shadow:0 12px 40px rgba(0,0,0,.5);display:flex;flex-direction:column}
+.perfil-menu a,.perfil-menu button{display:block;text-align:left;color:var(--claro);text-decoration:none;font:inherit;font-size:.9rem;padding:.55rem .75rem;border-radius:.6rem;background:none;border:0;cursor:pointer;width:100%}
+.perfil-menu a:hover,.perfil-menu button:hover{background:#3a3a3c}
+.perfil-menu form{margin:0;border-top:1px solid var(--linea-oscura);margin-top:.3rem;padding-top:.3rem}
+.perfil-menu .quien{padding:.45rem .75rem .55rem;font-size:.8rem;color:var(--gris);border-bottom:1px solid var(--linea-oscura);margin-bottom:.3rem}
+html.menu-plegado .perfil-menu{left:calc(100% + .9rem);right:auto;bottom:0;width:14rem}
 header.movil{display:none}
 .velo{display:none}
 @media(max-width:900px){body:has(>.lateral),html.menu-plegado body:has(>.lateral){padding-left:0}
@@ -340,6 +347,7 @@ header.movil{display:flex;align-items:center;gap:.9rem;height:3.25rem;padding:0 
 .hamburguesa{display:flex;flex-direction:column;gap:4px;padding:.4rem}.hamburguesa span{width:20px;height:2px;background:var(--claro);border-radius:2px}
 .lateral,html.menu-plegado .lateral{width:16rem;transform:translateX(-100%);transition:transform .2s ease}
 html.menu-plegado .lateral .txt{display:inline}html.menu-plegado .lat-sub{display:flex}html.menu-plegado .lat-cabeza{flex-direction:row}
+html.menu-plegado .perfil-menu{left:0;right:0;bottom:calc(100% + .4rem);width:auto}
 .lateral:target,html.menu-abierto .lateral{transform:none}
 .lateral:target~.velo,html.menu-abierto .velo{display:block;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:20}
 .plegar{display:none}.cerrar{display:grid}}
@@ -586,6 +594,8 @@ FUENTES_CSS = "".join(
     for peso, peso_nombre in ((400, "Regular"), (600, "SemiBold"), (700, "Bold"))
 )
 
+# La versión de panel.js va en su dirección: al cambiar el archivo, el navegador no usa la vieja de su caché.
+VERSION_JS = hashlib.sha256((STATIC / "panel.js").read_bytes()).hexdigest()[:10]
 PRINCIPIO = (
     '<!doctype html><html lang="es"><head><meta charset="utf-8">'
     '<meta name="viewport" content="width=device-width, initial-scale=1">'
@@ -594,7 +604,7 @@ PRINCIPIO = (
     '<title>Tu asistente · Agentes IA by Skandar</title>'
     f"<style>{ESTILO}{FUENTES_CSS}</style>"
     # Solo JavaScript propio (CSP script-src 'self'): la vista previa al momento en Contenido.
-    '<script src="/panel/static/panel.js" defer></script></head><body>'
+    f'<script src="/panel/static/panel.js?v={VERSION_JS}" defer></script></head><body>'
 )
 FINAL = "</body></html>"
 
@@ -633,9 +643,11 @@ SUBMENU = {
 }
 
 
-def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None, sub: str = "") -> str:
+def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None, sub: str = "",
+             perfil: str = "") -> str:
     """Con `menu` (la sección en la que está): el menú lateral, plegable a solo íconos y con el
     botón de hamburguesa en el celular. Contenido sale solo si el plan de `cuenta` lo tiene.
+    Con `perfil` (su @usuario), abajo va su menú de perfil en vez de solo Salir.
     Sin menú (la entrada y las páginas de espera): la barra de arriba de siempre."""
     boton = ('<form method="post" action="/panel/salir"><button class="salir">Salir</button></form>'
              if salir else "")
@@ -663,10 +675,28 @@ def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None, 
         f'<button class="plegar" type="button" data-plegar aria-label="Plegar o fijar el menú" title="Plegar o fijar">'
         f'{ICONOS["plegar"]}</button><a class="cerrar" href="#" aria-label="Cerrar menú">×</a></div>'
         f'<nav class="lat-nav">{"".join(secciones)}</nav>'
-        '<form method="post" action="/panel/salir" class="lat-pie"><button class="lat-item" title="Salir">'
-        f'{ICONOS["salir"]}<span class="txt">Salir</span></button></form></aside>'
+        + menu_perfil(perfil, cuenta) + '</aside>'
         '<a class="velo" href="#" aria-label="Cerrar menú"></a>'
     )
+
+
+def menu_perfil(perfil: str, cuenta: Cuenta | None) -> str:
+    salir = ('<form method="post" action="/panel/salir"{}><button class="{}" title="Salir">{}</button></form>')
+    if not perfil:
+        return salir.format(' class="lat-pie"', "lat-item", f'{ICONOS["salir"]}<span class="txt">Salir</span>')
+    usuario_ = escape(perfil)
+    marca = ('<a href="/panel/contenido/marca">Tu marca</a>'
+             if cuenta is not None and cuenta.imagenes_mes > 0 else "")
+    # <details>: abre y cierra sin JavaScript; panel.js lo cierra al hacer clic fuera.
+    return ('<div class="lat-pie"><details class="perfil">'
+            f'<summary class="lat-item" title="@{usuario_}"><span class="lat-avatar">{usuario_[:1].upper()}</span>'
+            f'<span class="txt">@{usuario_}<small>Tu cuenta</small></span></summary>'
+            f'<div class="perfil-menu"><div class="quien">Conectado como @{usuario_}</div>'
+            f'<a href="https://www.instagram.com/{usuario_}/" target="_blank" rel="noopener">Ver mi Instagram</a>'
+            '<a href="/panel/asistente?vista=conexion">Conexión</a>'
+            '<a href="/panel/asistente?abrir=1#ajustes">Horario y avisos</a>'
+            f'{marca}'
+            + salir.format("", "", "Salir") + "</div></details></div>")
 
 
 def entrar() -> HTMLResponse:
@@ -717,7 +747,7 @@ async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt
                   + _formulario(c, datos, prompt, pares_minimos, nota, confirmar, await ayudas_restantes(c))
                   + ajustes.tarjeta(c) + "</details>")
     return pagina(
-        cabecera(salir=True, menu="asistente", cuenta=c, sub=vista)
+        cabecera(salir=True, menu="asistente", cuenta=c, sub=vista, perfil=await usuario(c))
         + '<section class="oscuro portada compacta"><div class="contenedor">'
         '<p class="antetitulo">Tu asistente</p>'
         f'<h1>@{escape(await usuario(c))}<span class="punto">.</span></h1>'
@@ -1092,7 +1122,7 @@ async def ver_asistente(request: Request):
     c = cuenta_de_sesion(request)
     q = request.query_params
     vista = q.get("vista") if q.get("vista") == "conexion" else ""
-    return await panel_de(c, ver=q.get("ver", ""), vista=vista) if c else entrar()
+    return await panel_de(c, ver=q.get("ver", ""), vista=vista, abrir=q.get("abrir") == "1") if c else entrar()
 
 
 @router.post("/guardar")
@@ -1271,7 +1301,7 @@ async def prueba_inicio(c: Cuenta, mensajes: list[list[str]], aviso: str = "") -
         '<p class="vacio">Escribe como si fueras un cliente. Usa las instrucciones que guardaste.</p>')
     return (
         PRINCIPIO
-        + cabecera(salir=True, menu="asistente", cuenta=c, sub="probar")
+        + cabecera(salir=True, menu="asistente", cuenta=c, sub="probar", perfil=await usuario(c))
         + '<section class="oscuro portada compacta"><div class="contenedor">'
         '<p class="antetitulo">Prueba tu asistente</p>'
         f'<h1>@{escape(await usuario(c))}<span class="punto">.</span></h1>'

@@ -92,3 +92,8 @@ document.querySelectorAll(".hamburguesa, .lateral .cerrar, .velo").forEach((a) =
     raiz.classList.toggle("menu-abierto", a.classList.contains("hamburguesa"));
   });
 });
+
+// Menú de perfil (<details class="perfil">): se cierra al hacer clic fuera de él.
+document.addEventListener("click", (e) => {
+  document.querySelectorAll("details.perfil[open]").forEach((d) => { if (!d.contains(e.target)) d.open = false; });
+});

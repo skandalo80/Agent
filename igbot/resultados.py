@@ -255,7 +255,7 @@ async def pagina(c: Cuenta, rango: str) -> HTMLResponse:
     if c.imagenes_mes > 0:
         cuerpo += seccion_contenido(d)
     return panel.pagina(
-        panel.cabecera(salir=True, menu="resultados", cuenta=c)
+        panel.cabecera(salir=True, menu="resultados", cuenta=c, perfil=await panel.usuario(c))
         + '<section class="oscuro portada compacta"><div class="contenedor">'
         '<p class="antetitulo">Resultados</p>'
         f'<h1>@{escape(await panel.usuario(c))}<span class="punto">.</span></h1>'
