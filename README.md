@@ -2,7 +2,7 @@
 
 Contesta los DMs de la cuenta de Instagram con un agente hecho con el **Claude Agent SDK**, con memoria por persona.
 
-Dominio del webhook: `bot.skandar.online`. Repo: `skandalo80/Agent`.
+Dominio del bot y del panel: `console.skandar.online` (`bot.skandar.online` sigue funcionando como alias para el webhook y los enlaces viejos). Repo: `skandalo80/Agent`.
 
 ## Cómo funciona
 
@@ -78,7 +78,7 @@ Pruebas locales: `pip install pytest && python -m pytest -q`
 ```bash
 cd ~/ig-bot && git pull
 .venv/bin/pip install -r requirements.txt
-echo "PUBLIC_URL=https://bot.skandar.online" >> .env
+echo "PUBLIC_URL=https://console.skandar.online" >> .env
 sudo systemctl restart igbot
 ```
 
@@ -90,7 +90,7 @@ Un solo proceso (`igbot`, puerto 8001) atiende todas las cuentas sobre el mismo 
 CUENTAS=cafelunar,otra_cuenta
 ```
 
-Meta manda los avisos de todas las cuentas al mismo webhook (`bot.skandar.online/webhook`). Cada aviso trae el id de su cuenta y el bot lo atiende con la configuración de esa cuenta: su base, su token, su prompt y sus límites (ver `igbot/cuenta.py`). Cada cuenta tiene su cola; `MAX_CONCURRENT` (4) es el tope de respuestas a la vez entre todas y `MAX_CONCURRENT_PER_ACCOUNT` (3) el de una sola cuenta. La renovación de tokens, las publicaciones programadas y el reporte semanal son un bucle por tarea que pasa por todas las cuentas.
+Meta manda los avisos de todas las cuentas al mismo webhook (`console.skandar.online/webhook`). Cada aviso trae el id de su cuenta y el bot lo atiende con la configuración de esa cuenta: su base, su token, su prompt y sus límites (ver `igbot/cuenta.py`). Cada cuenta tiene su cola; `MAX_CONCURRENT` (4) es el tope de respuestas a la vez entre todas y `MAX_CONCURRENT_PER_ACCOUNT` (3) el de una sola cuenta. La renovación de tokens, las publicaciones programadas y el reporte semanal son un bucle por tarea que pasa por todas las cuentas.
 
 Para dar de alta un cliente que ya se conectó en skandar.online/conectar:
 ```bash
@@ -120,13 +120,13 @@ Mientras la app de Meta no tenga App Review, solo se conectan las cuentas invita
 2. Tú lo invitas a mano: panel de Meta → Roles de la app → **Instagram Testers** → su @. Le avisas y él acepta en instagram.com → Configuración → Apps y sitios web → Invitaciones de prueba.
 3. Pulsa **Conectar tu Instagram**: inicia sesión, autoriza y el bot guarda su token de 60 días en la tabla `conexiones` de `data/bot.db`. Te vuelve a avisar.
 4. Su cuenta se da de alta sola, **en pausa**, como paquete Básico: `clientes/<su_usuario>/` con su `.env` (token, id, `CLAUDE_MODEL=claude-haiku-5-5`, `GOOGLE_TOOLS=0` y `OWNER_EMAIL` = el correo del formulario) y un `system.md` inicial. No hace falta reiniciar ni tocar `CUENTAS`: al arrancar, el bot carga también las cuentas dadas de alta así.
-5. El cliente cae en su **panel** (`bot.skandar.online/panel`): llena a qué se dedica, horarios, precios, preguntas frecuentes, políticas y qué hacer si piden una persona; elige el tono (amigable, profesional o formal) y pulsa *Generar instrucciones*; las revisa, *Guardar* y *Encender*. Para volver al panel entra otra vez con Instagram (la sesión dura 30 días; Instagram vuelve a pedir el permiso cada vez que se entra). Lo que escribe va antes de `prompts/comun.md`, así que no puede quitar las reglas comunes.
+5. El cliente cae en su **panel** (`console.skandar.online/panel`): llena a qué se dedica, horarios, precios, preguntas frecuentes, políticas y qué hacer si piden una persona; elige el tono (amigable, profesional o formal) y pulsa *Generar instrucciones*; las revisa, *Guardar* y *Encender*. Para volver al panel entra otra vez con Instagram (la sesión dura 30 días; Instagram vuelve a pedir el permiso cada vez que se entra). Lo que escribe va antes de `prompts/comun.md`, así que no puede quitar las reglas comunes.
 
 Las cuentas de `CUENTAS` (dadas de alta con `scripts/alta_cliente.py`) también pueden entrar al panel: ven su `system.md` actual y lo pueden cambiar. Para ellas la pausa del panel es opcional (si nunca la tocan, contestan).
 
 `GOOGLE_TOOLS=0` en el `.env` de una cuenta le quita agendar en tu calendario, mandar correos y cotizar con tu Google (sigue pudiendo pasar a una persona, que avisa por correo a `OWNER_EMAIL`). Pónselo a cualquier cliente que no deba usar tu Google.
 
-Una sola vez: en el `.env` principal pon `IG_APP_ID` (y `IG_OAUTH_SECRET` si el "Instagram app secret" no es el mismo que `IG_APP_SECRET`), y en el panel de Meta, en *API de Instagram con inicio de sesión de Instagram* → *Configurar inicio de sesión para empresas*, agrega la URL de redirección `https://bot.skandar.online/conectar/callback`.
+Una sola vez: en el `.env` principal pon `IG_APP_ID` (y `IG_OAUTH_SECRET` si el "Instagram app secret" no es el mismo que `IG_APP_SECRET`), y en el panel de Meta, en *API de Instagram con inicio de sesión de Instagram* → *Configurar inicio de sesión para empresas*, agrega la URL de redirección `https://console.skandar.online/conectar/callback`.
 
 ## Comentarios: palabra clave → DM
 
@@ -263,7 +263,7 @@ Revisa también horario, zona y límites (están en `.env.example`) y reinicia c
 
 ## 1. DNS (en el panel de tu dominio)
 
-Crea un registro **A**: nombre `bot`, valor = la **IP pública** de tu instancia de Oracle. Comprueba desde tu PC con `ping bot.skandar.online` que responde esa IP (puede tardar unos minutos).
+Crea un registro **A**: nombre `console`, valor = la **IP pública** de tu instancia de Oracle. Comprueba desde tu PC con `ping console.skandar.online` que responde esa IP (puede tardar unos minutos).
 
 ## 2. Abrir puertos en Oracle Cloud
 
@@ -305,7 +305,7 @@ sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 sudo systemctl reload caddy
 ```
 
-Comprueba: `curl https://bot.skandar.online/health` debe mostrar `{"ok":true}`. Si el servidor dice `Could not resolve host` pero `dig +short bot.skandar.online @1.1.1.1` sí da la IP, es caché de DNS local: usa `curl --resolve bot.skandar.online:443:IP_DE_LA_INSTANCIA https://bot.skandar.online/health`.
+Comprueba: `curl https://console.skandar.online/health` debe mostrar `{"ok":true}`. Si el servidor dice `Could not resolve host` pero `dig +short console.skandar.online @1.1.1.1` sí da la IP, es caché de DNS local: usa `curl --resolve console.skandar.online:443:IP_DE_LA_INSTANCIA https://console.skandar.online/health`.
 
 El bot escucha en el puerto 8001 porque el 8000 ya lo usaba otra app en esta instancia.
 
@@ -317,7 +317,7 @@ El bot escucha en el puerto 8001 porque el 8000 ya lo usaba otra app en esta ins
 4. En esa misma página copia la **Clave secreta de la app de Instagram** (no la de Facebook) y ponla en `.env` como `IG_APP_SECRET`.
 5. Reinicia la app: `sudo systemctl restart igbot`.
 6. **Configurar webhooks**:
-   - URL de devolución de llamada: `https://bot.skandar.online/webhook`
+   - URL de devolución de llamada: `https://console.skandar.online/webhook`
    - Token de verificación: el mismo `IG_VERIFY_TOKEN` de tu `.env`
    - Pulsa *Verificar y guardar*, y después **suscribe el campo `messages`**.
 7. En la fila de tu cuenta de Instagram, activa la **suscripción a webhooks** si aparece el interruptor.
@@ -342,7 +342,7 @@ sudo journalctl -u igbot -f
 La página del negocio está en `web/` (HTML estático, sin build): `index.html` y `privacidad.html` (aviso de privacidad completo, sirve para Meta). Caddy la sirve desde `/var/www/skandar.online`, porque el usuario `caddy` no puede leer tu carpeta personal.
 
 1. DNS: registros A de `skandar.online` (`@`) y `www` apuntando a la IP de la instancia.
-2. Revisa que nadie use ya esos nombres: `grep -n "skandar.online" /etc/caddy/Caddyfile` (solo debe salir `bot.skandar.online`).
+2. Revisa que nadie use ya esos nombres: `grep -n "skandar.online" /etc/caddy/Caddyfile` (solo deben salir `console.skandar.online` y `bot.skandar.online`).
 3. Copia los archivos y añade el bloque:
 
 ```bash
@@ -363,7 +363,7 @@ La página incluye `404.html`, `robots.txt`, `sitemap.xml`, `og.png` (la vista p
 
 ```bash
 sudo cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.bak
-sudo nano /etc/caddy/Caddyfile   # borra los bloques bot.skandar.online, skandar.online y www.skandar.online
+sudo nano /etc/caddy/Caddyfile   # borra los bloques console.skandar.online, bot.skandar.online, skandar.online y www.skandar.online
 cat ~/ig-bot/deploy/Caddyfile ~/ig-bot/deploy/Caddyfile-web | sudo tee -a /etc/caddy/Caddyfile
 sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile && sudo systemctl reload caddy
 curl -sI https://skandar.online | grep -i strict   # debe salir Strict-Transport-Security

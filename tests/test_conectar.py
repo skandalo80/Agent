@@ -49,7 +49,7 @@ class FakeHTTP:
 
 def setup(monkeypatch):
     monkeypatch.setattr(bot.config, "IG_APP_ID", "123")
-    monkeypatch.setattr(bot.config, "PUBLIC_URL", "https://bot.skandar.online")
+    monkeypatch.setattr(bot.config, "PUBLIC_URL", "https://console.skandar.online")
     monkeypatch.setattr(cuenta(), "admin_ig_ids", {"jefe"})
     monkeypatch.setattr(conectar.httpx, "AsyncClient", FakeHTTP)
     avisos = []
@@ -91,7 +91,7 @@ def test_oauth_guarda_el_token_de_la_cuenta(monkeypatch):
         url = urlparse(r.headers["location"])
         q = parse_qs(url.query)
         assert url.netloc == "www.instagram.com"
-        assert q["redirect_uri"] == ["https://bot.skandar.online/conectar/callback"]
+        assert q["redirect_uri"] == ["https://console.skandar.online/conectar/callback"]
         state = q["state"][0]
 
         # Sin la cookie (enlace armado por alguien más) no se conecta nada.

@@ -282,7 +282,7 @@ for _nombre in ICONOS:
 
 @app.get("/", include_in_schema=False)
 def inicio():
-    """bot.skandar.online a secas lleva al panel."""
+    """console.skandar.online a secas lleva al panel."""
     return RedirectResponse("/panel", status_code=307)
 
 

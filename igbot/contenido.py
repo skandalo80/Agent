@@ -1,6 +1,6 @@
 """Contenido: el cliente arma, aprueba y programa sus posts desde el panel.
 
-bot.skandar.online/panel/contenido, para las cuentas con contenido en su plan
+console.skandar.online/panel/contenido, para las cuentas con contenido en su plan
 (IMAGES_PER_MONTH > 0: Community y Pro).
 
 - Tu marca: colores (HEX, con su Pantone de referencia), tipografía y grosor de

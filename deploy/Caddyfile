@@ -1,4 +1,4 @@
-bot.skandar.online {
+(cabeceras-bot) {
     header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains"
         Content-Security-Policy "default-src 'none'; script-src 'self'; font-src 'self'; img-src 'self' https://*.cdninstagram.com https://*.fbcdn.net; style-src 'unsafe-inline'; frame-ancestors 'none'"
@@ -7,5 +7,23 @@ bot.skandar.online {
         Referrer-Policy "no-referrer"
         -Server
     }
+}
+
+console.skandar.online {
+    import cabeceras-bot
     reverse_proxy 127.0.0.1:8001
+}
+
+# Dominio anterior: el webhook de Meta, las imágenes que se están publicando y los
+# PDF de cotización ya enviados siguen funcionando aquí; lo demás (panel, conectar)
+# se va a console para que la sesión y el origen sean siempre los mismos.
+bot.skandar.online {
+    import cabeceras-bot
+    @sigue path /webhook* /media/* /cotizaciones/* /health
+    handle @sigue {
+        reverse_proxy 127.0.0.1:8001
+    }
+    handle {
+        redir https://console.skandar.online{uri} permanent
+    }
 }

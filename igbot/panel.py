@@ -1,4 +1,4 @@
-"""Panel del cliente: bot.skandar.online/panel.
+"""Panel del cliente: console.skandar.online/panel.
 
 El cliente entra con su Instagram (el mismo botón de /conectar, sin
 contraseñas) y desde ahí:

@@ -15,7 +15,7 @@ from igbot import panel  # noqa: E402
 from test_conectar import FakeHTTP, FakeResponse, setup  # noqa: E402
 from test_cuenta import FakeInstagram  # noqa: E402
 
-ORIGEN = {"Origin": "https://bot.skandar.online"}
+ORIGEN = {"Origin": "https://console.skandar.online"}
 REVISAR = panel.revisar_instrucciones  # la de verdad (conftest la cambia por una que aprueba todo)
 
 
@@ -92,7 +92,7 @@ def test_cliente_se_conecta_configura_y_enciende(monkeypatch, tmp_path):
         r = client.get("/conectar/instagram", follow_redirects=False)
         state = parse_qs(urlparse(r.headers["location"]).query)["state"][0]
         r = client.get(f"/conectar/callback?code=abc&state={state}", follow_redirects=False)
-        assert r.headers["location"] == "https://bot.skandar.online/panel"
+        assert r.headers["location"] == "https://console.skandar.online/panel"
         assert any("en pausa" in t for _, t in avisos)
 
         # Se dio de alta sola: Básico (Haiku, sin tu Google) y avisos al correo del formulario.
@@ -176,7 +176,7 @@ def test_la_cuenta_principal_edita_sus_instrucciones_aparte(monkeypatch, tmp_pat
         r = client.get("/conectar/instagram", follow_redirects=False)
         state = parse_qs(urlparse(r.headers["location"]).query)["state"][0]
         r = client.get(f"/conectar/callback?code=abc&state={state}", follow_redirects=False)
-        assert r.headers["location"] == "https://bot.skandar.online/panel"
+        assert r.headers["location"] == "https://console.skandar.online/panel"
         assert not Path("clientes").exists() and len(bot.cuentas) == 1  # no se da de alta otra vez
         # Volver a conectarse deja el token nuevo (con los permisos de ahora) en su base.
         assert client.portal.call(bot.principal.store.get, "ig_token") == "largo"
