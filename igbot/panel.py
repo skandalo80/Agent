@@ -674,8 +674,8 @@ ICONOS = {
     "plegar": _icono('<path d="m11 17-5-5 5-5M18 17l-5-5 5-5"/>'),
 }
 SUBMENU = {
-    "asistente": [("chats", "Conversaciones", "/panel/asistente#chats"),
-                  ("configura", "Configura tu asistente", "/panel/asistente#configura"),
+    "asistente": [("chats", "Conversaciones", "/panel/asistente"),
+                  ("configura", "Configura tu asistente", "/panel/asistente/configura"),
                   ("conexion", "Conexión", "/panel/asistente?vista=conexion"),
                   ("probar", "Probar mi asistente", "/panel/probar#ultimo")],
     "contenido": [("semana", "Esta semana", "/panel/contenido/semana"), ("calendario", "Calendario", "/panel/contenido"),
@@ -738,7 +738,7 @@ def menu_perfil(perfil: str, cuenta: Cuenta | None) -> str:
             f'<div class="perfil-menu"><div class="quien">Conectado como @{usuario_}</div>'
             f'<a href="https://www.instagram.com/{usuario_}/" target="_blank" rel="noopener">Ver mi Instagram</a>'
             '<a href="/panel/asistente?vista=conexion">Conexión</a>'
-            '<a href="/panel/asistente?abrir=1#ajustes">Horario y avisos</a>'
+            '<a href="/panel/asistente/configura#ajustes">Horario y avisos</a>'
             f'{marca}'
             + salir.format("", "", "Salir") + "</div></details></div>")
 
@@ -764,11 +764,12 @@ def caja(nombre: str, etiqueta: str, ayuda: str, valor: str, filas: int = 2) -> 
 async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt: str | None = None,
                    pares_minimos: int = MIN_PREGUNTAS, nota: str = "", ver: str = "",
                    confirmar: bool = False, vista: str = "", abrir: bool = False) -> HTMLResponse:
-    """La página del panel. `aviso` sale arriba; `nota`, junto a las instrucciones
-    (ahí deja la página "Generar instrucciones", con #instrucciones)."""
-    # El formulario va plegado; abierto si aún no lo configura o si viene de editarlo (Guardar, Generar...).
-    abierto = (abrir or datos is not None or prompt is not None or bool(nota) or confirmar
-               or not await asistente_listo(c))
+    """Tu asistente. Tres vistas, cada una con su dirección: las conversaciones (/panel/asistente),
+    "configura" (el formulario, /panel/asistente/configura) y "conexion". `aviso` sale arriba;
+    `nota`, junto a las instrucciones (ahí deja la página "Generar instrucciones", con #instrucciones)."""
+    # Lo que viene de editar el formulario (Guardar, Generar, agregar una pregunta...) vuelve al formulario.
+    if not vista and (abrir or datos is not None or prompt is not None or bool(nota) or confirmar):
+        vista = "configura"
     datos = datos if datos is not None else await perfil(c)
     if prompt is None:  # el cliente ve solo su tono e instrucciones; el prompt completo se arma aparte
         prompt = datos.get("instrucciones", "") if c.slug else prompt_actual(c)
@@ -776,21 +777,35 @@ async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt
     from . import ajustes  # ajustes usa este módulo
     estado_conexion, tarjeta_conexion = await ajustes.conexion(c)
 
-    cuerpo = ('<p class="volver"><a class="enlace" href="/panel/asistente">← Volver a tu asistente</a></p>'
-              + tarjeta_conexion) if vista == "conexion" else None
-    formulario = (f'<details class="grupo plegable" id="configura"{" open" if abierto else ""}>'
-                  '<summary><div><span class="num">Configura tu asistente</span>'
-                  '<span class="resumen">Tu negocio, preguntas, políticas, tono, horario y avisos</span></div></summary>'
+    volver = '<p class="volver"><a class="enlace" href="/panel/asistente">← Volver a tus conversaciones</a></p>'
+    if vista == "conexion":
+        titulo, bajada, cuerpo = "Conexión", "Cómo está conectada tu cuenta de Instagram.", volver + tarjeta_conexion
+    elif vista == "configura":
+        titulo, bajada = "Configura", "Tu negocio, preguntas, políticas, tono, horario y avisos."
+        cuerpo = (("" if c.slug else principal(c))
+                  + '<div class="grupo" id="configura">'
                   + _formulario(c, datos, prompt, pares_minimos, nota, confirmar, await ayudas_restantes(c))
-                  + ajustes.tarjeta(c) + "</details>")
+                  + ajustes.tarjeta(c) + "</div>")
+    else:
+        titulo = bajada = ""
+        cuerpo = (await pendiente(c, "asistente")
+                  + ("" if await asistente_listo(c) else
+                     '<div class="tarjeta"><h2>Configura tu asistente para empezar</h2>'
+                     '<p class="ayuda">Cuéntale de tu negocio, tus precios y tus horarios: con eso contesta por ti.</p>'
+                     '<div class="acciones"><a class="boton" href="/panel/asistente/configura">Configurar mi asistente'
+                     "</a></div></div>")
+                  + ("" if estado_conexion == "ok" else
+                     '<div class="aviso">Hay algo que revisar en tu conexión.'
+                     ' <a class="enlace" href="/panel/asistente?vista=conexion">Ver conexión</a></div>')
+                  + await recientes(c, ver))
     return pagina(
-        cabecera(salir=True, menu="asistente", cuenta=c, sub=vista, perfil=await usuario(c),
+        cabecera(salir=True, menu="asistente", cuenta=c, sub=vista or "chats", perfil=await usuario(c),
                  luces={"conexion": estado_conexion})
         + (f'<section class="oscuro portada compacta delgada"><div class="contenedor">'
-           '<p class="antetitulo">Tu asistente · Conexión</p>'
+           f'<p class="antetitulo">Tu asistente · {titulo}</p>'
            f'<h1>@{escape(await usuario(c))}<span class="punto">.</span></h1>'
-           '<p class="bajada" style="margin-left:0">Cómo está conectada tu cuenta de Instagram.</p></div></section>'
-           if vista == "conexion" else
+           f'<p class="bajada" style="margin-left:0">{bajada}</p></div></section>'
+           if titulo else
            '<section class="oscuro portada compacta"><div class="contenedor">'
            '<p class="antetitulo">Tu asistente</p>'
            f'<h1>@{escape(await usuario(c))}<span class="punto">.</span></h1>'
@@ -804,15 +819,7 @@ async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt
            + "</div>" + await hoy(c) + "</div></section>")
         + '<main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
-        + (cuerpo if cuerpo is not None else
-           await pendiente(c, "asistente")
-           + ("" if estado_conexion == "ok" else
-              '<div class="aviso">Hay algo que revisar en tu conexión.'
-              ' <a class="enlace" href="/panel/asistente?vista=conexion">Ver conexión</a></div>')
-           + await recientes(c, ver)
-           + ("" if c.slug else principal(c))
-           + formulario)
-        + "</div></main>"
+        + cuerpo + "</div></main>"
     )
 
 
@@ -1051,7 +1058,7 @@ def tono_principal(tonos: str, prompt: str, nota: str, confirmar: bool) -> str:
            " armadas solo con el formulario y se pierde lo que escribiste. Tus instrucciones siguen abajo sin cambios."
            '<div class="acciones"><button class="boton" name="accion" value="generar_si"'
            ' formaction="/panel/guardar#instrucciones">Sí, reemplazarlas</button>'
-           '<a class="boton secundario" href="/panel/asistente#instrucciones">Cancelar</a></div></div>'
+           '<a class="boton secundario" href="/panel/asistente/configura#instrucciones">Cancelar</a></div></div>'
            if confirmar else "") +
         f'<label>Instrucciones de tu asistente</label><p class="ayuda">Puedes editarlas antes de guardar.</p>'
         f'<textarea class="prompt" name="prompt" maxlength="{MAX_PROMPT}">{escape(prompt)}</textarea>'
@@ -1162,8 +1169,14 @@ async def ver_bienvenida(request: Request):
 async def ver_asistente(request: Request):
     c = cuenta_de_sesion(request)
     q = request.query_params
-    vista = q.get("vista") if q.get("vista") == "conexion" else ""
+    vista = q.get("vista") if q.get("vista") in ("conexion", "configura") else ""
     return await panel_de(c, ver=q.get("ver", ""), vista=vista, abrir=q.get("abrir") == "1") if c else entrar()
+
+
+@router.get("/asistente/configura")
+async def ver_configura(request: Request):
+    c = cuenta_de_sesion(request)
+    return await panel_de(c, vista="configura") if c else entrar()
 
 
 @router.post("/guardar")
@@ -1184,7 +1197,7 @@ async def guardar(request: Request):
     if accion == "restaurar" and not c.slug:
         c.prompt_editado().unlink(missing_ok=True)
         log.info("@%s volvió a las instrucciones del servidor", await usuario(c))
-        return await panel_de(c, "Listo: tu asistente vuelve a usar las instrucciones del servidor.")
+        return await panel_de(c, "Listo: tu asistente vuelve a usar las instrucciones del servidor.", abrir=True)
     if c.slug:
         return await guardar_cliente(c, datos, accion, prompt[:MAX_INSTRUCCIONES].strip())
     if accion not in ("generar", "generar_si", "guardar"):
@@ -1208,8 +1221,8 @@ async def guardar(request: Request):
     log.info("@%s guardó las instrucciones de su asistente desde el panel", nombre)
     aviso = "Guardado. Tu asistente ya usa estas instrucciones."
     if not await activo(c) and not c.en_revision:
-        aviso += " Cuando quieras que conteste, pulsa Encender."
-    return await panel_de(c, aviso)
+        aviso += " Cuando quieras que conteste, ve a tus conversaciones y pulsa Encender."
+    return await panel_de(c, aviso, abrir=True)
 
 
 async def guardar_cliente(c: Cuenta, datos: dict, accion: str, instrucciones: str) -> HTMLResponse:
@@ -1243,8 +1256,8 @@ async def guardar_cliente(c: Cuenta, datos: dict, accion: str, instrucciones: st
     log.info("@%s guardó su asistente desde el panel", nombre)
     aviso = "Guardado. Tu asistente ya usa estos datos."
     if not await activo(c) and not c.en_revision:
-        aviso += " Cuando quieras que conteste, pulsa Encender."
-    return await panel_de(c, aviso)
+        aviso += " Cuando quieras que conteste, ve a tus conversaciones y pulsa Encender."
+    return await panel_de(c, aviso, abrir=True)
 
 
 @router.post("/estado")

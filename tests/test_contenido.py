@@ -466,15 +466,16 @@ def test_ajustes_y_conexion(cliente, monkeypatch):
     from igbot.cuenta import usar
     client, c, *_ = cliente
     ajustes._revision.clear()
+    assert 'name="pausa" value="12" checked' in client.get("/panel/asistente/configura").text
     r = client.get("/panel/asistente")
-    assert 'id="ajustes"' in r.text and 'name="pausa" value="12" checked' in r.text
+    assert 'id="ajustes"' not in r.text  # Horario y avisos va en Configura
     # Conexión va en el menú lateral (con su semáforo) y abre su propia vista.
     assert re.search(r'href="/panel/asistente\?vista=conexion">Conexión <span class="semaforo sem-\w+"></span>', r.text)
     assert "Recibiendo mensajes" not in r.text and 'id="conexion"' not in r.text
     r = client.get("/panel/asistente?vista=conexion")
     assert "Recibiendo mensajes" in r.text and 'id="ajustes"' not in r.text and "Gasto de hoy" not in r.text
     assert '<a href="/panel/asistente?vista=conexion" class="on">' in r.text and "compacta delgada" in r.text
-    assert '<a class="enlace" href="/panel/asistente">← Volver a tu asistente</a>' in r.text
+    assert '<a class="enlace" href="/panel/asistente">← Volver a tus conversaciones</a>' in r.text
     assert "Límite de gasto" not in r.text  # el gasto solo lo ve la cuenta principal
 
     datos = {"pausa": "24", "dias": ["1", "2", "3", "4", "5", "6"], "desde": "10:00", "hasta": "19:30",
@@ -580,13 +581,19 @@ def test_crear_post_con_ajustes_solo_para_ese_post(cliente, monkeypatch):
     assert p["plantilla"] == "editorial" and "marca" not in p
 
 
-def test_configura_tu_asistente_va_plegado(cliente):
+def test_configura_tu_asistente_en_su_propia_pagina(cliente):
     client, c, *_ = cliente
-    # Ya guardó sus instrucciones (el fixture): el formulario sale cerrado.
-    assert '<details class="grupo plegable" id="configura">' in client.get("/panel/asistente").text
+    # Conversaciones y el formulario van en direcciones distintas.
+    r = client.get("/panel/asistente")
+    assert 'id="chats"' in r.text and 'id="configura"' not in r.text and "Configurar mi asistente" not in r.text
+    assert '<a href="/panel/asistente" class="on">Conversaciones' in r.text
+    r = client.get("/panel/asistente/configura")
+    assert 'id="configura"' in r.text and 'id="chats"' not in r.text and "Tu asistente · Configura" in r.text
+    assert '<a href="/panel/asistente/configura" class="on">Configura tu asistente' in r.text
+    # Sin configurar: las conversaciones invitan a configurarlo.
     client.portal.call(c.store.set, "asistente_listo", "0")
     client.portal.call(c.store.set, "perfil", "")
-    assert '<details class="grupo plegable" id="configura" open>' in client.get("/panel/asistente").text
+    assert 'href="/panel/asistente/configura">Configurar mi asistente' in client.get("/panel/asistente").text
 
 
 def test_subir_fotos_solo_para_un_post(cliente, monkeypatch):
