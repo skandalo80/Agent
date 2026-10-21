@@ -399,6 +399,7 @@ main .boton.secundario{background:transparent;color:var(--negro);border-color:va
 .oscuro .boton.ajuste.on,.oscuro .acciones-estado .boton.on{background:var(--claro);color:var(--negro)}
 .boton .semaforo{display:inline-block;margin:0 .5rem 0 0;vertical-align:.05em}
 .lat-sub .semaforo{display:inline-block;margin:0 0 0 .35rem;vertical-align:.05em}
+html .lateral .lat-sub.cerrado{display:none}
 .compacta h1{font-size:clamp(1.8rem,4vw,2.4rem)}
 .compacta .bajada{font-size:1.05rem;margin-top:.5rem}
 .compacta+main{padding-top:1.5rem}
@@ -676,7 +677,7 @@ ICONOS = {
 SUBMENU = {
     "asistente": [("chats", "Conversaciones", "/panel/asistente"),
                   ("configura", "Configura tu asistente", "/panel/asistente/configura"),
-                  ("conexion", "Conexión", "/panel/asistente?vista=conexion"),
+                  ("conexion", "Conexión", "/panel/asistente/conexion"),
                   ("probar", "Probar mi asistente", "/panel/probar#ultimo")],
     "contenido": [("semana", "Esta semana", "/panel/contenido/semana"), ("calendario", "Calendario", "/panel/contenido"),
                   ("ideas", "Comentarios y DMs", "/panel/contenido/ideas"),
@@ -702,10 +703,13 @@ def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None, 
     for k, (nombre, href) in MENU.items():
         if k == "contenido" and cuenta is not None and cuenta.imagenes_mes <= 0:
             continue
-        secciones.append(f'<a class="lat-item{" on" if k == menu else ""}" href="{href}" title="{nombre}">'
+        # Con JavaScript, una sección con submenú lo despliega (y abre el menú si está plegado) en vez
+        # de cambiar de página; sin JavaScript es un enlace normal.
+        con_sub = f' data-sub="{k}" aria-expanded="{"true" if k == menu else "false"}"' if k in SUBMENU else ""
+        secciones.append(f'<a class="lat-item{" on" if k == menu else ""}" href="{href}" title="{nombre}"{con_sub}>'
                          f'{ICONOS[k]}<span class="txt">{nombre}</span></a>')
-        if k == menu and k in SUBMENU:
-            secciones.append('<div class="lat-sub">' + "".join(
+        if k in SUBMENU:
+            secciones.append(f'<div class="lat-sub{"" if k == menu else " cerrado"}" id="sub-{k}">' + "".join(
                 f'<a href="{h}"{ACTIVA if s == sub else ""}>{n}'
                 + (f' <span class="semaforo sem-{(luces or {})[s]}"></span>' if s in (luces or {}) else "")
                 + "</a>" for s, n, h in SUBMENU[k]) + "</div>")
@@ -737,7 +741,7 @@ def menu_perfil(perfil: str, cuenta: Cuenta | None) -> str:
             f'<span class="txt">@{usuario_}<small>Tu cuenta</small></span></summary>'
             f'<div class="perfil-menu"><div class="quien">Conectado como @{usuario_}</div>'
             f'<a href="https://www.instagram.com/{usuario_}/" target="_blank" rel="noopener">Ver mi Instagram</a>'
-            '<a href="/panel/asistente?vista=conexion">Conexión</a>'
+            '<a href="/panel/asistente/conexion">Conexión</a>'
             '<a href="/panel/asistente/configura#ajustes">Horario y avisos</a>'
             f'{marca}'
             + salir.format("", "", "Salir") + "</div></details></div>")
@@ -777,9 +781,8 @@ async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt
     from . import ajustes  # ajustes usa este módulo
     estado_conexion, tarjeta_conexion = await ajustes.conexion(c)
 
-    volver = '<p class="volver"><a class="enlace" href="/panel/asistente">← Volver a tus conversaciones</a></p>'
     if vista == "conexion":
-        titulo, bajada, cuerpo = "Conexión", "Cómo está conectada tu cuenta de Instagram.", volver + tarjeta_conexion
+        titulo, bajada, cuerpo = "Conexión", "Cómo está conectada tu cuenta de Instagram.", tarjeta_conexion
     elif vista == "configura":
         titulo, bajada = "Configura", "Tu negocio, preguntas, políticas, tono, horario y avisos."
         cuerpo = (("" if c.slug else principal(c))
@@ -796,7 +799,7 @@ async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt
                      "</a></div></div>")
                   + ("" if estado_conexion == "ok" else
                      '<div class="aviso">Hay algo que revisar en tu conexión.'
-                     ' <a class="enlace" href="/panel/asistente?vista=conexion">Ver conexión</a></div>')
+                     ' <a class="enlace" href="/panel/asistente/conexion">Ver conexión</a></div>')
                   + await recientes(c, ver))
     return pagina(
         cabecera(salir=True, menu="asistente", cuenta=c, sub=vista or "chats", perfil=await usuario(c),
@@ -1169,8 +1172,16 @@ async def ver_bienvenida(request: Request):
 async def ver_asistente(request: Request):
     c = cuenta_de_sesion(request)
     q = request.query_params
-    vista = q.get("vista") if q.get("vista") in ("conexion", "configura") else ""
+    if q.get("vista") == "conexion":  # enlaces viejos
+        return RedirectResponse("/panel/asistente/conexion", status_code=303)
+    vista = "configura" if q.get("vista") == "configura" else ""
     return await panel_de(c, ver=q.get("ver", ""), vista=vista, abrir=q.get("abrir") == "1") if c else entrar()
+
+
+@router.get("/asistente/conexion")
+async def ver_conexion(request: Request):
+    c = cuenta_de_sesion(request)
+    return await panel_de(c, vista="conexion") if c else entrar()
 
 
 @router.get("/asistente/configura")
