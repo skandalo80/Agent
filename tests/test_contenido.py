@@ -474,6 +474,7 @@ def test_ajustes_y_conexion(cliente, monkeypatch):
     r = client.get("/panel/asistente?vista=conexion")
     assert "Recibiendo mensajes" in r.text and 'id="ajustes"' not in r.text and "Gasto de hoy" not in r.text
     assert 'secundario on" href="/panel/asistente">' in r.text  # pulsarlo otra vez regresa
+    assert '<a class="enlace" href="/panel/asistente">← Volver a tu asistente</a>' in r.text
     assert "Límite de gasto" not in r.text  # el gasto solo lo ve la cuenta principal
 
     datos = {"pausa": "24", "dias": ["1", "2", "3", "4", "5", "6"], "desde": "10:00", "hasta": "19:30",
