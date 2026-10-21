@@ -167,8 +167,10 @@ def test_la_cuenta_principal_edita_sus_instrucciones_aparte(monkeypatch, tmp_pat
         # Volver a conectarse deja el token nuevo (con los permisos de ahora) en su base.
         assert client.portal.call(bot.principal.store.get, "ig_token") == "largo"
 
+        configura = client.get("/panel/asistente/configura").text
+        assert "Cuenta principal" in configura and "Generar instrucciones" in configura
+        assert "PROMPT DEL VENDEDOR" in configura
         r = client.get("/panel/asistente")
-        assert "Cuenta principal" in r.text and "Generar instrucciones" in r.text and "PROMPT DEL VENDEDOR" in r.text
         assert "Gasto de hoy" in r.text and "Mensajes este mes" not in r.text
         assert "Límite de gasto" in client.get("/panel/asistente?vista=conexion").text
         assert '<details class="tarjeta plegable" id="chats" open>' in r.text
