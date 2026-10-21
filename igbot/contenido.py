@@ -188,13 +188,32 @@ def url_imagen(c: Cuenta, token: str) -> str:
     return f"/media/{c.media_slug}/{token}.jpg?v={version}"
 
 
+MAX_REGLAS = 10
+
+
+def reglas_de(p: dict) -> list[dict]:
+    """Las reglas palabra clave -> respuesta y DM de un post. Las piezas viejas (y las recién
+    generadas) traen una sola, en "clave", "respuesta" y "dm"."""
+    if "reglas" in p:
+        return p["reglas"]
+    if p.get("clave") or p.get("dm"):
+        return [{"clave": p.get("clave", ""), "respuesta": p.get("respuesta", ""), "dm": p.get("dm", "")}]
+    return []
+
+
+def limpiar_clave(texto: str) -> str:
+    return re.sub(r"[^\wÁÉÍÓÚÜÑ]", "", texto.upper())[:20]
+
+
 async def reglas(store: Store) -> list[Rule]:
     """Palabra clave -> DM de los posts del panel que ya salieron (para comentarios.handle)."""
     out = []
     for post in (await store.posts(("publicada",), user_id=PANEL))[-50:]:
-        p = await pieza(store, post["id"])
-        if (code := shortcode(post["permalink"])) and p.get("clave") and p.get("dm"):
-            out.append(Rule(post=code, keywords=[p["clave"]], dm=p["dm"], public=p.get("respuesta", "")))
+        if not (code := shortcode(post["permalink"])):
+            continue
+        for r in reglas_de(await pieza(store, post["id"])):
+            if r["clave"] and r["dm"]:
+                out.append(Rule(post=code, keywords=[r["clave"]], dm=r["dm"], public=r["respuesta"]))
     return out
 
 
@@ -863,6 +882,39 @@ def campo(nombre: str, etiqueta: str, valor: str, maximo: int, ayuda: str = "") 
             + f'<input type="text" id="{nombre}" name="{nombre}" maxlength="{maximo}" value="{escape(valor)}">')
 
 
+def regla(n: str, r: dict) -> str:
+    """Los campos de una regla de Comentarios y DMs; n es su número, o "nueva" para la que se agrega."""
+    nueva = n == "nueva"
+    return ('<div class="regla">'
+            + ('<div class="cab-regla"><strong>Regla nueva</strong></div>' if nueva else f'<div class="cab-regla"><strong>Regla {int(n) + 1} · {escape(r["clave"])}</strong>'
+               f'<button class="boton secundario chico" name="accion" value="quitar_regla_{n}" formnovalidate>Quitar</button></div>')
+            + campo(f"clave_{n}", "Palabra clave", r["clave"], 20)
+            + campo(f"respuesta_{n}", "Respuesta al comentario", r["respuesta"], 300)
+            + f'<label for="dm_{n}">Mensaje por DM</label>'
+            f'<textarea id="dm_{n}" name="dm_{n}" rows="3" maxlength="1000">{escape(r["dm"])}</textarea></div>')
+
+
+def reglas_del_form(f: dict, antes: list[dict], quitar: int | None) -> list[dict]:
+    """Las reglas que quedan: las de antes (con lo que se cambió) y la nueva si trae palabra clave."""
+    out = []
+    for n in [str(i) for i in range(len(antes)) if i != quitar] + ["nueva"]:
+        r = {"clave": limpiar_clave(f.get(f"clave_{n}", "")), "respuesta": f.get(f"respuesta_{n}", "").strip()[:300],
+             "dm": f.get(f"dm_{n}", "").strip()[:1000]}
+        if r["clave"]:
+            out.append(r)
+    return out[:MAX_REGLAS]
+
+
+async def de_campana(c: Cuenta, p: dict) -> list[str]:
+    """Tema y formato de un post que viene de Campañas (vacío si no viene de ahí o ya no está)."""
+    from . import campanas  # campanas importa este módulo
+    if "campana" not in p:
+        return []
+    if not (x := campanas.buscar_post(await campanas.leer(c), p["campana"])):
+        return []
+    return [campanas.tema_de(x["tipo"])[0], campanas.FORMATOS[campanas.formato_de(x)][0]]
+
+
 async def editor(c: Cuenta, post_id: int, aviso: str = "", confirmar: bool = False) -> HTMLResponse:
     with usar(c):
         post = await c.store.post(post_id)
@@ -889,6 +941,7 @@ async def editor(c: Cuenta, post_id: int, aviso: str = "", confirmar: bool = Fal
                       + '<a class="boton secundario" href="/panel/contenido">← Calendario</a></form></div></div>')
             return await pagina(c, "calendario", "Así quedó tu post.", cuerpo, aviso)
 
+        variables = escape(" · ".join(await de_campana(c, p)) or objetivo)
         valor_cuando = (datetime.fromtimestamp(post["publish_at"], tools.tz()).strftime("%Y-%m-%dT%H:%M")
                         if post["publish_at"] else "")
         es_libre = libre(p)
@@ -901,12 +954,12 @@ async def editor(c: Cuenta, post_id: int, aviso: str = "", confirmar: bool = Fal
             botones = ('<button class="boton" name="accion" value="aprobar">Aprobar y programar</button>'
                        '<button class="boton secundario" name="accion" value="guardar">Guardar borrador</button>'
                        '<a class="boton secundario" href="/panel/contenido">Cancelar cambios</a>'
-                       '<button class="boton secundario" name="accion" value="cancelar" formnovalidate>Descartar post</button>')
+                       '<button class="boton secundario" name="accion" value="cancelar" formnovalidate data-confirma="¿Descartar este post? Se borra y no se puede deshacer.">Descartar post</button>')
         else:
             botones = ('<button class="boton" name="accion" value="aprobar">Guardar cambios</button>'
                        '<a class="boton secundario" href="/panel/contenido">Cancelar cambios</a>'
                        '<button class="boton secundario" name="accion" value="borrador">Quitar de programados</button>'
-                       '<button class="boton secundario" name="accion" value="cancelar" formnovalidate>Descartar post</button>')
+                       '<button class="boton secundario" name="accion" value="cancelar" formnovalidate data-confirma="¿Descartar este post? Se borra y no se puede deshacer.">Descartar post</button>')
         cuerpo = (
             f'<form method="post" action="/panel/contenido/post/{post_id}"'
             + ("" if es_libre or fija else f' data-vista="/panel/contenido/post/{post_id}/muestra.jpg?m={post["media_ids"][0]}"') + ">"
@@ -914,7 +967,7 @@ async def editor(c: Cuenta, post_id: int, aviso: str = "", confirmar: bool = Fal
             '<button class="oculto" name="accion" value="guardar" tabindex="-1" aria-hidden="true">Guardar</button>'
             + (tarjeta_extra(c, "otra") if confirmar else "")
             + f'<div class="editor"><div class="fija">{imagen}'
-            f'<p class="ayuda" style="margin-top:.75rem"><span class="chip {color}">{estado}</span> · {escape(objetivo)}</p></div><div>'
+            f'<p class="ayuda" style="margin-top:.75rem"><span class="chip {color}">{estado}</span> · {variables}</p></div><div>'
             '<div class="tarjeta"><span class="num">Imagen</span>'
             + (('<p class="ayuda">Esta pieza viene de tu campaña y su imagen no lleva un texto que se cambie aquí.'
                 ' Para hacerla de nuevo, ve a Campañas.</p></div>') if fija else
@@ -942,12 +995,14 @@ async def editor(c: Cuenta, post_id: int, aviso: str = "", confirmar: bool = Fal
             f'<p class="ayuda">Hora de tu negocio ({escape(c.timezone)}).</p>'
             f'<input type="datetime-local" id="cuando" name="cuando" value="{valor_cuando}"></div>'
             '<div class="tarjeta"><span class="num">Comentarios y DMs</span>'
-            '<p class="ayuda">Si alguien comenta la palabra en este post, le contestamos en público y le mandamos el DM.'
+            '<p class="ayuda">Si alguien comenta la palabra clave de una regla en este post, le contestamos en público y le mandamos el DM.'
             " Reconocemos variantes: «precio», «Precios» o «¿precio?» cuentan igual.</p>"
-            + campo("clave", "Palabra clave", p.get("clave", ""), 20)
-            + campo("respuesta", "Respuesta al comentario", p.get("respuesta", ""), 300)
-            + '<label for="dm">Mensaje por DM</label>'
-            f'<textarea id="dm" name="dm" rows="3" maxlength="1000">{escape(p.get("dm", ""))}</textarea></div>'
+            + "".join(regla(str(i), r) for i, r in enumerate(reglas_de(p)))
+            + ('<details class="nueva-regla"><summary class="boton secundario chico">Agregar regla +</summary>'
+               + regla("nueva", {"clave": "", "respuesta": "", "dm": ""})
+               + '<div class="acciones"><button class="boton chico" name="accion" value="regla">Guardar regla</button>'
+               "</div></details>" if len(reglas_de(p)) < MAX_REGLAS else "")
+            + "</div>"
             f'<div class="acciones">{botones}</div>'
             "</div></div></form>"
         )
@@ -1291,12 +1346,16 @@ async def editar(request: Request, post_id: int):
         fija = sin_rotulo(p)
         if not libre(p):
             p["plantilla"] = f.get("plantilla") if f.get("plantilla") in imagenes.PLANTILLAS else p.get("plantilla")
-        for k, n in (("titulo", 80), ("subtitulo", 120), ("precio", 40), ("respuesta", 300), ("dm", 1000)):
+        for k, n in (("titulo", 80), ("subtitulo", 120), ("precio", 40)):
             if not (fija and k in ("titulo", "subtitulo", "precio")):  # en una pieza fija, el texto de la imagen se queda
                 p[k] = f.get(k, "").strip()[:n]
         if f.get("con_precio") != "1" and not fija:
             p["precio"] = ""  # sin la casilla, el post no lleva precio aunque haya algo escrito
-        p["clave"] = re.sub(r"[^\wÁÉÍÓÚÜÑ]", "", f.get("clave", "").upper())[:20]
+        quitar = int(accion[13:]) if accion.startswith("quitar_regla_") and accion[13:].isdigit() else None
+        nueva = limpiar_clave(f.get("clave_nueva", ""))
+        p["reglas"] = reglas_del_form(f, reglas_de(p), quitar)
+        for k in ("clave", "respuesta", "dm"):
+            p.pop(k, None)
         caption = f.get("caption", "").strip()[:MAX_CAPTION]
         if not p["titulo"] and not fija:
             return await editor(c, post_id, "El título no puede quedar vacío.")
@@ -1334,6 +1393,10 @@ async def editar(request: Request, post_id: int):
             return await calendario(c, f"Listo: sale el {cuando(publish_at)}.")
         if error_hora:
             return await editor(c, post_id, f"Guardado, pero la hora no: {error_hora}")
+        if accion == "regla":
+            return await editor(c, post_id, f"Regla guardada: «{nueva}»." if nueva else "Escribe la palabra clave de la regla.")
+        if quitar is not None:
+            return await editor(c, post_id, "Regla quitada.")
         return await editor(c, post_id, "Listo: la imagen ya tiene el texto nuevo." if accion == "actualizar"
                             else "Guardado.")
 

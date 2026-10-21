@@ -607,6 +607,10 @@ label.check input[type=email]{flex:1;max-width:22rem;margin:0}
 .bajada-bienvenida{color:#a1a1a6;font-size:1.15rem;max-width:40rem;margin:.75rem 0 0}
 .despues{margin-top:1.25rem;text-align:center;color:#6e6e73;font-size:.9rem}.despues a{color:inherit}
 @media(max-width:700px){.caminos{grid-template-columns:1fr}}
+.regla{border-top:1px solid var(--linea-clara);margin-top:1rem;padding-top:1rem}
+.cab-regla{display:flex;justify-content:space-between;align-items:center;gap:.75rem}
+.nueva-regla{margin-top:1.25rem}.nueva-regla>summary{list-style:none;display:inline-flex}
+.nueva-regla>summary::-webkit-details-marker{display:none}.nueva-regla[open]>summary{display:none}
 .plegable>summary{display:flex;justify-content:space-between;align-items:center;cursor:pointer;list-style:none}
 .plegable>summary::-webkit-details-marker{display:none}
 .plegable>summary .num{margin:0}

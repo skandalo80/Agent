@@ -97,12 +97,13 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
 
     # Arrastrar el del lunes al miércoles: se intercambian.
     k_lun, k_mie = camp["posts"][0]["k"], camp["posts"][1]["k"]
-    r = client.post("/panel/contenido/campanas", headers=ORIGEN, data={"accion": "mover", "k": str(k_lun), "dia": mie})
-    assert r.status_code == 204
+    r = client.post("/panel/contenido/campanas", headers=ORIGEN, data={"accion": "mover", "k": str(k_lun), "dia": mie},
+                    follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"].endswith(f"#d-{mie}")
     camp = leer(client, c)
     assert campanas.buscar_post(camp, k_lun)["dia"] == mie and campanas.buscar_post(camp, k_mie)["dia"] == lun
     r = client.post("/panel/contenido/campanas", headers=ORIGEN, data={"accion": "mover", "k": "1", "dia": "2099-03-01"})
-    assert r.status_code == 409
+    assert "Ese día no es de la campaña." in r.text
     assert client.post("/panel/contenido/campanas", data={"accion": "mover", "k": "1", "dia": vie}).status_code == 403
 
     # El panel del post: cambiar hora, formato y texto; otra idea.
@@ -137,6 +138,8 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
     # En el editor, una pieza fija guarda su texto y hora sin pedir título ni rotular de nuevo.
     r = client.get(f"/panel/contenido/post/{post['id']}")
     assert "viene de tu campaña" in r.text and "data-vista" not in r.text
+    p3 = campanas.buscar_post(leer(client, c), "3")
+    assert f"{campanas.tema_de(p3['tipo'])[0]} · Solo texto</p>" in r.text  # tema y formato bajo la foto
     r = client.post(f"/panel/contenido/post/{post['id']}", headers=ORIGEN,
                     data={"accion": "guardar", "caption": "Desde el editor", "cuando": "2099-01-09T10:30"})
     assert "El título no puede quedar vacío" not in r.text
@@ -145,6 +148,12 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
     # Moverlo después cambia también el post programado.
     client.post("/panel/contenido/campanas", headers=ORIGEN, data={"accion": "mover", "k": "3", "dia": lun})
     assert client.portal.call(c.store.post, post["id"])["publish_at"] == cuando_sale(client, c, lun, "10:30")
+
+    # La propuesta para el dueño de la marca: un PDF con el calendario.
+    assert "/panel/contenido/campanas/propuesta" in client.get("/panel/contenido/campanas").text
+    r = client.get("/panel/contenido/campanas/propuesta")
+    assert r.headers["content-type"] == "application/pdf" and r.content.startswith(b"%PDF")
+    assert 'filename="propuesta-' in r.headers["content-disposition"]
 
     # Las demás de un jalón y aprobar todas: solo las fotos usan cupo.
     pendientes = [p for p in leer(client, c)["posts"] if not p["post_id"]]

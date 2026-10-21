@@ -158,17 +158,26 @@ document.querySelectorAll(".lat-item[data-sub]").forEach((item) => {
     d.addEventListener("dragover", (e) => {
       if (!arrastrado) return;
       e.preventDefault();
+      // Sin esto, al tomar el post por su imagen Chrome propone "copiar" y no deja soltarlo.
+      e.dataTransfer.dropEffect = "move";
       d.classList.add("sobre");
     });
     d.addEventListener("dragleave", () => d.classList.remove("sobre"));
-    d.addEventListener("drop", async (e) => {
+    d.addEventListener("drop", (e) => {
       e.preventDefault();
       d.classList.remove("sobre");
       if (!arrastrado || arrastrado.closest(".dia-cam") === d) return;
-      const datos = new URLSearchParams({accion: "mover", k: arrastrado.dataset.k, dia: d.dataset.dia});
-      const r = await fetch("/panel/contenido/campanas", {method: "POST", body: datos, credentials: "same-origin"});
-      if (r.ok) location.reload();
-      else alert(await r.text() || "No se pudo mover el post.");
+      // Un formulario y no fetch: la CSP del panel (default-src 'none') bloquea fetch.
+      const f = document.createElement("form");
+      f.method = "post";
+      f.action = "/panel/contenido/campanas";
+      for (const [n, v] of Object.entries({accion: "mover", k: arrastrado.dataset.k, dia: d.dataset.dia})) {
+        const i = document.createElement("input");
+        i.type = "hidden"; i.name = n; i.value = v;
+        f.append(i);
+      }
+      document.body.append(f);
+      f.submit();
     });
   });
 })();
@@ -210,3 +219,16 @@ document.querySelectorAll(".lat-item[data-sub]").forEach((item) => {
   form.addEventListener("input", actualizar);
   form.addEventListener("change", actualizar);
 })();
+
+// Botones que piden confirmar (p. ej. Descartar post): sin el sí, no se manda el formulario.
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-confirma]");
+  if (b && !confirm(b.dataset.confirma)) e.preventDefault();
+});
+
+// Fecha y hora: el calendario se abre al dar click en todo el campo, no solo en el icono.
+document.querySelectorAll('input[type="datetime-local"], input[type="date"], input[type="time"]').forEach((i) => {
+  i.addEventListener("click", () => {
+    try { i.showPicker(); } catch { /* navegadores sin showPicker: queda como siempre */ }
+  });
+});
