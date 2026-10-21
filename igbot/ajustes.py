@@ -86,7 +86,7 @@ def tarjeta(c: Cuenta) -> str:
     return (
         # Va dentro del formulario de "Configura tu asistente": su Guardar de abajo guarda también esto.
         '<details class="tarjeta plegable seccion" id="ajustes" open><summary><span class="titulo-sec">'
-        '<span class="num">06</span><h2>Horario y avisos</h2></span></summary>'
+        '<h2>Horario y avisos</h2></span></summary>'
         "<label>Cuando contestas tú un chat, el asistente se calla por</label>"
         f'<div class="chips">{pausas}</div>'
         '<p class="ayuda">Pasado ese tiempo vuelve a contestar solo. Siempre puedes reactivarlo antes desde'
