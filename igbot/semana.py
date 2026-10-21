@@ -249,7 +249,7 @@ def armando(c: Cuenta, extra: bool) -> StreamingResponse:
     """Como contenido.generando, pero con los 3 posts y el avance de cada uno."""
 
     async def partes():
-        yield (panel.PRINCIPIO + panel.cabecera(salir=True, menu="contenido", cuenta=c)
+        yield (panel.PRINCIPIO + panel.cabecera(salir=True, menu="contenido", cuenta=c, perfil=await panel.usuario(c))
                + '<main><div class="contenedor"><div class="tarjeta" id="generando"><div class="generando">'
                '<div class="escribiendo"><span></span><span></span><span></span></div>'
                "<div><h2>Armando tu semana…</h2>"

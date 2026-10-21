@@ -359,7 +359,7 @@ def generando(c: Cuenta, trabajo, volver: str, mensaje: str) -> StreamingRespons
     """Sin JavaScript: primero la página con "generando…" y, al terminar, el salto al editor."""
 
     async def partes():
-        yield (panel.PRINCIPIO + panel.cabecera(salir=True, menu="contenido")
+        yield (panel.PRINCIPIO + panel.cabecera(salir=True, menu="contenido", cuenta=c, perfil=await panel.usuario(c))
                + '<main><div class="contenedor"><div class="tarjeta" id="generando"><div class="generando">'
                '<div class="escribiendo"><span></span><span></span><span></span></div>'
                f"<div><h2>{escape(mensaje)}</h2>"
@@ -421,7 +421,7 @@ async def pagina(c: Cuenta, actual: str, bajada: str, cuerpo: str, aviso: str = 
         f'<a href="{href}" class="{"on" if k == actual else ""}{" crear" if k == "nuevo" else ""}">{nombre}</a>'
         for k, nombre, href in PESTANAS)
     return panel.pagina(
-        panel.cabecera(salir=True, menu="contenido", cuenta=c, sub=actual)
+        panel.cabecera(salir=True, menu="contenido", cuenta=c, sub=actual, perfil=await panel.usuario(c))
         + '<section class="oscuro portada compacta"><div class="contenedor">'
         '<p class="antetitulo">Contenido</p>'
         f'<div class="titulo-fila"><h1>@{escape(await panel.usuario(c))}<span class="punto">.</span></h1>'

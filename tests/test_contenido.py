@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from PIL import Image  # noqa: E402
 
 import app as bot  # noqa: E402
-from igbot import admin, contenido, imagenes, tools  # noqa: E402
+from igbot import admin, contenido, imagenes, panel, tools  # noqa: E402
 from igbot.cuenta import usar  # noqa: E402
 from test_conectar import setup  # noqa: E402
 from test_cuenta import FakeInstagram  # noqa: E402
@@ -253,7 +253,7 @@ def test_si_instagram_falla_la_pagina_sale(cliente, monkeypatch):
 
 def test_script_y_fuentes(cliente):
     client, *_ = cliente
-    assert '<script src="/panel/static/panel.js" defer></script>' in client.get("/panel").text
+    assert f'<script src="/panel/static/panel.js?v={panel.VERSION_JS}" defer></script>' in client.get("/panel").text
     r = client.get("/panel/static/panel.js")
     assert r.status_code == 200 and "javascript" in r.headers["content-type"]
     assert client.get("/panel/static/fuentes/Lora-Bold.ttf").headers["content-type"] == "font/ttf"
