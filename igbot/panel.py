@@ -399,6 +399,7 @@ main .boton.secundario{background:transparent;color:var(--negro);border-color:va
 .oscuro .boton.ajuste.on,.oscuro .acciones-estado .boton.on{background:var(--claro);color:var(--negro)}
 .boton .semaforo{display:inline-block;margin:0 .5rem 0 0;vertical-align:.05em}
 .lat-sub .semaforo{display:inline-block;margin:0 0 0 .35rem;vertical-align:.05em}
+html .lateral .lat-sub.cerrado{display:none}
 .compacta h1{font-size:clamp(1.8rem,4vw,2.4rem)}
 .compacta .bajada{font-size:1.05rem;margin-top:.5rem}
 .compacta+main{padding-top:1.5rem}
@@ -702,10 +703,13 @@ def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None, 
     for k, (nombre, href) in MENU.items():
         if k == "contenido" and cuenta is not None and cuenta.imagenes_mes <= 0:
             continue
-        secciones.append(f'<a class="lat-item{" on" if k == menu else ""}" href="{href}" title="{nombre}">'
+        # Con JavaScript, una sección con submenú lo despliega (y abre el menú si está plegado) en vez
+        # de cambiar de página; sin JavaScript es un enlace normal.
+        con_sub = f' data-sub="{k}" aria-expanded="{"true" if k == menu else "false"}"' if k in SUBMENU else ""
+        secciones.append(f'<a class="lat-item{" on" if k == menu else ""}" href="{href}" title="{nombre}"{con_sub}>'
                          f'{ICONOS[k]}<span class="txt">{nombre}</span></a>')
-        if k == menu and k in SUBMENU:
-            secciones.append('<div class="lat-sub">' + "".join(
+        if k in SUBMENU:
+            secciones.append(f'<div class="lat-sub{"" if k == menu else " cerrado"}" id="sub-{k}">' + "".join(
                 f'<a href="{h}"{ACTIVA if s == sub else ""}>{n}'
                 + (f' <span class="semaforo sem-{(luces or {})[s]}"></span>' if s in (luces or {}) else "")
                 + "</a>" for s, n, h in SUBMENU[k]) + "</div>")

@@ -703,3 +703,12 @@ def test_identidad_de_marca(cliente, monkeypatch):
     assert contenido.archivo(c, logo).is_file()
     r = client.post("/panel/contenido/marca", headers=ORIGEN, data={"accion": "quitar_logo"})
     assert "quitamos tu logo" in r.text and not contenido.archivo(c, logo).is_file()
+
+
+def test_menu_lateral_despliega_secciones(cliente, monkeypatch):
+    client, c, *_ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 5)
+    r = client.get("/panel/asistente").text
+    # Las dos secciones traen su submenú; el de la sección en la que estás sale abierto.
+    assert 'data-sub="asistente" aria-expanded="true"' in r and 'data-sub="contenido" aria-expanded="false"' in r
+    assert '<div class="lat-sub" id="sub-asistente">' in r and '<div class="lat-sub cerrado" id="sub-contenido">' in r
