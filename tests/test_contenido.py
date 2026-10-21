@@ -766,8 +766,11 @@ def test_identidad_de_marca(cliente, monkeypatch):
     assert "Listo: guardamos tu logo." in r.text and 'alt="Tu logo"' in r.text
     logo = client.portal.call(contenido.marca_de, c)["logo"]
     assert contenido.archivo(c, logo).is_file()
+    # También sale en el círculo de tu cuenta, abajo en el menú lateral, en todas las páginas.
+    assert f'<img class="lat-avatar" src="/media/{c.media_slug}/{logo}.jpg?v=' in client.get("/panel/asistente").text
     r = client.post("/panel/contenido/marca", headers=ORIGEN, data={"accion": "quitar_logo"})
     assert "quitamos tu logo" in r.text and not contenido.archivo(c, logo).is_file()
+    assert '<img class="lat-avatar"' not in r.text and '<span class="lat-avatar">' in r.text
 
 
 def test_menu_lateral_despliega_secciones(cliente, monkeypatch):

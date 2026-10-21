@@ -284,6 +284,17 @@ async def usuario(c: Cuenta) -> str:
     return await c.store.get("account_username") or c.slug
 
 
+async def foto_perfil(c: Cuenta) -> str:
+    """La dirección del logo de Tu marca (para el menú lateral), o "" si no hay."""
+    import json
+    from pathlib import Path
+    token = json.loads(await c.store.get("marca") or "{}").get("logo", "")
+    path = Path(c.media_dir) / f"{token}.jpg"
+    if not token or not path.is_file():
+        return ""
+    return f"/media/{c.media_slug}/{token}.jpg?v={int(path.stat().st_mtime)}"
+
+
 def prompt_actual(c: Cuenta) -> str:
     path = c.ruta_prompt()
     return path.read_text(encoding="utf-8") if path.is_file() else ""
@@ -334,7 +345,7 @@ html.menu-plegado .lat-cabeza{flex-direction:column}
 html.menu-plegado .plegar svg{transform:rotate(180deg)}
 .perfil{position:relative}
 .perfil>summary{list-style:none}.perfil>summary::-webkit-details-marker{display:none}
-.lat-avatar{flex:none;width:2rem;height:2rem;border-radius:50%;background:var(--acento);color:var(--blanco);display:grid;place-items:center;font-size:.8rem;font-weight:600;margin-left:-.1rem}
+.lat-avatar{flex:none;width:2rem;height:2rem;border-radius:50%;object-fit:cover;background:var(--acento);color:var(--blanco);display:grid;place-items:center;font-size:.8rem;font-weight:600;margin-left:-.1rem}
 .perfil .txt small{display:block;font-size:.75rem;color:var(--gris)}
 .perfil-menu{position:absolute;left:0;right:0;bottom:calc(100% + .4rem);background:#2c2c2e;border:1px solid #3a3a3c;border-radius:.9rem;padding:.35rem;box-shadow:0 12px 40px rgba(0,0,0,.5);display:flex;flex-direction:column}
 .perfil-menu a,.perfil-menu button{display:block;text-align:left;color:var(--claro);text-decoration:none;font:inherit;font-size:.9rem;padding:.55rem .75rem;border-radius:.6rem;background:none;border:0;cursor:pointer;width:100%}
@@ -696,7 +707,7 @@ SUBMENU = {
 
 
 def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None, sub: str = "",
-             perfil: str = "", luces: dict[str, str] | None = None) -> str:
+             perfil: str = "", luces: dict[str, str] | None = None, foto: str = "") -> str:
     """Con `menu` (la sección en la que está): el menú lateral, plegable a solo íconos y con el
     botón de hamburguesa en el celular. Contenido sale solo si el plan de `cuenta` lo tiene.
     Con `perfil` (su @usuario), abajo va su menú de perfil en vez de solo Salir.
@@ -733,21 +744,24 @@ def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None, 
         f'<button class="plegar" type="button" data-plegar aria-label="Plegar o fijar el menú" title="Plegar o fijar">'
         f'{ICONOS["plegar"]}</button><a class="cerrar" href="#" aria-label="Cerrar menú">×</a></div>'
         f'<nav class="lat-nav">{"".join(secciones)}</nav>'
-        + menu_perfil(perfil, cuenta) + '</aside>'
+        + menu_perfil(perfil, cuenta, foto) + '</aside>'
         '<a class="velo" href="#" aria-label="Cerrar menú"></a>'
     )
 
 
-def menu_perfil(perfil: str, cuenta: Cuenta | None) -> str:
+def menu_perfil(perfil: str, cuenta: Cuenta | None, foto: str = "") -> str:
     salir = ('<form method="post" action="/panel/salir"{}><button class="{}" title="Salir">{}</button></form>')
     if not perfil:
         return salir.format(' class="lat-pie"', "lat-item", f'{ICONOS["salir"]}<span class="txt">Salir</span>')
     usuario_ = escape(perfil)
     marca = ('<a href="/panel/contenido/marca">Tu marca</a>'
              if cuenta is not None and cuenta.imagenes_mes > 0 else "")
+    # El logo de Tu marca si ya subió uno; si no, la inicial.
+    avatar = (f'<img class="lat-avatar" src="{escape(foto)}" alt="">' if foto else
+              f'<span class="lat-avatar">{usuario_[:1].upper()}</span>')
     # <details>: abre y cierra sin JavaScript; panel.js lo cierra al hacer clic fuera.
     return ('<div class="lat-pie"><details class="perfil">'
-            f'<summary class="lat-item" title="@{usuario_}"><span class="lat-avatar">{usuario_[:1].upper()}</span>'
+            f'<summary class="lat-item" title="@{usuario_}">{avatar}'
             f'<span class="txt">@{usuario_}<small>Tu cuenta</small></span></summary>'
             f'<div class="perfil-menu"><div class="quien">Conectado como @{usuario_}</div>'
             f'<a href="https://www.instagram.com/{usuario_}/" target="_blank" rel="noopener">Ver mi Instagram</a>'
@@ -813,7 +827,7 @@ async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt
                      ' <a class="enlace" href="/panel/asistente/conexion">Ver conexión</a></div>')
                   + await recientes(c, ver, buscar, hoja))
     return pagina(
-        cabecera(salir=True, menu="asistente", cuenta=c, sub=vista or "chats", perfil=await usuario(c),
+        cabecera(salir=True, menu="asistente", cuenta=c, sub=vista or "chats", perfil=await usuario(c), foto=await foto_perfil(c),
                  luces={"conexion": estado_conexion})
         + (f'<section class="oscuro portada compacta delgada"><div class="contenedor">'
            f'<p class="antetitulo">Tu asistente · {titulo}</p>'
@@ -1408,7 +1422,7 @@ async def prueba_inicio(c: Cuenta, mensajes: list[list[str]], aviso: str = "") -
         '<p class="vacio">Escribe como si fueras un cliente. Usa las instrucciones que guardaste.</p>')
     return (
         PRINCIPIO
-        + cabecera(salir=True, menu="asistente", cuenta=c, sub="probar", perfil=await usuario(c))
+        + cabecera(salir=True, menu="asistente", cuenta=c, sub="probar", perfil=await usuario(c), foto=await foto_perfil(c))
         + '<section class="oscuro portada compacta delgada"><div class="contenedor">'
         '<p class="antetitulo">Tu asistente · Probar</p>'
         f'<h1>@{escape(await usuario(c))}<span class="punto">.</span></h1>'
