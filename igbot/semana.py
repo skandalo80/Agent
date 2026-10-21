@@ -1,6 +1,6 @@
-"""Esta semana y Comentarios y DMs: las dos pestañas de Contenido que proponen.
+"""Esta semana y Contenido sugerido: las dos pestañas de Contenido que proponen.
 
-- Comentarios y DMs (/panel/contenido/ideas): los temas que más le escribieron al
+- Contenido sugerido (/panel/contenido/ideas): los temas que más le escribieron al
   negocio en los últimos 7 días (mensajes directos y comentarios), agrupados por
   Claude (COMMENTS_MODEL) una vez al día (kv "ideas:<fecha>"). Cada tema lleva a
   Crear post con el tema ya puesto; no se gasta imagen hasta que el cliente genera.
@@ -131,7 +131,7 @@ async def pagina_ideas(c: Cuenta) -> HTMLResponse:
             f'<a class="boton secundario chico" href="/panel/contenido/nuevo?'
             f'{escape(urlencode({"objetivo": t["objetivo"], "tema": t["idea"] or t["tema"]}))}">Crear post</a></div>'
             for t in datos["temas"])
-        cuerpo = ('<div class="tarjeta"><span class="num">Ideas desde tus mensajes</span>'
+        cuerpo = ('<div class="tarjeta"><span class="num">Sugerido por tus DMs y comentarios</span>'
                   "<h2>Lo que más te preguntaron esta semana</h2>"
                   f'<p class="ayuda">De {datos["mensajes"]} mensajes y comentarios de los últimos 7 días.'
                   " Cada tema es una idea de post: responde una vez en tu feed lo que te preguntan todos.</p>"
@@ -144,8 +144,8 @@ async def pagina_ideas(c: Cuenta) -> HTMLResponse:
                   '<p class="ayuda">Cuando tus clientes te escriban por mensaje directo o comenten tus posts,'
                   " aquí verás los temas que más se repiten, listos para convertirlos en posts.</p>"
                   '<div class="acciones"><a class="boton" href="/panel/contenido/nuevo">Crear un post</a></div></div>')
-    return await pagina(c, "ideas", "Lo que te preguntan por mensaje y en comentarios, convertido en ideas de post.",
-                        cuerpo)
+    return await pagina(c, "ideas", "Ideas de post sugeridas a partir de lo que tus clientes te preguntan"
+                        " por mensaje y en los comentarios.", cuerpo)
 
 
 # --- esta semana ---

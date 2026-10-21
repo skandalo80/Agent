@@ -143,8 +143,11 @@ def prompt_libre(idea: str, texto: "Texto", marca: "Marca | None" = None) -> str
 
 
 # Tipografías de títulos que puede elegir el cliente (archivos en fonts/, todas OFL).
-FUENTES = {"Inter": "Inter", "Montserrat": "Montserrat", "Poppins": "Poppins",
-           "Playfair Display": "PlayfairDisplay", "Lora": "Lora"}
+# Nombre que ve el cliente -> archivo en fonts/ (Google Fonts, licencia OFL; 400, 600 y 700 cada una).
+FUENTES = {"Inter": "Inter", "Montserrat": "Montserrat", "Poppins": "Poppins", "Raleway": "Raleway",
+           "Nunito": "Nunito", "DM Sans": "DMSans", "Work Sans": "WorkSans", "Space Grotesk": "SpaceGrotesk", "Oswald": "Oswald",
+           "Playfair Display": "PlayfairDisplay", "Lora": "Lora", "Cormorant Garamond": "CormorantGaramond"}
+SERIF = {"Playfair Display", "Lora", "Cormorant Garamond"}
 PESOS = {400: "Regular", 600: "SemiBold", 700: "Bold"}
 HEX = re.compile(r"^#[0-9A-Fa-f]{6}$")
 

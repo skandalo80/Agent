@@ -112,7 +112,7 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     assert client.get("/panel/contenido/nuevo").text.count('name="objetivo"') == 5
 
     # Tu marca: colores, letra y una foto del producto.
-    marca = {"principal": "1f3a5f", "acento": "#F7D046", "fondo": "#zzz", "pantone_acento": "116 C",
+    marca = {"principal": "1f3a5f", "acento": "#F7D046", "fondo": "#zzz", 
              "fuente": "Playfair Display", "peso": "700", "estilo": "premium", "plantilla": "banda"}
     r = client.post("/panel/contenido/marca", headers=ORIGEN, data={**marca, "accion": "vista"})
     assert "Pulsa Guardar" in r.text and client.portal.call(contenido.marca_de, c) == {}  # vista no guarda
@@ -120,8 +120,15 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
                     files={"fotos": ("cartera.png", png(), "image/png")})
     assert "1 foto nueva" in r.text
     guardada = client.portal.call(contenido.marca_de, c)
-    assert guardada["principal"] == "#1F3A5F" and guardada["fondo"] == "" and guardada["pantone_acento"] == "116 C"
+    assert guardada["principal"] == "#1F3A5F" and guardada["fondo"] == ""
     assert guardada["fuente"] == "Playfair Display" and len(guardada["fotos"]) == 1
+    # El código del color se puede escribir o pegar; si es válido manda sobre el selector.
+    client.post("/panel/contenido/marca", headers=ORIGEN,
+                data={**marca, "principal_hex": "333d1f", "acento_hex": "nada", "fuente": "DM Sans", "accion": "guardar"})
+    guardada = client.portal.call(contenido.marca_de, c)
+    assert guardada["principal"] == "#333D1F" and guardada["acento"] == "#F7D046" and guardada["fuente"] == "DM Sans"
+    assert client.get("/panel/static/fuentes/CormorantGaramond-Bold.ttf").status_code == 200
+    assert "Pantone" not in client.get("/panel/contenido/marca").text
     token_foto = guardada["fotos"][0]
     r = client.get("/panel/contenido/muestra.jpg?fuente=Lora&acento=%23000000")
     assert r.headers["content-type"] == "image/jpeg"
@@ -570,6 +577,12 @@ def test_ajustes_y_conexion(cliente, monkeypatch):
     assert c.human_pause_hours == 24 and c.business_hours == "10:00-19:30" and c.owner_email == "ana@cafe.mx"
     assert c.fuera_horario == "" and c.business_days == [1, 2, 3, 4, 5, 6]
 
+    # El Guardar de abajo de Configura guarda también Horario y avisos (va en el mismo formulario).
+    r = client.get("/panel/asistente/configura")
+    assert "Guardar ajustes" not in r.text and r.text.index('id="ajustes"') < r.text.index('class="acciones guardar-todo"')
+    r = client.post("/panel/guardar", headers=ORIGEN, data={**datos, "pausa": "48", "accion": "guardar"})
+    assert c.human_pause_hours == 48 and c.business_hours == "10:00-19:30"
+
 
 def test_conexion_avisa_si_falta_el_permiso_de_estadisticas(cliente, monkeypatch):
     from igbot import ajustes
@@ -589,7 +602,7 @@ def test_bienvenida_con_contenido_y_lo_que_falta(cliente, monkeypatch):
     client, c, *_ = cliente
     monkeypatch.setattr(c, "imagenes_mes", 5)
     r = client.get("/panel")
-    assert "Configurar mi asistente" in r.text and "Configurar mi marca" in r.text and "Tu plan Básico" not in r.text
+    assert "Configurar tu asistente" in r.text and "Configurar tu marca" in r.text and "Tu plan Básico" not in r.text
     assert client.get("/panel", follow_redirects=False).headers["location"] != "/panel/bienvenida"  # solo una vez
     client.portal.call(c.store.set, "perfil", "")
     client.portal.call(c.store.set, "asistente_listo", "0")
@@ -657,7 +670,7 @@ def test_configura_tu_asistente_en_su_propia_pagina(cliente):
     client, c, *_ = cliente
     # Conversaciones y el formulario van en direcciones distintas.
     r = client.get("/panel/asistente")
-    assert 'id="chats"' in r.text and 'id="configura"' not in r.text and "Configurar mi asistente" not in r.text
+    assert 'id="chats"' in r.text and 'id="configura"' not in r.text and "Configurar tu asistente" not in r.text
     assert '<a href="/panel/asistente" class="on">Conversaciones' in r.text
     r = client.get("/panel/asistente/configura")
     assert 'id="configura"' in r.text and 'id="chats"' not in r.text and "Tu asistente · Configura" in r.text
@@ -665,7 +678,7 @@ def test_configura_tu_asistente_en_su_propia_pagina(cliente):
     # Sin configurar: las conversaciones invitan a configurarlo.
     client.portal.call(c.store.set, "asistente_listo", "0")
     client.portal.call(c.store.set, "perfil", "")
-    assert 'href="/panel/asistente/configura">Configurar mi asistente' in client.get("/panel/asistente").text
+    assert 'href="/panel/asistente/configura">Configurar tu asistente' in client.get("/panel/asistente").text
 
 
 def test_subir_fotos_solo_para_un_post(cliente, monkeypatch):

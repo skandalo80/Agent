@@ -404,7 +404,7 @@ def generando(c: Cuenta, trabajo, volver: str, mensaje: str) -> StreamingRespons
 # --- páginas ---
 
 # Las secciones de Contenido (en el menú lateral); su nombre sale arriba de cada página.
-NOMBRE_SECCION = {"semana": "Esta semana", "calendario": "Calendario", "ideas": "Comentarios y DMs",
+NOMBRE_SECCION = {"semana": "Esta semana", "calendario": "Calendario", "ideas": "Contenido sugerido",
                   "nuevo": "Crear post", "marca": "Tu marca"}
 
 
@@ -627,7 +627,7 @@ async def calendario(c: Cuenta, aviso: str = "", hoja: int = 1) -> HTMLResponse:
             cuerpo += ('<div class="tarjeta"><h2>Aún no tienes posts</h2>'
                        '<p class="ayuda">Dinos qué quieres lograr y te armamos el post: imagen, texto y palabra clave.</p>'
                        '<div class="acciones"><a class="boton" href="/panel/contenido/nuevo">Crear mi primer post</a>'
-                       '<a class="boton secundario" href="/panel/contenido/marca">Antes, configurar mi marca</a></div></div>')
+                       '<a class="boton secundario" href="/panel/contenido/marca">Antes, configurar tu marca</a></div></div>')
         if programados:
             cuerpo += plegable("proximos", "Próximos posts", len(programados),
                                '<p class="ayuda">Ya aprobados: salen solos el día y la hora que dicen.</p>'
@@ -1005,19 +1005,17 @@ async def pagina_marca(c: Cuenta, marca: dict | None = None, aviso: str = "") ->
     elegidos = marca.get("caracter", [])
     logo = marca.get("logo", "")
     logo_url = url_imagen(c, logo) if logo and archivo(c, logo).is_file() else ""
-    # Cada color es un cuadro grande: el selector del navegador ocupa el cuadro (cambia al momento).
+    # Cada color es un cuadro grande: el selector del navegador ocupa el cuadro (cambia al momento), y
+    # abajo su código, que se puede escribir o pegar (panel.js mantiene los dos iguales).
     colores = "".join(
-        f'<label class="swatch" for="{k}"><input type="color" id="{k}" name="{k}" value="{getattr(m, k).lower()}"'
-        f' aria-label="Color {n.lower()}"><span><b>{n}</b><span class="hex" data-hex="{k}">{getattr(m, k)}</span></span>'
-        "</label>"
+        f'<div class="swatch"><input type="color" id="{k}" name="{k}" value="{getattr(m, k).lower()}"'
+        f' aria-label="Color {n.lower()}"><span><b>{n}</b>'
+        f'<input type="text" class="hex" name="{k}_hex" data-hex="{k}" value="{getattr(m, k)}" maxlength="7"'
+        f' spellcheck="false" autocomplete="off" aria-label="Código del color {n.lower()}, p. ej. #333D1F"></span></div>'
         for k, n, _ in COLORES)
-    detalles_color = "".join(
-        f'<div class="color-uso"><b>{n}</b><p class="ayuda">{uso}</p>'
-        f'<label class="pantone" for="pantone_{k}">Pantone <span>(solo referencia, no cambia el color)</span></label>'
-        f'<input type="text" class="chico" id="pantone_{k}" name="pantone_{k}" placeholder="Ej. 7621 C"'
-        f' value="{escape(marca.get("pantone_" + k, ""))}" maxlength="40"></div>'
-        for k, n, uso in COLORES)
-    familia = {f: (f"'{f}', Georgia, serif" if f in ("Playfair Display", "Lora") else f"'{f}', system-ui, sans-serif")
+    detalles_color = "".join(f'<div class="color-uso"><b>{n}</b><p class="ayuda">{uso}</p></div>'
+                             for k, n, uso in COLORES)
+    familia = {f: (f"'{f}', Georgia, serif" if f in imagenes.SERIF else f"'{f}', system-ui, sans-serif")
                for f in imagenes.FUENTES}
     fuentes = "".join(
         f'<label class="letra" style="font-family:{familia[f]};font-weight:{m.peso}"><input type="radio" name="fuente"'
@@ -1093,7 +1091,7 @@ async def pagina_marca(c: Cuenta, marca: dict | None = None, aviso: str = "") ->
         + identidad
         + '<div class="tarjeta"><span class="num">02</span><h2>Colores</h2>'
         f'<p class="ayuda">Toca un color para cambiarlo.</p><div class="paleta">{colores}</div>'
-        '<details class="mas"><summary>Pantone y dónde se usa cada color</summary>'
+        '<details class="mas"><summary>Dónde se usa cada color</summary>'
         f"{detalles_color}</details></div>"
         '<div class="tarjeta"><span class="num">03</span><h2>Tipografía</h2>'
         f'<div class="letras">{fuentes}</div><label>Grosor</label><div class="chips">{pesos}</div></div>'
@@ -1130,10 +1128,13 @@ async def pagina_marca(c: Cuenta, marca: dict | None = None, aviso: str = "") ->
 def marca_del_form(f, antes: dict) -> dict:
     datos = {"fotos": list(antes.get("fotos", []))}
     for k, *_ in COLORES:
-        valor = str(f.get(k, "")).strip()
-        valor = valor if valor.startswith("#") else f"#{valor}"
-        datos[k] = valor.upper() if imagenes.HEX.match(valor) else antes.get(k, "")
-        datos[f"pantone_{k}"] = str(f.get(f"pantone_{k}", "")).strip()[:40]
+        # El código escrito o pegado manda; si no es válido, el del selector de color.
+        datos[k] = antes.get(k, "")
+        for valor in (str(f.get(f"{k}_hex", "")).strip(), str(f.get(k, "")).strip()):
+            valor = valor if valor.startswith("#") else f"#{valor}"
+            if imagenes.HEX.match(valor):
+                datos[k] = valor.upper()
+                break
     datos["fuente"] = f.get("fuente") if f.get("fuente") in imagenes.FUENTES else antes.get("fuente", "Inter")
     datos["peso"] = int(f.get("peso")) if str(f.get("peso")) in ("400", "600", "700") else antes.get("peso", 600)
     datos["estilo"] = f.get("estilo") if f.get("estilo") in ESTILOS else estilo_de(antes)
@@ -1201,7 +1202,7 @@ async def ver(request: Request):
 async def ver_nuevo(request: Request):
     if not (c := panel.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
-    q = request.query_params  # desde Comentarios y DMs llega con el tema ya puesto
+    q = request.query_params  # desde Contenido sugerido llega con el tema ya puesto
     valores = {"objetivo": q.get("objetivo", ""), "tema": q.get("tema", "")[:MAX_TEMA]}
     return await nuevo(c, valores) if c.imagenes_mes > 0 else sin_plan()
 

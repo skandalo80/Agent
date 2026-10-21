@@ -84,10 +84,9 @@ def tarjeta(c: Cuenta) -> str:
     dm = ('<label class="check"><input type="checkbox" name="aviso_dm" value="1"'
           f'{" checked" if c.aviso_dm else ""}> DM a mi Instagram personal</label>' if c.admin_ig_ids else "")
     return (
-        # Va dentro de "Configura tu asistente", después del formulario de instrucciones (es otro form).
+        # Va dentro del formulario de "Configura tu asistente": su Guardar de abajo guarda también esto.
         '<details class="tarjeta plegable seccion" id="ajustes" open><summary><span class="titulo-sec">'
         '<span class="num">06</span><h2>Horario y avisos</h2></span></summary>'
-        '<form method="post" action="/panel/ajustes#ajustes">'
         "<label>Cuando contestas tú un chat, el asistente se calla por</label>"
         f'<div class="chips">{pausas}</div>'
         '<p class="ayuda">Pasado ese tiempo vuelve a contestar solo. Siempre puedes reactivarlo antes desde'
@@ -111,7 +110,7 @@ def tarjeta(c: Cuenta) -> str:
         f"{dm}"
         f'<label class="check"><input type="checkbox" name="aviso_correo" value="1"{" checked" if c.aviso_correo else ""}>'
         f' Correo a <input type="email" name="correo" value="{escape(c.owner_email)}" aria-label="Correo"></label></div>'
-        '<div class="acciones"><button class="boton">Guardar ajustes</button></div></form></details>'
+        "</details>"
     )
 
 
@@ -188,15 +187,19 @@ async def conexion(c: Cuenta) -> tuple[str, str]:
                   + "".join(h for _, h in filas) + "</div>")
 
 
-@router.post("/ajustes")
-async def guardar(request: Request):
-    panel.de_aqui(request)
-    if not (c := panel.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
-    form = await request.form()
+async def guardar_del_form(c: Cuenta, form) -> None:
+    """Guarda Horario y avisos con lo que trae el formulario (el Guardar de Configura tu asistente)."""
     f = {k: str(v) for k, v in form.items()}
     datos = del_form(f, [str(d) for d in form.getlist("dias")], c)
     await c.store.set("ajustes", json.dumps(datos, ensure_ascii=False))
     aplicar(c, datos)
     log.info("@%s cambió sus ajustes desde el panel", await panel.usuario(c))
+
+
+@router.post("/ajustes")  # el formulario anterior; ahora todo se guarda con /panel/guardar
+async def guardar(request: Request):
+    panel.de_aqui(request)
+    if not (c := panel.cuenta_de_sesion(request)):
+        return RedirectResponse("/panel", status_code=303)
+    await guardar_del_form(c, await request.form())
     return await panel.panel_de(c, "Guardado: tu asistente ya trabaja con estos ajustes.", abrir=True)

@@ -3,7 +3,7 @@
 document.documentElement.classList.add("js");
 
 const CAMPOS = ["fuente", "peso", "principal", "acento", "fondo", "plantilla", "estilo", "titulo", "subtitulo", "precio", "modo"];
-const FAMILIAS = {"Playfair Display": "Georgia, serif", "Lora": "Georgia, serif"};
+const FAMILIAS = {"Playfair Display": "Georgia, serif", "Lora": "Georgia, serif", "Cormorant Garamond": "Georgia, serif"};
 
 function consulta(form) {
   const datos = new FormData(form);
@@ -47,7 +47,16 @@ function vigilar(form) {
     const t = e.target;
     if (t.type === "color") {
       const hex = form.querySelector('[data-hex="' + t.name + '"]');
-      if (hex) hex.textContent = t.value.toUpperCase();
+      if (hex && hex.value.toUpperCase() !== t.value.toUpperCase()) hex.value = t.value.toUpperCase();
+    }
+    // El código del color escrito o pegado (#333D1F o 333D1F) mueve el selector y la vista previa.
+    if (t.dataset.hex) {
+      const v = t.value.trim().replace(/^#?/, "#");
+      const color = form.querySelector('input[type=color][name="' + t.dataset.hex + '"]');
+      if (color && /^#[0-9a-f]{6}$/i.test(v) && color.value !== v.toLowerCase()) {
+        color.value = v.toLowerCase();
+        color.dispatchEvent(new Event("input", { bubbles: true }));
+      }
     }
     if (t.name === "fuente") {
       const familia = "'" + t.value + "', " + (FAMILIAS[t.value] || "system-ui, sans-serif");

@@ -96,7 +96,7 @@ def test_cliente_se_conecta_configura_y_enciende(monkeypatch, tmp_path):
         assert c and not c.google_tools
 
         r = client.get("/panel")  # la primera vez: la bienvenida
-        assert "Hola, @cafe.lunar" in r.text and "Configurar mi asistente" not in r.text and "Empezar" in r.text
+        assert "Hola, @cafe.lunar" in r.text and "Configurar tu asistente" not in r.text and "Empezar" in r.text
         r = client.get("/panel")
         assert "@cafe.lunar" in r.text and "en pausa" in r.text
 
@@ -226,7 +226,7 @@ def test_probar_mi_asistente(monkeypatch, tmp_path):
         c = bot.buscar("1784")
         client.post("/panel/guardar", headers=ORIGEN, data={"accion": "guardar", "prompt": "Eres el café."})
 
-        assert "Probar mi asistente" in client.get("/panel").text
+        assert "Probar tu asistente" in client.get("/panel").text
         assert client.post("/panel/probar", data={"mensaje": "hola"}).status_code == 403  # sin Origin
         r = client.post("/panel/probar", headers=ORIGEN, data={"mensaje": "¿Abren hoy?", "accion": "enviar"})
         assert "¿Abren hoy?" in r.text and "respuesta 1" in r.text
