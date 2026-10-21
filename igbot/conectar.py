@@ -13,6 +13,8 @@ Con ese token su cuenta se da de alta sola, en pausa, y el cliente entra a su
 panel (/panel, ver panel.py) para configurar y encender su asistente. Iniciar
 sesión en el panel es este mismo flujo.
 """
+import hashlib
+import hmac
 import logging
 import re
 import secrets
@@ -37,7 +39,9 @@ store: Store | None = None
 instagram: Instagram | None = None
 google: Google | None = None
 
-AUTHORIZE = "https://www.instagram.com/oauth/authorize"
+# En el iPhone, www.instagram.com abre la app de Instagram y la app se queda en "Loading";
+# con api.instagram.com la app sí muestra la pantalla de permisos.
+AUTHORIZE = "https://api.instagram.com/oauth/authorize"
 TOKEN = "https://api.instagram.com/oauth/access_token"
 SCOPES = ",".join([
     "instagram_business_basic",
@@ -47,6 +51,7 @@ SCOPES = ",".join([
     "instagram_business_manage_insights",
 ])
 STATE_COOKIE = "conectar_state"
+STATE_TTL = 900
 USUARIO = re.compile(r"^[a-z0-9._]{1,30}$")
 CORREO = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,190}\.[a-z]{2,}$", re.I)
 MAX_SOLICITUDES_POR_HORA = 20  # contra bots que llenen el formulario
@@ -111,12 +116,43 @@ async def solicitud(request: Request):
     return back("/conectar?enviado=1#paso-2")
 
 
+def firmar(texto: str) -> str:
+    return hmac.new(config.IG_OAUTH_SECRET.encode(), texto.encode(), hashlib.sha256).hexdigest()[:32]
+
+
+def nuevo_state() -> str:
+    base = f"{int(time.time())}.{secrets.token_urlsafe(18)}"
+    return f"{base}.{firmar(base)}"
+
+
+_usados: dict[str, float] = {}  # states ya usados (cada uno sirve una vez)
+
+
+def state_valido(state: str, cookie: str | None) -> bool:
+    """El state vale si es el de la cookie o, si volvió en otro navegador (en el cel, Instagram
+    regresa en su propio navegador, sin la cookie de Safari), si lo firmamos hace menos de 15 min."""
+    ahora = time.time()
+    for s, t in list(_usados.items()):
+        if ahora - t > STATE_TTL:
+            del _usados[s]
+    if not state or state in _usados:
+        return False
+    ok = bool(cookie) and secrets.compare_digest(cookie, state)
+    if not ok:
+        partes = state.split(".")
+        ok = (len(partes) == 3 and partes[0].isdigit() and 0 <= ahora - int(partes[0]) < STATE_TTL
+              and secrets.compare_digest(partes[2], firmar(f"{partes[0]}.{partes[1]}")))
+    if ok:
+        _usados[state] = ahora
+    return ok
+
+
 @router.get("/instagram")
 def start():
     """Manda al cliente a iniciar sesión en Instagram y autorizar la app."""
     if not enabled():
         return back("/conectar-error")
-    state = secrets.token_urlsafe(24)
+    state = nuevo_state()
     url = AUTHORIZE + "?" + urlencode({
         "client_id": config.IG_APP_ID,
         "redirect_uri": redirect_uri(),
@@ -128,7 +164,7 @@ def start():
     })
     response = RedirectResponse(url, status_code=303)
     # Se compara al volver para que nadie conecte una cuenta con un enlace armado.
-    response.set_cookie(STATE_COOKIE, state, max_age=900, path="/conectar",
+    response.set_cookie(STATE_COOKIE, state, max_age=STATE_TTL, path="/conectar",
                         secure=True, httponly=True, samesite="lax")
     return response
 
@@ -182,7 +218,7 @@ async def callback(request: Request):
         # Canceló, o su cuenta no es tester todavía.
         log.info("Conexión cancelada o rechazada: %s", p.get("error_reason") or p.get("error"))
         return back("/conectar-error")
-    if not expected or not secrets.compare_digest(expected, p.get("state", "")):
+    if not state_valido(p.get("state", ""), expected):
         log.warning("Callback con state inválido")
         return back("/conectar-error")
     try:
