@@ -468,12 +468,12 @@ def test_ajustes_y_conexion(cliente, monkeypatch):
     ajustes._revision.clear()
     r = client.get("/panel/asistente")
     assert 'id="ajustes"' in r.text and 'name="pausa" value="12" checked' in r.text
-    # Conexión es un botón de la barra (con su semáforo) que abre su propia vista.
-    assert re.search(r'href="/panel/asistente\?vista=conexion"><span class="semaforo sem-\w+"></span>Conexión', r.text)
+    # Conexión va en el menú lateral (con su semáforo) y abre su propia vista.
+    assert re.search(r'href="/panel/asistente\?vista=conexion">Conexión <span class="semaforo sem-\w+"></span>', r.text)
     assert "Recibiendo mensajes" not in r.text and 'id="conexion"' not in r.text
     r = client.get("/panel/asistente?vista=conexion")
     assert "Recibiendo mensajes" in r.text and 'id="ajustes"' not in r.text and "Gasto de hoy" not in r.text
-    assert 'secundario on" href="/panel/asistente">' in r.text  # pulsarlo otra vez regresa
+    assert '<a href="/panel/asistente?vista=conexion" class="on">' in r.text and "compacta delgada" in r.text
     assert '<a class="enlace" href="/panel/asistente">← Volver a tu asistente</a>' in r.text
     assert "Límite de gasto" not in r.text  # el gasto solo lo ve la cuenta principal
 
@@ -537,10 +537,10 @@ def test_resumen_del_plan_arriba(cliente, monkeypatch):
     monkeypatch.setattr(c, "mensajes_mes", 1000)
     r = client.get("/panel/contenido")
     assert "Posts restantes" in r.text and "de 12 este mes" in r.text and "de 40 este mes" in r.text
-    # Tu marca es un ajuste: va junto al nombre, no entre las pestañas.
-    nav = r.text.split('<nav class="pestanas">')[1].split("</nav>")[0]
-    assert "/panel/contenido/marca" not in nav and 'class="boton secundario ajuste"' in r.text
-    assert 'ajuste on"' in client.get("/panel/contenido/marca").text
+    # Las secciones van en el menú lateral; los números solo en Calendario (el inicio de Contenido).
+    assert '<nav class="pestanas">' not in r.text and 'class="lat-sub"' in r.text
+    marca = client.get("/panel/contenido/marca").text
+    assert "Posts restantes" not in marca and "compacta delgada" in marca and "Contenido · Tu marca" in marca
     r = client.get("/panel/asistente")
     assert "Mensajes restantes" in r.text and "de 1,000 este mes" in r.text and "Gasto de hoy" not in r.text
     # Sin tope en su plan, sale solo el conteo del mes.

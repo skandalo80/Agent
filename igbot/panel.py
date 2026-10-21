@@ -388,6 +388,7 @@ main .boton.secundario{background:transparent;color:var(--negro);border-color:va
 .compacta{padding:1.5rem 0 1.5rem;display:flex}
 /* La franja negra mide lo mismo en todas las secciones: el resumen (.hoy) va siempre pegado abajo. */
 @media(min-width:561px){.compacta{min-height:22rem}.compacta .hoy .kpi{min-height:7.5rem}}
+.compacta.delgada{min-height:0;padding:1.5rem 0 1.75rem}.delgada .titulo-fila .boton{margin:-2px 0}
 .compacta>.contenedor{display:flex;flex-direction:column;width:100%}
 .compacta .hoy{margin-top:auto}
 .compacta .estado,.compacta .pestanas{margin-bottom:1rem}
@@ -397,6 +398,7 @@ main .boton.secundario{background:transparent;color:var(--negro);border-color:va
 .oscuro .boton.ajuste{padding:.55rem 1.1rem;font-size:.9rem}
 .oscuro .boton.ajuste.on,.oscuro .acciones-estado .boton.on{background:var(--claro);color:var(--negro)}
 .boton .semaforo{display:inline-block;margin:0 .5rem 0 0;vertical-align:.05em}
+.lat-sub .semaforo{display:inline-block;margin:0 0 0 .35rem;vertical-align:.05em}
 .compacta h1{font-size:clamp(1.8rem,4vw,2.4rem)}
 .compacta .bajada{font-size:1.05rem;margin-top:.5rem}
 .compacta+main{padding-top:1.5rem}
@@ -683,10 +685,11 @@ SUBMENU = {
 
 
 def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None, sub: str = "",
-             perfil: str = "") -> str:
+             perfil: str = "", luces: dict[str, str] | None = None) -> str:
     """Con `menu` (la sección en la que está): el menú lateral, plegable a solo íconos y con el
     botón de hamburguesa en el celular. Contenido sale solo si el plan de `cuenta` lo tiene.
     Con `perfil` (su @usuario), abajo va su menú de perfil en vez de solo Salir.
+    `luces`: un semáforo junto a una parte del submenú (p. ej. {"conexion": "ok"}).
     Sin menú (la entrada y las páginas de espera): la barra de arriba de siempre."""
     boton = ('<form method="post" action="/panel/salir"><button class="salir">Salir</button></form>'
              if salir else "")
@@ -703,7 +706,9 @@ def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None, 
                          f'{ICONOS[k]}<span class="txt">{nombre}</span></a>')
         if k == menu and k in SUBMENU:
             secciones.append('<div class="lat-sub">' + "".join(
-                f'<a href="{h}"{ACTIVA if s == sub else ""}>{n}</a>' for s, n, h in SUBMENU[k]) + "</div>")
+                f'<a href="{h}"{ACTIVA if s == sub else ""}>{n}'
+                + (f' <span class="semaforo sem-{(luces or {})[s]}"></span>' if s in (luces or {}) else "")
+                + "</a>" for s, n, h in SUBMENU[k]) + "</div>")
     # Sin JavaScript también abre en el celular: la hamburguesa apunta a #lateral (:target).
     return (
         '<header class="movil"><a class="hamburguesa" href="#lateral" aria-label="Abrir menú">'
@@ -771,13 +776,6 @@ async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt
     from . import ajustes  # ajustes usa este módulo
     estado_conexion, tarjeta_conexion = await ajustes.conexion(c)
 
-    def boton_vista(clave: str, nombre: str) -> str:
-        # Conexión se abre en su propia vista; pulsarlo otra vez regresa.
-        on = clave == vista
-        href = "/panel/asistente" if on else f"/panel/asistente?vista={clave}"
-        luz = f'<span class="semaforo sem-{estado_conexion}"></span>' if clave == "conexion" else ""
-        return f'<a class="boton secundario{" on" if on else ""}" href="{href}">{luz}{nombre}</a>'
-
     cuerpo = ('<p class="volver"><a class="enlace" href="/panel/asistente">← Volver a tu asistente</a></p>'
               + tarjeta_conexion) if vista == "conexion" else None
     formulario = (f'<details class="grupo plegable" id="configura"{" open" if abierto else ""}>'
@@ -786,21 +784,25 @@ async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt
                   + _formulario(c, datos, prompt, pares_minimos, nota, confirmar, await ayudas_restantes(c))
                   + ajustes.tarjeta(c) + "</details>")
     return pagina(
-        cabecera(salir=True, menu="asistente", cuenta=c, sub=vista, perfil=await usuario(c))
-        + '<section class="oscuro portada compacta"><div class="contenedor">'
-        '<p class="antetitulo">Tu asistente</p>'
-        f'<h1>@{escape(await usuario(c))}<span class="punto">.</span></h1>'
-        f'<div class="estado"><div><span class="luz{" on" if encendido else ""}"></span>'
-        f'{"Está contestando tus mensajes." if encendido else REVISION if c.en_revision else "Está en pausa: no contesta mensajes."}</div>'
-        f'<form method="post" action="/panel/estado"><input type="hidden" name="activo" value="{"0" if encendido else "1"}">'
-        '<div class="acciones-estado">' + boton_vista("conexion", "Conexión")
-        + '<a class="boton secundario" href="/panel/probar#ultimo">Probar mi asistente</a>'
-        + ("" if c.en_revision else
-           f'<button class="boton{" secundario" if encendido else ""}">{"Pausar" if encendido else "Encender"}</button>')
-        + '</div></form></div>'
-        + await hoy(c) +
-        "</div></section>"
-        '<main><div class="contenedor">'
+        cabecera(salir=True, menu="asistente", cuenta=c, sub=vista, perfil=await usuario(c),
+                 luces={"conexion": estado_conexion})
+        + (f'<section class="oscuro portada compacta delgada"><div class="contenedor">'
+           '<p class="antetitulo">Tu asistente · Conexión</p>'
+           f'<h1>@{escape(await usuario(c))}<span class="punto">.</span></h1>'
+           '<p class="bajada" style="margin-left:0">Cómo está conectada tu cuenta de Instagram.</p></div></section>'
+           if vista == "conexion" else
+           '<section class="oscuro portada compacta"><div class="contenedor">'
+           '<p class="antetitulo">Tu asistente</p>'
+           f'<h1>@{escape(await usuario(c))}<span class="punto">.</span></h1>'
+           f'<div class="estado"><div><span class="luz{" on" if encendido else ""}"></span>'
+           f'{"Está contestando tus mensajes." if encendido else REVISION if c.en_revision else "Está en pausa: no contesta mensajes."}</div>'
+           + ("" if c.en_revision else
+              '<form method="post" action="/panel/estado">'
+              f'<input type="hidden" name="activo" value="{"0" if encendido else "1"}"><div class="acciones-estado">'
+              f'<button class="boton{" secundario" if encendido else ""}">{"Pausar" if encendido else "Encender"}</button>'
+              "</div></form>")
+           + "</div>" + await hoy(c) + "</div></section>")
+        + '<main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
         + (cuerpo if cuerpo is not None else
            await pendiente(c, "asistente")
@@ -1341,8 +1343,8 @@ async def prueba_inicio(c: Cuenta, mensajes: list[list[str]], aviso: str = "") -
     return (
         PRINCIPIO
         + cabecera(salir=True, menu="asistente", cuenta=c, sub="probar", perfil=await usuario(c))
-        + '<section class="oscuro portada compacta"><div class="contenedor">'
-        '<p class="antetitulo">Prueba tu asistente</p>'
+        + '<section class="oscuro portada compacta delgada"><div class="contenedor">'
+        '<p class="antetitulo">Tu asistente · Probar</p>'
         f'<h1>@{escape(await usuario(c))}<span class="punto">.</span></h1>'
         '<p class="bajada" style="margin-left:0">Así contestaría tus mensajes. Nada de esto llega a Instagram.</p>'
         "</div></section>"

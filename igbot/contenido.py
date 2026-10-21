@@ -403,8 +403,9 @@ def generando(c: Cuenta, trabajo, volver: str, mensaje: str) -> StreamingRespons
 
 # --- páginas ---
 
-PESTANAS = [("semana", "Esta semana", "/panel/contenido/semana"), ("calendario", "Calendario", "/panel/contenido"),
-            ("ideas", "Comentarios y DMs", "/panel/contenido/ideas"), ("nuevo", "+ Crear post", "/panel/contenido/nuevo")]
+# Las secciones de Contenido (en el menú lateral); su nombre sale arriba de cada página.
+NOMBRE_SECCION = {"semana": "Esta semana", "calendario": "Calendario", "ideas": "Comentarios y DMs",
+                  "nuevo": "Crear post", "marca": "Tu marca"}
 
 
 async def resumen(c: Cuenta) -> str:
@@ -431,20 +432,19 @@ async def resumen(c: Cuenta) -> str:
             + "</div>")
 
 
-async def pagina(c: Cuenta, actual: str, bajada: str, cuerpo: str, aviso: str = "") -> HTMLResponse:
-    pestanas = "".join(
-        f'<a href="{href}" class="{"on" if k == actual else ""}{" crear" if k == "nuevo" else ""}">{nombre}</a>'
-        for k, nombre, href in PESTANAS)
+async def pagina(c: Cuenta, actual: str, bajada: str, cuerpo: str, aviso: str = "",
+                 con_resumen: bool = False) -> HTMLResponse:
+    """Las secciones de Contenido van en el menú lateral. Los números del mes (con_resumen) solo salen
+    en Calendario, el inicio de Contenido; las demás páginas llevan el encabezado delgado."""
+    crear = ("" if actual == "nuevo" else
+             '<a class="boton secundario ajuste" href="/panel/contenido/nuevo">+ Crear post</a>')
     return panel.pagina(
         panel.cabecera(salir=True, menu="contenido", cuenta=c, sub=actual, perfil=await panel.usuario(c))
-        + '<section class="oscuro portada compacta"><div class="contenedor">'
-        '<p class="antetitulo">Contenido</p>'
-        f'<div class="titulo-fila"><h1>@{escape(await panel.usuario(c))}<span class="punto">.</span></h1>'
-        f'<a class="boton secundario ajuste{" on" if actual == "marca" else ""}" href="/panel/contenido/marca">'
-        "Tu marca</a></div>"
+        + f'<section class="oscuro portada compacta{"" if con_resumen else " delgada"}"><div class="contenedor">'
+        f'<p class="antetitulo">Contenido · {NOMBRE_SECCION.get(actual, "Calendario")}</p>'
+        f'<div class="titulo-fila"><h1>@{escape(await panel.usuario(c))}<span class="punto">.</span></h1>{crear}</div>'
         f'<p class="bajada" style="margin-left:0">{escape(bajada)}</p>'
-        f'<nav class="pestanas">{pestanas}</nav>'
-        + await resumen(c)
+        + (await resumen(c) if con_resumen else "")
         + "</div></section>"
         '<main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
@@ -588,7 +588,8 @@ async def calendario(c: Cuenta, aviso: str = "") -> HTMLResponse:
                                + publicados, clase="antiguos")
         if pendientes:
             cuerpo += '<div class="acciones"><a class="boton" href="/panel/contenido/nuevo">+ Crear post</a></div>'
-        return await pagina(c, "calendario", "Tus publicaciones: lo que viene y lo que ya salió.", cuerpo, aviso)
+        return await pagina(c, "calendario", "Tus publicaciones: lo que viene y lo que ya salió.", cuerpo, aviso,
+                            con_resumen=True)
 
 
 METRICAS = [  # (métrica de Instagram, cómo se le dice al cliente, qué es)
