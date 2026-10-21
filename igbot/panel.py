@@ -299,7 +299,7 @@ ESTILO = """
 *{box-sizing:border-box}
 body{margin:0;background:var(--claro);color:var(--negro);font:17px/1.55 "Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 a{color:inherit}
-.contenedor{max-width:64rem;margin:0 auto;padding:0 1.25rem}
+.contenedor{max-width:80rem;margin:0 auto;padding:0 2rem}
 header{background:var(--negro);color:var(--claro);border-bottom:1px solid var(--linea-oscura)}
 header .contenedor{display:flex;justify-content:space-between;align-items:center;height:3.25rem}
 .marca{font-weight:600;font-size:.95rem;text-decoration:none;letter-spacing:-.01em}
@@ -336,16 +336,18 @@ main .boton.secundario{background:transparent;color:var(--negro);border-color:va
 .escribiendo span:nth-child(2){animation-delay:.15s}
 .escribiendo span:nth-child(3){animation-delay:.3s}
 @keyframes puntos{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
-.compacta{padding:2.25rem 0 2rem;display:flex}
+.compacta{padding:1.5rem 0 1.5rem;display:flex}
 /* La franja negra mide lo mismo en todas las secciones: el resumen (.hoy) va siempre pegado abajo. */
-@media(min-width:561px){.compacta{min-height:28.5rem}.compacta .hoy .kpi{min-height:8.6rem}}
+@media(min-width:561px){.compacta{min-height:22rem}.compacta .hoy .kpi{min-height:7.5rem}}
 .compacta>.contenedor{display:flex;flex-direction:column;width:100%}
 .compacta .hoy{margin-top:auto}
-.compacta .estado,.compacta .pestanas{margin-bottom:1.25rem}
+.compacta .estado,.compacta .pestanas{margin-bottom:1rem}
+.compacta .antetitulo{margin-bottom:.5rem}.compacta .pestanas{margin-top:1rem}.compacta .estado{margin-top:1rem;padding:.75rem 1.1rem}
+.compacta .hoy{margin-top:auto;grid-template-columns:repeat(auto-fit,minmax(11rem,1fr))}.compacta .hoy .kpi{padding:.9rem 1.15rem}
 .titulo-fila{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap}
 .oscuro .boton.ajuste{padding:.55rem 1.1rem;font-size:.9rem}
 .oscuro .boton.ajuste.on{background:var(--claro);color:var(--negro)}
-.compacta h1{font-size:clamp(1.9rem,5vw,2.75rem)}
+.compacta h1{font-size:clamp(1.8rem,4vw,2.4rem)}
 .compacta .bajada{font-size:1.05rem;margin-top:.5rem}
 .compacta+main{padding-top:1.5rem}
 .ancla{display:block;scroll-margin-top:30vh}
