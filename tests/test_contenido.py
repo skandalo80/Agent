@@ -663,3 +663,12 @@ def test_filtros_abiertas_y_pidieron_una_persona(cliente):
     assert "@beto" not in r.text and "@dani" not in r.text and "Reactivar" in r.text
     r = client.get("/panel/asistente?ver=abiertas")
     assert "@beto" in r.text and "@caro" not in r.text and "@dani" not in r.text
+
+
+def test_menu_js_antes_de_pintar(cliente):
+    client, *_ = cliente
+    html = client.get("/panel").text
+    menu = html.index(f'<script src="/panel/static/menu.js?v={panel.VERSION_MENU}"></script>')
+    assert menu < html.index("</head>")  # sin defer y en el <head>: se pliega antes de pintar
+    r = client.get("/panel/static/menu.js")
+    assert r.status_code == 200 and "menu-plegado" in r.text
