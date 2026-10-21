@@ -316,6 +316,7 @@ h2{font-size:1.5rem;letter-spacing:-.02em;margin-bottom:.25rem}
 .bajada{font-size:clamp(1.1rem,2.4vw,1.35rem);line-height:1.4;color:var(--gris);margin:1.25rem auto 0;max-width:34rem}
 .nota{color:var(--gris);font-size:.9rem;margin-top:2rem}
 .enlace{color:var(--acento-claro);text-decoration:none;font-weight:500}
+.volver{margin:0 0 1rem;font-size:.95rem}
 .enlace:hover{text-decoration:underline}
 .boton{display:inline-block;padding:.8rem 1.5rem;border-radius:999px;font:inherit;font-weight:600;font-size:1rem;text-decoration:none;cursor:pointer;border:1px solid transparent;transition:transform .2s}
 .boton:hover{transform:scale(1.03)}
@@ -623,7 +624,8 @@ async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt
         luz = f'<span class="semaforo sem-{estado_conexion}"></span>' if clave == "conexion" else ""
         return f'<a class="boton secundario{" on" if on else ""}" href="{href}">{luz}{nombre}</a>'
 
-    cuerpo = tarjeta_conexion if vista == "conexion" else None
+    cuerpo = ('<p class="volver"><a class="enlace" href="/panel/asistente">← Volver a tu asistente</a></p>'
+              + tarjeta_conexion) if vista == "conexion" else None
     formulario = (f'<details class="grupo plegable" id="configura"{" open" if abierto else ""}>'
                   '<summary><div><span class="num">Configura tu asistente</span>'
                   '<span class="resumen">Tu negocio, preguntas, políticas, tono, horario y avisos</span></div></summary>'
