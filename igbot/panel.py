@@ -607,14 +607,14 @@ label.check input[type=email]{flex:1;max-width:22rem;margin:0}
 .bajada-bienvenida{color:#a1a1a6;font-size:1.15rem;max-width:40rem;margin:.75rem 0 0}
 .despues{margin-top:1.25rem;text-align:center;color:#6e6e73;font-size:.9rem}.despues a{color:inherit}
 @media(max-width:700px){.caminos{grid-template-columns:1fr}}
-.plegable summary{display:flex;justify-content:space-between;align-items:center;cursor:pointer;list-style:none}
-.plegable summary::-webkit-details-marker{display:none}
-.plegable summary .num{margin:0}
-.plegable summary::after{content:"";width:.55rem;height:.55rem;border-right:2px solid #6e6e73;border-bottom:2px solid #6e6e73;transform:rotate(45deg);margin:0 .3rem .3rem 1rem}
-.plegable[open] summary::after{transform:rotate(-135deg);margin-bottom:-.2rem}
-.plegable summary .resumen{margin-left:auto;color:#6e6e73;font-size:.85rem}
-.plegable[open] summary{margin-bottom:1rem}
-.seccion summary .titulo-sec .num{margin:0 0 .35rem}.seccion summary h2{margin:0}
+.plegable>summary{display:flex;justify-content:space-between;align-items:center;cursor:pointer;list-style:none}
+.plegable>summary::-webkit-details-marker{display:none}
+.plegable>summary .num{margin:0}
+.plegable>summary::after{content:"";width:.55rem;height:.55rem;border-right:2px solid #6e6e73;border-bottom:2px solid #6e6e73;transform:rotate(45deg);margin:0 .3rem .3rem 1rem}
+.plegable[open]>summary::after{transform:rotate(-135deg);margin-bottom:-.2rem}
+.plegable>summary .resumen{margin-left:auto;color:#6e6e73;font-size:.85rem}
+.plegable[open]>summary{margin-bottom:1rem}
+.seccion>summary .titulo-sec .num{margin:0 0 .35rem}.seccion>summary h2{margin:0}
 .guardar-todo{align-items:center;gap:1rem;margin:1.25rem 0 0}
 .guardar-todo .ayuda{margin:0}
 .grupo>summary{background:var(--blanco);border-radius:1.5rem;padding:1.5rem 2rem;margin-bottom:1.25rem}
@@ -650,7 +650,7 @@ label.check input[type=email]{flex:1;max-width:22rem;margin:0}
 .paso-cam{display:flex;align-items:center;gap:.5rem;padding:.4rem .85rem;border-radius:999px;border:1px solid var(--linea-oscura);color:var(--gris);font-size:.88rem}
 .paso-cam b{display:grid;place-items:center;width:1.35rem;height:1.35rem;border-radius:50%;background:var(--linea-oscura);font-size:.72rem;color:var(--claro)}
 .paso-cam.hecho{color:var(--claro)}.paso-cam.actual{color:var(--blanco);border-color:var(--blanco)}.paso-cam.actual b{background:var(--blanco);color:var(--negro)}
-.seccion summary .resumen-cam{margin:0 0 0 auto;padding-right:1rem}
+.seccion>summary .resumen-cam{margin:0 0 0 auto;padding-right:1rem}
 .fila-cam{display:grid;grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:1rem;margin:1rem 0}
 .fila-cam input,.fila-cam select{width:100%;font:inherit;font-size:1rem;padding:.65rem .8rem;border:1px solid var(--linea-clara);border-radius:.85rem;background:var(--claro);color:var(--negro)}
 .etq-cam{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.72rem;font-weight:600;padding:.12rem .5rem;border-radius:999px;width:max-content;background:#f3effa;color:#634c98}
@@ -730,7 +730,7 @@ label.check input[type=email]{flex:1;max-width:22rem;margin:0}
 @media(max-width:1100px){.fmts-cam{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:760px){.cal-cam{grid-template-columns:1fr}.dia-cam{min-height:0}.dia-cam.libre,.dia-cam.fuera{display:none}
 .obj-cam{grid-template-columns:1fr}.fmts-cam{grid-template-columns:1fr 1fr}.resumen-exp{grid-template-columns:1fr 1fr}
-.mini-cam{width:4.5rem}.seccion summary .resumen-cam{display:none}}
+.mini-cam{width:4.5rem}.seccion>summary .resumen-cam{display:none}}
 """
 
 
@@ -1112,16 +1112,12 @@ async def recientes(c: Cuenta, ver: str, buscar: str = "", hoja: int = 1) -> str
                 + (f'<a class="enlace" href="{escape(enlace_chats(ver))}">Borrar</a>' if buscar else "") + "</form>")
     cuenta = (f'<p class="ayuda cuantos">{encontrados} {"chat" if encontrados == 1 else "chats"}'
               + (f" · página {hoja} de {total}" if total > 1 else "") + "</p>") if encontrados else ""
-    # Plegable (<details>): panel.js recuerda en el navegador si la cerró.
-    resumen = (f"{cuantos['persona']} piden una persona" if cuantos["persona"] else
-               f"{cuantos['pausa']} en pausa" if cuantos["pausa"] else f"{cuantos['']} chats")
-    return ('<details class="tarjeta plegable" id="chats" open><summary><span class="num">Conversaciones recientes</span>'
-            f'<span class="resumen">{resumen}</span></summary>'
+    return ('<div class="tarjeta" id="chats"><span class="num">Conversaciones recientes</span>'
             f'<p class="ayuda">Lo último que te escribieron. "Tomar este chat" pausa al asistente ahí'
             f" {c.human_pause_hours:g} h para que contestes tú desde Instagram.</p>"
             f'<div class="filtros">{filtros}</div>{busqueda}{cuenta}'
             + ("".join(html) or f'<p class="ayuda vacio">{vacio}</p>')
-            + paginas(hoja, total, lambda n: enlace_chats(ver, buscar, n)) + "</details>")
+            + paginas(hoja, total, lambda n: enlace_chats(ver, buscar, n)) + "</div>")
 
 
 # La cuenta principal (la vendedora, la del .env) usa prompts/system.md, que vive en el
@@ -1163,17 +1159,17 @@ def _formulario(c: Cuenta, datos: dict, prompt: str, pares_minimos: int, nota: s
         '<form method="post" action="/panel/guardar">'
         # Enter en un campo no debe quitar una pregunta: el primer botón del formulario solo recarga.
         '<button class="oculto" name="accion" value="vista" tabindex="-1" aria-hidden="true">Actualizar</button>'
-        + seccion("negocio", "01", "Tu negocio", negocio)
-        + seccion("preguntas", "02", "Preguntas frecuentes",
+        + seccion("negocio", "Tu negocio", negocio)
+        + seccion("preguntas", "Preguntas frecuentes",
                   '<p class="ayuda">Lo que más te preguntan, con la respuesta que darías tú.</p>'
                   f'<input type="hidden" name="faq_n" value="{len(pares)}">{faq}'
                   '<div class="acciones"><button class="boton secundario" name="accion" value="agregar"'
                   ' formaction="/panel/guardar#preguntas">+ Agregar pregunta</button></div>',
                   plural_(sum(1 for q in pares if q["p"].strip()), "pregunta", "preguntas"))
-        + seccion("politicas", "03", "Políticas", f'<p class="ayuda">Llena solo las que apliquen a tu negocio.</p>{pol}')
-        + seccion("atencion", "04", "Atención personal",
+        + seccion("politicas", "Políticas", f'<p class="ayuda">Llena solo las que apliquen a tu negocio.</p>{pol}')
+        + seccion("atencion", "Atención personal",
                   caja(HUMANO[0], HUMANO[1], HUMANO[2], datos.get(HUMANO[0], ""), HUMANO[3]))
-        + seccion("instrucciones", "05", "Tono e instrucciones",
+        + seccion("instrucciones", "Tono e instrucciones",
                   tono_cliente(tonos, prompt, nota, quedan) if c.slug else tono_principal(tonos, prompt, nota, confirmar))
         + horario
         # Un solo Guardar, hasta abajo y fuera de las secciones: guarda todo, aunque estén cerradas.
@@ -1182,10 +1178,10 @@ def _formulario(c: Cuenta, datos: dict, prompt: str, pares_minimos: int, nota: s
     )
 
 
-def seccion(id_: str, num: str, titulo: str, cuerpo: str, resumen: str = "") -> str:
+def seccion(id_: str, titulo: str, cuerpo: str, resumen: str = "") -> str:
     """Una parte de Configura tu asistente que se abre y se cierra (panel.js recuerda si la cerraste)."""
     return (f'<details class="tarjeta plegable seccion" id="{id_}" open><summary><span class="titulo-sec">'
-            f'<span class="num">{num}</span><h2>{titulo}</h2></span>'
+            f'<h2>{titulo}</h2></span>'
             + (f'<span class="resumen">{resumen}</span>' if resumen else "") + f"</summary>{cuerpo}</details>")
 
 

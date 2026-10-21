@@ -776,7 +776,7 @@ def tarjeta_como(marca: dict, valores: dict) -> str:
         + f"<b>{n}</b><span>{d}</span></label>"
         for k, (n, d, _) in ESTILOS.items())
     return (
-        '<div class="tarjeta"><span class="num">03</span><h2>¿Cómo lo armamos?</h2>'
+        '<div class="tarjeta"><h2>¿Cómo lo armamos?</h2>'
         f'<div class="opciones">{opciones}</div>'
         '<div class="desplegable si-como plantilla"><h3>Plantilla solo para este post</h3>'
         '<p class="ayuda">Empieza con lo de tu marca; cambia lo que quieras.</p>'
@@ -828,10 +828,10 @@ async def nuevo(c: Cuenta, valores: dict | None = None, aviso: str = "", confirm
     cuerpo = (
         '<form method="post" action="/panel/contenido/nuevo" enctype="multipart/form-data">'
         + (tarjeta_extra(c, "generar") if confirmar else "")
-        + '<div class="tarjeta"><span class="num">01</span><h2>¿Qué quieres lograr con este post?</h2>'
+        + '<div class="tarjeta"><h2>¿Qué quieres lograr con este post?</h2>'
         '<p class="ayuda">Con esto elegimos el tono, la imagen y la llamada a la acción.</p>'
         f'<div class="opciones">{objetivos}</div></div>'
-        '<div class="tarjeta"><span class="num">02</span><h2>¿De qué trata?</h2>'
+        '<div class="tarjeta"><h2>¿De qué trata?</h2>'
         '<p class="ayuda">Opcional. Si lo dejas vacío, lo proponemos con la información de tu negocio.</p>'
         f'<textarea name="tema" rows="3" maxlength="{MAX_TEMA}" placeholder="{OBJETIVOS[elegido][3]}">'
         f'{escape(valores.get("tema", ""))}</textarea>'
@@ -915,7 +915,7 @@ async def editor(c: Cuenta, post_id: int, aviso: str = "", confirmar: bool = Fal
             + (tarjeta_extra(c, "otra") if confirmar else "")
             + f'<div class="editor"><div class="fija">{imagen}'
             f'<p class="ayuda" style="margin-top:.75rem"><span class="chip {color}">{estado}</span> · {escape(objetivo)}</p></div><div>'
-            '<div class="tarjeta"><span class="num">01 · Imagen</span>'
+            '<div class="tarjeta"><span class="num">Imagen</span>'
             + (('<p class="ayuda">Esta pieza viene de tu campaña y su imagen no lleva un texto que se cambie aquí.'
                 ' Para hacerla de nuevo, ve a Campañas.</p></div>') if fija else
                ('<p class="ayuda">Diseño libre: el texto va dentro del diseño.</p>' if es_libre
@@ -935,13 +935,13 @@ async def editor(c: Cuenta, post_id: int, aviso: str = "", confirmar: bool = Fal
                 "Actualizar imagen</button>"
                 '<button class="boton secundario" name="accion" value="otra">Otra imagen · usa 1 de tu cupo</button>'
                 "</div></div>")))
-            + '<div class="tarjeta"><span class="num">02 · Publicación</span>'
+            + '<div class="tarjeta"><span class="num">Publicación</span>'
             '<label for="caption">Texto del post</label>'
             f'<textarea id="caption" name="caption" rows="7" maxlength="{MAX_CAPTION}">{escape(post["caption"])}</textarea>'
             '<label for="cuando">Cuándo sale</label>'
             f'<p class="ayuda">Hora de tu negocio ({escape(c.timezone)}).</p>'
             f'<input type="datetime-local" id="cuando" name="cuando" value="{valor_cuando}"></div>'
-            '<div class="tarjeta"><span class="num">03 · Comentarios y DMs</span>'
+            '<div class="tarjeta"><span class="num">Comentarios y DMs</span>'
             '<p class="ayuda">Si alguien comenta la palabra en este post, le contestamos en público y le mandamos el DM.'
             " Reconocemos variantes: «precio», «Precios» o «¿precio?» cuentan igual.</p>"
             + campo("clave", "Palabra clave", p.get("clave", ""), 20)
@@ -1056,7 +1056,7 @@ async def pagina_marca(c: Cuenta, marca: dict | None = None, aviso: str = "") ->
               f'<span class="avatar-marca" data-fondo="principal" data-inicial style="background:{m.principal}">'
               f"{inicial}</span>")
     identidad = (
-        '<div class="tarjeta"><span class="num">01</span><h2>Identidad</h2>'
+        '<details class="tarjeta plegable seccion" id="identidad" open><summary><span class="titulo-sec"><h2>Identidad</h2></span></summary>'
         '<p class="ayuda">Lo básico de tu marca. Lo usamos al escribir tus posts y en tu vista previa.</p>'
         '<div class="pares"><div><label for="nombre">Nombre de tu marca</label>'
         f'<input type="text" id="nombre" name="nombre" maxlength="{MAX_NOMBRE}" value="{escape(nombre)}"'
@@ -1070,7 +1070,7 @@ async def pagina_marca(c: Cuenta, marca: dict | None = None, aviso: str = "") ->
         f'<input type="text" id="frase" name="frase" maxlength="{MAX_FRASE}" value="{escape(frase)}"'
         ' placeholder="Ej. Café de especialidad tostado en casa, a dos cuadras del parque.">'
         f'<label>Carácter <span class="suave">(elige hasta {MAX_CARACTER})</span></label>'
-        f'<div class="chips">{caracter}</div></div>')
+        f'<div class="chips">{caracter}</div></details>')
     vista_previa = (
         '<aside class="lado"><div class="tarjeta"><span class="num">Vista previa</span>'
         '<div class="pestanas-mini"><input type="radio" name="vista_previa" id="vp-perfil" value="perfil" checked>'
@@ -1097,13 +1097,13 @@ async def pagina_marca(c: Cuenta, marca: dict | None = None, aviso: str = "") ->
         '<button class="oculto" name="accion" value="guardar" tabindex="-1" aria-hidden="true">Guardar</button>'
         '<div class="marca-pagina"><div>'
         + identidad
-        + '<div class="tarjeta"><span class="num">02</span><h2>Colores</h2>'
+        + '<details class="tarjeta plegable seccion" id="colores" open><summary><span class="titulo-sec"><h2>Colores</h2></span></summary>'
         f'<p class="ayuda">Toca un color para cambiarlo.</p><div class="paleta">{colores}</div>'
         '<details class="mas"><summary>Dónde se usa cada color</summary>'
-        f"{detalles_color}</details></div>"
-        '<div class="tarjeta"><span class="num">03</span><h2>Tipografía</h2>'
-        f'<div class="letras">{fuentes}</div><label>Grosor</label><div class="chips">{pesos}</div></div>'
-        '<div class="tarjeta" id="fotos"><span class="num">04</span><h2>Fotos y estilo</h2>'
+        f"{detalles_color}</details></details>"
+        '<details class="tarjeta plegable seccion" id="tipografia" open><summary><span class="titulo-sec"><h2>Tipografía</h2></span></summary>'
+        f'<div class="letras">{fuentes}</div><label>Grosor</label><div class="chips">{pesos}</div></details>'
+        '<details class="tarjeta plegable seccion" id="fotos" open><summary><span class="titulo-sec"><h2>Fotos y estilo</h2></span></summary>'
         '<div class="si-plantilla"><p class="ayuda">Así le pedimos las fotos al generador para tus plantillas.</p>'
         f'<div class="opciones">{estilos}</div></div>'
         '<div class="si-libre"><p class="ayuda">En Diseño libre el generador arma el post completo siguiendo'
@@ -1121,12 +1121,12 @@ async def pagina_marca(c: Cuenta, marca: dict | None = None, aviso: str = "") ->
         + ('<input type="file" name="fotos" accept="image/jpeg,image/png,image/webp" multiple>'
            '<div class="acciones"><button class="boton secundario" name="accion" value="subir">Subir fotos</button></div>'
            if sube else "")
-        + '</div>'
-        '<div class="tarjeta"><span class="num">05</span><h2>Cómo se arman tus posts</h2>'
+        + '</details>'
+        '<details class="tarjeta plegable seccion" id="como-se-arman" open><summary><span class="titulo-sec"><h2>Cómo se arman tus posts</h2></span></summary>'
         '<p class="ayuda">Lo que usan tus posts nuevos; en cada post nuevo lo puedes cambiar.</p>'
         f'<div class="opciones">{opciones_modo(modo_de(marca))}</div>'
         '<div class="si-plantilla"><label>Plantilla</label>'
-        f'<div class="chips">{plantillas}</div></div></div>'
+        f'<div class="chips">{plantillas}</div></div></details>'
         '<div class="acciones"><button class="boton" name="accion" value="guardar">Guardar</button></div>'
         f"</div>{vista_previa}</div></form>"
     )

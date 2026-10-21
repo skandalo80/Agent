@@ -749,7 +749,7 @@ def test_filtros_abiertas_y_pidieron_una_persona(cliente):
 
     r = client.get("/panel/asistente")
     assert "Abiertas (1)" in r.text and "Pidieron una persona (1)" in r.text and "En pausa (2)" in r.text
-    assert "1 piden una persona" in r.text
+    assert '<div class="tarjeta" id="chats">' in r.text  # una sola tarjeta: no se pliega
     r = client.get("/panel/asistente?ver=persona")
     assert "@caro" in r.text and "Pidió una persona" in r.text and "Motivo: Quiere negociar el precio" in r.text
     assert "@beto" not in r.text and "@dani" not in r.text and "Reactivar" in r.text

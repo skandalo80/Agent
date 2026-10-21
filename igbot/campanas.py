@@ -480,7 +480,7 @@ def paso1(camp: dict, quedan: int, abierto: bool, nueva: bool = False, fotos: in
     boton = ("Proponer calendario de nuevo" if hay else "Proponer calendario")
     return (
         f'<details class="tarjeta plegable seccion" id="campana"{" open" if abierto else ""}><summary>'
-        '<span class="titulo-sec"><span class="num">01</span><h2>Tu campaña</h2></span>'
+        '<span class="titulo-sec"><h2>Tu campaña</h2></span>'
         f'<span class="ayuda resumen-cam">{resumen}</span></summary>'
         '<form method="post" action="/panel/contenido/campanas" class="form-cam">'
         + ('<input type="hidden" name="nueva" value="1">' if nueva else "")
@@ -571,7 +571,7 @@ async def calendario(c: Cuenta, camp: dict, sel: str) -> str:
                        f' {hasta.day} {MESES[hasta.month - 1]}</span></div><div class="cal-cam">{"".join(celdas)}</div>')
         d += timedelta(days=7)
         n += 1
-    return ('<div class="tarjeta"><span class="titulo-sec"><span class="num">02</span><h2>Calendario</h2></span>'
+    return ('<div class="tarjeta"><span class="titulo-sec"><h2>Calendario</h2></span>'
             '<p class="ayuda">Cada post dice qué se está probando: su tema, su formato y su hora. Arrastra un post a otro'
             " día para cambiarlo (si ese día ya tiene uno, se intercambian). Tócalo para cambiar su día, su hora, su"
             " formato, su texto o la idea de la imagen.</p>" + se_prueba(camp) + "".join(semanas) + "</div>")
