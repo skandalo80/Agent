@@ -302,6 +302,29 @@ def test_conversaciones_recientes_y_tomar_un_chat(cliente):
                                                     data={"usuario": "nadie", "accion": "tomar"}).text
 
 
+def test_chats_de_10_en_10_con_buscador(cliente):
+    client, c, *_ = cliente
+    for i in range(23):
+        client.portal.call(c.store.add_incoming, f"u{i:02d}", f"m{i}", f"Hola, pregunta {i:02d}")
+    client.portal.call(c.store.set, "username:u05", "@lupita.flores")
+    r = client.get("/panel/asistente")
+    assert r.text.count('class="fila"') == 10 and "23 chats · página 1 de 3" in r.text
+    assert '<span class="on" aria-current="page">1</span>' in r.text and 'href="/panel/asistente?p=2#chats"' in r.text
+    assert '<span class="apagada" aria-hidden="true">‹</span>' in r.text and 'aria-label="Siguiente"' in r.text
+    r = client.get("/panel/asistente?p=3")
+    assert r.text.count('class="fila"') == 3 and "pregunta 00" in r.text and "pregunta 22" not in r.text
+    assert client.get("/panel/asistente?p=99").text.count('class="fila"') == 3  # se queda en la última
+    # El filtro se mantiene al cambiar de página y al buscar.
+    r = client.get("/panel/asistente?ver=sin&p=2")
+    assert "23 chats · página 2 de 3" in r.text and 'href="/panel/asistente?ver=sin&amp;p=3#chats"' in r.text
+    r = client.get("/panel/asistente?q=lupita")
+    assert r.text.count('class="fila"') == 1 and "ig.me/m/u05" in r.text and 'class="paginas"' not in r.text
+    assert 'value="lupita"' in r.text and ">Borrar</a>" in r.text
+    r = client.get("/panel/asistente?ver=sin&q=pregunta+1")
+    assert r.text.count('class="fila"') == 10 and '<input type="hidden" name="ver" value="sin">' in r.text
+    assert "No encontramos chats con «zzz»" in client.get("/panel/asistente?q=zzz").text
+
+
 TEMAS = {"temas": [{"tema": "Horario de fin de semana", "personas": 4, "ejemplo": "¿Abren el sábado?",
                     "objetivo": "explicar", "idea": "Post con el horario del sábado"},
                    {"tema": "x", "personas": "muchas", "objetivo": "otro"}]}
