@@ -62,6 +62,13 @@ def test_cliente_se_conecta_configura_y_enciende(monkeypatch, tmp_path):
     monkeypatch.setattr(bot, "cuentas", list(bot.cuentas))
     monkeypatch.setattr(bot, "dispatchers", dict(bot.dispatchers))
     monkeypatch.setattr(bot.principal, "ig_account_id", "negocio")
+    claude = []
+
+    async def fake_claude(prompt, system, mcp=None, allowed=(), max_turns=5, model=None):
+        claude.append((prompt, system))
+        return "- Saluda con calidez y contesta en pocas frases."
+
+    monkeypatch.setattr(bot.agent, "run_claude", fake_claude)
 
     with TestClient(bot.app, base_url="https://testserver") as client:
         assert "Entrar con Instagram" in client.get("/panel").text  # sin sesión
@@ -108,14 +115,27 @@ def test_cliente_se_conecta_configura_y_enciende(monkeypatch, tmp_path):
         assert client.post("/panel/guardar", data={**datos, "accion": "generar"}).status_code == 403  # sin Origin
         assert client.post("/panel/guardar", headers={"Origin": "https://otro.com", "Sec-Fetch-Site": "cross-site"},
                            data={**datos, "accion": "generar"}).status_code == 403
+        # Generar: Claude escribe solo el tono e instrucciones (no repite lo de arriba) y no guarda.
         r = client.post("/panel/guardar", headers=ORIGEN, data={**datos, "accion": "generar"})
-        assert "Cafetería en Puebla" in r.text and "revísalas y pulsa Guardar" in r.text
-        assert "Cafetería" not in Path(c.prompt_path).read_text()  # generar no guarda
+        assert "- Saluda con calidez" in r.text and "revísalas, cámbialas" in r.text and "Te quedan 2 de 3 hoy" in r.text
+        assert "Cafetería en Puebla" in claude[-1][0] and "<instrucciones_actuales>" not in claude[-1][0]
+        assert "Cafetería" not in Path(c.prompt_path).read_text()
+        client.post("/panel/guardar", headers=ORIGEN, data={**datos, "accion": "profundizar", "prompt": "Sé breve <b>"})
+        assert "<instrucciones_actuales>\nSé breve &lt;b&gt;" in claude[-1][0]
 
-        r = client.post("/panel/guardar", headers=ORIGEN,
-                        data={**datos, "accion": "guardar", "prompt": "Eres el asistente de @cafe.lunar. <b>"})
-        assert "Guardado" in r.text and "&lt;b&gt;" in r.text
-        assert Path(c.prompt_path).read_text() == "Eres el asistente de @cafe.lunar. <b>\n"
+        # El cuadro guarda solo las instrucciones; el prompt completo se arma con todo el formulario.
+        r = client.post("/panel/guardar", headers=ORIGEN, data={**datos, "accion": "guardar", "prompt": "Sé breve. <b>"})
+        assert "Guardado" in r.text and "&lt;b&gt;" in r.text and "Cafetería en Puebla</textarea>" in r.text
+        assert r.text.count("Sé breve.") == 1  # el cuadro no muestra el prompt completo
+        prompt = Path(c.prompt_path).read_text()
+        assert "Cafetería en Puebla" in prompt and "CÓMO QUIERE EL DUEÑO QUE ATIENDAS\nSé breve. <b>" in prompt
+        assert "Claro y profesional" in prompt
+
+        # Pasado el tope del día ya no se llama a Claude.
+        client.post("/panel/guardar", headers=ORIGEN, data={**datos, "accion": "generar"})
+        n = len(claude)
+        r = client.post("/panel/guardar", headers=ORIGEN, data={**datos, "accion": "profundizar"})
+        assert "Ya usaste las de hoy" in r.text and len(claude) == n
 
         r = client.post("/panel/estado", headers={"Origin": "null", "Sec-Fetch-Site": "same-origin"},
                         data={"activo": "1"})
@@ -206,7 +226,8 @@ def test_probar_mi_asistente(monkeypatch, tmp_path):
         assert r.text.index('id="escribiendo"') < r.text.index('id="ultimo"') < r.text.index("#escribiendo{display:none}")
         prompt, system, mcp = vistos[0]
         # Sus instrucciones guardadas + las reglas comunes, sin herramientas.
-        assert system.startswith("Eres el café.") and "REGLAS COMUNES" in system and not mcp
+        assert system.startswith("Eres el asistente de Instagram de @cafe.lunar") and "Eres el café." in system
+        assert "REGLAS COMUNES" in system and not mcp
         assert "¿Abren hoy?" in prompt
 
         r = client.post("/panel/probar", headers=ORIGEN, data={"mensaje": "¿Y mañana?"})
