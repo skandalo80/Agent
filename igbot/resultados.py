@@ -1,6 +1,6 @@
 """Resultados: lo que hizo el asistente, en el panel del cliente.
 
-bot.skandar.online/panel/resultados, para todos los planes, con los últimos 7
+console.skandar.online/panel/resultados, para todos los planes, con los últimos 7
 o 30 días:
 - Conversaciones: personas que escribieron (y cuántas nuevas), mensajes,
   cuántas resolvió el asistente sin pasar a una persona, su tiempo de

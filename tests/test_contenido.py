@@ -20,7 +20,7 @@ from test_conectar import setup  # noqa: E402
 from test_cuenta import FakeInstagram  # noqa: E402
 from test_imagenes import Falso  # noqa: E402
 
-ORIGEN = {"Origin": "https://bot.skandar.online"}
+ORIGEN = {"Origin": "https://console.skandar.online"}
 
 POST = {"titulo": "Cartera Atelier", "subtitulo": "Piel italiana, hecha a mano.", "precio": "Desde $1,290 MXN",
         "caption": "Hecha a mano en piel italiana. Comenta PRECIO y te mandamos los colores.\n#cartera #piel",

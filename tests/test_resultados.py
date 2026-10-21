@@ -139,7 +139,7 @@ def test_inicio_del_panel(cliente):
     # Después (en pausa y sin mensajes): a configurar su asistente.
     r = client.get("/panel", follow_redirects=False)
     assert r.status_code == 303 and r.headers["location"] == "/panel/asistente"
-    client.post("/panel/estado", headers={"Origin": "https://bot.skandar.online"}, data={"activo": "1"})
+    client.post("/panel/estado", headers={"Origin": "https://console.skandar.online"}, data={"activo": "1"})
     assert client.get("/panel", follow_redirects=False).headers["location"] == "/panel/asistente"  # sin mensajes
     client.portal.call(c.store.add_incoming, "ana", "m1", "hola")
     assert client.get("/panel", follow_redirects=False).headers["location"] == "/panel/resultados"

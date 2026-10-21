@@ -27,7 +27,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.exception_handlers import http_exception_handler
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
 from igbot import (admin, agent, ajustes, botones, comentarios, conectar, config, contenido, limites, panel, reporte, resultados,
                    semana)
@@ -262,6 +262,28 @@ if not config.CLIENTE:
 @app.get("/health")
 def health():
     return {"ok": True}
+
+
+# Los íconos de skandar.online (web/), para que la pestaña del panel lleve el mismo.
+WEB = Path(__file__).resolve().parent / "web"
+ICONOS = {"favicon.ico": "image/x-icon", "favicon-32.png": "image/png", "apple-touch-icon.png": "image/png"}
+
+
+def _icono(nombre: str):
+    def ver():
+        return FileResponse(WEB / nombre, media_type=ICONOS[nombre],
+                            headers={"Cache-Control": "public, max-age=604800"})
+    return ver
+
+
+for _nombre in ICONOS:
+    app.get(f"/{_nombre}", include_in_schema=False)(_icono(_nombre))
+
+
+@app.get("/", include_in_schema=False)
+def inicio():
+    """console.skandar.online a secas lleva al panel."""
+    return RedirectResponse("/panel", status_code=307)
 
 
 PRIVACY_HTML = """<!doctype html><html lang="es"><meta charset="utf-8">
