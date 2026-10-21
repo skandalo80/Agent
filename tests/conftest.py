@@ -16,3 +16,15 @@ def no_instagram_on_startup(monkeypatch):
         monkeypatch.setattr(bot.instagram, "subscribe", nothing)
         monkeypatch.setattr(bot.instagram, "set_ice_breakers", nothing)
         monkeypatch.setattr(bot, "fondo", lambda: [])
+
+
+@pytest.fixture(autouse=True)
+def sin_revision_de_instrucciones(monkeypatch):
+    """Guardar el asistente no gasta una llamada de Claude en revisarlo (test_panel prueba la revisión)."""
+    if "igbot.panel" in sys.modules:
+        panel = sys.modules["igbot.panel"]
+
+        async def aprobar(c, texto):
+            return ""
+
+        monkeypatch.setattr(panel, "revisar_instrucciones", aprobar)

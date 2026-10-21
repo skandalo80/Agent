@@ -81,12 +81,16 @@ async def build_prompt(store: Store, user_id: str, new_messages: list[str]) -> s
 
 # Estilo y temas permitidos, comunes a todos los bots que hablan con clientes.
 STYLE_PATH = Path("prompts/comun.md")
+# Reglas base (persona, memoria, honestidad, seguridad): van al final de todos los prompts y
+# mandan sobre lo que haya escrito el dueño. Vive en el repo; ningún cliente la puede editar.
+BASE_PATH = Path(__file__).resolve().parent.parent / "prompts" / "base.md"
 
 
 def system_prompt() -> str:
     """Las instrucciones del bot más el catálogo del negocio, si hay."""
     system = cuenta().ruta_prompt().read_text(encoding="utf-8")
     system += "\n\n" + STYLE_PATH.read_text(encoding="utf-8")
+    system += "\n\n" + BASE_PATH.read_text(encoding="utf-8")
     from .ajustes import prompt_horario  # ajustes importa el panel, que importa este módulo
     system += "\n\n" + prompt_horario(cuenta())
     if catalog.available():

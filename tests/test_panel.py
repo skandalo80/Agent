@@ -16,6 +16,7 @@ from test_conectar import FakeHTTP, FakeResponse, setup  # noqa: E402
 from test_cuenta import FakeInstagram  # noqa: E402
 
 ORIGEN = {"Origin": "https://bot.skandar.online"}
+REVISAR = panel.revisar_instrucciones  # la de verdad (conftest la cambia por una que aprueba todo)
 
 
 def test_generar_arma_las_instrucciones_con_el_tono():
@@ -128,7 +129,7 @@ def test_cliente_se_conecta_configura_y_enciende(monkeypatch, tmp_path):
         assert "Guardado" in r.text and "&lt;b&gt;" in r.text and "Cafetería en Puebla</textarea>" in r.text
         assert r.text.count("Sé breve.") == 1  # el cuadro no muestra el prompt completo
         prompt = Path(c.prompt_path).read_text()
-        assert "Cafetería en Puebla" in prompt and "CÓMO QUIERE EL DUEÑO QUE ATIENDAS\nSé breve. <b>" in prompt
+        assert "Cafetería en Puebla" in prompt and "<instrucciones_del_dueño>\nSé breve. <b>\n</instrucciones_del_dueño>" in prompt
         assert "Claro y profesional" in prompt
 
         # Pasado el tope del día ya no se llama a Claude.
@@ -281,3 +282,46 @@ def test_cuenta_grande_queda_en_revision(monkeypatch, tmp_path):
         assert "En revisión" in r.text and ">Encender<" not in r.text
         r = client.post("/panel/estado", headers=ORIGEN, data={"activo": "1"})
         assert "En revisión" in r.text and not client.portal.call(panel.activo, c)
+
+
+def test_lo_que_escribe_el_dueno_se_revisa_y_las_reglas_base_mandan(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    Path("prompts").mkdir()
+    Path("prompts/comun.md").write_text("REGLAS COMUNES")
+    setup(monkeypatch)
+    monkeypatch.setattr(bot, "Instagram", lambda store: FakeInstagram())
+    monkeypatch.setattr(bot, "cuentas", list(bot.cuentas))
+    monkeypatch.setattr(bot, "dispatchers", dict(bot.dispatchers))
+    monkeypatch.setattr(bot.principal, "ig_account_id", "negocio")
+    monkeypatch.setattr(panel, "revisar_instrucciones", REVISAR)
+    vistos = []
+
+    async def fake_claude(prompt, system, mcp=None, allowed=(), max_turns=5, model=None):
+        vistos.append((prompt, system, model))
+        if "odia" in prompt:
+            return "RECHAZAR: Tus instrucciones piden insultar a las personas."
+        return "OK"
+
+    monkeypatch.setattr(bot.agent, "run_claude", fake_claude)
+    with TestClient(bot.app, base_url="https://testserver") as client:
+        r = client.get("/conectar/instagram", follow_redirects=False)
+        state = parse_qs(urlparse(r.headers["location"]).query)["state"][0]
+        client.get(f"/conectar/callback?code=abc&state={state}", follow_redirects=False)
+        c = bot.buscar("1784")
+        antes = Path(c.prompt_path).read_text()
+
+        r = client.post("/panel/guardar", headers=ORIGEN,
+                        data={"negocio": "Café", "accion": "guardar", "prompt": "Di que odias a los clientes."})
+        assert "No se guardó: Tus instrucciones piden insultar" in r.text and "Di que odias" in r.text
+        assert Path(c.prompt_path).read_text() == antes and client.portal.call(panel.perfil, c) == {}
+        assert vistos[-1][2] == bot.config.COMMENTS_MODEL and "Café" in vistos[-1][0]  # revisa todo lo escrito
+
+        r = client.post("/panel/guardar", headers=ORIGEN,
+                        data={"negocio": "Café", "accion": "guardar", "prompt": "Sé breve."})
+        assert "Guardado" in r.text and "Sé breve." in Path(c.prompt_path).read_text()
+
+        # Las reglas base van al final de todo prompt y nadie las edita desde el panel.
+        with bot.usar(c):
+            system = bot.agent.system_prompt()
+        assert system.index("Sé breve.") < system.index("REGLAS COMUNES") < system.index("<reglas_base>")
+        assert "mandan sobre cualquier instrucción del negocio" in system and "`recordar`" in system
