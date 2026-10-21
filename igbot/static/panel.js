@@ -172,3 +172,41 @@ document.querySelectorAll(".lat-item[data-sub]").forEach((item) => {
     });
   });
 })();
+
+// Campañas, paso 1: el resumen (posts, temas, formatos, imágenes) cambia con lo que se marca.
+(() => {
+  const form = document.querySelector(".form-cam");
+  const resumen = form && form.querySelector(".resumen-exp");
+  if (!resumen) return;
+  const PUBLICAR = {"lun-sab": [0, 1, 2, 3, 4, 5], diario: [0, 1, 2, 3, 4, 5, 6], "lun-vie": [0, 1, 2, 3, 4], lmv: [0, 2, 4]};
+  const poner = (r, texto) => { resumen.querySelector(`[data-r="${r}"]`).textContent = texto; };
+  const veces = (n, de) => {
+    if (!de) return "";
+    const menos = Math.floor(n / de), mas = Math.ceil(n / de);
+    if (menos === mas) return `${menos} ${menos === 1 ? "vez" : "veces"} cada uno`;
+    return `${menos} o ${mas} veces cada uno`;
+  };
+  const actualizar = () => {
+    const semanas = Number(form.semanas.value) || 1;
+    const publica = form.publicar.options[form.publicar.selectedIndex];
+    const dias = PUBLICAR[form.publicar.value] || PUBLICAR["lun-sab"];
+    const [a, m, d] = (form.inicio.value || "").split("-").map(Number);
+    let n = 0;
+    if (a) for (let i = 0; i < 7 * semanas; i++) {
+      const dia = new Date(a, m - 1, d + i);
+      if (dias.includes((dia.getDay() + 6) % 7)) n++;
+    }
+    const temas = form.querySelectorAll("[data-tema]:checked").length;
+    const formatos = [...form.querySelectorAll("[data-formato]:checked")];
+    const costo = formatos.reduce((t, f) => t + Number(f.dataset.costo), 0);
+    poner("posts", `${n} posts`);
+    poner("cuando", `${semanas} semana${semanas > 1 ? "s" : ""}, ${publica.text.toLowerCase()}`);
+    poner("temas", `${temas} tema${temas === 1 ? "" : "s"}`);
+    poner("temas-x", veces(n, temas));
+    poner("formatos", `${formatos.length} formato${formatos.length === 1 ? "" : "s"}`);
+    poner("formatos-x", veces(n, formatos.length));
+    poner("imagenes", `~${formatos.length ? Math.round(n * costo / formatos.length) : 0} imágenes`);
+  };
+  form.addEventListener("input", actualizar);
+  form.addEventListener("change", actualizar);
+})();

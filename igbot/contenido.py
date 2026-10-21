@@ -150,6 +150,11 @@ def libre(p: dict) -> bool:
     return p.get("plantilla") == imagenes.LIBRE
 
 
+def sin_rotulo(p: dict) -> bool:
+    """Piezas de Campañas sin título que se pueda cambiar: foto sola, solo texto y collage."""
+    return p.get("formato") in ("foto", "texto", "collage")
+
+
 ESTILO_REFERENCIA = ("The reference images are the brand's own photos and posts: match their color palette, lighting,"
                      " backgrounds, mood and overall visual language. Do not copy their text or logos.")
 
@@ -887,6 +892,7 @@ async def editor(c: Cuenta, post_id: int, aviso: str = "", confirmar: bool = Fal
         valor_cuando = (datetime.fromtimestamp(post["publish_at"], tools.tz()).strftime("%Y-%m-%dT%H:%M")
                         if post["publish_at"] else "")
         es_libre = libre(p)
+        fija = sin_rotulo(p)
         actual = p.get("plantilla", imagenes.PLANTILLA_INICIAL)
         plantillas = "".join(
             f'<label><input type="radio" name="plantilla" value="{k}"{" checked" if k == actual else ""}> {nombre}</label>'
@@ -903,14 +909,16 @@ async def editor(c: Cuenta, post_id: int, aviso: str = "", confirmar: bool = Fal
                        '<button class="boton secundario" name="accion" value="cancelar" formnovalidate>Descartar post</button>')
         cuerpo = (
             f'<form method="post" action="/panel/contenido/post/{post_id}"'
-            + ("" if es_libre else f' data-vista="/panel/contenido/post/{post_id}/muestra.jpg?m={post["media_ids"][0]}"') + ">"
+            + ("" if es_libre or fija else f' data-vista="/panel/contenido/post/{post_id}/muestra.jpg?m={post["media_ids"][0]}"') + ">"
             # Enter en un campo guarda; no aprueba ni genera otra imagen.
             '<button class="oculto" name="accion" value="guardar" tabindex="-1" aria-hidden="true">Guardar</button>'
             + (tarjeta_extra(c, "otra") if confirmar else "")
             + f'<div class="editor"><div class="fija">{imagen}'
             f'<p class="ayuda" style="margin-top:.75rem"><span class="chip {color}">{estado}</span> · {escape(objetivo)}</p></div><div>'
             '<div class="tarjeta"><span class="num">01 · Imagen</span>'
-            + ('<p class="ayuda">Diseño libre: el texto va dentro del diseño.</p>' if es_libre
+            + (('<p class="ayuda">Esta pieza viene de tu campaña y su imagen no lleva un texto que se cambie aquí.'
+                ' Para hacerla de nuevo, ve a Campañas.</p></div>') if fija else
+               ('<p class="ayuda">Diseño libre: el texto va dentro del diseño.</p>' if es_libre
                else f'<label>Plantilla</label><div class="chips">{plantillas}</div>')
             + campo("titulo", "Título", p.get("titulo", ""), 80)
             + campo("subtitulo", "Subtítulo", p.get("subtitulo", ""), 120)
@@ -926,7 +934,7 @@ async def editor(c: Cuenta, post_id: int, aviso: str = "", confirmar: bool = Fal
                 '<div class="acciones"><button class="boton secundario sin-js" name="accion" value="actualizar">'
                 "Actualizar imagen</button>"
                 '<button class="boton secundario" name="accion" value="otra">Otra imagen · usa 1 de tu cupo</button>'
-                "</div></div>"))
+                "</div></div>")))
             + '<div class="tarjeta"><span class="num">02 · Publicación</span>'
             '<label for="caption">Texto del post</label>'
             f'<textarea id="caption" name="caption" rows="7" maxlength="{MAX_CAPTION}">{escape(post["caption"])}</textarea>'
@@ -1280,15 +1288,17 @@ async def editar(request: Request, post_id: int):
             return await calendario(c, "Listo: ese post quedó descartado.")
 
         p = await pieza(c.store, post_id)
+        fija = sin_rotulo(p)
         if not libre(p):
             p["plantilla"] = f.get("plantilla") if f.get("plantilla") in imagenes.PLANTILLAS else p.get("plantilla")
         for k, n in (("titulo", 80), ("subtitulo", 120), ("precio", 40), ("respuesta", 300), ("dm", 1000)):
-            p[k] = f.get(k, "").strip()[:n]
-        if f.get("con_precio") != "1":
+            if not (fija and k in ("titulo", "subtitulo", "precio")):  # en una pieza fija, el texto de la imagen se queda
+                p[k] = f.get(k, "").strip()[:n]
+        if f.get("con_precio") != "1" and not fija:
             p["precio"] = ""  # sin la casilla, el post no lleva precio aunque haya algo escrito
         p["clave"] = re.sub(r"[^\wÁÉÍÓÚÜÑ]", "", f.get("clave", "").upper())[:20]
         caption = f.get("caption", "").strip()[:MAX_CAPTION]
-        if not p["titulo"]:
+        if not p["titulo"] and not fija:
             return await editor(c, post_id, "El título no puede quedar vacío.")
         if caption.count("#") > 30:
             return await editor(c, post_id, "Instagram acepta hasta 30 hashtags por post.")
@@ -1300,14 +1310,14 @@ async def editar(request: Request, post_id: int):
             error_hora = ""
         await guardar_pieza(c.store, post_id, p)
         await c.store.update_post(post_id, caption=caption, publish_at=publish_at or None)
-        if not libre(p):  # en diseño libre el texto está dentro de la imagen: se rehace con "Otra imagen"
+        if not libre(p) and not fija:  # en diseño libre el texto está dentro de la imagen: se rehace con "Otra imagen"
             try:
                 await imagenes.rerotular(c.store, post["media_ids"][0], p["plantilla"],
                                          texto_imagen(p, await panel.usuario(c)), kit(await marca_post(c, p)))
             except imagenes.ErrorImagen as e:
                 return await editor(c, post_id, str(e))
 
-        if accion == "otra":
+        if accion == "otra" and not fija:
             falta = await falta_cupo(c, f.get("extra") == "1")
             if falta:
                 return await editor(c, post_id, confirmar=True) if falta == "extra" else sin_plan()
