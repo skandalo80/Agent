@@ -270,7 +270,7 @@ def test_del_form():
 
 
 def test_tus_campanas_y_reporte(cliente, monkeypatch):
-    """La campaña anterior pasa a Tus campañas y el reporte ordena sus posts por Impacto."""
+    """La campaña anterior pasa a Tus campañas y el reporte ordena sus posts por tasa de interacción."""
     from igbot import informe
 
     client, c, *_ = cliente
@@ -328,9 +328,9 @@ def test_tus_campanas_y_reporte(cliente, monkeypatch):
         with usar(c):
             return informe.filas(c, pasadas)
     renglones = client.portal.call(filas)
-    assert [f["impacto"] for f in renglones] == [24.0, 10.0, None]  # (10 + 2·2 + 3·2 + 4·1) / 100 × 100; sin link, sin números
+    assert [f["tasa"] for f in renglones] == [15.0, 10.0, None]  # (10 + 2 + 2 + 1) / 100; sin link, sin números
     assert paginas == ["id,permalink"] and client.portal.call(c.store.get, "media_de:https://www.instagram.com/p/COD2/") == "m2"
-    assert all(f["maduro"] for f in renglones) and informe.por(renglones, "formato")[0][1] == 24.0
+    assert all(f["maduro"] for f in renglones) and informe.por(renglones, "formato")[0][1] == 15.0
 
     r = client.get(f"/panel/contenido/campanas/reporte?c={pasadas[0]['id']}")
     assert r.headers["content-type"] == "application/pdf" and r.content.startswith(b"%PDF")
@@ -343,8 +343,8 @@ def test_tus_campanas_y_reporte(cliente, monkeypatch):
     assert "Elige al menos una campaña" in client.get("/panel/contenido/campanas/reporte?c=999").text
 
 
-def test_impacto():
+def test_tasa_de_interaccion():
     from igbot import informe
-    assert informe.impacto({"reach": 200, "likes": 10, "comments": 5, "saved": 2, "shares": 1}) == 15.0
-    assert informe.impacto({"reach": 0, "likes": 3}) is None and informe.impacto(None) is None
+    assert informe.tasa({"reach": 200, "likes": 10, "comments": 5, "saved": 2, "shares": 1, "views": 900}) == 9.0
+    assert informe.tasa({"reach": 0, "likes": 3}) is None and informe.tasa(None) is None
     assert [informe.franja(h) for h in ("09:00", "14:00", "20:00", "")] == ["manana", "mediodia", "noche", "noche"]

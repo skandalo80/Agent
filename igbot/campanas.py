@@ -810,7 +810,7 @@ async def tus_campanas(c: Cuenta, actual: dict) -> str:
                      + ('<span class="chip">Actual</span>' if x.get("actual") else "") + "</label>")
     return ('<form method="get" action="/panel/contenido/campanas/reporte" class="tarjeta" id="tus-campanas">'
             '<span class="titulo-sec"><h2>Tus campañas</h2></span>'
-            '<p class="ayuda">Marca una o varias y descarga su reporte: los posts de mayor a menor impacto, con su'
+            '<p class="ayuda">Marca una o varias y descarga su reporte: los posts de mayor a menor interacción, con su'
             " alcance, likes, comentarios, guardados y compartidos, y qué tema, formato y horario funcionó mejor."
             " Los números se leen de Instagram al momento.</p>"
             f'<div class="lista-cam">{"".join(filas)}</div>'

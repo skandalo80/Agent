@@ -2,14 +2,14 @@
 
 Cuando el cliente arma una campaña nueva, la anterior se guarda en el kv "campanas_pasadas"
 con lo que se probó en cada post que llegó a tener imagen (tema, formato, hora). Desde
-"Tus campañas" marca una o varias y descarga un PDF con sus posts de mayor a menor Impacto,
+"Tus campañas" marca una o varias y descarga un PDF con sus posts de mayor a menor interacción,
 para que un community manager se lo mande a la marca.
 
 Los números se leen de Instagram al momento de abrir el reporte (con un caché corto para no
-pedirlos de nuevo en cada descarga). Impacto = interacciones por cada 100 personas que vieron
-el post, con más peso a lo que le importa al algoritmo:
+pedirlos de nuevo en cada descarga). Cada post se mide con la tasa de interacción por alcance,
+la que usan Metricool, Hootsuite y Later para los posts propios, sin pesos inventados:
 
-    (likes + 2·comentarios + 3·guardados + 4·compartidos) / alcance × 100
+    (likes + comentarios + guardados + compartidos) / alcance × 100
 
 Para decir qué funcionó solo cuentan los posts con 3 días o más publicados: uno de ayer
 sigue juntando interacciones.
@@ -31,7 +31,7 @@ from .pdf_marca import GRIS, LINEA, NEGRO, Cotizacion
 
 log = logging.getLogger("igbot.informe")
 
-PESOS = {"likes": 1, "comments": 2, "saved": 3, "shares": 4}
+ACCIONES = ("likes", "comments", "saved", "shares")
 MADURO = 3 * 86400  # publicado hace al menos esto para contar en "qué funcionó"
 MAX_HISTORIAL = 30
 MAX_REPORTE = 6  # campañas por PDF
@@ -40,21 +40,22 @@ PAGINAS_BUSQUEDA = 4  # páginas de 50 de "me/media" para hallar posts viejos si
 _insights: dict[tuple[str, str], tuple[float, dict | None]] = {}
 
 CONCLUSIONES = """Eres analista de redes sociales. Lees los resultados de unas campañas de Instagram y escribes 3 conclusiones cortas para el dueño del negocio, en español y de tú.
-- Usa solo los números de <datos>; no inventes cifras ni causas que no se vean ahí.
+- Usa solo los números de <datos> (la tasa es la tasa de interacción por alcance, en %); no inventes cifras ni causas que no se vean ahí.
 - Cada conclusión compara algo concreto (un tema, un formato o un horario contra otro) y dice qué conviene hacer.
 - Si hay menos de 12 posts con resultados, una de las conclusiones dice que todavía es una señal, no una certeza.
 - Máximo 25 palabras cada una. Sin emojis.
 Responde solo un JSON: {"conclusiones": ["...", "...", "..."]}"""
 
 
-def impacto(d: dict | None) -> float | None:
+def tasa(d: dict | None) -> float | None:
+    """Tasa de interacción por alcance, en %."""
     if not d or not d.get("reach"):
         return None
-    return round(sum(d.get(k, 0) * w for k, w in PESOS.items()) / d["reach"] * 100, 1)
+    return round(interacciones(d) / d["reach"] * 100, 1)
 
 
 def interacciones(d: dict | None) -> int:
-    return sum(d.get(k, 0) for k in PESOS) if d else 0
+    return sum(d.get(k, 0) for k in ACCIONES) if d else 0
 
 
 def franja(hora: str) -> str:
@@ -141,7 +142,7 @@ async def numeros(c: Cuenta, media_id: str) -> dict | None:
 
 
 async def filas(c: Cuenta, camps: list[dict]) -> list[dict]:
-    """Un renglón por post publicado de esas campañas, con sus números y su Impacto."""
+    """Un renglón por post publicado de esas campañas, con sus números y su tasa de interacción."""
     todos = [(camp, p) for camp in camps for p in camp["posts"]]
     posts = await c.store.posts_by_id([p["post_id"] for _, p in todos])
     publicados = [(camp, p, posts[p["post_id"]]) for camp, p in todos
@@ -163,17 +164,17 @@ async def filas(c: Cuenta, camps: list[dict]) -> list[dict]:
         salida.append({"campana": camp["nombre"], "titulo": p.get("titulo") or "", "tema": p.get("tipo") or "",
                        "formato": p.get("formato") or "", "franja": franja(p.get("hora") or ""),
                        "publish_at": post["publish_at"], "token": media[0] if media else "", "datos": d,
-                       "impacto": impacto(d), "maduro": ahora - (post["publish_at"] or ahora) >= MADURO})
-    salida.sort(key=lambda f: (f["impacto"] is None, -(f["impacto"] or 0), -(f["publish_at"] or 0)))
+                       "tasa": tasa(d), "maduro": ahora - (post["publish_at"] or ahora) >= MADURO})
+    salida.sort(key=lambda f: (f["tasa"] is None, -(f["tasa"] or 0), -(f["publish_at"] or 0)))
     return salida
 
 
 def por(renglones: list[dict], clave: str) -> list[tuple[str, float, int]]:
-    """Impacto promedio por tema, formato u horario (solo los posts con 3 días o más)."""
+    """Tasa de interacción promedio por tema, formato u horario (solo los posts con 3 días o más)."""
     grupos: dict[str, list[float]] = {}
     for f in renglones:
-        if f["maduro"] and f["impacto"] is not None:
-            grupos.setdefault(f[clave], []).append(f["impacto"])
+        if f["maduro"] and f["tasa"] is not None:
+            grupos.setdefault(f[clave], []).append(f["tasa"])
     return sorted(((k, round(sum(v) / len(v), 1), len(v)) for k, v in grupos.items()), key=lambda x: -x[1])
 
 
@@ -206,6 +207,10 @@ def cifra(n: int | float | None) -> str:
     return f"{n:,.1f}" if isinstance(n, float) else f"{n:,}"
 
 
+def pct(n: float | None) -> str:
+    return "—" if n is None else f"{n:.1f}%"
+
+
 def fecha(d: date) -> str:
     from .campanas import MESES
     return f"{d.day} {MESES[d.month - 1]} {d.year}"
@@ -226,7 +231,7 @@ class Reporte(Cotizacion):
         def encabezado():
             self.font(7, bold=True, color=GRIS)
             self.set_char_spacing(0.4)
-            for ancho, t in zip(anchos, ("", "Post", "Alcance", "Likes", "Coment.", "Guard.", "Compart.", "Impacto")):
+            for ancho, t in zip(anchos, ("", "Post", "Alcance", "Likes", "Coment.", "Guard.", "Compart.", "Interacción")):
                 self.cell(ancho, 6, t.upper(), align="L" if t in ("", "Post") else "R")
             self.ln(6)
             self.set_char_spacing(0)
@@ -268,7 +273,7 @@ class Reporte(Cotizacion):
                 x += ancho
             self.set_xy(x, y + 3.5)
             self.font(10, bold=True, color=NEGRO)
-            self.cell(anchos[7], 5, cifra(f["impacto"]), align="R")
+            self.cell(anchos[7], 5, pct(f["tasa"]), align="R")
             self.set_xy(self.l_margin, y + 15)
             self.rule()
         self.ln(3)
@@ -291,7 +296,7 @@ class Reporte(Cotizacion):
             self.rect(self.l_margin + 50, y + 0.8, ancho, 3.6, style="F", round_corners=True, corner_radius=0.8)
             self.set_xy(self.l_margin + 50 + ancho + 2, y)
             self.font(8.5, bold=True)
-            self.cell(18, 5, cifra(valor))
+            self.cell(18, 5, pct(valor))
             self.set_xy(self.l_margin + self.epw - 22, y)
             self.font(7.5, color=GRIS)
             self.cell(22, 5, f"{n} post{'s' if n != 1 else ''}", align="R")
@@ -324,11 +329,11 @@ async def pdf(c: Cuenta, camps: list[dict], marca: dict, cuenta: str) -> bytes:
                f"Del {fecha(inicio)} al {fecha(fin)}.")
 
     con_datos = [f for f in renglones if f["datos"]]
-    impactos = [f["impacto"] for f in renglones if f["impacto"] is not None]
+    tasas = [f["tasa"] for f in renglones if f["tasa"] is not None]
     doc.datos([("Posts publicados", cifra(len(renglones))),
                ("Alcance total", cifra(sum(f["datos"].get("reach", 0) for f in con_datos))),
                ("Interacciones", cifra(sum(interacciones(f["datos"]) for f in con_datos))),
-               ("Impacto promedio", cifra(round(sum(impactos) / len(impactos), 1)) if impactos else "—")])
+               ("Interacción promedio", pct(round(sum(tasas) / len(tasas), 1)) if tasas else "—")])
 
     if not renglones:
         doc.seccion("Todavía no hay resultados", ["Estas campañas aún no tienen posts publicados."])
@@ -340,21 +345,22 @@ async def pdf(c: Cuenta, camps: list[dict], marca: dict, cuenta: str) -> bytes:
 
     grupos = {k: por(renglones, k) for k in ("tema", "formato", "franja")}
     if con_datos:
-        resumen = {"posts_con_resultados": sum(1 for f in renglones if f["maduro"] and f["impacto"] is not None),
-                   **{f"impacto_por_{k}": [(nombres[k].get(g, g), v, n) for g, v, n in lista]
+        resumen = {"posts_con_resultados": sum(1 for f in renglones if f["maduro"] and f["tasa"] is not None),
+                   **{f"tasa_por_{k}": [(nombres[k].get(g, g), v, n) for g, v, n in lista]
                       for k, lista in grupos.items()},
                    "mejores": [(f["titulo"], nombres["tema"].get(f["tema"]), nombres["formato"].get(f["formato"]),
-                                f["impacto"], f["datos"]) for f in renglones[:3]]}
+                                f["tasa"], f["datos"]) for f in renglones[:3]]}
         if lista := await conclusiones(c, resumen):
             doc.seccion("Lo más importante", lista)
 
     doc.font(11, bold=True, color=NEGRO)
-    doc.cell(doc.epw, 7, "Posts de mayor a menor impacto", new_x="LMARGIN", new_y="NEXT")
+    doc.cell(doc.epw, 7, "Posts de mayor a menor interacción", new_x="LMARGIN", new_y="NEXT")
     doc.ln(1)
     doc.tabla_posts(renglones, nombres, Path(c.media_dir), len(camps) > 1)
     doc.font(7.5, color=GRIS)
-    doc.multi_cell(doc.epw, 4, "Impacto: interacciones por cada 100 personas que vieron el post, con más peso a lo que"
-                   " más le importa a Instagram (likes ×1, comentarios ×2, guardados ×3, compartidos ×4)."
+    doc.multi_cell(doc.epw, 4, "Interacción: likes, comentarios, guardados y compartidos entre el alcance (las cuentas"
+                   " que vieron el post), en %. Es la tasa de interacción por alcance que usan Metricool, Hootsuite y"
+                   " Later; compara bien posts que llegaron a distinta cantidad de gente."
                    + (" * Publicado hace menos de 3 días: sigue juntando interacciones y no cuenta en «Qué"
                       " funcionó»." if any(not f["maduro"] for f in renglones) else ""),
                    new_x="LMARGIN", new_y="NEXT")
@@ -366,7 +372,7 @@ async def pdf(c: Cuenta, camps: list[dict], marca: dict, cuenta: str) -> bytes:
         doc.font(11, bold=True, color=NEGRO)
         doc.cell(doc.epw, 7, "Qué funcionó", new_x="LMARGIN", new_y="NEXT")
         doc.font(8.5, color=GRIS)
-        doc.cell(doc.epw, 5, "Impacto promedio de los posts con 3 días o más publicados.", new_x="LMARGIN",
+        doc.cell(doc.epw, 5, "Tasa de interacción promedio de los posts con 3 días o más publicados.", new_x="LMARGIN",
                  new_y="NEXT")
         doc.ln(3)
         doc.barras("Por tema", grupos["tema"], nombres["tema"])
