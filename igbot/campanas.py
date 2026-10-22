@@ -18,9 +18,12 @@ Con 12 posts con resultados se puede "Repetir lo que funcionó": la siguiente ca
 forma que ganó (tema, formato y horario, con la tasa de interacción de informe.py), nunca el
 mismo asunto, y siempre deja una parte para seguir probando (MEZCLAS).
 
-La campaña vive en el kv "campana" de la cuenta (una a la vez). Los posts que ya
-tienen imagen son posts normales: siguen en Calendario aunque empiece otra campaña, y la
-campaña anterior pasa a "Tus campañas", de donde se descarga su reporte (informe.py).
+Puede tener varias campañas a la vez (kv "campanas"; antes era una sola, en "campana"), y pueden
+cruzarse: ese día salen las dos. Son activas, próximas o pasadas solo por sus fechas. Cada una tiene
+su página (/panel/contenido/campanas/<id>) donde se cambian su nombre y sus fechas (los posts se
+quedan en su día) y, al soltar un post en un día de fuera, la campaña se estira hasta ahí. De las
+pasadas se descarga el reporte (informe.py). Contenido › Calendario muestra el mes con la barra de
+cada campaña y una miniatura de cada post (mes()).
 Lo que escribe el cliente son datos, no instrucciones: va entre etiquetas.
 """
 import json
@@ -45,6 +48,7 @@ from .cuenta import Cuenta, usar
 
 log = logging.getLogger("igbot.campanas")
 router = APIRouter(prefix="/panel/contenido")
+BASE = "/panel/contenido/campanas"
 
 # tema: (cómo se le dice al cliente, objetivo del post en Crear post, qué le pedimos a Claude)
 TEMAS = {
@@ -113,6 +117,8 @@ MESES = ("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "
 HORA = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 HORA_INICIAL = "19:00"
 MAX_NOMBRE, MAX_TEMA, MAX_TITULO, MAX_IDEA = 60, 600, 80, 800
+MAX_CAMPANAS = 24  # las de más pasan al historial (informe.archivar)
+MAX_DIAS = 84  # lo más larga que puede quedar una campaña al editarla o estirarla
 IA_POR_DIA = 10  # propuestas y "otra idea" al día por cuenta: no gastan imagen, pero sí Claude
 BLOQUEADOS = ("publicando", "publicada")  # posts que ya no se mueven
 
@@ -160,28 +166,66 @@ def costo(p: dict) -> int:
     return FORMATOS[formato_de(p)][1]
 
 
-# --- la campaña ---
+# --- las campañas ---
 
-async def leer(c: Cuenta) -> dict:
-    return json.loads(await c.store.get("campana") or "{}")
+async def todas_las(c: Cuenta) -> list[dict]:
+    """Sus campañas, cada una con su id. Las cuentas de antes tenían una sola, en el kv "campana"."""
+    guardadas = await c.store.get("campanas")
+    if guardadas is not None:
+        return json.loads(guardadas)
+    vieja = json.loads(await c.store.get("campana") or "{}")
+    if not vieja.get("posts"):
+        return []
+    return [{**vieja, "id": int(vieja.get("creada", 0) * 1000)}]
+
+
+async def leer(c: Cuenta, cid) -> dict:
+    """Una campaña por su id, o {}."""
+    return next((x for x in await todas_las(c) if str(x["id"]) == str(cid)), {})
 
 
 async def guardar(c: Cuenta, camp: dict) -> None:
-    await c.store.set("campana", json.dumps(camp, ensure_ascii=False))
+    """Guarda esa campaña sin tocar las demás (se leen de nuevo: otra pudo cambiar mientras tanto). Si ya son
+    muchas, las que terminaron hace más tiempo pasan al historial, que solo guarda lo de su reporte."""
+    lista = [x for x in await todas_las(c) if x["id"] != camp["id"]] + [camp]
+    lista.sort(key=lambda x: x["inicio"])
+    while len(lista) > MAX_CAMPANAS:
+        vieja = min(lista, key=lambda x: informe.fin_de(x))
+        await informe.archivar(c, vieja)
+        lista.remove(vieja)
+    await c.store.set("campanas", json.dumps(lista, ensure_ascii=False))
 
 
-def dias_de(camp: dict) -> list[str]:
-    """Las fechas en que sale un post (AAAA-MM-DD)."""
-    inicio = date.fromisoformat(camp["inicio"])
-    dias = PUBLICAR.get(camp.get("publicar"), PUBLICAR["lun-sab"])[1]
-    return [d.isoformat() for d in (inicio + timedelta(days=i) for i in range(7 * camp["semanas"]))
-            if d.weekday() in dias]
+def estado(camp: dict, hoy: date) -> str:
+    """Activa, próxima o pasada: solo por sus fechas."""
+    if date.fromisoformat(camp["inicio"]) > hoy:
+        return "proxima"
+    return "pasada" if informe.fin_de(camp) < hoy else "activa"
+
+
+def url_de(camp: dict) -> str:
+    return f"{BASE}/{camp['id']}"
 
 
 def rango(camp: dict) -> list[str]:
     """Todos los días de la campaña, publique o no."""
     inicio = date.fromisoformat(camp["inicio"])
-    return [(inicio + timedelta(days=i)).isoformat() for i in range(7 * camp["semanas"])]
+    return [(inicio + timedelta(days=i)).isoformat() for i in range((informe.fin_de(camp) - inicio).days + 1)]
+
+
+def dias_de(camp: dict) -> list[str]:
+    """Las fechas en que sale un post (AAAA-MM-DD)."""
+    dias = PUBLICAR.get(camp.get("publicar"), PUBLICAR["lun-sab"])[1]
+    return [d for d in rango(camp) if date.fromisoformat(d).weekday() in dias]
+
+
+def visibles(camp: dict) -> list[str]:
+    """Los días de su calendario: semanas completas, con al menos un día antes y uno después de la campaña
+    para poder estirarla soltando ahí un post."""
+    antes = date.fromisoformat(camp["inicio"]) - timedelta(days=1)
+    despues = informe.fin_de(camp) + timedelta(days=1)
+    lunes = antes - timedelta(days=antes.weekday())
+    return [(lunes + timedelta(days=i)).isoformat() for i in range((despues - lunes).days + 7 - despues.weekday())]
 
 
 def lunes_que_viene() -> date:
@@ -444,15 +488,29 @@ async def sincronizar(c: Cuenta, p: dict) -> None:
             await c.store.update_post(post["id"], caption=p["caption"], publish_at=momento(p["dia"], p["hora"]))
 
 
+def estirar(camp: dict, dia: str) -> str:
+    """Amplía el rango de la campaña hasta ese día (los posts se quedan donde están). '' o por qué no."""
+    inicio, fin = date.fromisoformat(camp["inicio"]), informe.fin_de(camp)
+    d = date.fromisoformat(dia)
+    inicio, fin = min(inicio, d), max(fin, d)
+    if (fin - inicio).days + 1 > MAX_DIAS:
+        return f"Una campaña puede durar hasta {MAX_DIAS // 7} semanas."
+    camp["inicio"], camp["fin"] = inicio.isoformat(), fin.isoformat()
+    return ""
+
+
 async def mover(c: Cuenta, camp: dict, p: dict, dia: str) -> str:
-    """Pasa el post a otro día; si ahí hay uno, se intercambian. '' si se pudo, o por qué no."""
-    if dia not in rango(camp):
+    """Pasa el post a otro día; si ahí hay uno, se intercambian. Si el día queda antes o después de la campaña,
+    la campaña se estira hasta ahí. '' si se pudo, o por qué no."""
+    if dia not in visibles(camp) and dia not in rango(camp):
         return "Ese día no es de la campaña."
     if (post := await estado_post(c, p)) and post["status"] in BLOQUEADOS:
         return "Ese post ya se publicó."
     otro = next((x for x in camp["posts"] if x["dia"] == dia and x is not p), None)
     if otro and (post := await estado_post(c, otro)) and post["status"] in BLOQUEADOS:
         return "El post de ese día ya se publicó."
+    if error := estirar(camp, dia):
+        return error
     if otro:
         otro["dia"] = p["dia"]
         await sincronizar(c, otro)
@@ -474,7 +532,8 @@ async def fotos_para_collage(c: Cuenta, camp: dict, p: dict, marca: dict) -> lis
     """Las fotos para el collage de p, en grupos de la más a la menos parecida: de posts publicados de sus
     campañas con el mismo tema y formato, solo el mismo formato, solo el mismo tema, y el resto (con las de
     Tu marca). Son nombres para `archivo`: el de la foto, o "<token>.base" si es la de un post sin su texto."""
-    hechos = [x for camp_ in await informe.todas(c, camp) for x in camp_["posts"]
+    camps = [x for x in await todas_las(c) if x["id"] != camp.get("id")] + [camp]
+    hechos = [x for camp_ in await informe.todas(c, camps) for x in camp_["posts"]
               if x.get("post_id") != p.get("post_id")]
     posts = await c.store.posts_by_id([x["post_id"] for x in hechos])
     grupo: dict[str, int] = {}
@@ -526,7 +585,7 @@ async def generar_imagen(c: Cuenta, camp: dict, p: dict, extra: bool) -> int:
         pieza_ = {"objetivo": tema_de(p["tipo"])[1], "tema": p["idea"], "fotos": [], "plantilla": plantilla,
                   "titulo": "" if formato in ("foto", "collage") else p["titulo"],
                   "subtitulo": p.get("subtitulo", "") if formato in ("titular", "texto") else "",
-                  "precio": "", "imagen": p["idea"], "clave": "", "respuesta": "", "dm": "", "campana": p["k"],
+                  "precio": "", "imagen": p["idea"], "clave": "", "respuesta": "", "dm": "", "campana": p["k"], "campana_id": camp["id"],
                   "formato": formato}
         if formato == "texto":
             hecha = await imagenes.crear_local(c.store, PANEL, "texto", texto_imagen(pieza_, usuario), kit(marca),
@@ -657,8 +716,9 @@ def lo_que_funciono(gano: dict, anteriores: int) -> str:
             " ya respondiste.</li></ul>")
 
 
-def paso1(camp: dict, quedan: int, abierto: bool, nueva: bool = False, fotos: int = 0, resultados: int = 0,
+def paso1(camp: dict, quedan: int, abierto: bool, destino: str = BASE, fotos: int = 0, resultados: int = 0,
           sugerido: dict | None = None, gano: dict | None = None, anteriores: int = 0) -> str:
+    """El formulario para armar la campaña: el de una nueva (destino BASE) o, plegado, el de volver a proponer."""
     hay = bool(camp.get("posts"))
     puede = resultados >= CON_RESULTADOS and bool(gano)
     rep_ = puede and camp.get("modo") == "repetir"
@@ -691,11 +751,10 @@ def paso1(camp: dict, quedan: int, abierto: bool, nueva: bool = False, fotos: in
     boton = ("Proponer calendario de nuevo" if hay else "Proponer calendario")
     return (
         f'<details class="tarjeta plegable seccion" id="campana"{" open" if abierto else ""}><summary>'
-        '<span class="titulo-sec"><h2>Tu campaña</h2></span>'
+        f'<span class="titulo-sec"><h2>{"Volver a proponer" if hay else "Tu campaña"}</h2></span>'
         f'<span class="ayuda resumen-cam">{resumen}</span></summary>'
-        '<form method="post" action="/panel/contenido/campanas" class="form-cam">'
-        + ('<input type="hidden" name="nueva" value="1">' if nueva else "")
-        + '<label>¿Qué quieres lograr?</label><div class="obj-cam">'
+        f'<form method="post" action="{destino}" class="form-cam">'
+        '<label>¿Qué quieres lograr?</label><div class="obj-cam">'
         f'<label class="obj"><input type="radio" name="modo" value="explorar"{"" if rep_ else " checked"}><span>'
         "<b>Explorar</b><small>Prueba un poco de todo: temas, formatos y horarios distintos, para descubrir qué le gusta"
         " a tu audiencia.</small></span></label>"
@@ -746,7 +805,7 @@ def paso1(camp: dict, quedan: int, abierto: bool, nueva: bool = False, fotos: in
         "</form></details>")
 
 
-async def tarjeta_post(c: Cuenta, p: dict, sel: str) -> str:
+async def tarjeta_post(c: Cuenta, camp: dict, p: dict, sel: str) -> str:
     post = await estado_post(c, p)
     if post:
         estado, color = ESTADOS.get(post["status"], (post["status"], ""))
@@ -756,7 +815,7 @@ async def tarjeta_post(c: Cuenta, p: dict, sel: str) -> str:
     else:
         mini, marca_estado = "", '<span class="sinimg">sin imagen</span>'
     fija = post and post["status"] in BLOQUEADOS
-    return (f'<a class="post-cam{" sel" if str(p["k"]) == sel else ""}" href="/panel/contenido/campanas?post={p["k"]}#detalle"'
+    return (f'<a class="post-cam{" sel" if str(p["k"]) == sel else ""}" href="{url_de(camp)}?post={p["k"]}#detalle"'
             f'{"" if fija else f' draggable="true" data-k="{p["k"]}"'}>'
             # Lo que se prueba va hasta arriba, en gris (los colores van en el panel lateral).
             f'<span class="fmt-cam">{tema_de(p["tipo"])[0]}</span>'
@@ -769,33 +828,37 @@ async def tarjeta_post(c: Cuenta, p: dict, sel: str) -> str:
 
 
 async def calendario(c: Cuenta, camp: dict, sel: str) -> str:
-    inicio = date.fromisoformat(camp["inicio"])
-    lunes = inicio - timedelta(days=inicio.weekday())
-    fin = inicio + timedelta(days=7 * camp["semanas"] - 1)
+    inicio, fin = date.fromisoformat(camp["inicio"]), informe.fin_de(camp)
     publica = set(dias_de(camp))
     por_dia: dict[str, list[dict]] = {}
     for p in camp["posts"]:
         por_dia.setdefault(p["dia"], []).append(p)
-    semanas, d, n = [], lunes, 1
-    while d <= fin:
+    dias = visibles(camp)
+    semanas = []
+    for n in range(len(dias) // 7):
         celdas = []
-        for i in range(7):
-            dia = d + timedelta(days=i)
-            iso = dia.isoformat()
+        for iso in dias[7 * n:7 * n + 7]:
+            dia = date.fromisoformat(iso)
             fuera = dia < inicio or dia > fin
-            posts = "".join([await tarjeta_post(c, p, sel) for p in por_dia.get(iso, [])])
+            posts = "".join([await tarjeta_post(c, camp, p, sel) for p in por_dia.get(iso, [])])
             clase = " fuera" if fuera else "" if iso in publica or posts else " libre"
-            celdas.append(f'<div class="dia-cam{clase}"' + ("" if fuera else f' id="d-{iso}" data-dia="{iso}"')
+            # Los días de fuera también reciben posts: al soltar uno ahí, la campaña se estira.
+            celdas.append(f'<div class="dia-cam{clase}" id="d-{iso}" data-dia="{iso}"'
                           + (" data-publica" if iso in publica else "") + ">"
-                          f'<span class="fecha">{fecha_corta(iso)}</span>{posts}</div>')
-        hasta = d + timedelta(days=6)
-        semanas.append(f'<div class="semana-cam"><h3>Semana {n}</h3><span>{d.day} {MESES[d.month - 1]} –'
-                       f' {hasta.day} {MESES[hasta.month - 1]}</span></div><div class="cal-cam">{"".join(celdas)}</div>')
-        d += timedelta(days=7)
-        n += 1
-    return ('<div class="tarjeta"><span class="titulo-sec"><h2>Calendario</h2></span>'
+                          f'<span class="fecha">{fecha_corta(iso)}</span>{posts}'
+                          + ('<span class="fuera-cam">Fuera de la campaña</span>' if fuera and not posts else "")
+                          + "</div>")
+        lunes, hasta = date.fromisoformat(dias[7 * n]), date.fromisoformat(dias[7 * n + 6])
+        toda_fuera = hasta < inicio or lunes > fin  # una semana entera fuera va más baja: solo es para soltar ahí
+        # Si empieza en lunes, la primera semana que se ve es la de antes: no cuenta.
+        nombre = ("Semana antes" if hasta < inicio else "Semana después" if toda_fuera
+                  else f"Semana {n + (inicio.weekday() != 0)}")
+        semanas.append(f'<div class="semana-cam"><h3>{nombre}</h3><span>{lunes.day} {MESES[lunes.month - 1]} – {hasta.day} {MESES[hasta.month - 1]}</span></div>'
+                       f'<div class="cal-cam{" fuera" if toda_fuera else ""}">{"".join(celdas)}</div>')
+    return (f'<div class="tarjeta" data-camp="{url_de(camp)}"><span class="titulo-sec"><h2>Calendario</h2></span>'
             '<p class="ayuda">Cada post dice qué se está probando: su tema, su formato y su hora. Arrastra un post a otro'
-            " día para cambiarlo (si ese día ya tiene uno, se intercambian). Tócalo para cambiar su día, su hora, su"
+            " día para cambiarlo (si ese día ya tiene uno, se intercambian). Los días rayados están fuera de la campaña:"
+            " si sueltas un post ahí, la campaña se estira hasta ese día. Tócalo para cambiar su día, su hora, su"
             " formato, su texto o la idea de la imagen.</p>" + se_prueba(camp) + "".join(semanas) + "</div>")
 
 
@@ -825,7 +888,7 @@ async def detalle(c: Cuenta, camp: dict, p: dict, quedan_ia: int) -> str:
     fija = post and post["status"] in BLOQUEADOS
     usa = costo(p)
     gasto = f"usa {usa}" if usa else "no usa imágenes"
-    dias = sorted(set(rango(camp)) | {p["dia"]})
+    dias = sorted(set(visibles(camp)) | set(rango(camp)) | {p["dia"]})
     opciones = "".join(f'<option value="{d}"{" selected" if d == p["dia"] else ""}>{fecha_larga(d)}</option>' for d in dias)
     if post:
         media = await c.store.media(post["media_ids"][0]) if post["media_ids"] else None
@@ -873,14 +936,14 @@ async def detalle(c: Cuenta, camp: dict, p: dict, quedan_ia: int) -> str:
             + ('<p class="ayuda">Cámbiala o agrégale detalles y pide otra imagen: sale con tu idea nueva.</p>'
                if post and not fija else ""))
     return (
-        '<a class="velo-cam" href="/panel/contenido/campanas" aria-label="Cerrar"></a>'
-        '<aside class="cajon-cam" id="detalle"><a class="cerrar-cam" href="/panel/contenido/campanas" aria-label="Cerrar">×</a>'
+        f'<a class="velo-cam" href="{url_de(camp)}" aria-label="Cerrar"></a>'
+        f'<aside class="cajon-cam" id="detalle"><a class="cerrar-cam" href="{url_de(camp)}" aria-label="Cerrar">×</a>'
         f'<div class="etqs-cam"><span class="etq-cam t-{p["tipo"]}">{tema_de(p["tipo"])[0]}</span>'
         f'<span class="fmt-cam bur f-{formato}">{FORMATOS[formato][0]}</span></div>'
         f'<h2>{escape(p["titulo"])}</h2><p class="ayuda">{fecha_larga(p["dia"])} · {p["hora"]}</p>'
         + (f'<p class="cli-cam">Responde a lo que te preguntan: {escape(p["responde"])}</p>' if p.get("responde") else "")
         + f'{imagen}'
-        '<form method="post" action="/panel/contenido/campanas" id="f-cam">'
+        f'<form method="post" action="{url_de(camp)}" id="f-cam">'
         f'<input type="hidden" name="k" value="{p["k"]}">'
         f'<div class="dos-cam"><div><label for="d-dia">Día</label><select id="d-dia" name="dia"{" disabled" if fija else ""}>'
         f'{opciones}</select></div><div><label for="d-hora">Hora</label><input type="time" id="d-hora" name="hora"'
@@ -896,32 +959,40 @@ async def detalle(c: Cuenta, camp: dict, p: dict, quedan_ia: int) -> str:
         + f'<div class="acciones">{botones}</div></form></aside>')
 
 
-def cabeza(camp: dict) -> str:
+
+
+def de_a(ini: date, fin: date) -> str:
+    return f"{ini.day} {MESES[ini.month - 1]} – {fin.day} {MESES[fin.month - 1]}"
+
+
+def pasos_de(camp: dict) -> str:
     posts = camp.get("posts", [])
     con_imagen = sum(1 for p in posts if p.get("post_id"))
     paso = 1 if not posts else 3 if con_imagen else 2
-    pasos = "".join(
+    return '<div class="pasos-cam">' + "".join(
         f'<span class="paso-cam{" hecho" if i < paso else " actual" if i == paso else ""}">'
         f'<b>{"✓" if i < paso else i}</b>{t}</span>'
-        for i, t in enumerate(("Arma tu campaña", "Acomoda el calendario", "Genera imágenes y aprueba"), 1))
-    if posts:
-        fin = date.fromisoformat(camp["inicio"]) + timedelta(days=7 * camp["semanas"] - 1)
-        ini = date.fromisoformat(camp["inicio"])
-        bajada = (f"{ini.day} {MESES[ini.month - 1]} – {fin.day} {MESES[fin.month - 1]} · {len(posts)} posts ·"
-                  + (" para descubrir qué le gusta a tu audiencia." if camp.get("modo") == "explorar"
-                     else " con lo que mejor le funcionó a tu audiencia." if camp.get("modo") == "repetir"
-                     else " un poco de todo para que tu cuenta se vea viva."))
-        titulo = escape(camp["nombre"])
-        nueva = '<a class="boton secundario ajuste" href="/panel/contenido/campanas?nueva=1">+ Nueva campaña</a>'
-    else:
-        bajada = ("Explora qué le gusta a tu audiencia con temas, formatos y horarios distintos. Primero el calendario;"
-                  " las imágenes, al final.")
-        titulo, nueva = "Tu campaña", ""
+        for i, t in enumerate(("Arma tu campaña", "Acomoda el calendario", "Genera imágenes y aprueba"), 1)) + "</div>"
+
+
+def bajada_de(camp: dict) -> str:
+    return (f"{de_a(date.fromisoformat(camp['inicio']), informe.fin_de(camp))} · {len(camp['posts'])} posts ·"
+            + (" para descubrir qué le gusta a tu audiencia." if camp.get("modo") == "explorar"
+               else " con lo que mejor le funcionó a tu audiencia." if camp.get("modo") == "repetir"
+               else " un poco de todo para que tu cuenta se vea viva."))
+
+
+def cabeza(titulo: str, bajada: str, boton: str = "", pasos: str = "") -> str:
+    """El encabezado negro de Campañas; titulo ya viene escapado."""
     return ('<section class="oscuro portada compacta delgada"><div class="contenedor">'
             '<p class="antetitulo">Contenido · Campañas</p>'
-            f'<div class="titulo-fila"><h1>{titulo}<span class="punto">.</span></h1>{nueva}</div>'
-            f'<p class="bajada" style="margin-left:0">{bajada}</p><div class="pasos-cam">{pasos}</div>'
+            f'<div class="titulo-fila"><h1>{titulo}<span class="punto">.</span></h1>{boton}</div>'
+            f'<p class="bajada" style="margin-left:0">{escape(bajada)}</p>{pasos}'
             "</div></section>")
+
+
+def boton_todas(ver: str = "") -> str:
+    return (f'<a class="boton secundario ajuste" href="{BASE}{f"?ver={ver}" if ver else ""}">‹ Todas las campañas</a>')
 
 
 async def barra(c: Cuenta, camp: dict) -> str:
@@ -940,12 +1011,26 @@ async def barra(c: Cuenta, camp: dict) -> str:
                 if sin == 1 else "")
                + (f'<button class="boton chico secundario" name="accion" value="aprobar_todas">Aprobar {borradores}'
                   f' con imagen</button>' if borradores else ""))
-    botones += ('<a class="boton chico secundario" href="/panel/contenido/campanas/propuesta">Descargar propuesta'
-                " (PDF)</a>")
-    return ('<form method="post" action="/panel/contenido/campanas" class="barra-cam">'
+    botones += (f'<a class="boton chico secundario" href="{url_de(camp)}/propuesta">Descargar propuesta (PDF)</a>')
+    return (f'<form method="post" action="{url_de(camp)}" class="barra-cam">'
             f"<p><b>{len(posts)} posts</b> · {len(posts) - sin} con imagen · {aprobados} aprobado{'s' if aprobados != 1 else ''} · tu plan:"
             f" {incluidas + extra} de {c.imagenes_mes} imágenes este mes</p>"
             f'<div class="acciones">{botones}</div></form>')
+
+
+def editar(camp: dict) -> str:
+    """Nombre y fechas. Cambiar las fechas solo mueve el rango: los posts se quedan en su día."""
+    return (f'<form method="post" action="{url_de(camp)}" class="tarjeta" id="editar">'
+            '<span class="titulo-sec"><h2>Editar campaña</h2></span><div class="edit-cam">'
+            f'<div><label for="e-nombre">Nombre</label><input type="text" id="e-nombre" name="nombre"'
+            f' maxlength="{MAX_NOMBRE}" value="{escape(camp["nombre"])}"></div>'
+            f'<div><label for="e-inicio">Empieza</label><input type="date" id="e-inicio" name="inicio"'
+            f' value="{camp["inicio"]}"></div>'
+            f'<div><label for="e-fin">Termina</label><input type="date" id="e-fin" name="fin"'
+            f' value="{informe.fin_de(camp).isoformat()}"></div></div>'
+            '<p class="ayuda">Cambiar las fechas solo amplía o recorta el rango: los posts se quedan en su día.</p>'
+            '<div class="acciones"><button class="boton secundario chico" name="accion" value="editar">Guardar cambios'
+            "</button></div></form>")
 
 
 async def con_resultados(c: Cuenta, camps: list[dict]) -> int:
@@ -955,72 +1040,138 @@ async def con_resultados(c: Cuenta, camps: list[dict]) -> int:
     return sum(1 for p in posts.values() if p["status"] == "publicada" and 0 < (p["publish_at"] or 0) <= hace)
 
 
-async def pagina_campana(c: Cuenta, aviso: str = "", sel: str = "", nueva: bool = False,
-                         confirmar: str = "", k: str = "", form: dict | None = None) -> HTMLResponse:
-    guardada = await leer(c)
-    camp = {} if nueva else guardada
+async def contexto_form(c: Cuenta) -> tuple[int, int, list[dict], dict, int]:
+    """Lo que necesita el formulario de una campaña: cuántas propuestas le quedan hoy, fotos de Tu marca, sus
+    campañas (para el reporte y lo que funcionó), lo de Contenido sugerido y cuántos posts tienen resultados."""
     quedan_ia = await ia_restantes(c)
     with usar(c):
         fotos = len(fotos_marca(c, await marca_de(c)))
-        anteriores = await informe.todas(c, guardada)
+        anteriores = await informe.todas(c, await todas_las(c))
         resultados = await con_resultados(c, anteriores)
         sugerido = await ya_sugerido(c)
-        if camp.get("posts") and not form:
-            cuerpo = paso1(camp, quedan_ia, abierto=False, fotos=fotos, resultados=resultados, sugerido=sugerido)
-            if confirmar:
-                cuerpo += tarjeta_extra(confirmar, k)
-            cuerpo += await calendario(c, camp, sel) + await barra(c, camp)
-            p = buscar_post(camp, sel) if sel else None
-            cajon = await detalle(c, camp, p, quedan_ia) if p else ""
-            await guardar(c, camp)  # por si se descartó algún post en Calendario
-            cuerpo += await tus_campanas(c, camp)
-        else:
-            base = {"nombre": "", "inicio": lunes_que_viene().isoformat(), "semanas": SEMANAS_INICIAL,
-                    "publicar": "lun-sab", "tema": ""}
-            # Si el formulario no pasó, vuelve con lo que marcó.
-            datos = {**base, **(form or ({} if nueva else camp))}
-            # Lo que funcionó lee Instagram: solo cuando ya hay resultados suficientes y se ve el formulario.
-            gano = await informe.ganadores(c, anteriores) if resultados >= CON_RESULTADOS else None
-            if gano:  # los que de verdad tienen números (sin el permiso de estadísticas no hay)
-                resultados = gano["posts"]
-            cuerpo = paso1({k: v for k, v in datos.items() if k != "posts"}, quedan_ia, abierto=True,
-                           nueva=nueva or bool(form and form.get("nueva")), fotos=fotos, resultados=resultados,
-                           sugerido=sugerido, gano=gano, anteriores=sum(len(x["posts"]) for x in anteriores))
-            if (nueva or form) and guardada.get("posts"):
-                cuerpo = ('<div class="aviso">Al proponer el calendario de la nueva campaña, la anterior pasa a Tus'
-                          " campañas, abajo. Los posts que ya tienen imagen siguen en Calendario.</div>" + cuerpo)
-            cuerpo += await tus_campanas(c, guardada)
-            cajon = ""
+    return quedan_ia, fotos, anteriores, sugerido, resultados
+
+
+async def form_abierto(c: Cuenta, datos: dict, destino: str) -> str:
+    quedan_ia, fotos, anteriores, sugerido, resultados = await contexto_form(c)
+    with usar(c):
+        # Lo que funcionó lee Instagram: solo cuando ya hay resultados suficientes y se ve el formulario.
+        gano = await informe.ganadores(c, anteriores) if resultados >= CON_RESULTADOS else None
+    if gano:  # los que de verdad tienen números (sin el permiso de estadísticas no hay)
+        resultados = gano["posts"]
+    return paso1({k: v for k, v in datos.items() if k != "posts"}, quedan_ia, abierto=True, destino=destino,
+                 fotos=fotos, resultados=resultados, sugerido=sugerido, gano=gano,
+                 anteriores=sum(len(x["posts"]) for x in anteriores))
+
+
+async def pagina_campana(c: Cuenta, camp: dict, aviso: str = "", sel: str = "", confirmar: str = "", k: str = "",
+                         form: dict | None = None) -> HTMLResponse:
+    """Una campaña: editar su nombre y fechas, su calendario y, plegado, volver a proponerla."""
+    with usar(c):
+        hoy = tools.now().date()
+    if form:  # volver a proponer no pasó: arriba, con lo que marcó
+        cuerpo = await form_abierto(c, {**camp, **form}, url_de(camp))
+    else:
+        cuerpo = ""
+    quedan_ia, fotos, _, sugerido, resultados = await contexto_form(c)
+    with usar(c):
+        cuerpo += editar(camp)
+        if confirmar:
+            cuerpo += tarjeta_extra(confirmar, k, url_de(camp))
+        cuerpo += await calendario(c, camp, sel) + await barra(c, camp)
+        if not form:
+            cuerpo += paso1(camp, quedan_ia, abierto=False, destino=url_de(camp), fotos=fotos, resultados=resultados,
+                            sugerido=sugerido)
+        p = buscar_post(camp, sel) if sel else None
+        cajon = await detalle(c, camp, p, quedan_ia) if p else ""
+        await guardar(c, camp)  # por si se descartó algún post en Calendario
     return panel.pagina(
         panel.cabecera(salir=True, menu="contenido", cuenta=c, sub="campanas", perfil=await panel.usuario(c),
                        foto=await panel.foto_perfil(c))
-        + cabeza({} if form else camp) + '<main><div class="contenedor">'
+        + cabeza(escape(camp["nombre"]), bajada_de(camp), boton_todas(estado(camp, hoy)), pasos_de(camp))
+        + '<main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
         + await panel.pendiente(c, "campanas") + cuerpo + "</div></main>" + cajon)
 
 
-async def tus_campanas(c: Cuenta, actual: dict) -> str:
-    """El historial con casillas para descargar el reporte de una o varias."""
-    lista = await informe.todas(c, actual)
+async def pagina_nueva(c: Cuenta, aviso: str = "", form: dict | None = None) -> HTMLResponse:
+    """El formulario de una campaña nueva (la primera, o una más junto a las que ya tiene)."""
+    base = {"nombre": "", "inicio": lunes_que_viene().isoformat(), "semanas": SEMANAS_INICIAL,
+            "publicar": "lun-sab", "tema": ""}
+    hay = bool(await todas_las(c) or await informe.historial(c))
+    cuerpo = await form_abierto(c, {**base, **(form or {})}, BASE)
+    return panel.pagina(
+        panel.cabecera(salir=True, menu="contenido", cuenta=c, sub="campanas", perfil=await panel.usuario(c),
+                       foto=await panel.foto_perfil(c))
+        + cabeza("Nueva campaña" if hay else "Tu campaña",
+                 "Explora qué le gusta a tu audiencia con temas, formatos y horarios distintos. Primero el calendario;"
+                 " las imágenes, al final.", boton_todas() if hay else "", pasos_de({}))
+        + '<main><div class="contenedor">'
+        + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
+        + await panel.pendiente(c, "campanas") + cuerpo + "</div></main>")
+
+
+PESTANAS = {"activa": "Activas", "proxima": "Próximas", "pasada": "Pasadas"}
+COLOR = {"activa": "b-activa", "proxima": "b-proxima", "pasada": "b-pasada"}
+
+
+def se_cruza(camp: dict, otras: list[dict]) -> str:
+    """Con qué otras campañas comparte días, para decirlo en su fila (publicar el mismo día se vale)."""
+    mios = set(rango(camp))
+    cruces = [(x, sorted(mios & set(rango(x)))) for x in otras if x["id"] != camp["id"]]
+    return " ".join(f"Se cruza {len(d)} día{'s' if len(d) != 1 else ''} con «{escape(x['nombre'])}»"
+                    f" ({', '.join(fecha_larga(i) for i in d[:3])}{'…' if len(d) > 3 else ''})."
+                    for x, d in cruces if d)
+
+
+async def fila_campana(c: Cuenta, camp: dict, cual: str, hoy: date, otras: list[dict]) -> str:
+    ini, fin = date.fromisoformat(camp["inicio"]), informe.fin_de(camp)
+    posts = await c.store.posts_by_id([p["post_id"] for p in camp["posts"] if p.get("post_id")])
+    status = [posts[p["post_id"]]["status"] if p.get("post_id") in posts else "" for p in camp["posts"]]
+    modo = {"explorar": "Explorar", "repetir": "Repetir lo que funcionó"}.get(camp.get("modo"), "")
+    n = len(camp["posts"])
+    datos = f"{de_a(ini, fin)} · {n} post{'s' if n != 1 else ''}" + (f" · {modo}" if modo else "")
+    if cual == "activa":
+        total, dia = (fin - ini).days + 1, (hoy - ini).days + 1
+        datos += f" · <b>día {dia} de {total}</b>"
+        conteo = [(status.count("publicada"), "publicado"), (status.count("programada"), "programado"),
+                  (status.count("borrador"), "en borrador"), (status.count(""), "sin imagen")]
+        extra = ('<p>' + " · ".join(f"{n} {t}" if t.startswith(("en", "sin")) else f"{n} {t}{'s' if n != 1 else ''}"
+                                    for n, t in conteo if n) + "</p>"
+                 f'<div class="prog-cam"><i style="width:{round(100 * dia / total)}%"></i></div>')
+    else:
+        faltan = (ini - hoy).days
+        datos += f" · empieza {'mañana' if faltan == 1 else f'en {faltan} días'}"
+        extra = f"<p>{cruce}</p>" if (cruce := se_cruza(camp, otras)) else ""
+    return (f'<div class="fila-camp"><span class="col-camp {COLOR[cual]}"></span>'
+            f'<div><h3>{escape(camp["nombre"])}</h3><p>{datos}</p>{extra}</div>'
+            f'<div class="acciones"><a class="boton chico" href="{url_de(camp)}">Abrir</a>'
+            f'<a class="boton secundario chico" href="{url_de(camp)}#editar">Editar</a></div></div>')
+
+
+async def pasadas_html(c: Cuenta, camps: list[dict]) -> str:
+    """Las que ya terminaron (y las del historial), con casillas para descargar el reporte de una o varias."""
+    lista = await informe.todas(c, camps)
     if not lista:
-        return ""
+        return '<p class="ayuda">Aún no tienes campañas que hayan terminado.</p>'
+    completas = {x["id"] for x in camps}
     posts = await c.store.posts_by_id([p["post_id"] for x in lista for p in x["posts"]])
     filas, marcada = [], False
     for x in lista:
         n = sum(1 for p in x["posts"] if p["post_id"] in posts and posts[p["post_id"]]["status"] == "publicada")
-        ini, fin = date.fromisoformat(x["inicio"]), informe.fin_de(x)
-        cuando = f"{ini.day} {MESES[ini.month - 1]} – {fin.day} {MESES[fin.month - 1]} {fin.year}"
+        fin = informe.fin_de(x)
         publicados = (f"{n} post{'s' if n != 1 else ''} publicado{'s' if n != 1 else ''}" if n
                       else "Aún sin posts publicados")
         marcar = bool(n) and not marcada
         marcada |= marcar
-        filas.append(f'<label class="hist-cam{"" if n else " apagada"}">'
+        filas.append(f'<div class="hist-cam{"" if n else " apagada"}"><label>'
                      f'<input type="checkbox" name="c" value="{x["id"]}"{" checked" if marcar else ""}'
                      f'{"" if n else " disabled"}>'
-                     f'<span class="datos"><b>{escape(x["nombre"])}</b><span>{cuando} · {publicados}</span></span>'
-                     + ('<span class="chip">Actual</span>' if x.get("actual") else "") + "</label>")
-    return ('<form method="get" action="/panel/contenido/campanas/reporte" class="tarjeta" id="tus-campanas">'
-            '<span class="titulo-sec"><h2>Tus campañas</h2></span>'
+                     f'<span class="datos"><b>{escape(x["nombre"])}</b><span>'
+                     f'{de_a(date.fromisoformat(x["inicio"]), fin)} {fin.year} · {publicados}</span></span></label>'
+                     + (f'<a class="boton secundario chico" href="{BASE}/{x["id"]}">Ver</a>' if x["id"] in completas
+                        else "") + "</div>")
+    return (f'<form method="get" action="{BASE}/reporte" id="tus-campanas">'
             '<p class="ayuda">Marca una o varias y descarga su reporte: los posts de mayor a menor interacción, con su'
             " alcance, likes, comentarios, guardados y compartidos, y qué tema, formato y horario funcionó mejor."
             " Los números se leen de Instagram al momento.</p>"
@@ -1029,17 +1180,133 @@ async def tus_campanas(c: Cuenta, actual: dict) -> str:
             f'<span class="ayuda">Hasta {informe.MAX_REPORTE} campañas. Tarda unos segundos.</span></div></form>')
 
 
-def tarjeta_extra(accion: str, k: str) -> str:
-    return ('<form method="post" action="/panel/contenido/campanas" class="tarjeta extra">'
+async def pagina_lista(c: Cuenta, ver: str = "", aviso: str = "") -> HTMLResponse:
+    """Campañas: las activas, las próximas y las pasadas, en pestañas. Sin ninguna, el formulario de la primera."""
+    camps = await todas_las(c)
+    if not camps and not await informe.historial(c):
+        return await pagina_nueva(c, aviso)
+    with usar(c):
+        hoy = tools.now().date()
+    grupos: dict[str, list[dict]] = {k: [] for k in PESTANAS}
+    for x in camps:
+        grupos[estado(x, hoy)].append(x)
+    grupos["pasada"].sort(key=lambda x: x["inicio"], reverse=True)
+    if ver not in PESTANAS:
+        ver = next((k for k in ("activa", "proxima") if grupos[k]), "pasada")
+    n_pasadas = len(await informe.todas(c, grupos["pasada"]))
+    pestanas = '<nav class="tabs-cam">' + "".join(
+        f'<a href="{BASE}?ver={k}"{panel.ACTIVA if k == ver else ""}>{v}'
+        f'<small>{n_pasadas if k == "pasada" else len(grupos[k])}</small></a>' for k, v in PESTANAS.items()) + "</nav>"
+    if ver == "pasada":
+        cuerpo = await pasadas_html(c, grupos["pasada"])
+    elif grupos[ver]:
+        otras = grupos["activa"] + grupos["proxima"]
+        cuerpo = "".join([await fila_campana(c, x, ver, hoy, otras) for x in grupos[ver]])
+    else:
+        cuerpo = (f'<p class="ayuda">No tienes campañas {PESTANAS[ver].lower()}.</p>'
+                  f'<div class="acciones"><a class="boton secundario chico" href="{BASE}/nueva">+ Nueva campaña</a></div>')
+    if ver == "proxima" and grupos[ver]:
+        cuerpo += (f'<div class="acciones"><a class="boton secundario chico" href="{BASE}/nueva">+ Planear otra campaña'
+                   "</a></div>")
+    return panel.pagina(
+        panel.cabecera(salir=True, menu="contenido", cuenta=c, sub="campanas", perfil=await panel.usuario(c),
+                       foto=await panel.foto_perfil(c))
+        + cabeza("Campañas", "Lo que está corriendo, lo que viene y lo que ya terminó.",
+                 f'<a class="boton secundario ajuste" href="{BASE}/nueva">+ Nueva campaña</a>')
+        + '<main><div class="contenedor">'
+        + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
+        + await panel.pendiente(c, "campanas")
+        + f'<div class="tarjeta">{pestanas}{cuerpo}</div></div></main>')
+
+
+# --- el mes, en Contenido › Calendario ---
+
+MESES_LARGOS = ("Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre",
+                "Noviembre", "Diciembre")
+MINIS_POR_DIA = 2
+
+
+def otro_mes(primero: date, n: int) -> date:
+    m = primero.month - 1 + n
+    return date(primero.year + m // 12, m % 12 + 1, 1)
+
+
+async def mes(c: Cuenta, primero: date) -> str:
+    """El mes con una barra por campaña (se pueden cruzar) y una miniatura de cada post en su día."""
+    camps = await todas_las(c)
+    fin_mes = otro_mes(primero, 1) - timedelta(days=1)
+    lunes = primero - timedelta(days=primero.weekday())
+    domingo = fin_mes + timedelta(days=6 - fin_mes.weekday())
+    with usar(c):
+        hoy = tools.now().date()
+        desde = momento(lunes.isoformat(), "00:00")
+        hasta = momento((domingo + timedelta(days=1)).isoformat(), "00:00")
+        zona = tools.tz()
+    posts = await c.store.posts(("borrador", "programada", "publicando", "publicada", "fallida"),
+                                due_before=hasta - 1, user_id=PANEL, desde=desde)
+    por_dia: dict[str, list[str]] = {}
+    for post in posts:
+        dia = datetime.fromtimestamp(post["publish_at"], zona).date().isoformat()
+        media = await c.store.media(post["media_ids"][0]) if post["media_ids"] else None
+        imagen = f'<img src="{url_imagen(c, media[0])}" alt="">' if media else ""
+        por_dia.setdefault(dia, []).append(f'<a class="mini-mes" href="/panel/contenido/post/{post["id"]}">{imagen}</a>')
+    for camp in camps:  # los de campañas que aún no tienen imagen: un cuadro gris que lleva a la campaña
+        for p in camp.get("posts", []):
+            if not p.get("post_id") and lunes.isoformat() <= p["dia"] <= domingo.isoformat():
+                por_dia.setdefault(p["dia"], []).append(
+                    f'<a class="mini-mes vacia" href="{url_de(camp)}?post={p["k"]}#detalle"'
+                    f' title="{escape(p["titulo"])} · sin imagen"></a>')
+    celdas = [f'<div class="dn-mes">{d}</div>' for d in DIAS]
+    d = lunes
+    while d <= domingo:
+        semana_ = [d + timedelta(days=i) for i in range(7)]
+        carriles = [x for x in camps if any(date.fromisoformat(x["inicio"]) <= s <= informe.fin_de(x) for s in semana_)]
+        carriles.sort(key=lambda x: x["inicio"])
+        for dia in semana_:
+            barras, cuantas = "", 0
+            for x in carriles:
+                ini, fin = date.fromisoformat(x["inicio"]), informe.fin_de(x)
+                if not ini <= dia <= fin:
+                    barras += '<span class="bc vacia"></span>'
+                    continue
+                cuantas += 1
+                clase = "bc " + COLOR[estado(x, hoy)]
+                if dia != ini and dia.weekday() != 0:
+                    clase += " cont"
+                if dia != fin and dia.weekday() != 6:
+                    clase += " sig"
+                nombre = escape(x["nombre"]) if dia == ini or dia.weekday() == 0 else "&nbsp;"
+                barras += f'<a class="{clase}" href="{url_de(x)}" title="{escape(x["nombre"])}">{nombre}</a>'
+            iso = dia.isoformat()
+            minis = por_dia.get(iso, [])
+            mas = f'<span class="mas-mes">+{len(minis) - MINIS_POR_DIA}</span>' if len(minis) > MINIS_POR_DIA else ""
+            clase = "d-mes" + (" otro" if dia.month != primero.month else "") + (" hoy-mes" if dia == hoy else "")
+            celdas.append(f'<div class="{clase}"><b>{dia.day}</b>'
+                          + (f'<span class="traslape">{cuantas} campañas</span>' if cuantas > 1 else "")
+                          + f'{barras}<div class="minis-mes">{"".join(minis[:MINIS_POR_DIA])}{mas}</div></div>')
+        d += timedelta(days=7)
+    antes, despues = otro_mes(primero, -1), otro_mes(primero, 1)
+    return ('<div class="tarjeta" id="mes"><div class="cab-mes"><h2>Tu mes</h2><div class="nav-mes">'
+            f'<a href="/panel/contenido?mes={antes:%Y-%m}#mes" aria-label="Mes anterior">‹</a>'
+            f"<b>{MESES_LARGOS[primero.month - 1]} {primero.year}</b>"
+            f'<a href="/panel/contenido?mes={despues:%Y-%m}#mes" aria-label="Mes siguiente">›</a></div></div>'
+            f'<div class="mes-cam">{"".join(celdas)}</div>'
+            '<div class="leyenda-mes"><span><i class="b-activa"></i>Activa</span><span><i class="b-proxima"></i>Próxima'
+            '</span><span><i class="b-pasada"></i>Pasada</span><span><i class="vacia"></i>Aún sin imagen</span>'
+            "<span>Toca una campaña para abrirla, o un post para editarlo.</span></div></div>")
+
+
+def tarjeta_extra(accion: str, k: str, destino: str) -> str:
+    return (f'<form method="post" action="{destino}" class="tarjeta extra">'
             "<h2>Ya usaste las imágenes de tu plan este mes</h2>"
             f'<p class="ayuda">Las que generes ahora son extra, a US${config.EXTRA_IMAGE_USD} cada una, y se suman a tu'
             " próxima mensualidad.</p>"
             f'<input type="hidden" name="k" value="{escape(k)}"><input type="hidden" name="extra" value="1">'
             f'<div class="acciones"><button class="boton" name="accion" value="{escape(accion)}">Generar de todos modos</button>'
-            '<a class="boton secundario" href="/panel/contenido/campanas">Cancelar</a></div></form>')
+            f'<a class="boton secundario" href="{destino}">Cancelar</a></div></form>')
 
 
-def trabajando(c: Cuenta, titulo: str, nota: str, trabajo) -> StreamingResponse:
+def trabajando(c: Cuenta, titulo: str, nota: str, trabajo, destino: str = BASE) -> StreamingResponse:
     """Sin JavaScript: "trabajando…" mientras tanto y, al terminar, de vuelta a la campaña."""
 
     async def partes():
@@ -1048,11 +1315,11 @@ def trabajando(c: Cuenta, titulo: str, nota: str, trabajo) -> StreamingResponse:
                + '<main><div class="contenedor"><div class="tarjeta" id="generando"><div class="generando">'
                '<div class="escribiendo"><span></span><span></span><span></span></div>'
                f'<div><h2>{escape(titulo)}</h2><p class="ayuda">{escape(nota)} No cierres esta página.</p></div></div></div>')
-        destino, error = "/panel/contenido/campanas", ""
+        ir, error = destino, ""
         try:
             async for linea in trabajo():
                 if linea.startswith("/"):
-                    destino = linea
+                    ir = linea
                 else:
                     yield f'<p class="ayuda">{escape(linea)}</p>'
         except imagenes.ErrorImagen as e:
@@ -1061,10 +1328,10 @@ def trabajando(c: Cuenta, titulo: str, nota: str, trabajo) -> StreamingResponse:
             log.exception("Campaña de %s", c.slug)
             error = "No se pudo terminar esta vez. Lo que no salió no usó tu cupo; intenta de nuevo en un momento."
         yield ('<style>#generando{display:none}</style>'
-               + ("" if error else f'<meta http-equiv="refresh" content="0;url={destino}">')
+               + ("" if error else f'<meta http-equiv="refresh" content="0;url={ir}">')
                + (f'<div class="aviso">{escape(error)}</div>' if error else "")
                + f'<div class="tarjeta"><h2>{"Listo." if not error else "No se terminó."}</h2>'
-               f'<div class="acciones"><a class="boton" href="{destino}">Ver tu campaña</a></div></div></div></main>'
+               f'<div class="acciones"><a class="boton" href="{ir}">Ver tu campaña</a></div></div></div></main>'
                + panel.FINAL)
 
     return StreamingResponse(partes(), media_type="text/html; charset=utf-8")
@@ -1078,24 +1345,18 @@ async def ver(request: Request):
         return RedirectResponse("/panel", status_code=303)
     if c.imagenes_mes <= 0:
         return sin_plan()
-    q = request.query_params
-    return await pagina_campana(c, sel=q.get("post", ""), nueva=q.get("nueva") == "1")
+    if request.query_params.get("nueva") == "1":  # el enlace de antes
+        return RedirectResponse(f"{BASE}/nueva", status_code=303)
+    return await pagina_lista(c, request.query_params.get("ver", ""))
 
 
-@router.get("/campanas/propuesta")
-async def descargar_propuesta(request: Request):
-    """La campaña que se está armando en PDF, para mandarla a la marca antes de publicar."""
+@router.get("/campanas/nueva")
+async def ver_nueva(request: Request):
     if not (c := panel.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     if c.imagenes_mes <= 0:
         return sin_plan()
-    with usar(c):
-        camp = await leer(c)
-        if not camp.get("posts"):
-            return RedirectResponse("/panel/contenido/campanas", status_code=303)
-        contenido_pdf = await informe.propuesta(c, camp, await marca_de(c), await panel.usuario(c))
-    return Response(contenido_pdf, media_type="application/pdf",
-                    headers={"Content-Disposition": f'attachment; filename="propuesta-{archivo_de(camp["nombre"])}.pdf"'})
+    return await pagina_nueva(c)
 
 
 def archivo_de(nombre: str) -> str:
@@ -1112,19 +1373,95 @@ async def reporte(request: Request):
         return sin_plan()
     pedidas = set(request.query_params.getlist("c"))
     with usar(c):
-        camps = [x for x in await informe.todas(c, await leer(c)) if str(x["id"]) in pedidas]
+        camps = [x for x in await informe.todas(c, await todas_las(c)) if str(x["id"]) in pedidas]
         if not camps:
-            return await pagina_campana(c, "Elige al menos una campaña para el reporte.")
+            return await pagina_lista(c, "pasada", "Elige al menos una campaña para el reporte.")
         if len(camps) > informe.MAX_REPORTE:
-            return await pagina_campana(c, f"Elige hasta {informe.MAX_REPORTE} campañas por reporte.")
+            return await pagina_lista(c, "pasada", f"Elige hasta {informe.MAX_REPORTE} campañas por reporte.")
         contenido_pdf = await informe.pdf(c, camps, await marca_de(c), await panel.usuario(c))
     nombre = f"reporte-{archivo_de(camps[0]['nombre'])}" if len(camps) == 1 else f"reporte-{len(camps)}-campanas"
     return Response(contenido_pdf, media_type="application/pdf",
                     headers={"Content-Disposition": f'attachment; filename="{nombre}.pdf"'})
 
 
+@router.get("/campanas/{cid}")
+async def ver_campana(request: Request, cid: str):
+    if not (c := panel.cuenta_de_sesion(request)):
+        return RedirectResponse("/panel", status_code=303)
+    if c.imagenes_mes <= 0:
+        return sin_plan()
+    if not (camp := await leer(c, cid)):
+        return RedirectResponse(BASE, status_code=303)
+    return await pagina_campana(c, camp, sel=request.query_params.get("post", ""))
+
+
+@router.get("/campanas/{cid}/propuesta")
+async def descargar_propuesta(request: Request, cid: str):
+    """La campaña en PDF, para mandarla a la marca antes de publicar."""
+    if not (c := panel.cuenta_de_sesion(request)):
+        return RedirectResponse("/panel", status_code=303)
+    if c.imagenes_mes <= 0:
+        return sin_plan()
+    with usar(c):
+        camp = await leer(c, cid)
+        if not camp.get("posts"):
+            return RedirectResponse(BASE, status_code=303)
+        contenido_pdf = await informe.propuesta(c, camp, await marca_de(c), await panel.usuario(c))
+    return Response(contenido_pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="propuesta-{archivo_de(camp["nombre"])}.pdf"'})
+
+
+async def armar(c: Cuenta, f: dict, camp: dict):
+    """Proponer: una campaña nueva (camp vacío) o la misma otra vez, que deja los posts que ya tienen imagen."""
+    datos = del_form(f)
+
+    async def de_vuelta(aviso: str, datos_: dict):
+        return await (pagina_campana(c, camp, aviso, form=datos_) if camp else pagina_nueva(c, aviso, form=datos_))
+
+    with usar(c):
+        if len(fotos_marca(c, await marca_de(c))) < MIN_FOTOS_COLLAGE and "collage" in datos["formatos"]:
+            datos["formatos"].remove("collage")
+    if falta := falta_en(datos):
+        return await de_vuelta(falta, datos)
+    with usar(c):
+        anteriores = await informe.todas(c, await todas_las(c))
+        if datos["modo"] == "repetir" and await con_resultados(c, anteriores) < CON_RESULTADOS:
+            return await de_vuelta("Todavía no hay resultados suficientes para repetir lo que funcionó.",
+                                   {**datos, "modo": "explorar"})
+        fotos = len(fotos_marca(c, await marca_de(c)))
+    if not await ia_restantes(c):
+        return await de_vuelta("Por hoy ya no quedan propuestas; mañana puedes pedir más.", datos)
+    fijos = [p for p in camp.get("posts", []) if p.get("post_id")]
+    nueva = {**datos, "id": camp.get("id") or int(time.time() * 1000), "posts": fijos, "creada": time.time()}
+
+    async def trabajo():
+        with usar(c):
+            await usar_ia(c)
+            gano = await informe.ganadores(c, anteriores) if nueva["modo"] == "repetir" else None
+            hecha = await proponer(c, nueva, anteriores, gano, fotos)
+            for p in fijos:  # los que ya tienen imagen se quedan en su día: el rango llega hasta ellos
+                estirar(hecha, p["dia"])
+            await guardar(c, hecha)
+        yield url_de(nueva)
+
+    return trabajando(c, "Armando tu campaña…", "Tarda alrededor de medio minuto.", trabajo, url_de(nueva))
+
+
 @router.post("/campanas")
-async def accion(request: Request):
+async def nueva_campana(request: Request):
+    panel.de_aqui(request)
+    if not (c := panel.cuenta_de_sesion(request)):
+        return RedirectResponse("/panel", status_code=303)
+    if c.imagenes_mes <= 0:
+        return sin_plan()
+    f = await panel.form(request)
+    if f.get("accion") != "proponer":
+        return RedirectResponse(BASE, status_code=303)
+    return await armar(c, f, {})
+
+
+@router.post("/campanas/{cid}")
+async def accion(request: Request, cid: str):
     panel.de_aqui(request)
     if not (c := panel.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
@@ -1132,54 +1469,43 @@ async def accion(request: Request):
         return sin_plan()
     f = await panel.form(request)
     que = f.get("accion", "")
-    camp = await leer(c)
+    if not (camp := await leer(c, cid)) or not camp.get("posts"):
+        return RedirectResponse(BASE, status_code=303)
+    url = url_de(camp)
 
     if que == "proponer":
-        datos = del_form(f)
+        return await armar(c, f, camp)
+
+    if que == "editar":
+        try:
+            ini, fin = date.fromisoformat(f.get("inicio", "")), date.fromisoformat(f.get("fin", ""))
+        except ValueError:
+            return await pagina_campana(c, camp, "Elige el día en que empieza y el día en que termina.")
+        if fin < ini:
+            return await pagina_campana(c, camp, "La campaña no puede terminar antes de empezar.")
+        if (fin - ini).days + 1 > MAX_DIAS:
+            return await pagina_campana(c, camp, f"Una campaña puede durar hasta {MAX_DIAS // 7} semanas.")
+        if fuera := sorted(p["dia"] for p in camp["posts"] if not ini.isoformat() <= p["dia"] <= fin.isoformat()):
+            return await pagina_campana(c, camp, f"El post del {fecha_larga(fuera[0])} quedaría fuera de la campaña:"
+                                        " muévelo antes, o elige fechas que lo incluyan.")
+        camp.update(nombre=f.get("nombre", "").strip()[:MAX_NOMBRE] or camp["nombre"], inicio=ini.isoformat(),
+                    fin=fin.isoformat())
         with usar(c):
-            if len(fotos_marca(c, await marca_de(c))) < MIN_FOTOS_COLLAGE and "collage" in datos["formatos"]:
-                datos["formatos"].remove("collage")
-        if falta := falta_en(datos):
-            return await pagina_campana(c, falta, form={**datos, "nueva": f.get("nueva") == "1"})
-        with usar(c):
-            anteriores = await informe.todas(c, camp)
-            if datos["modo"] == "repetir" and await con_resultados(c, anteriores) < CON_RESULTADOS:
-                return await pagina_campana(c, "Todavía no hay resultados suficientes para repetir lo que funcionó.",
-                                            form={**datos, "modo": "explorar", "nueva": f.get("nueva") == "1"})
-            fotos = len(fotos_marca(c, await marca_de(c)))
-        if not await ia_restantes(c):
-            return await pagina_campana(c, "Por hoy ya no quedan propuestas; mañana puedes pedir más.")
-        # Proponer de nuevo deja los posts que ya tienen imagen; una campaña nueva empieza en blanco.
-        nueva = {**datos, "posts": [] if f.get("nueva") == "1" else
-                 [p for p in camp.get("posts", []) if p.get("post_id")], "creada": time.time()}
-
-        async def trabajo():
-            with usar(c):
-                await usar_ia(c)
-                gano = await informe.ganadores(c, anteriores) if nueva["modo"] == "repetir" else None
-                hecha = await proponer(c, nueva, anteriores, gano, fotos)
-                if f.get("nueva") == "1":
-                    await informe.archivar(c, camp)
-                await guardar(c, hecha)
-            yield "/panel/contenido/campanas"
-
-        return trabajando(c, "Armando tu campaña…", "Tarda alrededor de medio minuto.", trabajo)
-
-    if not camp.get("posts"):
-        return RedirectResponse("/panel/contenido/campanas", status_code=303)
+            await guardar(c, camp)
+        return await pagina_campana(c, camp, "Guardado.")
 
     if que == "mover":  # lo manda el arrastre (panel.js), como formulario: la CSP no deja usar fetch
         if not (p := buscar_post(camp, f.get("k", ""))):
-            return RedirectResponse("/panel/contenido/campanas", status_code=303)
+            return RedirectResponse(url, status_code=303)
         with usar(c):
             error = await mover(c, camp, p, f.get("dia", ""))
             if not error:
                 await guardar(c, camp)
         if error:
-            return await pagina_campana(c, error)
+            return await pagina_campana(c, camp, error)
         if f.get("suave") == "1":  # panel.js ya movió la tarjeta: 204 deja la página como está, sin recargar
             return Response(status_code=204)
-        return RedirectResponse(f"/panel/contenido/campanas#d-{p['dia']}", status_code=303)
+        return RedirectResponse(f"{url}#d-{p['dia']}", status_code=303)
 
     if que == "generar_todas":
         pendientes = [p for p in camp["posts"] if not await estado_post(c, p)]
@@ -1187,7 +1513,7 @@ async def accion(request: Request):
         with usar(c):
             incluidas, _ = await imagenes.usadas(c.store)
         if incluidas + sum(costo(p) for p in pendientes) > c.imagenes_mes and not extra:
-            return await pagina_campana(c, confirmar="generar_todas")
+            return await pagina_campana(c, camp, confirmar="generar_todas")
 
         async def todas():
             for i, p in enumerate(pendientes, 1):
@@ -1195,9 +1521,10 @@ async def accion(request: Request):
                 with usar(c):
                     await generar_imagen(c, camp, p, extra)
                     await guardar(c, camp)
-            yield "/panel/contenido/campanas"
+            yield url
 
-        return trabajando(c, "Generando las imágenes…", f"Tarda alrededor de {len(pendientes) * 20} segundos.", todas)
+        return trabajando(c, "Generando las imágenes…", f"Tarda alrededor de {len(pendientes) * 20} segundos.", todas,
+                          url)
 
     if que == "aprobar_todas":
         n = 0
@@ -1207,16 +1534,16 @@ async def accion(request: Request):
                 if post and post["status"] == "borrador" and post["publish_at"] > time.time() + 60:
                     await c.store.set_post(post["id"], "programada", only_if="borrador")
                     n += 1
-        return await pagina_campana(c, f"Listo: {n} post{'s' if n != 1 else ''} programado{'s' if n != 1 else ''}."
+        return await pagina_campana(c, camp, f"Listo: {n} post{'s' if n != 1 else ''} programado{'s' if n != 1 else ''}."
                                     if n else "No había posts con imagen por aprobar (o su día ya pasó).")
 
     p = buscar_post(camp, f.get("k", ""))
     if not p:
-        return await pagina_campana(c, "Ese post ya no está en la campaña.")
+        return await pagina_campana(c, camp, "Ese post ya no está en la campaña.")
     k = str(p["k"])
     post = await estado_post(c, p)
     if post and post["status"] in BLOQUEADOS:
-        return await pagina_campana(c, "Ese post ya se publicó.", sel=k)
+        return await pagina_campana(c, camp, "Ese post ya se publicó.", sel=k)
 
     # Lo que cambió en el panel lateral se guarda antes de cualquier acción.
     hora = f.get("hora", "")
@@ -1237,39 +1564,39 @@ async def accion(request: Request):
 
     if que == "otra":
         if not await ia_restantes(c):
-            return await pagina_campana(c, "Por hoy ya no quedan ideas nuevas; mañana puedes pedir más.", sel=k)
+            return await pagina_campana(c, camp, "Por hoy ya no quedan ideas nuevas; mañana puedes pedir más.", sel=k)
 
         async def otra():
             with usar(c):
                 await usar_ia(c)
                 await otra_idea(c, camp, p)
                 await guardar(c, camp)
-            yield f"/panel/contenido/campanas?post={k}#detalle"
+            yield f"{url}?post={k}#detalle"
 
-        return trabajando(c, "Pensando otra idea…", "Tarda unos segundos.", otra)
+        return trabajando(c, "Pensando otra idea…", "Tarda unos segundos.", otra, url)
 
     if que == "generar":
         extra = f.get("extra") == "1"
-        if costo(p) and (falta := await falta_cupo(c, extra)) == "extra":
-            return await pagina_campana(c, confirmar="generar", k=k)
+        if costo(p) and await falta_cupo(c, extra) == "extra":
+            return await pagina_campana(c, camp, confirmar="generar", k=k)
 
         async def una():
             with usar(c):
                 await generar_imagen(c, camp, p, extra)
                 await guardar(c, camp)
-            yield f"/panel/contenido/campanas?post={k}#detalle"
+            yield f"{url}?post={k}#detalle"
 
         return trabajando(c, "Generando la imagen…" if costo(p) else "Armando la pieza…",
-                          "Tarda alrededor de medio minuto." if costo(p) else "Tarda unos segundos.", una)
+                          "Tarda alrededor de medio minuto." if costo(p) else "Tarda unos segundos.", una, url)
 
     if que == "aprobar":
         with usar(c):
             post = await estado_post(c, p)
             if not post or post["status"] != "borrador":
-                return await pagina_campana(c, "Ese post no está en borrador.", sel=k)
+                return await pagina_campana(c, camp, "Ese post no está en borrador.", sel=k)
             if post["publish_at"] <= time.time() + 60:
-                return await pagina_campana(c, "Su día ya pasó: elige otro día u hora y guarda.", sel=k)
+                return await pagina_campana(c, camp, "Su día ya pasó: elige otro día u hora y guarda.", sel=k)
             await c.store.set_post(post["id"], "programada", only_if="borrador")
-            return await pagina_campana(c, f"Listo: sale el {cuando(post['publish_at'])}.", sel=k)
+            return await pagina_campana(c, camp, f"Listo: sale el {cuando(post['publish_at'])}.", sel=k)
 
-    return await pagina_campana(c, aviso or "Guardado.", sel=k)
+    return await pagina_campana(c, camp, aviso or "Guardado.", sel=k)
