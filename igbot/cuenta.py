@@ -168,10 +168,10 @@ class Cuenta:
             # Horas que el bot se calla en una conversación que toma una persona.
             human_pause_hours=float(get("HUMAN_PAUSE_HOURS", "12")),
             # Agendar en tu calendario, mandar correos y cotizar con tu Google.
-            # Las cuentas que se dan de alta solas desde el panel (Básico) no lo tienen.
+            # Las cuentas que se dan de alta solas desde el panel (Asistente virtual) no lo tienen.
             google_tools=_bool(get("GOOGLE_TOOLS", "1")),
             # Imágenes de contenido incluidas al mes (0 = su plan no incluye contenido;
-            # Community 40, Pro 80). Las que pasen de aquí se cobran aparte.
+            # Community Manager 40). Las que pasen de aquí se cobran aparte.
             imagenes_mes=int(get("IMAGES_PER_MONTH", "0")),
             # Respuestas del asistente y posts que incluye el plan al mes (0 = sin tope).
             # Solo se muestran en el panel: pasarse no corta nada, se ve como extra.
@@ -186,13 +186,14 @@ class Cuenta:
         )
 
 
-# Lo que incluye cada plan (PLAN= en el .env de la cuenta). Cualquier valor escrito
-# en el .env gana sobre esto, para darle a un cliente algo distinto a su plan.
+# Lo que incluye cada plan (PLAN= en el .env de la cuenta; los mismos números que
+# negocio/catalogo.yaml). Cualquier valor escrito en el .env gana sobre esto, para
+# darle a un cliente algo distinto a su plan.
 PLANES = {
-    "basico": {"IMAGES_PER_MONTH": "0", "MESSAGES_PER_MONTH": "1000", "POSTS_PER_MONTH": "0"},
-    "community": {"IMAGES_PER_MONTH": "40", "MESSAGES_PER_MONTH": "2000", "POSTS_PER_MONTH": "12"},
-    "pro_crm": {"IMAGES_PER_MONTH": "80", "MESSAGES_PER_MONTH": "5000", "POSTS_PER_MONTH": "20"},
+    "basico": {"IMAGES_PER_MONTH": "0", "MESSAGES_PER_MONTH": "1000", "POSTS_PER_MONTH": "0"},  # Asistente virtual
+    "community": {"IMAGES_PER_MONTH": "40", "MESSAGES_PER_MONTH": "2500", "POSTS_PER_MONTH": "12"},
 }
+PLANES["pro_crm"] = PLANES["community"]  # el Pro CRM ya no se vende: las cuentas que lo tengan quedan como Community
 
 
 def de_carpeta(slug: str) -> Cuenta:

@@ -97,9 +97,9 @@ def test_sin_contenido_en_el_plan(cliente):
     client, c, *_ = cliente
     assert c.imagenes_mes == 0
     assert 'title="Contenido"' not in client.get("/panel").text  # el menú solo sale si su plan lo tiene
-    assert "solo incluye el asistente" in client.get("/panel/contenido").text
+    assert "Tu plan actual es el Asistente virtual" in client.get("/panel/contenido").text
     r = client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "marca"})
-    assert "solo incluye el asistente" in r.text
+    assert "Tu plan actual es el Asistente virtual" in r.text
 
 
 def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
@@ -621,7 +621,7 @@ def test_bienvenida_con_contenido_y_lo_que_falta(cliente, monkeypatch):
     client, c, *_ = cliente
     monkeypatch.setattr(c, "imagenes_mes", 5)
     r = client.get("/panel")
-    assert "Configurar tu asistente" in r.text and "Configurar tu marca" in r.text and "Tu plan Básico" not in r.text
+    assert "Configurar tu asistente" in r.text and "Configurar tu marca" in r.text and "Tu plan Asistente virtual" not in r.text
     assert client.get("/panel", follow_redirects=False).headers["location"] != "/panel/bienvenida"  # solo una vez
     client.portal.call(c.store.set, "perfil", "")
     client.portal.call(c.store.set, "asistente_listo", "0")

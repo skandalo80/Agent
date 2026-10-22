@@ -1,7 +1,7 @@
 """Contenido: el cliente arma, aprueba y programa sus posts desde el panel.
 
 console.skandar.online/panel/contenido, para las cuentas con contenido en su plan
-(IMAGES_PER_MONTH > 0: Community y Pro).
+(IMAGES_PER_MONTH > 0: Community Manager).
 
 - Tu marca: colores (HEX, con su Pantone de referencia), tipografía y grosor de
   los títulos, estilo de las fotos, plantilla de inicio y fotos reales de sus
@@ -495,10 +495,10 @@ def sin_plan() -> HTMLResponse:
         panel.cabecera(salir=True)
         + '<section class="oscuro entrar"><div class="contenedor centro">'
         '<p class="antetitulo">Contenido</p><h1>Tus posts, listos para aprobar<span class="punto">.</span></h1>'
-        '<p class="bajada">Tu plan actual solo incluye el asistente de mensajes. El contenido viene en los'
-        ' planes Community Manager y Pro.</p>'
+        '<p class="bajada">Tu plan actual es el Asistente virtual, que contesta tus mensajes. El contenido'
+        ' viene en el plan Community Manager.</p>'
         f'<div class="acciones"><a class="boton" href="/panel/asistente">Volver a tu asistente</a>'
-        f'<a class="boton secundario" href="{config.SITE_URL}/#precios">Ver planes</a></div>'
+        f'<a class="boton secundario" href="{config.SITE_URL}/#planes">Ver planes</a></div>'
         "</div></section>"
     )
 

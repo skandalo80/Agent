@@ -144,8 +144,9 @@ def test_bucle_de_fondo_pasa_por_cada_cuenta(monkeypatch):
 def test_el_plan_pone_los_topes_y_el_env_gana():
     from igbot.cuenta import Cuenta
     c = Cuenta.desde_env("x", {"IG_ACCESS_TOKEN": "t", "PLAN": "community"})
-    assert (c.imagenes_mes, c.mensajes_mes, c.posts_mes) == (40, 2000, 12)
+    assert (c.imagenes_mes, c.mensajes_mes, c.posts_mes) == (40, 2500, 12)
+    # El Pro CRM ya no existe: quien lo tenga queda como Community.
     c = Cuenta.desde_env("x", {"IG_ACCESS_TOKEN": "t", "PLAN": "pro_crm", "POSTS_PER_MONTH": "30"})
-    assert (c.imagenes_mes, c.mensajes_mes, c.posts_mes) == (80, 5000, 30)
+    assert (c.imagenes_mes, c.mensajes_mes, c.posts_mes) == (40, 2500, 30)
     c = Cuenta.desde_env("x", {"IG_ACCESS_TOKEN": "t"})  # sin plan: sin topes ni contenido
     assert (c.imagenes_mes, c.mensajes_mes, c.posts_mes) == (0, 0, 0)
