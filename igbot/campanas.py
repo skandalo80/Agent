@@ -78,7 +78,8 @@ FORMATOS = {
     "titular": ("Foto con titular", 1, "Una foto con el título escrito encima."),
     "texto": ("Solo texto", 0, "Sin foto: una frase o un dato escrito en grande sobre el color de la marca."
               " \"titulo\" es esa frase (máximo 12 palabras) y \"subtitulo\" la completa. \"idea\": \"\"."),
-    "collage": ("Collage", 0, "Un collage con las fotos de producto del negocio (no se genera foto nueva)."
+    "collage": ("Collage", 0, "Un collage con fotos del negocio: de Tu marca o de posts que ya salieron (no se"
+                " genera foto nueva)."
                 " \"idea\": qué deben mostrar juntas, en una frase."),
     "vs": ("Esto o aquello", 1, "Dos opciones lado a lado para que la gente elija en comentarios. \"titulo\" es la"
            " pregunta (\"¿A o B?\"). \"idea\": una sola foto dividida a la mitad, A a la izquierda y B a la derecha."),
@@ -465,17 +466,53 @@ def fotos_marca(c: Cuenta, marca: dict) -> list[str]:
     return [t for t in marca.get("fotos", []) if archivo(c, t).is_file()]
 
 
-def otro_collage(fotos: list[str], antes: list[str], azar: random.Random | None = None) -> list[str]:
-    """De 2 a 4 fotos de Tu marca en otro orden o con otras fotos que el collage anterior (para "Otra imagen")."""
+FOTO_LIMPIA = ("foto", "titular")  # formatos de post cuya foto (sin texto) puede volver a salir en un collage
+
+
+async def fotos_para_collage(c: Cuenta, camp: dict, p: dict, marca: dict) -> list[list[str]]:
+    """Las fotos para el collage de p, en grupos de la más a la menos parecida: de posts publicados de sus
+    campañas con el mismo tema y formato, solo el mismo formato, solo el mismo tema, y el resto (con las de
+    Tu marca). Son nombres para `archivo`: el de la foto, o "<token>.base" si es la de un post sin su texto."""
+    hechos = [x for camp_ in await informe.todas(c, camp) for x in camp_["posts"]
+              if x.get("post_id") != p.get("post_id")]
+    posts = await c.store.posts_by_id([x["post_id"] for x in hechos])
+    grupo: dict[str, int] = {}
+    for x in hechos:
+        post = posts.get(x["post_id"])
+        if not post or post["status"] != "publicada":
+            continue
+        formato = x.get("formato") or FORMATO_VIEJO
+        if formato == "collage":
+            fotos = x.get("collage") or []
+        elif formato in FOTO_LIMPIA and post["media_ids"] and (media := await c.store.media(post["media_ids"][0])):
+            # Sin el texto encima; una foto sola no lleva texto, así que sirve tal cual.
+            fotos = [f"{media[0]}.base"] if archivo(c, f"{media[0]}.base").is_file() else (
+                [media[0]] if formato == "foto" else [])
+        else:
+            continue
+        mismo_tema = x.get("tipo") == p["tipo"]
+        n = (0 if mismo_tema else 1) if formato == "collage" else (2 if mismo_tema else 3)
+        for f in fotos:
+            if archivo(c, f).is_file():
+                grupo[f] = min(grupo.get(f, n), n)
+    for f in fotos_marca(c, marca):
+        grupo.setdefault(f, 3)
+    return [[f for f, n in grupo.items() if n == i] for i in range(4)]
+
+
+def otro_collage(grupos: list[list[str]], antes: list[str], azar: random.Random | None = None) -> list[str]:
+    """De 2 a 4 fotos, primero las de los grupos que más se parecen al post (revueltas dentro de cada grupo),
+    en otro orden o con otras fotos que el collage anterior (para "Otra imagen")."""
     azar = azar or random.Random()
+    total = sum(len(g) for g in grupos)
     for _ in range(12):
-        nuevas = azar.sample(fotos, azar.randint(MIN_FOTOS_COLLAGE, min(4, len(fotos))))
+        nuevas = [f for g in grupos for f in azar.sample(g, len(g))][:azar.randint(MIN_FOTOS_COLLAGE, min(4, total))]
         if nuevas != antes:
             return nuevas
     return nuevas
 
 
-async def generar_imagen(c: Cuenta, p: dict, extra: bool) -> int:
+async def generar_imagen(c: Cuenta, camp: dict, p: dict, extra: bool) -> int:
     """La pieza de un post de la campaña según su formato: crea (o actualiza) su post en borrador, como
     Crear post. Solo texto y collage se arman aquí, sin el generador ni el cupo."""
     formato = formato_de(p)
@@ -494,11 +531,11 @@ async def generar_imagen(c: Cuenta, p: dict, extra: bool) -> int:
             hecha = await imagenes.crear_local(c.store, PANEL, "texto", texto_imagen(pieza_, usuario), kit(marca),
                                                tema_de(p["tipo"])[0])
         elif formato == "collage":
-            todas = fotos_marca(c, marca)
-            if len(todas) < MIN_FOTOS_COLLAGE:
+            grupos = await fotos_para_collage(c, camp, p, marca)
+            if sum(len(g) for g in grupos) < MIN_FOTOS_COLLAGE:
                 raise imagenes.ErrorImagen(f"Para el collage sube al menos {MIN_FOTOS_COLLAGE} fotos de producto en"
                                            " Tu marca, o cambia el formato de este post.")
-            fotos = otro_collage(todas, p.get("collage") or [])
+            fotos = otro_collage(grupos, p.get("collage") or [])
             p["collage"] = fotos
             hecha = await imagenes.crear_local(c.store, PANEL, "collage", [archivo(c, t).read_bytes() for t in fotos])
         else:
@@ -1135,7 +1172,7 @@ async def accion(request: Request):
             for i, p in enumerate(pendientes, 1):
                 yield f"Pieza {i} de {len(pendientes)}: {p['titulo']}…"
                 with usar(c):
-                    await generar_imagen(c, p, extra)
+                    await generar_imagen(c, camp, p, extra)
                     await guardar(c, camp)
             yield "/panel/contenido/campanas"
 
@@ -1194,7 +1231,7 @@ async def accion(request: Request):
 
         async def una():
             with usar(c):
-                await generar_imagen(c, p, extra)
+                await generar_imagen(c, camp, p, extra)
                 await guardar(c, camp)
             yield f"/panel/contenido/campanas?post={k}#detalle"
 
