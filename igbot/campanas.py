@@ -850,9 +850,13 @@ async def detalle(c: Cuenta, camp: dict, p: dict, quedan_ia: int) -> str:
                        for k, v in FORMATOS.items())
     cambia_formato = ("" if post else
                       f'<label for="d-formato">Formato</label><select id="d-formato" name="formato">{formatos}</select>')
-    idea = ("" if post or formato in SIN_IDEA else
+    # La idea se queda después de generar (menos en el collage, que no la usa) para irla puliendo con "Otra imagen".
+    idea = ("" if formato in SIN_IDEA or (post and formato == "collage") else
             f'<label for="d-idea">{"Qué deben mostrar las fotos" if formato == "collage" else "Idea de la imagen"}'
-            f'</label><textarea id="d-idea" name="idea" rows="4" maxlength="{MAX_IDEA}">{escape(p["idea"])}</textarea>')
+            f'</label><textarea id="d-idea" name="idea" rows="4" maxlength="{MAX_IDEA}"{solo}>{escape(p["idea"])}'
+            "</textarea>"
+            + ('<p class="ayuda">Cámbiala o agrégale detalles y pide otra imagen: sale con tu idea nueva.</p>'
+               if post and not fija else ""))
     return (
         '<a class="velo-cam" href="/panel/contenido/campanas" aria-label="Cerrar"></a>'
         '<aside class="cajon-cam" id="detalle"><a class="cerrar-cam" href="/panel/contenido/campanas" aria-label="Cerrar">×</a>'
@@ -1202,7 +1206,8 @@ async def accion(request: Request):
     if HORA.match(hora):
         p["hora"] = hora
     for campo, maximo in (("titulo", MAX_TITULO), ("subtitulo", 120), ("caption", MAX_CAPTION), ("idea", MAX_IDEA)):
-        if campo in f and (f[campo].strip() or campo == "subtitulo") and not (post and campo != "caption"):
+        # Con imagen ya hecha solo cambian el texto y la idea (la que usa "Otra imagen").
+        if campo in f and (f[campo].strip() or campo == "subtitulo") and not (post and campo not in ("caption", "idea")):
             p[campo] = f[campo].strip()[:maximo]
     if not post and f.get("formato") in FORMATOS:
         p["formato"] = f["formato"]

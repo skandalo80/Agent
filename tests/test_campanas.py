@@ -58,7 +58,7 @@ def datos_campana(**cambios):
 
 
 def test_campana_de_punta_a_punta(cliente, monkeypatch):
-    client, c, *_ = cliente
+    client, c, _, proveedor = cliente
     monkeypatch.setattr(c, "imagenes_mes", 4)
     llamadas = []
     monkeypatch.setattr(campanas.config, "CONTENT_MODEL", "modelo")
@@ -164,6 +164,15 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
     assert client.portal.call(contenido.imagenes.usadas, c.store)[0] == sum(campanas.costo(p) for p in pendientes)
     r = client.post("/panel/contenido/campanas", headers=ORIGEN, data={"accion": "aprobar_todas"})
     assert "2 posts programados" in r.text
+
+    # Con la imagen hecha, la idea se queda para irla puliendo: "Otra imagen" usa la nueva.
+    foto = next(p for p in camp["posts"] if p["formato"] in ("foto", "titular"))
+    r = client.get(f"/panel/contenido/campanas?post={foto['k']}")
+    assert 'name="idea"' in r.text and "sale con tu idea nueva" in r.text
+    client.post("/panel/contenido/campanas", headers=ORIGEN,
+                data={"accion": "generar", "k": str(foto["k"]), "idea": "Laptop en un escritorio de madera"})
+    assert campanas.buscar_post(leer(client, c), foto["k"])["idea"] == "Laptop en un escritorio de madera"
+    assert "Laptop en un escritorio de madera" in proveedor.llamadas[-1][0]
 
     # Proponer de nuevo deja los que tienen imagen; una campaña nueva empieza en blanco.
     assert "Nueva campaña" in client.get("/panel/contenido/campanas").text
