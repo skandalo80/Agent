@@ -56,7 +56,7 @@ def _norm(text: str) -> str:
 def quote(paquete: str, pago: str = "mensual", bloques_extra: int = 0) -> Quote:
     """Calcula una cotización. Lanza ValueError si las opciones no existen.
 
-    paquete puede ser la clave ("pro_crm") o el nombre ("Pro CRM")."""
+    paquete puede ser la clave ("community") o el nombre ("Community Manager")."""
     cat = load()
     key = _norm(paquete)
     key = next((k for k, p in cat["paquetes"].items() if key in (k, _norm(p["nombre"]))), key)
@@ -73,16 +73,17 @@ def quote(paquete: str, pago: str = "mensual", bloques_extra: int = 0) -> Quote:
     meses = cat["meses_pagados_en_anual"] if pago == "anual" else 1
     servicio = p["mensualidad"] * meses
     extras = bloques_extra * extra["precio"] * meses
-    lineas = [(f"Instalación paquete {p['nombre']} (pago único)", p["instalacion"])]
+    # Sin costo de instalación (0) no sale en la cotización.
+    lineas = [(f"Instalación plan {p['nombre']} (pago único)", p["instalacion"])] if p.get("instalacion") else []
     gratis = bool(cat.get("primer_mes_gratis"))
     if gratis:
         # El primer mes no se cobra; el servicio (y los extras) se pagan desde el segundo.
-        lineas.append((f"Primer mes del paquete {p['nombre']} (gratis)", 0))
+        lineas.append((f"Primer mes del plan {p['nombre']} (gratis)", 0))
     else:
         lineas.append((
-            f"Paquete {p['nombre']}, pago anual (12 meses por {meses})"
+            f"Plan {p['nombre']}, pago anual (12 meses por {meses})"
             if pago == "anual"
-            else f"Paquete {p['nombre']}, primera mensualidad",
+            else f"Plan {p['nombre']}, primera mensualidad",
             servicio,
         ))
         if bloques_extra:
@@ -104,11 +105,12 @@ def prompt_text() -> str:
     cat = load()
     m = lambda x: money(x, cat["moneda"]) + iva_suffix(cat)  # noqa: E731
     neg = cat["negocio"]
-    out = [f"Negocio: {neg['nombre']} ({neg['instagram']}). {neg['descripcion']}", "", "Paquetes:"]
+    out = [f"Negocio: {neg['nombre']} ({neg['instagram']}). {neg['descripcion']}", "", "Planes:"]
     for key, p in cat["paquetes"].items():
         resumen = f" ({p['resumen']})" if p.get("resumen") else ""
+        instalacion = f"instalación {m(p['instalacion'])}" if p.get("instalacion") else "sin costo de instalación"
         out.append(
-            f"- {p['nombre']} (clave: {key}){resumen}: instalación {m(p['instalacion'])}, {m(p['mensualidad'])} al mes,"
+            f"- {p['nombre']} (clave: {key}){resumen}: {instalacion}, {m(p['mensualidad'])} al mes,"
             f" {p['respuestas_mes']:,} respuestas al mes. Incluye: {'; '.join(p['incluye'])}."
         )
     e = cat["extras"]["respuestas"]
@@ -116,7 +118,7 @@ def prompt_text() -> str:
         f"- Extra: {e['descripcion']}, {m(e['precio'])} al mes cada uno.",
         f"- Pago anual: se pagan {cat['meses_pagados_en_anual']} mensualidades por 12 meses.",
         *(["- Primer mes gratis: al contratar solo se paga la instalación; la mensualidad empieza el segundo mes."]
-          if cat.get("primer_mes_gratis") else []),
+          if cat.get("primer_mes_gratis") else ["- Se paga desde el primer mes (no hay mes gratis)."]),
         f"- Las cotizaciones valen {cat['vigencia_dias']} días.",
         "Condiciones: " + " ".join(cat["condiciones"]),
     ]
@@ -136,7 +138,7 @@ def pdf(q: Quote, folio: str, cliente: str, empresa: str, email: str, today: dat
     doc = Cotizacion(neg["nombre"], f"{neg['instagram']}  ·  {neg['correo']}", folio, neg.get("color_acento", ""))
 
     resumen = p.get("resumen", "").strip()
-    doc.titulo("Propuesta", f"Paquete {p['nombre']}", resumen[:1].upper() + resumen[1:] + "." if resumen else "")
+    doc.titulo("Propuesta", f"Plan {p['nombre']}", resumen[:1].upper() + resumen[1:] + "." if resumen else "")
     vence = today + timedelta(days=cat["vigencia_dias"])
     para = ", ".join(x for x in (cliente, empresa) if x) or "Cliente"
     doc.datos([("Para", "\n".join(x for x in (para, email) if x)),
