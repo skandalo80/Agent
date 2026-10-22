@@ -1,6 +1,6 @@
-"""Contenido > Campañas > Tus campañas: el historial y el reporte en PDF.
+"""Contenido > Campañas > Pasadas: el historial y el reporte en PDF.
 
-Cuando el cliente arma una campaña nueva, la anterior se guarda en el kv "campanas_pasadas"
+Cuando ya no caben en la lista de campañas, las más viejas se guardan en el kv "campanas_pasadas"
 con lo que se probó en cada post que llegó a tener imagen (tema, formato, hora, y las fotos de sus
 collages, que otro collage puede volver a usar). Desde "Tus campañas" marca una o varias y descarga
 un PDF con sus posts de mayor a menor interacción, para que un community manager se lo mande a la marca.
@@ -64,6 +64,9 @@ def franja(hora: str) -> str:
 
 
 def fin_de(camp: dict) -> date:
+    """El último día: el que eligió al editarla (o al estirarla arrastrando un post), o el de su duración."""
+    if camp.get("fin"):
+        return date.fromisoformat(camp["fin"])
     return date.fromisoformat(camp["inicio"]) + timedelta(days=7 * camp.get("semanas", 1) - 1)
 
 
@@ -71,8 +74,9 @@ def fin_de(camp: dict) -> date:
 
 def resumen_de(camp: dict) -> dict:
     """Lo que hace falta de una campaña para su reporte: solo los posts que tuvieron imagen."""
-    return {"id": int(camp.get("creada", 0) * 1000), "nombre": camp.get("nombre", ""), "inicio": camp["inicio"],
-            "semanas": camp.get("semanas", 1), "modo": camp.get("modo", ""),
+    return {"id": camp.get("id") or int(camp.get("creada", 0) * 1000), "nombre": camp.get("nombre", ""),
+            "inicio": camp["inicio"], "fin": fin_de(camp).isoformat(), "semanas": camp.get("semanas", 1),
+            "modo": camp.get("modo", ""),
             "posts": [{k: p.get(k) for k in ("post_id", "tipo", "formato", "hora", "titulo", "responde", "collage")}
                       for p in camp.get("posts", []) if p.get("post_id")]}
 
@@ -82,7 +86,8 @@ async def historial(c: Cuenta) -> list[dict]:
 
 
 async def archivar(c: Cuenta, camp: dict) -> None:
-    """Guarda la campaña que se va (si llegó a tener algún post con imagen)."""
+    """Guarda en el historial una campaña vieja que ya no cabe en la lista (si llegó a tener algún post con
+    imagen)."""
     if not camp.get("posts") or not any(p.get("post_id") for p in camp["posts"]):
         return
     nueva = resumen_de(camp)
@@ -90,13 +95,12 @@ async def archivar(c: Cuenta, camp: dict) -> None:
     await c.store.set("campanas_pasadas", json.dumps(lista[:MAX_HISTORIAL], ensure_ascii=False))
 
 
-async def todas(c: Cuenta, actual: dict) -> list[dict]:
-    """La campaña de ahora (si tiene posts) y las anteriores, de la más nueva a la más vieja."""
-    pasadas = await historial(c)
-    if not actual.get("posts"):
-        return pasadas
-    hoy = resumen_de(actual)
-    return [{**hoy, "actual": True}] + [x for x in pasadas if x["id"] != hoy["id"]]
+async def todas(c: Cuenta, camps: list[dict]) -> list[dict]:
+    """Sus campañas (las que tienen posts) y las del historial, de la que empieza más tarde a la más vieja."""
+    ahora = [resumen_de(x) for x in camps if x.get("posts")]
+    ids = {x["id"] for x in ahora}
+    return sorted(ahora + [x for x in await historial(c) if x["id"] not in ids], key=lambda x: x["inicio"],
+                  reverse=True)
 
 
 # --- los números de Instagram ---

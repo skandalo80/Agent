@@ -565,10 +565,13 @@ class Store:
         return {p["id"]: p for p in map(self._post, await cur.fetchall())}
 
     async def posts(self, statuses: tuple[str, ...], due_before: float | None = None,
-                    user_id: str | None = None) -> list[dict]:
+                    user_id: str | None = None, desde: float | None = None) -> list[dict]:
         marks = ",".join("?" * len(statuses))
         sql = f"SELECT {self.POST_FIELDS} FROM posts WHERE status IN ({marks})"
         args: list = list(statuses)
+        if desde is not None:
+            sql += " AND publish_at >= ?"
+            args.append(desde)
         if due_before is not None:
             sql += " AND publish_at <= ?"
             args.append(due_before)

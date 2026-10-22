@@ -169,8 +169,9 @@ document.querySelectorAll(".lat-item[data-sub]").forEach((item) => {
       if (!arrastrado || arrastrado.closest(".dia-cam") === d) return;
       const origen = arrastrado.closest(".dia-cam");
       const otro = d.querySelector(".post-cam");
-      // Si el de ese día ya se publicó, el servidor no deja: se recarga y dice por qué.
-      const suave = !otro || otro.hasAttribute("data-k");
+      // Si el de ese día ya se publicó, el servidor no deja: se recarga y dice por qué. Un día de fuera estira la
+      // campaña: también se recarga, para ver el rango nuevo.
+      const suave = (!otro || otro.hasAttribute("data-k")) && !d.classList.contains("fuera");
       if (suave) {  // se mueve aquí mismo y el servidor contesta 204: la página no se recarga
         if (otro) origen.append(otro);
         d.append(arrastrado);
@@ -186,7 +187,7 @@ document.querySelectorAll(".lat-item[data-sub]").forEach((item) => {
       // Un formulario y no fetch: la CSP del panel (default-src 'none') bloquea fetch.
       const f = document.createElement("form");
       f.method = "post";
-      f.action = "/panel/contenido/campanas";
+      f.action = d.closest("[data-camp]").dataset.camp;
       for (const [n, v] of Object.entries({accion: "mover", k: arrastrado.dataset.k, dia: d.dataset.dia, suave: suave ? "1" : ""})) {
         const i = document.createElement("input");
         i.type = "hidden"; i.name = n; i.value = v;

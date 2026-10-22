@@ -36,7 +36,7 @@ import logging
 import re
 import secrets
 import time
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from html import escape
 from pathlib import Path
 from urllib.parse import urlencode
@@ -671,13 +671,16 @@ def plegable(id_: str, titulo: str, n: int, cuerpo: str, clase: str = "") -> str
             f"{cuenta}</summary>{cuerpo}</details>")
 
 
-async def calendario(c: Cuenta, aviso: str = "", hoja: int = 1) -> HTMLResponse:
+async def calendario(c: Cuenta, aviso: str = "", hoja: int = 1, mes: date | None = None) -> HTMLResponse:
+    from . import campanas  # campanas importa este módulo
     with usar(c):
+        mes = mes or tools.now().date().replace(day=1)
         pendientes = await c.store.posts(("programada", "publicando", "fallida", "borrador"), user_id=PANEL)
         programados = [p for p in pendientes if p["status"] != "borrador"]
         borradores = [p for p in pendientes if p["status"] == "borrador"]
         publicados, n_publicados = await publicados_html(c, hoja)
-        cuerpo = ""
+    cuerpo = await campanas.mes(c, mes)
+    with usar(c):
         if not pendientes:
             cuerpo += ('<div class="tarjeta"><h2>Aún no tienes posts</h2>'
                        '<p class="ayuda">Dinos qué quieres lograr y te armamos el post: imagen, texto y palabra clave.</p>'
@@ -936,14 +939,15 @@ def reglas_del_form(f: dict, antes: list[dict], quitar: int | None) -> list[dict
     return out[:MAX_REGLAS]
 
 
-async def de_campana(c: Cuenta, p: dict) -> list[str]:
+async def de_campana(c: Cuenta, p: dict, post_id: int) -> list[str]:
     """Tema y formato de un post que viene de Campañas (vacío si no viene de ahí o ya no está)."""
     from . import campanas  # campanas importa este módulo
     if "campana" not in p:
         return []
-    if not (x := campanas.buscar_post(await campanas.leer(c), p["campana"])):
-        return []
-    return [campanas.tema_de(x["tipo"])[0], campanas.FORMATOS[campanas.formato_de(x)][0]]
+    for camp in await campanas.todas_las(c):
+        if x := next((x for x in camp.get("posts", []) if x.get("post_id") == post_id), None):
+            return [campanas.tema_de(x["tipo"])[0], campanas.FORMATOS[campanas.formato_de(x)][0]]
+    return []
 
 
 async def editor(c: Cuenta, post_id: int, aviso: str = "", confirmar: bool = False) -> HTMLResponse:
@@ -972,7 +976,7 @@ async def editor(c: Cuenta, post_id: int, aviso: str = "", confirmar: bool = Fal
                       + '<a class="boton secundario" href="/panel/contenido">← Calendario</a></form></div></div>')
             return await pagina(c, "calendario", "Así quedó tu post.", cuerpo, aviso)
 
-        variables = escape(" · ".join(await de_campana(c, p)) or objetivo)
+        variables = escape(" · ".join(await de_campana(c, p, post_id)) or objetivo)
         valor_cuando = (datetime.fromtimestamp(post["publish_at"], tools.tz()).strftime("%Y-%m-%dT%H:%M")
                         if post["publish_at"] else "")
         es_libre = libre(p)
@@ -1307,8 +1311,12 @@ def preparar_foto(data: bytes) -> bytes:
 async def ver(request: Request):
     if not (c := panel.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
-    p = request.query_params.get("p", "")
-    return await calendario(c, hoja=int(p) if p.isdigit() else 1) if c.imagenes_mes > 0 else sin_plan()
+    p, mes = request.query_params.get("p", ""), request.query_params.get("mes", "")
+    try:
+        primero = date.fromisoformat(f"{mes}-01")
+    except ValueError:
+        primero = None
+    return await calendario(c, hoja=int(p) if p.isdigit() else 1, mes=primero) if c.imagenes_mes > 0 else sin_plan()
 
 
 @router.get("/nuevo")
