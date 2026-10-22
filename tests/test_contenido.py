@@ -521,7 +521,7 @@ def test_orden_de_tu_marca_y_miniaturas(cliente, monkeypatch):
     client, c, *_ = cliente
     monkeypatch.setattr(c, "imagenes_mes", 5)
     r = client.get("/panel/contenido/marca")
-    orden = [r.text.index(t) for t in ("Identidad", "lo que te hace distinto", "<h2>Colores", "<h2>Tipografía", "Fotos y estilo",
+    orden = [r.text.index(t) for t in ("Identidad", "<h2>Colores", "<h2>Tipografía", "Fotos y estilo",
                                         "Cómo se arman tus posts", "Vista previa")]
     assert orden == sorted(orden)
     assert 'data-plantilla="marco"' in r.text and 'data-plantilla="banda"' in r.text
@@ -821,23 +821,31 @@ def test_menu_lateral_despliega_secciones(cliente, monkeypatch):
     assert '<div class="lat-sub" id="sub-asistente">' in r and '<div class="lat-sub cerrado" id="sub-contenido">' in r
 
 
-def test_tu_negocio_en_tu_marca_llega_a_los_posts(cliente, monkeypatch):
+def test_posicionamiento_sale_de_configura_y_llega_a_los_posts(cliente, monkeypatch):
+    from igbot import posicionamiento
     client, c, *_ = cliente
     monkeypatch.setattr(c, "imagenes_mes", 5)
-    # Sin nada en Configura, "Llenar" avisa; con algo, llena lo vacío sin guardar.
-    r = client.post("/panel/contenido/marca", headers=ORIGEN, data={"accion": "llenar"})
-    assert "Aún no llenas Tu negocio" in r.text
-    client.post("/panel/guardar", headers=ORIGEN, data={"accion": "guardar", "negocio": "Carteras de piel hechas a mano.",
-                                                        "precios": "Cartera mini $900", "prompt": ""})
-    r = client.post("/panel/contenido/marca", headers=ORIGEN, data={"accion": "llenar", "distinto": "Piel mexicana"})
-    assert "Carteras de piel hechas a mano.\nCartera mini $900</textarea>" in r.text and "Piel mexicana" in r.text
-    assert client.portal.call(contenido.marca_de, c) == {}
-    client.post("/panel/contenido/marca", headers=ORIGEN, data={
-        "accion": "guardar", "ofreces": "Carteras", "cliente_ideal": "Mujeres de 25 a 40",
-        "distinto": "Piel <b>mexicana</b>\r\ncosida a mano", "competencia": "Marcas de Asia"})
-    marca = client.portal.call(contenido.marca_de, c)
-    assert marca["distinto"] == "Piel <b>mexicana</b>\ncosida a mano" and marca["cliente_ideal"] == "Mujeres de 25 a 40"
+    llamadas = []
+
+    async def fake_claude(prompt, system, mcp=None, allowed=(), max_turns=5, model=None):
+        llamadas.append(prompt)
+        return json.dumps({"ofrece": "Carteras de piel", "cliente_ideal": "Mujeres de 25 a 40",
+                           "distinto": "Piel <b>mexicana</b> cosida a mano", "competencia": "Marcas de Asia"})
+
+    monkeypatch.setattr(bot.agent, "run_claude", fake_claude)
+    perfil = {"negocio": "Carteras de piel hechas a mano.", "precios": "Cartera mini $900",
+              "faq": [{"p": "¿Envían?", "r": "Sí, a todo México."}]}
+    client.portal.call(posicionamiento.actualizar, c, perfil)
+    assert "Cartera mini $900" in llamadas[0] and "¿Envían? Sí, a todo México." in llamadas[0]
     negocio = client.portal.call(contenido.negocio_de, c)
-    assert "- Qué ofreces: Carteras" in negocio and "Piel &lt;b&gt;mexicana&lt;/b&gt;" in negocio
-    assert "- Con quién te comparan: Marcas de Asia (no la nombres en los posts)" in negocio
-    assert 'value="Mujeres de 25 a 40"' in client.get("/panel/contenido/marca").text
+    assert "- Qué ofrece: Carteras de piel" in negocio and "Piel &lt;b&gt;mexicana&lt;/b&gt;" in negocio
+    assert "- Con quién lo comparan (no la nombres en los posts): Marcas de Asia" in negocio
+    client.portal.call(posicionamiento.actualizar, c, perfil)  # sin cambios en Configura no se vuelve a pedir
+    assert len(llamadas) == 1
+    # Guardar Configura lo manda a calcular (en segundo plano).
+    programados = []
+    monkeypatch.setattr(posicionamiento, "programar", lambda cuenta, datos: programados.append(datos["negocio"]))
+    client.post("/panel/guardar", headers=ORIGEN, data={"accion": "guardar", "negocio": "Bolsos", "prompt": ""})
+    assert programados == ["Bolsos"]
+    # Ya no vive en Tu marca.
+    assert "lo que te hace distinto" not in client.get("/panel/contenido/marca").text
