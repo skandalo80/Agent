@@ -816,27 +816,31 @@ def se_prueba(camp: dict) -> str:
 async def detalle(c: Cuenta, camp: dict, p: dict, quedan_ia: int) -> str:
     post = await estado_post(c, p)
     fija = post and post["status"] in BLOQUEADOS
+    usa = costo(p)
+    gasto = f"usa {usa}" if usa else "no usa imágenes"
     dias = sorted(set(rango(camp)) | {p["dia"]})
     opciones = "".join(f'<option value="{d}"{" selected" if d == p["dia"] else ""}>{fecha_larga(d)}</option>' for d in dias)
     if post:
         media = await c.store.media(post["media_ids"][0]) if post["media_ids"] else None
         estado, color = ESTADOS.get(post["status"], (post["status"], ""))
         imagen = (f'<img class="img-cam" src="{url_imagen(c, media[0])}" alt="{escape(p["titulo"])}">' if media else "")
-        imagen += f'<p class="ayuda"><span class="chip {color}">{estado}</span></p>'
+        # "Otra imagen" va junto a la imagen, como reintento, para no confundirse con Aprobar (envía el form de abajo).
+        otra = ("" if fija else
+                f'<span class="otra-cam"><small>{gasto}</small><button class="boton secundario chico" form="f-cam"'
+                ' name="accion" value="generar" title="Generar otra imagen para este post">↻ Otra imagen</button></span>')
+        imagen += f'<div class="bajo-img-cam"><span class="chip {color}">{estado}</span>{otra}</div>'
     else:
         imagen = ('<div class="img-cam vacia">Aún sin imagen<small>Se genera cuando estés conforme con la idea</small>'
                   "</div>")
     formato = formato_de(p)
-    usa = costo(p)
-    gasto = f" · usa {usa}" if usa else " · no usa imágenes"
     if fija:
         botones = f'<a class="boton secundario chico" href="/panel/contenido/post/{post["id"]}">Ver el post</a>'
     else:
         botones = ('<button class="boton secundario chico" name="accion" value="guardar">Guardar cambios</button>'
                    + ("" if post else f'<button class="boton secundario chico" name="accion" value="otra"'
                       f'{"" if quedan_ia else " disabled"}>Otra idea</button>')
-                   + '<button class="boton chico" name="accion" value="generar">'
-                   + ("Otra imagen" if post else "Generar imagen") + gasto + "</button>"
+                   + ("" if post else '<button class="boton chico" name="accion" value="generar">Generar imagen · '
+                      + gasto + "</button>")
                    + ('<button class="boton chico" name="accion" value="aprobar">Aprobar</button>'
                       if post and post["status"] == "borrador" else "")
                    + (f'<a class="boton secundario chico" href="/panel/contenido/post/{post["id"]}">Abrir en el editor</a>'
@@ -865,7 +869,7 @@ async def detalle(c: Cuenta, camp: dict, p: dict, quedan_ia: int) -> str:
         f'<h2>{escape(p["titulo"])}</h2><p class="ayuda">{fecha_larga(p["dia"])} · {p["hora"]}</p>'
         + (f'<p class="cli-cam">Responde a lo que te preguntan: {escape(p["responde"])}</p>' if p.get("responde") else "")
         + f'{imagen}'
-        '<form method="post" action="/panel/contenido/campanas">'
+        '<form method="post" action="/panel/contenido/campanas" id="f-cam">'
         f'<input type="hidden" name="k" value="{p["k"]}">'
         f'<div class="dos-cam"><div><label for="d-dia">Día</label><select id="d-dia" name="dia"{" disabled" if fija else ""}>'
         f'{opciones}</select></div><div><label for="d-hora">Hora</label><input type="time" id="d-hora" name="hora"'
