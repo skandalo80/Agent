@@ -663,6 +663,10 @@ label.check input[type=email]{flex:1;max-width:22rem;margin:0}
 .t-ensena{background:#f2eefb;color:#5f4a96}.t-pregunta{background:#f4f0fb;color:#6b569f}.t-clientes{background:#f0ebf9;color:#5a4590}.t-fecha{background:#f5f1fb;color:#705da2}
 .fmt-cam{display:inline-flex;align-items:center;gap:.3rem;font-size:.72rem;color:var(--gris)}
 .fmt-cam:before{content:"";width:.5rem;height:.5rem;border-radius:.15rem;background:#d4d4d8}
+.fmt-cam.bur{align-self:flex-start;vertical-align:middle;color:#fff;font-weight:500;padding:.1rem .45rem;border-radius:.4rem;background:#7a2232}
+.fmt-cam.bur:before{display:none}
+.fmt-cam.f-foto{background:#6e1d2b}.fmt-cam.f-titular{background:#76202f}.fmt-cam.f-texto{background:#7e2434}
+.fmt-cam.f-collage{background:#862839}.fmt-cam.f-vs{background:#8e2c3e}
 .cli-cam{display:inline-block;width:max-content;max-width:100%;font-size:.7rem;font-weight:600;color:#6d28d9;background:#faf8ff;border:1px solid #ddd6fe;border-radius:999px;padding:.05rem .45rem;margin:0}
 p.cli-cam{margin:.5rem 0 0;font-size:.78rem;border-radius:.6rem;padding:.3rem .6rem;width:auto}
 .clientes-cam{margin-top:1rem}
