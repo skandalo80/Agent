@@ -92,6 +92,7 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
 
     r = client.get("/panel/contenido/campanas")
     assert "Otoño" in r.text and r.text.count("sin imagen") == 3 and 'draggable="true"' in r.text
+    assert f'data-dia="{lun}" data-publica>' in r.text and 'data-dia="2099-01-06">' in r.text  # martes no publica
     assert "Se prueba:" in r.text and "3 formatos" in r.text and "Solo texto" in r.text
     assert "Generar las 3 que faltan · usa 2" in r.text  # el de solo texto no usa cupo
 
@@ -102,6 +103,12 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
     assert r.status_code == 303 and r.headers["location"].endswith(f"#d-{mie}")
     camp = leer(client, c)
     assert campanas.buscar_post(camp, k_lun)["dia"] == mie and campanas.buscar_post(camp, k_mie)["dia"] == lun
+    # Desde el arrastre (suave): panel.js ya movió la tarjeta, así que 204 y la página no se recarga.
+    r = client.post("/panel/contenido/campanas", headers=ORIGEN, follow_redirects=False,
+                    data={"accion": "mover", "k": str(k_lun), "dia": lun, "suave": "1"})
+    assert r.status_code == 204
+    assert campanas.buscar_post(leer(client, c), k_lun)["dia"] == lun
+    client.post("/panel/contenido/campanas", headers=ORIGEN, data={"accion": "mover", "k": str(k_lun), "dia": mie})
     r = client.post("/panel/contenido/campanas", headers=ORIGEN, data={"accion": "mover", "k": "1", "dia": "2099-03-01"})
     assert "Ese día no es de la campaña." in r.text
     assert client.post("/panel/contenido/campanas", data={"accion": "mover", "k": "1", "dia": vie}).status_code == 403
@@ -179,6 +186,20 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
                 data={"accion": "generar", "k": str(foto["k"]), "idea": "Laptop en un escritorio de madera"})
     assert campanas.buscar_post(leer(client, c), foto["k"])["idea"] == "Laptop en un escritorio de madera"
     assert "Laptop en un escritorio de madera" in proveedor.llamadas[-1][0]
+
+    # Tu marca va como contexto de la imagen, con la casilla marcada de inicio; sin ella, solo la idea.
+    monkeypatch.setattr(c, "imagenes_mes", 10)  # que no pida confirmar imágenes extra
+    client.portal.call(c.store.set, "marca", json.dumps({"nombre": "Café Lunar", "frase": "Café de especialidad",
+                                                         "principal": "#112233"}))
+    assert 'name="con_marca" value="1" checked> Usar Tu marca como contexto' in r.text
+    client.post("/panel/contenido/campanas", headers=ORIGEN, data={"accion": "generar", "k": str(foto["k"]),
+                                                                   "con_marca_en_form": "1", "con_marca": "1"})
+    assert "- Name: Café Lunar" in proveedor.llamadas[-1][0] and "main #112233" in proveedor.llamadas[-1][0]
+    client.post("/panel/contenido/campanas", headers=ORIGEN, data={"accion": "generar", "k": str(foto["k"]),
+                                                                   "con_marca_en_form": "1"})
+    assert "Brand context" not in proveedor.llamadas[-1][0] and "Photo style" not in proveedor.llamadas[-1][0]
+    r = client.get(f"/panel/contenido/campanas?post={foto['k']}")
+    assert 'name="con_marca" value="1"> Usar Tu marca como contexto' in r.text
 
     # Proponer de nuevo deja los que tienen imagen; una campaña nueva empieza en blanco.
     assert "Nueva campaña" in client.get("/panel/contenido/campanas").text

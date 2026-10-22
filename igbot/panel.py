@@ -747,6 +747,7 @@ p.cli-cam{margin:.5rem 0 0;font-size:.78rem;border-radius:.6rem;padding:.3rem .6
 .dia-cam.sobre{border:2px dashed #a78bfa;background:#f5f3ff}
 .post-cam{background:var(--blanco);border:1px solid var(--linea-clara);border-radius:.75rem;padding:.5rem .55rem;display:flex;flex-direction:column;gap:.3rem;text-decoration:none;color:var(--negro)}
 .post-cam[draggable=true]{cursor:grab}.post-cam.arrastrando{opacity:.4}
+.post-cam.movido{animation:llega-cam .25s ease-out}@keyframes llega-cam{from{opacity:.4;transform:scale(.96)}}
 .post-cam .t{font-size:.84rem;font-weight:600;line-height:1.25}
 .post-cam .pie{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:.3rem;font-size:.72rem;color:var(--gris)}
 .post-cam .hora{border:1px solid var(--linea-clara);border-radius:.45rem;padding:0 .35rem;color:var(--negro)}

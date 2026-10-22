@@ -167,11 +167,27 @@ document.querySelectorAll(".lat-item[data-sub]").forEach((item) => {
       e.preventDefault();
       d.classList.remove("sobre");
       if (!arrastrado || arrastrado.closest(".dia-cam") === d) return;
+      const origen = arrastrado.closest(".dia-cam");
+      const otro = d.querySelector(".post-cam");
+      // Si el de ese día ya se publicó, el servidor no deja: se recarga y dice por qué.
+      const suave = !otro || otro.hasAttribute("data-k");
+      if (suave) {  // se mueve aquí mismo y el servidor contesta 204: la página no se recarga
+        if (otro) origen.append(otro);
+        d.append(arrastrado);
+        d.classList.remove("libre");
+        if (!origen.querySelector(".post-cam") && !origen.hasAttribute("data-publica")) origen.classList.add("libre");
+        [arrastrado, otro].forEach((x) => {
+          if (!x) return;
+          x.classList.remove("movido");
+          void x.offsetWidth;  // para que la animación corra otra vez si se vuelve a mover
+          x.classList.add("movido");
+        });
+      }
       // Un formulario y no fetch: la CSP del panel (default-src 'none') bloquea fetch.
       const f = document.createElement("form");
       f.method = "post";
       f.action = "/panel/contenido/campanas";
-      for (const [n, v] of Object.entries({accion: "mover", k: arrastrado.dataset.k, dia: d.dataset.dia})) {
+      for (const [n, v] of Object.entries({accion: "mover", k: arrastrado.dataset.k, dia: d.dataset.dia, suave: suave ? "1" : ""})) {
         const i = document.createElement("input");
         i.type = "hidden"; i.name = n; i.value = v;
         f.append(i);

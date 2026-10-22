@@ -159,6 +159,18 @@ ESTILO_REFERENCIA = ("The reference images are the brand's own photos and posts:
                      " backgrounds, mood and overall visual language. Do not copy their text or logos.")
 
 
+def contexto_marca(datos: dict) -> str:
+    """La identidad y los colores de Tu marca para el generador, para que la foto se sienta de la marca."""
+    lineas = [f"- {k}: {v}" for k, v in (("Name", datos.get("nombre", "")), ("In one sentence", datos.get("frase", "")),
+                                         ("Personality", ", ".join(datos.get("caracter", [])))) if v]
+    colores = [f"{n} {datos[k]}" for k, n in (("principal", "main"), ("acento", "accent"), ("fondo", "background"))
+               if imagenes.HEX.match(str(datos.get(k, "")))]
+    if colores:
+        lineas.append("- Colors (use them subtly in props, backgrounds or light): " + ", ".join(colores))
+    return ("\n\nBrand context, as the owner describes it (in Spanish); the image should feel like this brand."
+            " Do not write the brand name in the image:\n" + "\n".join(lineas)) if lineas else ""
+
+
 def estilo_de(datos: dict) -> str:
     return datos.get("estilo") if datos.get("estilo") in ESTILOS else ESTILO_INICIAL
 
@@ -379,6 +391,7 @@ async def generar(c: Cuenta, objetivo: str = "", tema: str = "", fotos: list[str
             idea = p["imagen"] + (f"\n\nPhoto style, as the owner describes it (in Spanish): {notas}" if notas else "")
         else:
             idea = f"{p['imagen']}\n\nPhoto style: {ESTILOS[estilo_de(marca)][2]}"
+        idea += contexto_marca(marca)
         if not referencias and marca.get("fotos_estilo", True):  # sin foto de producto: sus fotos guían el estilo
             referencias = [archivo(c, t).read_bytes() for t in marca.get("fotos", [])[:3] if archivo(c, t).is_file()]
             if referencias:
