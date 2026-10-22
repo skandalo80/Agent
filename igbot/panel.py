@@ -1462,10 +1462,14 @@ async def guardar(request: Request):
         if accion in ("generar", "generar_si"):
             return await panel_de(c, nota="Listo: revísalas y pulsa Guardar para que tu asistente las use.",
                                   datos=datos, prompt=generar(nombre, datos))
-        prompt = prompt.strip() or generar(nombre, datos)
-        destino = Path(c.prompt_path) if c.slug else c.prompt_editado()
-        destino.parent.mkdir(parents=True, exist_ok=True)
-        destino.write_text(prompt + "\n", encoding="utf-8")
+        prompt = prompt.replace("\r\n", "\n").strip() or generar(nombre, datos)
+        servidor = Path(c.prompt_path)
+        if servidor.is_file() and prompt == servidor.read_text(encoding="utf-8").replace("\r\n", "\n").strip():
+            # Guardó el formulario sin tocar las instrucciones: sigue con las del repo y sus cambios.
+            c.prompt_editado().unlink(missing_ok=True)
+        else:
+            c.prompt_editado().parent.mkdir(parents=True, exist_ok=True)
+            c.prompt_editado().write_text(prompt + "\n", encoding="utf-8")
     await c.store.set("asistente_listo", "1")
     log.info("@%s guardó las instrucciones de su asistente desde el panel", nombre)
     aviso = "Guardado. Tu asistente ya usa estas instrucciones."

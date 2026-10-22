@@ -9,9 +9,10 @@ negocio:
   # Color del único detalle de acento en el PDF de cotización (el naranja de la marca).
   color_acento: "#C2410C"
   descripcion: >-
-    Instalamos y operamos agentes de inteligencia artificial que atienden el
-    Instagram de tu negocio 24/7: contestan DMs, agendan citas, mandan
-    cotizaciones y avisan cuando hay un cliente listo para comprar.
+    Una plataforma con inteligencia artificial para el Instagram de tu negocio.
+    Junta en un mismo lugar a un asistente virtual que contesta tus mensajes y a
+    un Community Manager que genera tu contenido sabiendo lo que pasa en tu
+    cuenta: tus métricas, tus DMs y tus comentarios.
 
 # Demo en vivo dentro del mismo DM: el asesor pregunta a qué se dedica el negocio
 # y contesta unos mensajes como lo haría su agente, con datos de ejemplo.
@@ -19,58 +20,50 @@ negocio:
 demo:
   giros:
     antro, bar o restaurante: reservaciones y listas, cover, horarios, menú y promociones del día
-    tienda que vende por Instagram: precios, tallas o modelos, existencias, envíos y mandar la cotización
-    distribuidora o negocio con CRM: cotización por volumen, registrar al cliente con sus datos y agendar una llamada con ventas
-    consultorio, estética o servicios con cita: precios de servicios, horarios disponibles y apartar la cita
+    tienda que vende por Instagram: precios, tallas o modelos, existencias, envíos y cómo pagar
+    consultorio, estética o servicios con cita: precios de servicios, horarios y cómo apartar la cita
+    marca que necesita contenido: tres ideas de post para su negocio con tema, formato y hora sugerida
 
 moneda: USD
 vigencia_dias: 15
 # El pago anual cobra este número de mensualidades (12 - 2 meses gratis).
 meses_pagados_en_anual: 10
-# El primer mes de servicio no se cobra: al contratar solo se paga la instalación.
-primer_mes_gratis: true
+# Sin instalación y sin mes gratis: se paga desde el primer mes.
+primer_mes_gratis: false
 # Los precios no incluyen IVA: se muestran como "US$29 + IVA".
 precios_mas_iva: true
 
+# Las claves (basico, community) son las mismas de PLAN= en el .env de cada cliente.
+# instalacion: 0 = sin costo de instalación (no sale en la cotización).
 paquetes:
   basico:
-    nombre: Básico
-    resumen: solo contesta DMs con la información de tu negocio
-    instalacion: 49
+    nombre: Asistente virtual
+    resumen: contesta tus mensajes directos 24/7 con la información de tu negocio
+    instalacion: 0
     mensualidad: 29
     respuestas_mes: 1000
     incluye:
-      - Responde DMs 24/7 con IA, con el tono y la información de tu negocio
+      - Responde tus DMs 24/7 con IA, con tu información y tu tono
+      - Lo configuras tú desde el panel (tu negocio, precios, preguntas frecuentes y políticas)
       - Recuerda a cada cliente (memoria por persona)
-      - Preguntas frecuentes y botones de inicio
-      - Se calla en la conversación cuando tú contestas a mano
+      - Te pasa la conversación cuando el cliente pide una persona, y se calla cuando tú contestas
+      - Panel con tus conversaciones y tus resultados
   community:
     nombre: Community Manager
-    resumen: además de contestar, cuida tus comentarios y te ayuda con el contenido, sin conectar nada fuera de Instagram
-    instalacion: 99
+    resumen: el asistente más un Community Manager que genera tu contenido conectado a tus métricas, DMs y comentarios
+    instalacion: 0
     mensualidad: 79
     respuestas_mes: 2500
     incluye:
-      - Todo lo del Básico
-      - "Comentarios: respuesta pública, \"comenta X y te mando DM\" y filtro de spam"
-      - Te escribe el texto de tus publicaciones (por ejemplo "comenta PRECIO y te mando la info")
-      - Publica en tu Instagram mandándole la foto por DM (al momento o programado)
-      - Pasar a humano (pausa la conversación cuando el cliente pide una persona)
-      - Reporte semanal por DM
-  pro_crm:
-    nombre: Pro CRM
-    resumen: completo y a la medida, enfocado en captar leads y conectado a tus sistemas
-    instalacion: 199
-    mensualidad: 129
-    respuestas_mes: 5000
-    incluye:
-      - Todo lo del Community Manager
-      - Captura de leads y conexión con tu CRM
-      - Conexión a tu inventario, precios o base de datos (Google Sheets u otro sistema)
-      - Cotizaciones en PDF con tu marca, por DM o por correo
-      - Agenda citas en Google Calendar con link de Meet
-      - Manda correos y te avisa de prospectos listos para comprar
-      - Reporte semanal por correo
+      - Todo lo del Asistente virtual
+      - Campañas con calendario automático armado con la información de tu negocio, listas para programar
+      - Campañas de prueba (temas, formatos y horarios distintos) y campañas que repiten lo que mejor te funcionó
+      - Contenido sugerido a partir de lo que te preguntan en DMs y comentarios
+      - Genera cada post (imagen y texto) según Tu marca, tus colores, tus fotos y las referencias que le des
+      - Publica solo en tu Instagram a la hora programada
+      - Palabra clave por post ("comenta PRECIO y te mando la info por DM")
+      - Reportes de tus campañas con tus métricas reales
+      - 12 posts al mes con imagen
 
 extras:
   respuestas:
@@ -81,9 +74,7 @@ extras:
 
 condiciones:
   - Los precios no incluyen IVA (16% para clientes en México).
-  - La instalación se paga una sola vez, al contratar.
-  - El primer mes de servicio es gratis; la mensualidad (o el pago anual) se empieza a cobrar en el segundo mes.
-  - La mensualidad se cobra por adelantado; se puede cancelar en cualquier momento.
+  - Sin costo de instalación.
+  - La mensualidad se cobra por adelantado desde el primer mes; se puede cancelar en cualquier momento.
   - Con pago anual pagas 10 mensualidades y recibes 12 meses de servicio.
   - Las respuestas no usadas no se acumulan al mes siguiente.
-  - En Pro CRM, las integraciones con sistemas fuera de lo común se cotizan aparte después de revisarlas.

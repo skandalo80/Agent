@@ -197,6 +197,11 @@ def test_la_cuenta_principal_edita_sus_instrucciones_aparte(monkeypatch, tmp_pat
                         data={"negocio": "Agentes IA", "accion": "generar_si", "prompt": "PROMPT DEL VENDEDOR"})
         assert "revísalas y pulsa Guardar" in r.text and "EL NEGOCIO\nAgentes IA" in r.text
         assert not bot.principal.prompt_editado().exists()  # sigue sin guardar nada
+        # Guardar el formulario con las instrucciones del servidor tal cual no las congela.
+        r = client.post("/panel/guardar", headers=ORIGEN,
+                        data={"negocio": "Agentes IA", "accion": "guardar", "prompt": "PROMPT DEL VENDEDOR\r\n"})
+        assert not bot.principal.prompt_editado().exists() and "Volver a las del servidor" not in r.text
+        assert client.portal.call(panel.perfil, bot.principal)["negocio"] == "Agentes IA"
         # Lo que guarda va aparte (fuera de git) y manda sobre el del repo hasta que lo restaure.
         r = client.post("/panel/guardar", headers=ORIGEN, data={"accion": "guardar", "prompt": "PROMPT DE LA DEMO"})
         assert Path("prompts/system.md").read_text() == "PROMPT DEL VENDEDOR"
