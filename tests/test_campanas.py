@@ -131,6 +131,12 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
     pieza = client.portal.call(contenido.pieza, c.store, post["id"])
     assert (pieza["campana"], pieza["formato"]) == (3, "texto")
     assert client.portal.call(contenido.imagenes.usadas, c.store) == (0, 0)
+    # "Otra imagen" va junto a la imagen (envía el mismo form) y no entre los botones de abajo, junto a Aprobar.
+    r = client.get("/panel/contenido/campanas?post=3")
+    assert 'form="f-cam" name="accion" value="generar"' in r.text and "↻ Otra imagen" in r.text
+    assert r.text.index("↻ Otra imagen") < r.text.index('id="f-cam"') < r.text.index('value="aprobar"')
+    if os.environ.get("GUARDAR_HTML"):
+        open(os.environ["GUARDAR_HTML"], "w").write(r.text)
     r = client.post("/panel/contenido/campanas", headers=ORIGEN, data={"accion": "aprobar", "k": "3"})
     assert "Listo: sale el" in r.text
     assert client.portal.call(c.store.post, post["id"])["status"] == "programada"
