@@ -58,7 +58,7 @@ def datos_campana(**cambios):
 
 
 def test_campana_de_punta_a_punta(cliente, monkeypatch):
-    client, c, *_ = cliente
+    client, c, _, proveedor = cliente
     monkeypatch.setattr(c, "imagenes_mes", 4)
     llamadas = []
     monkeypatch.setattr(campanas.config, "CONTENT_MODEL", "modelo")
@@ -170,6 +170,15 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
     assert client.portal.call(contenido.imagenes.usadas, c.store)[0] == sum(campanas.costo(p) for p in pendientes)
     r = client.post("/panel/contenido/campanas", headers=ORIGEN, data={"accion": "aprobar_todas"})
     assert "2 posts programados" in r.text
+
+    # Con la imagen hecha, la idea se queda para irla puliendo: "Otra imagen" usa la nueva.
+    foto = next(p for p in camp["posts"] if p["formato"] in ("foto", "titular"))
+    r = client.get(f"/panel/contenido/campanas?post={foto['k']}")
+    assert 'name="idea"' in r.text and "sale con tu idea nueva" in r.text
+    client.post("/panel/contenido/campanas", headers=ORIGEN,
+                data={"accion": "generar", "k": str(foto["k"]), "idea": "Laptop en un escritorio de madera"})
+    assert campanas.buscar_post(leer(client, c), foto["k"])["idea"] == "Laptop en un escritorio de madera"
+    assert "Laptop en un escritorio de madera" in proveedor.llamadas[-1][0]
 
     # Proponer de nuevo deja los que tienen imagen; una campaña nueva empieza en blanco.
     assert "Nueva campaña" in client.get("/panel/contenido/campanas").text
@@ -478,6 +487,49 @@ def test_otro_collage_cambia():
     antes = ["a", "b"]
     for fotos in (["a", "b"], ["a", "b", "c", "d", "e"]):
         for _ in range(20):
-            nuevas = campanas.otro_collage(fotos, antes, azar)
+            nuevas = campanas.otro_collage([fotos], antes, azar)
             assert nuevas != antes and 2 <= len(nuevas) <= 4 and set(nuevas) <= set(fotos)
             antes = nuevas
+
+
+def test_otro_collage_empieza_por_lo_mas_parecido():
+    import random
+    azar = random.Random(2)
+    grupos = [["a"], ["b", "c"], ["d"], ["e", "f", "g"]]
+    for _ in range(30):
+        nuevas = campanas.otro_collage(grupos, [], azar)
+        assert nuevas[0] == "a" and set(nuevas[1:3]) <= {"b", "c"} and nuevas[3:] in ([], ["d"])
+
+
+def test_collage_usa_fotos_de_posts_pasados(cliente):
+    client, c, *_ = cliente
+    from igbot.admin import PANEL
+
+    def guardar_foto(nombre):
+        contenido.archivo(c, nombre).parent.mkdir(parents=True, exist_ok=True)
+        out = io.BytesIO()
+        Image.new("RGB", (300, 400), "gray").save(out, "JPEG")
+        contenido.archivo(c, nombre).write_bytes(out.getvalue())
+
+    for nombre in ("marca0", "marca1", "pub1", "pub1.base", "pub2", "pub3", "pub4.base"):
+        guardar_foto(nombre)
+
+    async def preparar():
+        ids = []
+        for token, estado in (("pub1", "publicada"), ("pub2", "publicada"), ("pub3", "publicada"),
+                              ("pub4", "cancelada"), ("pub5", "publicada")):
+            post_id = await c.store.add_post(PANEL, [await c.store.add_media(PANEL, token, "x")], "t", 1)
+            await c.store.set_post(post_id, estado)
+            ids.append(post_id)
+        await c.store.set("campanas_pasadas", json.dumps([{"id": 1, "nombre": "Antes", "inicio": "2099-01-05",
+            "posts": [{"post_id": ids[0], "tipo": "dato", "formato": "titular"},  # mismo tema: su foto sin texto
+                      {"post_id": ids[1], "tipo": "producto", "formato": "foto"},  # nada en común
+                      {"post_id": ids[2], "tipo": "dato", "formato": "collage", "collage": ["marca0"]},  # los dos
+                      {"post_id": ids[3], "tipo": "dato", "formato": "titular"},  # lo descartaron
+                      {"post_id": ids[4], "tipo": "dato", "formato": "texto"}]}]))  # sin foto
+        with usar(c):
+            return await campanas.fotos_para_collage(c, {}, {"k": 1, "tipo": "dato", "post_id": None},
+                                                     {"fotos": ["marca0", "marca1"]})
+
+    grupos = client.portal.call(preparar)
+    assert grupos == [["marca0"], [], ["pub1.base"], ["pub2", "marca1"]]

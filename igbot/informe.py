@@ -1,9 +1,9 @@
 """Contenido > Campañas > Tus campañas: el historial y el reporte en PDF.
 
 Cuando el cliente arma una campaña nueva, la anterior se guarda en el kv "campanas_pasadas"
-con lo que se probó en cada post que llegó a tener imagen (tema, formato, hora). Desde
-"Tus campañas" marca una o varias y descarga un PDF con sus posts de mayor a menor interacción,
-para que un community manager se lo mande a la marca.
+con lo que se probó en cada post que llegó a tener imagen (tema, formato, hora, y las fotos de sus
+collages, que otro collage puede volver a usar). Desde "Tus campañas" marca una o varias y descarga
+un PDF con sus posts de mayor a menor interacción, para que un community manager se lo mande a la marca.
 
 Los números se leen de Instagram al momento de abrir el reporte (con un caché corto para no
 pedirlos de nuevo en cada descarga). Cada post se mide con la tasa de interacción por alcance,
@@ -73,7 +73,7 @@ def resumen_de(camp: dict) -> dict:
     """Lo que hace falta de una campaña para su reporte: solo los posts que tuvieron imagen."""
     return {"id": int(camp.get("creada", 0) * 1000), "nombre": camp.get("nombre", ""), "inicio": camp["inicio"],
             "semanas": camp.get("semanas", 1), "modo": camp.get("modo", ""),
-            "posts": [{k: p.get(k) for k in ("post_id", "tipo", "formato", "hora", "titulo", "responde")}
+            "posts": [{k: p.get(k) for k in ("post_id", "tipo", "formato", "hora", "titulo", "responde", "collage")}
                       for p in camp.get("posts", []) if p.get("post_id")]}
 
 
