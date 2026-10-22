@@ -764,6 +764,9 @@ p.cli-cam{margin:.5rem 0 0;font-size:.78rem;border-radius:.6rem;padding:.3rem .6
 .img-cam{display:block;width:100%;max-height:18rem;object-fit:contain;background:var(--claro);border-radius:.9rem;margin:.75rem 0 .25rem}
 .img-cam.vacia{height:11rem;border:1.5px dashed var(--linea-clara);display:grid;place-items:center;align-content:center;gap:.4rem;text-align:center;color:var(--gris);font-size:.9rem;background:var(--claro)}
 .img-cam.vacia small{font-size:.78rem}
+.bajo-img-cam{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin:.4rem 0 .25rem}
+.otra-cam{display:flex;align-items:center;gap:.5rem}.otra-cam small{color:var(--gris);font-size:.78rem}
+.cajon-cam .otra-cam .boton{padding:.35rem .8rem;font-size:.85rem}
 .dos-cam{display:grid;grid-template-columns:1fr 1fr;gap:.6rem}
 .dos-cam select,.dos-cam input{width:100%;font:inherit;font-size:1rem;padding:.6rem .7rem;border:1px solid var(--linea-clara);border-radius:.8rem;background:var(--claro);color:var(--negro)}
 .cajon-cam .acciones{flex-wrap:wrap;gap:.5rem}
