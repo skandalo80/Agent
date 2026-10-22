@@ -6,7 +6,7 @@ o 30 días:
   cuántas resolvió el asistente sin pasar a una persona, su tiempo de
   respuesta (mediana) y cuántas veces contestó fuera del horario de atención.
 - Gráficas: mensajes por día y a qué hora escriben (dentro y fuera de horario).
-- Si el plan tiene contenido (Community y Pro): comentarios, DMs que salieron
+- Si el plan tiene contenido (Community Manager): comentarios, DMs que salieron
   de un comentario, palabras clave, spam ocultado y publicaciones.
 
 Solo lee lo que ya está en la base de la cuenta: no llama a Instagram ni a

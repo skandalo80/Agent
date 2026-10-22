@@ -55,7 +55,7 @@ COOKIE = "panel"
 SESSION_DAYS = 30  # Instagram vuelve a pedir el permiso en cada inicio de sesión
 MAX_CAMPO = 3000
 MAX_PROMPT = 12000
-# Modelo del paquete Básico (solo chat).
+# Modelo del plan Asistente virtual (solo chat).
 MODELO_BASICO = "claude-haiku-5-5"
 # Lo que ve una cuenta grande recién conectada mientras se revisa (ver conectar.py).
 REVISION = "En revisión: por el tamaño de tu cuenta, la revisamos antes de encender tu asistente. Te avisamos."
@@ -209,7 +209,7 @@ def preparar_carpeta(ig_id: str, usuario: str, token: str, correo: str, ocupados
     carpeta = Path(f"clientes/{slug}")
     carpeta.mkdir(parents=True)
     lineas = [f"IG_ACCESS_TOKEN={token}", f"IG_ACCOUNT_ID={ig_id}", f"CLAUDE_MODEL={MODELO_BASICO}",
-              # Sin tu agenda ni tu correo: el Básico solo contesta el chat.
+              # Sin tu agenda ni tu correo: el Asistente virtual solo contesta el chat.
               "GOOGLE_TOOLS=0", "PLAN=basico"]
     if correo:
         lineas.append(f"OWNER_EMAIL={correo}")  # a quién avisar cuando piden una persona
@@ -1330,7 +1330,7 @@ def camino(etiqueta: str, titulo: str, desc: str, pasos: list[str], tiempo: str,
 
 
 async def bienvenida(c: Cuenta) -> HTMLResponse:
-    """Con contenido (Community y Pro): elige por dónde empezar. Básico: solo su asistente."""
+    """Con contenido (Community Manager): elige por dónde empezar. Asistente virtual: solo su asistente."""
     asistente_desc = "El que contesta tus mensajes directos por ti, de día y de noche."
     if c.imagenes_mes > 0:
         bajada = "Vamos a dejar todo listo. ¿Por dónde quieres empezar? Puedes hacer el otro después; te lo recordamos en el panel."
@@ -1343,7 +1343,7 @@ async def bienvenida(c: Cuenta) -> HTMLResponse:
                   + "</div>")
     else:
         bajada = "En 10 minutos dejas tu asistente contestando tus mensajes. Son 4 pasos y puedes guardar y seguir después."
-        cuerpo = ('<div class="sola">' + camino("Tu plan Básico", "Tu asistente", asistente_desc, PASOS_ASISTENTE,
+        cuerpo = ('<div class="sola">' + camino("Tu plan Asistente virtual", "Tu asistente", asistente_desc, PASOS_ASISTENTE,
                                                 "≈ 10 min", "Empezar", "/panel/asistente", True) + "</div>")
     await c.store.set("bienvenida", "1")
     return pagina(

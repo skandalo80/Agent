@@ -242,7 +242,7 @@ def test_cupo_extra_y_sin_plan(cliente, monkeypatch):
     client, c, *_ = cliente
     import app as bot
     monkeypatch.setattr(bot.agent, "run_claude", claude_de_campana([]))
-    assert "solo incluye el asistente" in client.get("/panel/contenido/campanas").text
+    assert "Tu plan actual es el Asistente virtual" in client.get("/panel/contenido/campanas").text
     monkeypatch.setattr(c, "imagenes_mes", 1)
     client.post("/panel/contenido/campanas", headers=ORIGEN, data=datos_campana(f_texto="", f_foto=""))
     r = client.post("/panel/contenido/campanas", headers=ORIGEN, data={"accion": "generar_todas"})

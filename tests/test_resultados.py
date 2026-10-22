@@ -135,7 +135,7 @@ def test_inicio_del_panel(cliente):
     client, c = cliente
     # Recién conectada: la bienvenida, solo la primera vez (Básico: un solo camino).
     r = client.get("/panel", follow_redirects=True)
-    assert "Hola, @" in r.text and "Tu plan Básico" in r.text and "Tu marca" not in r.text
+    assert "Hola, @" in r.text and "Tu plan Asistente virtual" in r.text and "Tu marca" not in r.text
     # Después (en pausa y sin mensajes): a configurar su asistente.
     r = client.get("/panel", follow_redirects=False)
     assert r.status_code == 303 and r.headers["location"] == "/panel/asistente"
