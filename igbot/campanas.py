@@ -37,7 +37,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response, Streamin
 
 from . import config, imagenes, informe, panel, semana, tools
 from .admin import PANEL
-from .contenido import (ESTADOS, ESTILO_REFERENCIA, ESTILOS, MAX_CAPTION, archivo, cuando, estilo_de, falta_cupo,
+from .contenido import (ESTADOS, ESTILO_REFERENCIA, ESTILOS, MAX_CAPTION, archivo, contexto_marca, cuando, estilo_de,
+                        falta_cupo,
                         guardar_pieza, kit, libre, marca_de, modo_de, negocio_de, notas_estilo, plantilla_de, sin_plan,
                         texto_imagen, url_imagen)
 from .cuenta import Cuenta, usar
@@ -539,16 +540,20 @@ async def generar_imagen(c: Cuenta, camp: dict, p: dict, extra: bool) -> int:
             p["collage"] = fotos
             hecha = await imagenes.crear_local(c.store, PANEL, "collage", [archivo(c, t).read_bytes() for t in fotos])
         else:
+            con_marca = p.get("con_marca", True)  # "Usar Tu marca como contexto": sin ella, solo la idea
             if libre(pieza_):
-                notas = notas_estilo(marca, modo)
+                notas = notas_estilo(marca, modo) if con_marca else ""
                 idea = p["idea"] + (f"\n\nPhoto style, as the owner describes it (in Spanish): {notas}" if notas else "")
             else:
-                idea = f"{p['idea']}\n\nNo text, letters or logos in the photo.\nPhoto style: {ESTILOS[estilo_de(marca)][2]}"
+                idea = f"{p['idea']}\n\nNo text, letters or logos in the photo." + (
+                    f"\nPhoto style: {ESTILOS[estilo_de(marca)][2]}" if con_marca else "")
+            if con_marca:
+                idea += contexto_marca(marca)
             if formato == "vs":
                 idea = ("A single photo split vertically down the middle into two halves, one option on each side,"
                         f" same light and style on both.\n{idea}")
             referencias = []
-            if marca.get("fotos_estilo", True):  # sus fotos guían el estilo
+            if con_marca and marca.get("fotos_estilo", True):  # sus fotos guían el estilo
                 referencias = [archivo(c, t).read_bytes() for t in marca.get("fotos", [])[:3] if archivo(c, t).is_file()]
                 if referencias:
                     idea += f"\n{ESTILO_REFERENCIA}"
@@ -779,7 +784,8 @@ async def calendario(c: Cuenta, camp: dict, sel: str) -> str:
             fuera = dia < inicio or dia > fin
             posts = "".join([await tarjeta_post(c, p, sel) for p in por_dia.get(iso, [])])
             clase = " fuera" if fuera else "" if iso in publica or posts else " libre"
-            celdas.append(f'<div class="dia-cam{clase}"' + ("" if fuera else f' id="d-{iso}" data-dia="{iso}"') + ">"
+            celdas.append(f'<div class="dia-cam{clase}"' + ("" if fuera else f' id="d-{iso}" data-dia="{iso}"')
+                          + (" data-publica" if iso in publica else "") + ">"
                           f'<span class="fecha">{fecha_corta(iso)}</span>{posts}</div>')
         hasta = d + timedelta(days=6)
         semanas.append(f'<div class="semana-cam"><h3>Semana {n}</h3><span>{d.day} {MESES[d.month - 1]} –'
@@ -859,6 +865,10 @@ async def detalle(c: Cuenta, camp: dict, p: dict, quedan_ia: int) -> str:
             f'<label for="d-idea">{"Qué deben mostrar las fotos" if formato == "collage" else "Idea de la imagen"}'
             f'</label><textarea id="d-idea" name="idea" rows="4" maxlength="{MAX_IDEA}"{solo}>{escape(p["idea"])}'
             "</textarea>"
+            + ("" if formato == "collage" else
+               '<input type="hidden" name="con_marca_en_form" value="1"><label class="check"><input type="checkbox"'
+               f' name="con_marca" value="1"{" checked" if p.get("con_marca", True) else ""}{" disabled" if fija else ""}>'
+               " Usar Tu marca como contexto</label>")
             + ('<p class="ayuda">Cámbiala o agrégale detalles y pide otra imagen: sale con tu idea nueva.</p>'
                if post and not fija else ""))
     return (
@@ -1166,6 +1176,8 @@ async def accion(request: Request):
                 await guardar(c, camp)
         if error:
             return await pagina_campana(c, error)
+        if f.get("suave") == "1":  # panel.js ya movió la tarjeta: 204 deja la página como está, sin recargar
+            return Response(status_code=204)
         return RedirectResponse(f"/panel/contenido/campanas#d-{p['dia']}", status_code=303)
 
     if que == "generar_todas":
@@ -1213,6 +1225,8 @@ async def accion(request: Request):
         # Con imagen ya hecha solo cambian el texto y la idea (la que usa "Otra imagen").
         if campo in f and (f[campo].strip() or campo == "subtitulo") and not (post and campo not in ("caption", "idea")):
             p[campo] = f[campo].strip()[:maximo]
+    if f.get("con_marca_en_form") == "1":
+        p["con_marca"] = f.get("con_marca") == "1"
     if not post and f.get("formato") in FORMATOS:
         p["formato"] = f["formato"]
     with usar(c):
