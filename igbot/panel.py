@@ -40,7 +40,7 @@ from urllib.parse import parse_qs
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
 
-from . import config, imagenes
+from . import config, imagenes, posicionamiento
 from .cuenta import Cuenta, usar
 
 log = logging.getLogger("igbot.panel")
@@ -1504,6 +1504,7 @@ async def guardar(request: Request):
         if accion in ("generar", "generar_si"):
             return await panel_de(c, nota="Listo: revísalas y pulsa Guardar para que tu asistente las use.",
                                   datos=datos, prompt=generar(nombre, datos))
+        posicionamiento.programar(c, datos)
         prompt = prompt.replace("\r\n", "\n").strip() or generar(nombre, datos)
         servidor = Path(c.prompt_path)
         if servidor.is_file() and prompt == servidor.read_text(encoding="utf-8").replace("\r\n", "\n").strip():
@@ -1545,6 +1546,7 @@ async def guardar_cliente(c: Cuenta, datos: dict, accion: str, instrucciones: st
         return await panel_de(c, nota=f"No se guardó: {motivo} Corrígelo y vuelve a guardar.", datos=datos,
                               prompt=instrucciones)
     await c.store.set("perfil", json.dumps(datos, ensure_ascii=False))
+    posicionamiento.programar(c, datos)  # lo que vende y lo que lo hace distinto, para su contenido
     Path(c.prompt_path).parent.mkdir(parents=True, exist_ok=True)
     Path(c.prompt_path).write_text(prompt, encoding="utf-8")
     await c.store.set("asistente_listo", "1")

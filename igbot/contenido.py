@@ -45,7 +45,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response, StreamingResponse
 from PIL import Image, ImageDraw, ImageOps
 
-from . import config, imagenes, panel, tools
+from . import config, imagenes, panel, posicionamiento, tools
 from .admin import PANEL, parse_when
 from .comentarios import Rule, shortcode
 from .cuenta import Cuenta, usar
@@ -108,18 +108,6 @@ MAX_FOTOS = 6  # fotos de producto en el kit de marca
 MAX_NOMBRE, MAX_FRASE, MAX_CARACTER = 60, 160, 3
 CARACTERES = ["Profesional", "Cercana", "Premium", "Tecnológica", "Divertida", "Natural", "Elegante", "Atrevida",
               "Clásica", "Juvenil"]
-# Tu negocio y lo que te hace distinto (Tu marca > 02): lo que vende y por qué lo eligen, para proponer
-# campañas y escribir posts. (clave, etiqueta, ayuda, placeholder, filas (0 = una línea), máximo)
-NEGOCIO = [
-    ("ofreces", "Qué ofreces", "Tus productos o servicios principales, en pocas líneas.",
-     "Ej. Café de especialidad tostado en casa, pan de masa madre y desayunos los fines de semana.", 3, 800),
-    ("cliente_ideal", "A quién le vendes", "",
-     "Ej. Gente que trabaja cerca del parque y busca un buen café para llevar.", 0, 300),
-    ("distinto", "Lo que te hace distinto", "Tus puntos fuertes: lo que quieres que tus posts repitan.",
-     "Ej. Tostamos cada semana, conocemos a nuestros productores y el café sale en menos de 3 minutos.", 4, 1000),
-    ("competencia", "Con quién te comparan", "No lo nombramos en tus posts; solo sirve para explicar tu diferencia.",
-     "Ej. Las cadenas de café de la zona.", 0, 300),
-]
 MAX_FOTO_BYTES = 10 * 1024 * 1024
 MAX_TEMA = 500
 MAX_ESTILO = 400  # "Describe tu estilo" en Tu marca
@@ -287,20 +275,17 @@ def leer_respuesta(texto: str) -> dict:
 
 
 async def negocio_de(c: Cuenta) -> str:
-    """La información del negocio (su asistente) y la identidad de Tu marca, para escribir posts."""
+    """La información del negocio (su asistente), lo que lo hace distinto y la identidad de Tu marca, para escribir posts."""
     negocio = panel.prompt_actual(c)[:8000] or "(El cliente aún no llena la información de su negocio.)"
     marca = await marca_de(c)
     identidad = [f"{k}: {v}" for k, v in (("Nombre de la marca", marca.get("nombre", "")),
                                            ("La marca en una frase", marca.get("frase", "")),
                                            ("Carácter", ", ".join(marca.get("caracter", [])))) if v]
-    # Lo escribió el dueño: dato, no instrucciones (por eso va escapado).
-    distinto = [f"- {etq}: {escape(marca[k])}" for k, etq, *_ in NEGOCIO if marca.get(k)]
-    if marca.get("competencia"):
-        distinto[-1] += " (no la nombres en los posts)"
+    distinto = await posicionamiento.texto(c)  # sale solo de Configura tu asistente al guardar
     return (negocio
             + ("\n\nIdentidad de la marca (escribe con este carácter):\n" + "\n".join(identidad) if identidad else "")
-            + ("\n\nLo que vende y lo que lo hace distinto, según el dueño (apóyate en esto para elegir temas y"
-               " argumentos):\n" + "\n".join(distinto) if distinto else ""))
+            + ("\n\nLo que vende y lo que lo hace distinto, según la información de su asistente (apóyate en esto para elegir temas y"
+               " argumentos):\n" + distinto if distinto else ""))
 
 
 async def escribir(c: Cuenta, objetivo: str, tema: str, n_fotos: int, con_precio: bool = False,
@@ -1161,22 +1146,6 @@ async def pagina_marca(c: Cuenta, marca: dict | None = None, aviso: str = "") ->
         ' placeholder="Ej. Café de especialidad tostado en casa, a dos cuadras del parque.">'
         f'<label>Carácter <span class="suave">(elige hasta {MAX_CARACTER})</span></label>'
         f'<div class="chips">{caracter}</div></details>')
-    campos_negocio = "".join(
-        f'<label for="{k}">{etq}' + (' <span class="suave">(opcional)</span>' if k == "competencia" else "") + "</label>"
-        + (f'<p class="ayuda">{ayuda}</p>' if ayuda else "")
-        + (f'<textarea id="{k}" name="{k}" rows="{filas}" maxlength="{n}" placeholder="{ejemplo_}">'
-           f'{escape(marca.get(k, ""))}</textarea>' if filas else
-           f'<input type="text" id="{k}" name="{k}" maxlength="{n}" value="{escape(marca.get(k, ""))}"'
-           f' placeholder="{ejemplo_}">')
-        for k, etq, ayuda, ejemplo_, filas, n in NEGOCIO)
-    negocio = (
-        '<details class="tarjeta plegable seccion" id="negocio" open><summary><span class="titulo-sec">'
-        "<h2>Tu negocio y lo que te hace distinto</h2></span></summary>"
-        '<p class="ayuda">Qué vendes y por qué te eligen. Lo usamos para proponer tus campañas, escribir tus posts'
-        " y sugerirte contenido.</p>"
-        '<div class="acciones"><button class="boton secundario chico" name="accion" value="llenar" formnovalidate>'
-        'Llenar con lo de tu asistente</button><span class="ayuda">Toma lo que escribiste en Configura tu'
-        f" asistente.</span></div>{campos_negocio}</details>")
     vista_previa = (
         '<aside class="lado"><div class="tarjeta"><span class="num">Vista previa</span>'
         '<div class="pestanas-mini"><input type="radio" name="vista_previa" id="vp-perfil" value="perfil" checked>'
@@ -1203,7 +1172,6 @@ async def pagina_marca(c: Cuenta, marca: dict | None = None, aviso: str = "") ->
         '<button class="oculto" name="accion" value="guardar" tabindex="-1" aria-hidden="true">Guardar</button>'
         '<div class="marca-pagina"><div>'
         + identidad
-        + negocio
         + '<details class="tarjeta plegable seccion" id="colores" open><summary><span class="titulo-sec"><h2>Colores</h2></span></summary>'
         f'<p class="ayuda">Toca un color para cambiarlo.</p><div class="paleta">{colores}</div>'
         '<details class="mas"><summary>Dónde se usa cada color</summary>'
@@ -1260,8 +1228,6 @@ def marca_del_form(f, antes: dict) -> dict:
     datos["nombre"] = " ".join(str(f.get("nombre", "")).split())[:MAX_NOMBRE]
     datos["frase"] = " ".join(str(f.get("frase", "")).split())[:MAX_FRASE]
     datos["caracter"] = [k for k in CARACTERES if k in f.getlist("caracter")][:MAX_CARACTER]
-    for k, *_, n in NEGOCIO:
-        datos[k] = str(f.get(k, "")).replace("\r\n", "\n").strip()[:n]
     if antes.get("logo"):
         datos["logo"] = antes["logo"]
     return datos
@@ -1477,14 +1443,6 @@ async def guardar_marca(request: Request):
     datos = marca_del_form(f, antes)
     if accion == "vista":
         return await pagina_marca(c, datos, "Así se ve con estos cambios. Pulsa Guardar para quedártelos.")
-    if accion == "llenar":
-        # Lo de Configura tu asistente, solo en lo que está vacío; no se guarda hasta que pulse Guardar.
-        perfil = await panel.perfil(c)
-        ofrece = "\n".join(v for v in (perfil.get("negocio", "").strip(), perfil.get("precios", "").strip()) if v)
-        if not ofrece:
-            return await pagina_marca(c, datos, "Aún no llenas Tu negocio en Configura tu asistente.")
-        datos["ofreces"] = datos["ofreces"] or ofrece[:NEGOCIO[0][-1]]
-        return await pagina_marca(c, datos, "Listo: revisa lo que tomamos de tu asistente y pulsa Guardar.")
     aviso = "Guardado. Tus próximos posts ya usan tu marca."
     if accion.startswith("quitar_") and accion[7:].isdigit():
         i = int(accion[7:])
