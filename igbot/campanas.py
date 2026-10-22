@@ -757,10 +757,11 @@ async def tarjeta_post(c: Cuenta, p: dict, sel: str) -> str:
         mini, marca_estado = "", '<span class="sinimg">sin imagen</span>'
     fija = post and post["status"] in BLOQUEADOS
     return (f'<a class="post-cam{" sel" if str(p["k"]) == sel else ""}" href="/panel/contenido/campanas?post={p["k"]}#detalle"'
-            f'{"" if fija else f' draggable="true" data-k="{p["k"]}"'}>{mini}'
-            f'<span class="t">{escape(p["titulo"])}</span>'
+            f'{"" if fija else f' draggable="true" data-k="{p["k"]}"'}>'
+            # Lo que se prueba va hasta arriba, en gris (los colores van en el panel lateral).
             f'<span class="fmt-cam">{tema_de(p["tipo"])[0]}</span>'
             f'<span class="fmt-cam">{FORMATOS[formato_de(p)][0]}</span>'
+            f'{mini}<span class="t">{escape(p["titulo"])}</span>'
             + ({"repite": '<span class="rol-cam rep">Repite</span>',
                 "prueba": '<span class="rol-cam prob">Sigue probando</span>'}.get(p.get("rol"), ""))
             + ('<span class="cli-cam">De tus clientes</span>' if p.get("responde") else "")
@@ -874,8 +875,8 @@ async def detalle(c: Cuenta, camp: dict, p: dict, quedan_ia: int) -> str:
     return (
         '<a class="velo-cam" href="/panel/contenido/campanas" aria-label="Cerrar"></a>'
         '<aside class="cajon-cam" id="detalle"><a class="cerrar-cam" href="/panel/contenido/campanas" aria-label="Cerrar">×</a>'
-        f'<span class="etq-cam t-{p["tipo"]}">{tema_de(p["tipo"])[0]}</span>'
-        f' <span class="fmt-cam">{FORMATOS[formato][0]}</span>'
+        f'<div class="etqs-cam"><span class="etq-cam t-{p["tipo"]}">{tema_de(p["tipo"])[0]}</span>'
+        f'<span class="fmt-cam bur f-{formato}">{FORMATOS[formato][0]}</span></div>'
         f'<h2>{escape(p["titulo"])}</h2><p class="ayuda">{fecha_larga(p["dia"])} · {p["hora"]}</p>'
         + (f'<p class="cli-cam">Responde a lo que te preguntan: {escape(p["responde"])}</p>' if p.get("responde") else "")
         + f'{imagen}'
