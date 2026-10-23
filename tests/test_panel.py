@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -17,6 +18,18 @@ from test_cuenta import FakeInstagram  # noqa: E402
 
 ORIGEN = {"Origin": "https://console.skandar.online"}
 REVISAR = panel.revisar_instrucciones  # la de verdad (conftest la cambia por una que aprueba todo)
+
+
+def campos_con_nombre(html: str) -> None:
+    """Sin ids repetidos y cada campo con su etiqueta (si no, Chrome lo marca en Issues)."""
+    ids = re.findall(r' id="([^"]+)"', html)
+    assert len(ids) == len(set(ids)), sorted(i for i in ids if ids.count(i) > 1)
+    etiquetados = set(re.findall(r'<label for="([^"]+)"', html))
+    for campo in re.findall(r"<(?:textarea|select|input)\b[^>]*>", html):
+        if 'type="hidden"' in campo or "aria-label=" in campo or re.search(r'type="(radio|checkbox)"', campo):
+            continue
+        id_ = re.search(r' id="([^"]+)"', campo)
+        assert id_ and id_.group(1) in etiquetados, campo
 
 
 def test_404_sin_sesion():
@@ -120,6 +133,7 @@ def test_cliente_se_conecta_configura_y_enciende(monkeypatch, tmp_path):
             "faq_n": "3", "faq_p_0": "¿Envíos?", "faq_r_0": "Sí", "faq_p_1": "¿Factura?", "faq_r_1": "Sí",
             "accion": "agregar"})
         assert 'name="faq_p_3"' in r.text and "¿Factura?" in r.text and 'name="faq_p_4"' not in r.text
+        campos_con_nombre(r.text)
         r = client.post("/panel/guardar", headers=ORIGEN, data={
             "faq_n": "4", "faq_p_0": "¿Envíos?", "faq_r_0": "Sí", "faq_p_1": "¿Factura?", "faq_r_1": "Sí",
             "accion": "quitar_0"})
@@ -183,6 +197,7 @@ def test_la_cuenta_principal_edita_sus_instrucciones_aparte(monkeypatch, tmp_pat
 
         configura = client.get("/panel/asistente/configura").text
         assert "Cuenta principal" in configura and "Generar instrucciones" in configura
+        campos_con_nombre(configura)
         assert "PROMPT DEL VENDEDOR" in configura
         r = client.get("/panel/asistente")
         assert "Gasto de hoy" in r.text and "Mensajes este mes" not in r.text
