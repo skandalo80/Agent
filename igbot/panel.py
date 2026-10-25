@@ -692,6 +692,16 @@ p.cli-cam{margin:.5rem 0 0;font-size:.78rem;border-radius:.6rem;padding:.3rem .6
 .leyenda-mes{display:flex;gap:1rem;flex-wrap:wrap;font-size:.78rem;color:var(--gris);margin-top:.7rem}
 .leyenda-mes i{display:inline-block;width:.7rem;height:.7rem;border-radius:.2rem;margin-right:.35rem;vertical-align:-1px}
 .leyenda-mes i.vacia{background:repeating-linear-gradient(135deg,#efeff1 0 3px,#e4e4e7 3px 6px);border:1px dashed #c7c7cc}
+/* Calendario › Tu mes en oscuro (como Campañas) */
+.oscuro-pag .dn-mes{background:var(--suave)}
+.oscuro-pag .d-mes.otro{background:#121214;color:#5a5a5f}
+.oscuro-pag .d-mes.hoy-mes>b{background:var(--negro);color:#0a0a0a}
+.oscuro-pag .b-activa{background:#2a2440;color:#c7b8f0}.oscuro-pag .b-proxima{background:#3a1d24;color:#f0a8b6}.oscuro-pag .b-pasada{background:#2a2a2d;color:#a1a1a6}
+.oscuro-pag .traslape{color:#f0a8b6}
+.oscuro-pag .mini-mes{background:#2a2a2d}
+.oscuro-pag .mini-mes.vacia,.oscuro-pag .leyenda-mes i.vacia{background:repeating-linear-gradient(135deg,#232326 0 5px,#1c1c1f 5px 10px);border-color:#48484c}
+.oscuro-pag .nav-mes a{border-color:#3a3a3d}
+.oscuro-pag .plegable>summary::after{border-color:var(--gris)}.oscuro-pag .plegable>summary .resumen,.oscuro-pag .fila .datos span{color:var(--texto2)}
 @media(max-width:900px){.edit-cam{grid-template-columns:1fr}
 .d-mes{min-height:4.6rem;padding:.25rem .2rem}.bc{font-size:0;height:.45rem;padding:0}.bc.vacia::before{content:""}
 .bc.cont{margin-left:-.25rem}.bc.sig{margin-right:-.25rem}

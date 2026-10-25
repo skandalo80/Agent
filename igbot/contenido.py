@@ -703,7 +703,7 @@ async def calendario(c: Cuenta, aviso: str = "", hoja: int = 1, mes: date | None
                                '<p class="ayuda">Todo lo de tu Instagram, también lo que subiste desde la app.</p>'
                                + publicados, clase="antiguos")
         return await pagina(c, "calendario", "Tus publicaciones: lo que viene y lo que ya salió.", cuerpo, aviso,
-                            con_resumen=True)
+                            con_resumen=True, oscuro=True)
 
 
 METRICAS = [  # (métrica de Instagram, cómo se le dice al cliente, qué es)

@@ -1291,6 +1291,7 @@ async def mes(c: Cuenta, primero: date) -> str:
         semana_ = [d + timedelta(days=i) for i in range(7)]
         carriles = [x for x in camps if any(date.fromisoformat(x["inicio"]) <= s <= informe.fin_de(x) for s in semana_)]
         carriles.sort(key=lambda x: x["inicio"])
+        cruce_antes = False  # el aviso de cruce va solo en el primer día de cada tramo, no en todos
         for dia in semana_:
             barras, cuantas = "", 0
             for x in carriles:
@@ -1311,8 +1312,9 @@ async def mes(c: Cuenta, primero: date) -> str:
             mas = f'<span class="mas-mes">+{len(minis) - MINIS_POR_DIA}</span>' if len(minis) > MINIS_POR_DIA else ""
             clase = "d-mes" + (" otro" if dia.month != primero.month else "") + (" hoy-mes" if dia == hoy else "")
             celdas.append(f'<div class="{clase}"><b>{dia.day}</b>'
-                          + (f'<span class="traslape">{cuantas} campañas</span>' if cuantas > 1 else "")
+                          + (f'<span class="traslape">{cuantas} campañas</span>' if cuantas > 1 and not cruce_antes else "")
                           + f'{barras}<div class="minis-mes">{"".join(minis[:MINIS_POR_DIA])}{mas}</div></div>')
+            cruce_antes = cuantas > 1
         d += timedelta(days=7)
     antes, despues = otro_mes(primero, -1), otro_mes(primero, 1)
     return ('<div class="tarjeta" id="mes"><div class="cab-mes"><h2>Tu mes</h2><div class="nav-mes">'
