@@ -140,7 +140,10 @@ def test_opciones_de_campana_al_terminar(cliente, monkeypatch):
     programadas = []
     monkeypatch.setattr(empresa, "programar_opciones", lambda c: programadas.append(c))
     r = client.post("/panel/empresa", headers=ORIGEN, data={"paso": "6", "accion": "terminar"}, follow_redirects=False)
-    assert r.headers["location"] == "/panel/empresa?paso=6&aviso=listo" and programadas
+    assert r.headers["location"] == "/panel/bienvenida" and programadas  # cuenta nueva: al paso 2 de la bienvenida
+    client.portal.call(c.store.set, "bienvenida", "1")
+    r = client.post("/panel/empresa", headers=ORIGEN, data={"paso": "6", "accion": "terminar"}, follow_redirects=False)
+    assert r.headers["location"] == "/panel/empresa?paso=6&aviso=listo" and len(programadas) == 2
     assert client.portal.call(empresa.de, c)["terminado"] is True
 
     respuestas = []
@@ -162,7 +165,7 @@ def test_opciones_de_campana_al_terminar(cliente, monkeypatch):
     assert "Objetivo 0" in r.text and "Mensaje 5" in r.text and "ya usan tu perfil" in r.text
     # Ya terminado, cambiar un paso vuelve a pedirlas (en segundo plano).
     client.post("/panel/empresa", headers=ORIGEN, data={"paso": "2", "distinto": "Nuevo", "accion": "ir_3"})
-    assert len(programadas) == 2
+    assert len(programadas) == 3
 
 
 @pytest.mark.parametrize("respuesta", ["no sé", json.dumps({"objetivos": OPCIONES["objetivos"][:2],
