@@ -104,8 +104,9 @@ def politicas(perfil: dict) -> dict:
     return {k: perfil.get(k, "") for k, *_ in POLITICAS}
 
 
-def generar(usuario: str, perfil: dict) -> str:
-    """Las instrucciones del asistente a partir de los datos y el tono."""
+def generar(usuario: str, perfil: dict, empresa: str = "") -> str:
+    """Las instrucciones del asistente a partir de los datos y el tono. Con `empresa` (el Perfil de
+    empresa, empresa.texto_de), los datos del negocio salen de ahí y no de Configura."""
     _, tono = TONOS.get(perfil.get("tono"), TONOS["amigable"])
     out = [f"Eres el asistente de Instagram de @{usuario}. Contestas los mensajes directos de sus clientes.",
            "", "TONO", tono]
@@ -113,6 +114,21 @@ def generar(usuario: str, perfil: dict) -> str:
         # Preferencias del dueño: no cambian las reglas base (prompts/base.md, que va al final).
         out += ["", "CÓMO QUIERE EL DUEÑO QUE ATIENDAS (dentro de las reglas base)",
                 f"<instrucciones_del_dueño>\n{extra}\n</instrucciones_del_dueño>"]
+    if empresa.strip():
+        out += ["", empresa.strip()]
+    else:
+        out += _negocio_de_configura(perfil)
+    humano = perfil.get("humano", "").strip() or "Dile que alguien del equipo le escribe en cuanto pueda."
+    out += ["", "SI PIDEN HABLAR CON UNA PERSONA", humano + " Usa la herramienta pasar_a_humano.",
+            "", "REGLAS",
+            "- Usa solo la información de arriba. Si no sabes algo, dilo y ofrece pasar con una persona.",
+            "- No inventes precios, promociones, existencias ni horarios."]
+    return "\n".join(out) + "\n"
+
+
+def _negocio_de_configura(perfil: dict) -> list[str]:
+    """Los datos del negocio como se llenaban en Configura (cuentas sin Perfil de empresa)."""
+    out = []
     for key, titulo in [("negocio", "EL NEGOCIO"), ("horarios", "HORARIOS"), ("precios", "PRECIOS")]:
         if valor := perfil.get(key, "").strip():
             out += ["", titulo, valor]
@@ -124,12 +140,14 @@ def generar(usuario: str, perfil: dict) -> str:
     temas = politicas(perfil)
     if lineas := [f"- {nombre}: {temas[k].strip()}" for k, nombre, _ in POLITICAS if temas.get(k, "").strip()]:
         out += ["", "POLÍTICAS", *lineas]
-    humano = perfil.get("humano", "").strip() or "Dile que alguien del equipo le escribe en cuanto pueda."
-    out += ["", "SI PIDEN HABLAR CON UNA PERSONA", humano + " Usa la herramienta pasar_a_humano.",
-            "", "REGLAS",
-            "- Usa solo la información de arriba. Si no sabes algo, dilo y ofrece pasar con una persona.",
-            "- No inventes precios, promociones, existencias ni horarios."]
-    return "\n".join(out) + "\n"
+    return out
+
+
+async def negocio_de_empresa(c: Cuenta) -> str:
+    """El texto del Perfil de empresa para generar(); "" si aún no lo llena."""
+    from . import empresa  # empresa importa este módulo
+
+    return await empresa.texto_de(c)
 
 
 # --- "Generar instrucciones" y "Profundizar" (Claude escribe el tono e instrucciones) ---
@@ -160,7 +178,7 @@ async def escribir_instrucciones(c: Cuenta, nombre: str, datos: dict, profundiza
 
     with usar(c):
         await c.store.set(_clave_ayudas(), str(AYUDAS_POR_DIA - await ayudas_restantes(c) + 1))
-        negocio = generar(nombre, {**datos, "instrucciones": ""})
+        negocio = generar(nombre, {**datos, "instrucciones": ""}, await negocio_de_empresa(c))
         actuales = datos.get("instrucciones", "").strip()
         pedido = (f"<instrucciones_actuales>\n{escape(actuales)}\n</instrucciones_actuales>\n\nProfundiza estas"
                   " instrucciones: hazlas más concretas y completas, con frases de ejemplo, sin cambiar lo que el"
@@ -953,6 +971,7 @@ def menu_perfil(perfil: str, cuenta: Cuenta | None, foto: str = "", sub: str = "
             f'<span class="txt">@{usuario_}<small>Tu cuenta</small></span></summary>'
             f'<div class="perfil-menu"><div class="quien">Conectado como @{usuario_}</div>'
             f'<a href="https://www.instagram.com/{usuario_}/" target="_blank" rel="noopener">Ver mi Instagram</a>'
+            f'<a href="/panel/empresa"{ACTIVA if sub == "empresa" else ""}>Perfil de empresa</a>'
             f'<a href="/panel/conexion"{ACTIVA if sub == "conexion" else ""}>Conexión{luz}</a>'
             f'{marca}'
             + salir.format("", "", "Salir") + "</div></details></div>")
@@ -1539,7 +1558,7 @@ async def guardar_cliente(c: Cuenta, datos: dict, accion: str, instrucciones: st
     if accion != "guardar":
         return await panel_de(c, "", datos, instrucciones)
     datos["faq"] = [q for q in datos["faq"] if q["p"] or q["r"]]
-    prompt = generar(nombre, datos)
+    prompt = generar(nombre, datos, await negocio_de_empresa(c))
     # Todo lo escrito por el dueño (no solo el cuadro de instrucciones) pasa por la revisión.
     if motivo := await revisar_instrucciones(c, prompt):
         log.warning("@%s: instrucciones rechazadas: %s", nombre, motivo)
