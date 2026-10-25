@@ -301,6 +301,7 @@ async def aplicar(c: Cuenta) -> None:
         Path(c.prompt_path).write_text(prompt, encoding="utf-8")
     if (await de(c)).get("terminado"):
         programar_opciones(c)
+        posicionamiento.programar(c, await panel.perfil(c))  # sale del perfil; no se rehace si no cambió
 
 
 async def revisar(c: Cuenta, e: dict, prods: list[dict]) -> str:
