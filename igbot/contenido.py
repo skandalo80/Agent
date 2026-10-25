@@ -286,52 +286,72 @@ def leer_respuesta(texto: str) -> dict:
     return out
 
 
-# Perfil de empresa (kv "empresa"): lo llena el dueño en su perfil, aparte de su asistente. Se lee
-# de forma flexible: {"campos": [{"etiqueta", "valor"}] o pares sueltos, "productos": [{"nombre",
-# "descripcion", "precio", "url"}]}. Si aún no existe, la empresa sale de Configura tu asistente.
-EMPRESA = "empresa"
+# Perfil de empresa: lo llena el dueño en /panel/empresa, aparte de su asistente. El dueño de esos datos
+# es igbot/empresa.py (kv "empresa" y kv "productos"); si ese módulo trae texto_para_prompt(c), se usa
+# ese. Si no, se lee aquí con el mismo modelo. Sin perfil, la empresa sale de Configura tu asistente.
+CAMPOS_EMPRESA = (  # (clave en kv "empresa", cómo se le dice en el prompt)
+    ("nombre", "Nombre"), ("giro", "A qué se dedica"), ("giro_otro", "Giro"), ("frase", "En una frase"),
+    ("descripcion", "Descripción"), ("zona", "Dónde atiende"), ("sitio_web", "Sitio web"), ("caracter", "Cómo es"),
+    ("atiende", "Cómo atiende"), ("clientes_tipo", "Vende a"), ("cliente_ideal", "Cliente ideal"),
+    ("problema", "Problema que resuelve"), ("distinto", "Por qué lo eligen"),
+    ("competencia", "Con quién lo comparan (no la nombres en los posts)"), ("horarios", "Horarios"),
+    ("direccion", "Dirección"), ("pagos", "Formas de pago"), ("envios", "Envíos"), ("cambios", "Cambios y devoluciones"),
+    ("apartados", "Apartados o reservaciones"), ("otras_politicas", "Otras políticas"))
 MAX_EMPRESA = 6000
 MAX_PRODUCTOS = 30
-CAMPOS_PRODUCTO = (("descripcion", "Descripción"), ("precio", "Precio"), ("url", "Enlace"))
 
 
-async def empresa_de(c: Cuenta) -> dict:
+async def _kv(c: Cuenta, clave: str, vacio):
     try:
-        datos = json.loads(await c.store.get(EMPRESA) or "{}")
+        datos = json.loads(await c.store.get(clave) or "null")
     except json.JSONDecodeError:
-        return {}
-    return datos if isinstance(datos, dict) else {}
+        return vacio
+    return datos if isinstance(datos, type(vacio)) else vacio
 
 
 def _plano(v) -> str:
     if isinstance(v, (list, tuple)):
-        return ", ".join(_plano(x) for x in v if _plano(x))
-    return re.sub(r"\s+", " ", str(v if v is not None else "")).strip()
+        return ", ".join(x for x in map(_plano, v) if x)
+    return "" if isinstance(v, dict) or v is None else re.sub(r"\s+", " ", str(v)).strip()
 
 
-def texto_empresa(datos: dict) -> str:
-    """El perfil de empresa para el prompt, escapado: lo escribió el cliente."""
-    campos = datos.get("campos")
-    pares = ([(x.get("etiqueta", ""), x.get("valor", "")) for x in campos if isinstance(x, dict)]
-             if isinstance(campos, list) else
-             [(k.replace("_", " ").capitalize(), v) for k, v in datos.items()
-              if k not in ("productos", "campos", "huella", "actualizado") and not isinstance(v, dict)])
-    lineas = [f"- {escape(_plano(k))}: {escape(_plano(v))}" for k, v in pares if _plano(k) and _plano(v)]
-    productos = []
-    for x in (datos.get("productos") or [])[:MAX_PRODUCTOS]:
+def texto_empresa(datos: dict, productos: list) -> str:
+    """El perfil de empresa y su catálogo para el prompt, escapados: los escribió el cliente."""
+    lineas = [f"- {n}: {escape(_plano(datos.get(k)))[:1000]}" for k, n in CAMPOS_EMPRESA if _plano(datos.get(k))]
+    lista = []
+    for x in productos[:MAX_PRODUCTOS]:
         if not isinstance(x, dict) or not _plano(x.get("nombre")):
             continue
-        extra = "; ".join(f"{n}: {escape(_plano(x[k]))}" for k, n in CAMPOS_PRODUCTO if _plano(x.get(k)))
-        productos.append(f"- {escape(_plano(x['nombre']))}" + (f" ({extra})" if extra else ""))
-    if productos:
-        lineas.append("Productos y servicios:\n" + "\n".join(productos))
+        precio = _plano(x.get("precio"))
+        if precio:
+            precio = ("desde " if x.get("desde") else "") + precio + (f" {_plano(x.get('moneda'))}" if x.get("moneda") else "")
+        extra = "; ".join(v for v in (escape(_plano(x.get("descripcion")))[:400], escape(precio),
+                                      escape(_plano(x.get("url")))) if v)
+        lista.append(f"- {'(destacado) ' if x.get('destacado') else ''}{escape(_plano(x['nombre']))}"
+                     + (f": {extra}" if extra else ""))
+    if lista:
+        lineas.append("Productos y servicios:\n" + "\n".join(lista))
+    faq = [f"- {escape(_plano(q.get('p')))} {escape(_plano(q.get('r')))}"[:400] for q in datos.get("faq") or []
+           if isinstance(q, dict) and _plano(q.get("p")) and _plano(q.get("r"))]
+    if faq:
+        lineas.append("Preguntas frecuentes:\n" + "\n".join(faq))
     return "\n".join(lineas)[:MAX_EMPRESA]
+
+
+async def empresa_texto(c: Cuenta) -> str:
+    try:
+        from . import empresa
+        if hasattr(empresa, "texto_para_prompt"):
+            return (await empresa.texto_para_prompt(c) or "")[:MAX_EMPRESA]
+    except ImportError:
+        pass
+    return texto_empresa(await _kv(c, "empresa", {}), await _kv(c, "productos", []))
 
 
 async def negocio_de(c: Cuenta) -> str:
     """Todo lo que se sabe de la empresa para escribir posts: su perfil de empresa, lo que sabe su asistente,
     lo que la hace distinta y la identidad de Tu marca."""
-    empresa = texto_empresa(await empresa_de(c))
+    empresa = await empresa_texto(c)
     asistente = panel.prompt_actual(c)[:4000 if empresa else 8000]
     partes = []
     if empresa:

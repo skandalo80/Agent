@@ -653,16 +653,21 @@ def test_la_campana_se_escribe_con_la_empresa_la_marca_y_sus_parametros(cliente,
     llamadas = []
     import app as bot
     monkeypatch.setattr(bot.agent, "run_claude", claude_de_campana(llamadas))
-    empresa = {"campos": [{"etiqueta": "A qué se dedica", "valor": "Café de <b>especialidad</b> en Puebla"}],
-               "productos": [{"nombre": "Latte de calabaza", "precio": "$75", "descripcion": "Solo en otoño"}]}
-    client.portal.call(c.store.set, contenido.EMPRESA, json.dumps(empresa))
+    empresa = {"descripcion": "Café de <b>especialidad</b> en Puebla", "pagos": ["efectivo", "tarjeta"],
+               "faq": [{"p": "¿Abren?", "r": "Sí"}]}
+    productos = [{"nombre": "Latte de calabaza", "precio": "75", "moneda": "MXN", "desde": True,
+                  "descripcion": "Solo en otoño", "destacado": True}]
+    client.portal.call(c.store.set, "empresa", json.dumps(empresa))
+    client.portal.call(c.store.set, "productos", json.dumps(productos))
     client.portal.call(c.store.set, "marca", json.dumps({"estilo": "calido", "acento": "#E8590C"}))
     camp = {**campanas.del_form(datos_campana()), "id": "x", "creada": 1, "posts": [],
             "objetivo": "Vender más <lattes>", "producto": "Latte de calabaza"}
     client.portal.call(campanas.proponer, c, camp)
     prompt, sistema = llamadas[-1]
-    assert "- A qué se dedica: Café de &lt;b&gt;especialidad&lt;/b&gt; en Puebla" in prompt
-    assert "- Latte de calabaza (Descripción: Solo en otoño; Precio: $75)" in prompt
+    assert "- Descripción: Café de &lt;b&gt;especialidad&lt;/b&gt; en Puebla" in prompt
+    assert "- Formas de pago: efectivo, tarjeta" in prompt and "{" not in prompt.split("</negocio>")[0]
+    assert "Preguntas frecuentes:\n- ¿Abren? Sí" in prompt
+    assert "- (destacado) Latte de calabaza: Solo en otoño; desde 75 MXN" in prompt
     assert "<marca_visual>\nEstilo de fotos: Cálido y cercano" in prompt and "acento #E8590C" in prompt
     assert "<objetivo>Vender más &lt;lattes&gt;</objetivo>" in prompt and "<producto>Latte de calabaza</producto>" in prompt
     assert "de 120 a 180 palabras" in sistema and "nunca algo genérico del ramo" in sistema
