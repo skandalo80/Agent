@@ -21,6 +21,7 @@ from test_conectar import setup  # noqa: E402
 from test_cuenta import FakeInstagram  # noqa: E402
 from test_imagenes import Falso  # noqa: E402
 
+MARCA = "/panel/contenido/marca"
 ORIGEN = {"Origin": "https://console.skandar.online"}
 
 POST = {"titulo": "Cartera Atelier", "subtitulo": "Piel italiana, hecha a mano.", "precio": "Desde $1,290 MXN",
@@ -114,29 +115,57 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     r = client.get("/panel/contenido")
     assert "Aún no tienes posts" in r.text and "DESDEAPP" in r.text  # lo de la app sale aunque no haya del panel
 
-    # Tu marca: colores, letra y una foto del producto.
-    marca = {"principal": "1f3a5f", "acento": "#F7D046", "fondo": "#zzz", 
-             "fuente": "Playfair Display", "peso": "700", "estilo": "premium", "plantilla": "banda"}
-    r = client.post("/panel/contenido/marca", headers=ORIGEN, data={**marca, "accion": "vista"})
-    assert "Pulsa Guardar" in r.text and client.portal.call(contenido.marca_de, c) == {}  # vista no guarda
-    r = client.post("/panel/contenido/marca", headers=ORIGEN, data={**marca, "accion": "subir"},
+    # Tu marca, paso a paso: sin marca abre el paso 1; cada paso guarda y lleva al siguiente.
+    r = client.get("/panel/contenido/marca")
+    assert "Paso 1 de 5" in r.text and '<main class="oscuro-pag">' in r.text and r.text.count('name="estilos"') == 15
+    r = client.post(MARCA, headers=ORIGEN, data={"paso": "1"})
+    assert "Elige al menos un estilo" in r.text and client.portal.call(contenido.marca_de, c) == {}
+    r = client.post(MARCA, headers=ORIGEN, follow_redirects=False,
+                    data={"paso": "1", "estilos": ["natural", "lujo", "fresco", "urbano"], "orden": "lujo,natural"})
+    assert r.status_code == 303 and r.headers["location"] == f"{MARCA}?paso=2"
+    assert client.portal.call(contenido.marca_de, c)["estilos"] == ["lujo", "natural", "fresco"]  # en el orden tocado
+    # Colores: la paleta recién elegida (sin JavaScript) llena los cuatro; después manda el color que cambió.
+    client.post(MARCA, headers=ORIGEN, data={"paso": "2", "paleta": "azul", "paleta_antes": "", "uso_color": "oscuro"})
+    guardada = client.portal.call(contenido.marca_de, c)
+    assert (guardada["principal"], guardada["secundario"], guardada["uso_color"]) == ("#16324F", "#3B82C4", "oscuro")
+    client.post(MARCA, headers=ORIGEN, data={
+        "paso": "2", "paleta": "azul", "paleta_antes": "azul", "uso_color": "oscuro",
+        "principal": "#16324f", "principal_hex": "1f3a5f", "secundario": "#3b82c4", "secundario_hex": "nada",
+        "acento": "#123456", "acento_hex": "#9ED8CF", "fondo": "#f5f8fb", "fondo_hex": "#F5F8FB"})
+    guardada = client.portal.call(contenido.marca_de, c)
+    assert (guardada["principal"], guardada["secundario"], guardada["acento"]) == ("#1F3A5F", "#3B82C4", "#123456")
+    r = client.get(f"{MARCA}?paso=2")
+    assert 'name="paleta" value="azul" data-colores' in r.text and "--m-principal:#1F3A5F" in r.text
+    assert 'value="azul" data-colores="#16324F,#3B82C4,#9ED8CF,#F5F8FB">' in r.text  # ya no es la paleta: sin marcar
+    # Tipografía: cada letra trae su grosor.
+    client.post(MARCA, headers=ORIGEN, data={"paso": "3", "fuente": "Playfair Display"})
+    guardada = client.portal.call(contenido.marca_de, c)
+    assert (guardada["fuente"], guardada["peso"]) == ("Playfair Display", 600)
+    # Logotipo (opcional) y recursos visuales con una foto del producto.
+    r = client.post(MARCA, headers=ORIGEN, data={"paso": "4", "logo_presencia": "visible"}, follow_redirects=False,
+                    files={"logo": ("logo.png", png(), "image/png")})
+    assert r.headers["location"] == f"{MARCA}?paso=5"
+    r = client.post(MARCA, headers=ORIGEN, data={"paso": "5", "recursos": "productos", "fotos_estilo": "1", "accion": "subir"},
                     files={"fotos": ("cartera.png", png(), "image/png")})
-    assert "1 foto nueva" in r.text
+    assert "1 foto nueva" in r.text and "Paso 5 de 5" in r.text
+    r = client.post(MARCA, headers=ORIGEN, follow_redirects=False,
+                    data={"paso": "5", "recursos": ["productos", "personas", "nada"], "fotos_estilo": "1"})
+    assert r.headers["location"] == f"{MARCA}?paso=resumen"
     guardada = client.portal.call(contenido.marca_de, c)
-    assert guardada["principal"] == "#1F3A5F" and guardada["fondo"] == ""
-    assert guardada["fuente"] == "Playfair Display" and len(guardada["fotos"]) == 1
-    # El código del color se puede escribir o pegar; si es válido manda sobre el selector.
-    client.post("/panel/contenido/marca", headers=ORIGEN,
-                data={**marca, "principal_hex": "333d1f", "acento_hex": "nada", "fuente": "DM Sans", "accion": "guardar"})
-    guardada = client.portal.call(contenido.marca_de, c)
-    assert guardada["principal"] == "#333D1F" and guardada["acento"] == "#F7D046" and guardada["fuente"] == "DM Sans"
+    assert guardada["recursos"] == ["personas", "productos"] and guardada["logo_presencia"] == "visible"
+    assert guardada["pasos"] == ["estilo", "colores", "tipografia", "logotipo", "recursos"] and len(guardada["fotos"]) == 1
+    # Ya configurada, Tu marca abre en el resumen, con Editar en cada parte.
+    r = client.get("/panel/contenido/marca")
+    assert "Así se verá tu contenido" in r.text and r.text.count(">Editar</a>") == 5 and "Completar" not in r.text
+    assert "Colores propios · Oscuro" in r.text and "Elegante y editorial · Playfair Display" in r.text
+    assert "Firma visible" in r.text and "1 foto tuya · estilo copiado" in r.text
     assert client.get("/panel/static/fuentes/CormorantGaramond-Bold.ttf").status_code == 200
-    assert "Pantone" not in client.get("/panel/contenido/marca").text
     token_foto = guardada["fotos"][0]
-    r = client.get("/panel/contenido/muestra.jpg?fuente=Lora&acento=%23000000")
-    assert r.headers["content-type"] == "image/jpeg"
-    assert Image.open(io.BytesIO(r.content)).size == (1080, 1350)
     assert client.get(f"/media/cafe_lunar/{token_foto}.jpg").status_code == 200
+    # La plantilla de inicio ya no se elige en Tu marca (pasa a Crear campaña): se conserva la guardada.
+    client.portal.call(c.store.set, "marca", json.dumps({**guardada, "plantilla": "banda"}))
+    client.post(MARCA, headers=ORIGEN, data={"paso": "3", "fuente": "Playfair Display"})
+    assert client.portal.call(contenido.marca_de, c)["plantilla"] == "banda"
 
     # Un post: Claude escribe, el generador pinta (con la foto real) y queda en borrador.
     assert crear(client, c, "estrella", tema="La cartera Atelier", fotos=[token_foto], con_precio=True) == 1
@@ -144,7 +173,9 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     assert "Vendemos carteras." in prompt and "La cartera Atelier" in prompt and "precio" in prompt
     assert "JSON" in system and model == "claude-sonnet-5-5"
     idea, fotos = proveedor.llamadas[0]
-    assert "leather handbag" in idea and "Dark background" in idea and "Do not include any text" in idea
+    assert "leather handbag" in idea and "Luxurious and refined" in idea and "Do not include any text" in idea
+    assert "A lighter secondary influence: Candid" in idea and "secondary #3B82C4" in idea
+    assert "How much color: Dark, low-key" in idea and "the products as protagonists" in idea
     assert len(fotos) == 1
     post = client.portal.call(c.store.post, 1)
     assert post["status"] == "borrador" and post["user_id"] == admin.PANEL and "Comenta PRECIO" in post["caption"]
@@ -470,14 +501,15 @@ def test_lo_que_mas_preguntan(con_mensajes):
 def test_diseno_libre_con_el_estilo_de_sus_fotos(cliente, monkeypatch):
     client, c, llamadas, proveedor = cliente
     monkeypatch.setattr(c, "imagenes_mes", 5)
-    marca = {"principal": "#111111", "acento": "#E8590C", "fondo": "#000000", "fuente": "Inter", "peso": "700",
-             "estilo": "premium", "plantilla": "editorial", "modo": "libre", "fotos_estilo": "1",
-             "estilo_propio": "Fondos oscuros, minimalista, el celular como protagonista."}
-    r = client.post("/panel/contenido/marca", headers=ORIGEN, data={**marca, "accion": "subir"},
-                    files={"fotos": ("post.png", png(), "image/png")})
+    client.post(MARCA, headers=ORIGEN, data={"paso": "5", "fotos_estilo": "1", "accion": "subir"},
+                files={"fotos": ("post.png", png(), "image/png")})
     guardada = client.portal.call(contenido.marca_de, c)
-    assert guardada["modo"] == "libre" and guardada["fotos_estilo"] is True and "celular" in guardada["estilo_propio"]
-    assert 'name="modo" value="libre" checked' in r.text
+    assert guardada["fotos_estilo"] is True and len(guardada["fotos"]) == 1
+    # El modo y "Describe tu estilo" se guardaban en Tu marca; ahora pasan a Crear campaña y se conservan.
+    client.portal.call(c.store.set, "marca", json.dumps({
+        **guardada, "principal": "#111111", "acento": "#E8590C", "fondo": "#000000", "fuente": "Inter", "peso": 700,
+        "estilo": "premium", "plantilla": "editorial", "modo": "libre",
+        "estilo_propio": "Fondos oscuros, minimalista, el celular como protagonista."}))
 
     crear(client, c)
     assert "<estilo_de_la_marca>Estilo de fotos: Fondos oscuros" in llamadas[-1][0] and "acento #E8590C" in llamadas[-1][0]
@@ -508,31 +540,56 @@ def test_diseno_libre_con_el_estilo_de_sus_fotos(cliente, monkeypatch):
 def test_el_estilo_depende_del_modo_del_post(cliente, monkeypatch):
     client, c, llamadas, proveedor = cliente
     monkeypatch.setattr(c, "imagenes_mes", 5)
-    base = {"principal": "#111111", "acento": "#E8590C", "fondo": "#000000", "fuente": "Inter", "peso": "700",
-            "estilo": "limpio", "estilo_propio": "Fondos oscuros y detalles en naranja.", "accion": "guardar"}
-    # Ya no hay casilla: con plantilla mandan los estilos de la lista; en libre, su descripción.
-    r = client.post("/panel/contenido/marca", headers=ORIGEN, data=base)
-    assert 'name="propio"' not in r.text and 'class="si-libre"' in r.text
+    # Una marca guardada con el formulario de antes: su estilo "limpio" ahora es "Minimalista y premium".
+    client.portal.call(c.store.set, "marca", json.dumps({
+        "principal": "#111111", "acento": "#E8590C", "fondo": "#000000", "fuente": "Inter", "peso": 700,
+        "estilo": "limpio", "estilo_propio": "Fondos oscuros y detalles en naranja."}))
+    # Con plantilla mandan los estilos de la lista; en libre, su descripción.
     crear(client, c, modo="plantilla")
-    assert "Studio photography" in proveedor.llamadas[-1][0] and "naranja" not in proveedor.llamadas[-1][0]
-    assert "Estilo de fotos: Limpio y profesional" in llamadas[-1][0] and "naranja" not in llamadas[-1][0]
+    assert "Minimalist premium" in proveedor.llamadas[-1][0] and "naranja" not in proveedor.llamadas[-1][0]
+    assert "Estilo de fotos: Minimalista y premium" in llamadas[-1][0] and "naranja" not in llamadas[-1][0]
 
     crear(client, c, modo="libre")
-    assert "naranja" in proveedor.llamadas[-1][0] and "Studio photography" not in proveedor.llamadas[-1][0]
+    assert "naranja" in proveedor.llamadas[-1][0] and "Minimalist premium" not in proveedor.llamadas[-1][0]
     assert "Estilo de fotos: Fondos oscuros y detalles en naranja." in llamadas[-1][0]
-    # La vista previa en libre no usa la foto de ejemplo de un estilo de la lista.
-    assert client.get("/panel/contenido/muestra.jpg?modo=libre").status_code == 200
 
 
-def test_orden_de_tu_marca_y_miniaturas(cliente, monkeypatch):
+def test_tu_marca_menu_de_pasos_y_marca_de_antes(cliente, monkeypatch):
     client, c, *_ = cliente
     monkeypatch.setattr(c, "imagenes_mes", 5)
-    r = client.get("/panel/contenido/marca")
-    orden = [r.text.index(t) for t in ("Identidad", "<h2>Colores", "<h2>Tipografía", "Fotos y estilo",
-                                        "Cómo se arman tus posts", "Vista previa")]
-    assert orden == sorted(orden)
-    assert 'data-plantilla="marco"' in r.text and 'data-plantilla="banda"' in r.text
-    assert "plantilla=marco" in r.text and client.get("/panel/contenido/muestra.jpg?plantilla=banda").status_code == 200
+    r = client.get(f"{MARCA}?paso=3")
+    # El menú de pasos: cada uno es un enlace; el actual marcado y el resumen al final.
+    assert all(f'href="{MARCA}?paso={i}"' in r.text for i in (1, 2, 3, 4, 5, "resumen"))
+    assert f'href="{MARCA}?paso=3" class="actual"' in r.text and "Paso 3 de 5" in r.text
+    assert r.text.count('name="fuente"') == 12 and "font-family:'Oswald';font-weight:700" in r.text
+    assert f'href="{MARCA}?paso=2">← Anterior' in r.text
+    # Las tarjetas sin imagen pintan su color; con imagen en static/tarjetas/marca, la usan.
+    r = client.get(f"{MARCA}?paso=1")
+    assert 'style="--fondo:#3a3128"' in r.text
+    carpeta = panel.STATIC / "tarjetas" / "marca"
+    nueva = not carpeta.exists()
+    carpeta.mkdir(parents=True, exist_ok=True)
+    try:
+        (carpeta / "lujo.webp").write_bytes(b"RIFF")
+        assert "--fondo:#3a3128 url(/panel/static/tarjetas/marca/lujo.webp)" in client.get(f"{MARCA}?paso=1").text
+        assert client.get("/panel/static/tarjetas/marca/lujo.webp").status_code == 200
+        assert client.get("/panel/static/tarjetas/otra/lujo.webp").status_code == 404
+        assert client.get("/panel/static/tarjetas/marca/..%2Fpanel.js").status_code == 404
+    finally:
+        (carpeta / "lujo.webp").unlink()
+        if nueva:
+            carpeta.rmdir()
+    # Una marca guardada con el formulario de antes cuenta como lista y abre en el resumen; lo que falta dice Completar.
+    client.portal.call(c.store.set, "marca", json.dumps({"principal": "#111111", "acento": "#E8590C", "fondo": "#F7F5F1",
+                                                         "fuente": "Lora", "peso": 700, "estilo": "premium"}))
+    assert client.portal.call(panel.marca_lista, c)
+    r = client.get(MARCA)
+    assert "Así se verá tu contenido" in r.text and "Lujo y sofisticación" in r.text and r.text.count(">Completar</a>") == 2
+    assert 'name="estilos" value="lujo" checked' in client.get(f"{MARCA}?paso=1").text
+    # Sin colores no está lista: abre en el primer paso que falta.
+    client.portal.call(c.store.set, "marca", json.dumps({"estilos": ["urbano"]}))
+    assert not client.portal.call(panel.marca_lista, c)
+    assert "Paso 2 de 5" in client.get(MARCA).text
 
 
 def test_insights_de_un_post(cliente, monkeypatch):
@@ -646,7 +703,9 @@ def test_bienvenida_con_contenido_y_lo_que_falta(cliente, monkeypatch):
     assert "Te falta configurar <b>Tu marca</b>" in client.get("/panel/asistente").text
     assert "Te falta configurar <b>Tu marca</b>" in client.get("/panel/contenido").text
     assert "Te falta configurar" not in client.get("/panel/contenido/marca").text  # ya está ahí
-    client.post("/panel/contenido/marca", headers=ORIGEN, data={"principal": "#111111", "accion": "guardar"})
+    client.post(MARCA, headers=ORIGEN, data={"paso": "1", "estilos": "minimal"})
+    assert "Te falta configurar <b>Tu marca</b>" in client.get("/panel/asistente").text  # faltan los colores
+    client.post(MARCA, headers=ORIGEN, data={"paso": "2", "paleta": "mono"})
     assert "Te falta configurar" not in client.get("/panel/asistente").text
     assert "Te falta configurar" not in client.get("/panel/contenido").text
 
@@ -672,15 +731,15 @@ def test_resumen_del_plan_arriba(cliente, monkeypatch):
 def test_crear_post_con_ajustes_solo_para_ese_post(cliente, monkeypatch):
     client, c, llamadas, proveedor = cliente
     monkeypatch.setattr(c, "imagenes_mes", 5)
-    client.post("/panel/contenido/marca", headers=ORIGEN,
-                data={"principal": "#111111", "acento": "#E8590C", "fondo": "#000000", "fuente": "Inter", "peso": "700",
-                      "estilo": "limpio", "plantilla": "editorial", "modo": "plantilla", "accion": "guardar"})
-    # Otra plantilla: banda, otro acento y estilo premium; la marca no cambia.
-    crear(client, c, ajustes={"plantilla": "banda", "acento": "#2255AA", "estilo": "premium", "fuente": "Lora",
+    client.portal.call(c.store.set, "marca", json.dumps({
+        "principal": "#111111", "acento": "#E8590C", "fondo": "#000000", "fuente": "Inter", "peso": 700,
+        "estilos": ["minimal"], "plantilla": "editorial", "modo": "plantilla"}))
+    # Otra plantilla: banda, otro acento y estilo lujo; la marca no cambia.
+    crear(client, c, ajustes={"plantilla": "banda", "acento": "#2255AA", "estilo": "lujo", "fuente": "Lora",
                               "principal": "#111111", "fondo": "#000000"})
     p = client.portal.call(contenido.pieza, c.store, 1)
     assert p["plantilla"] == "banda" and p["marca"]["acento"] == "#2255AA" and p["marca"]["fuente"] == "Lora"
-    assert "Dark background" in proveedor.llamadas[-1][0]  # el estilo premium
+    assert "Luxurious and refined" in proveedor.llamadas[-1][0]  # el estilo de este post
     marca = client.portal.call(contenido.marca_de, c)
     assert marca["acento"] == "#E8590C" and marca["plantilla"] == "editorial"
     assert client.portal.call(contenido.marca_post, c, p)["acento"] == "#2255AA"
@@ -758,29 +817,31 @@ def test_menu_js_antes_de_pintar(cliente):
     assert r.status_code == 200 and "menu-plegado" in r.text
 
 
-def test_identidad_de_marca(cliente, monkeypatch):
+def test_identidad_de_marca_y_logo(cliente, monkeypatch):
     client, c, *_ = cliente
     monkeypatch.setattr(c, "imagenes_mes", 5)
-    r = client.post("/panel/contenido/marca", headers=ORIGEN, data={
-        "nombre": "  Café   Lunar ", "frase": "Café de especialidad.",
-        "caracter": ["Cercana", "Premium", "Natural", "Clásica", "Otro"], "accion": "guardar"})
-    assert r.status_code == 200
+    # Nombre, frase y carácter ya no se piden en Tu marca (pasan a Perfil de empresa), pero lo guardado se conserva.
+    client.portal.call(c.store.set, "marca", json.dumps({"nombre": "Café Lunar", "frase": "Café de especialidad.",
+                                                         "caracter": ["Cercana", "Premium", "Natural"]}))
+    r = client.post(MARCA, headers=ORIGEN, data={"paso": "1", "estilos": "calido"})
     marca = client.portal.call(contenido.marca_de, c)
-    assert marca["nombre"] == "Café Lunar" and marca["caracter"] == ["Cercana", "Premium", "Natural"]
-    assert 'data-espejo="nombre">Café Lunar<' in r.text and 'data-espejo="frase">Café de especialidad.<' in r.text
+    assert marca["nombre"] == "Café Lunar" and marca["estilos"] == ["calido"]
+    assert 'name="nombre"' not in client.get(f"{MARCA}?paso=1").text
     negocio = client.portal.call(contenido.negocio_de, c)
     assert "Nombre de la marca: Café Lunar" in negocio and "Carácter: Cercana, Premium, Natural" in negocio
-    # Logo: se sube, sale en la vista previa y se puede quitar.
-    png = io.BytesIO()
-    Image.new("RGB", (64, 64), "#123456").save(png, "PNG")
-    r = client.post("/panel/contenido/marca", headers=ORIGEN, data={"nombre": "Café Lunar", "accion": "guardar"},
-                    files={"logo": ("logo.png", png.getvalue(), "image/png")})
-    assert "Listo: guardamos tu logo." in r.text and 'alt="Tu logo"' in r.text
+    # Logo: se sube en el paso 4, sale en sus tarjetas y se puede quitar.
+    png_ = io.BytesIO()
+    Image.new("RGB", (64, 64), "#123456").save(png_, "PNG")
+    client.post(MARCA, headers=ORIGEN, data={"paso": "4", "logo_presencia": "siempre"},
+                files={"logo": ("logo.png", png_.getvalue(), "image/png")})
     logo = client.portal.call(contenido.marca_de, c)["logo"]
     assert contenido.archivo(c, logo).is_file()
+    r = client.get(f"{MARCA}?paso=4")
+    assert 'alt="Tu logo"' in r.text and f'<img class="lg" src="/media/{c.media_slug}/{logo}.jpg?v=' in r.text
+    assert 'name="logo_presencia" value="siempre" checked' in r.text
     # También sale en el círculo de tu cuenta, abajo en el menú lateral, en todas las páginas.
     assert f'<img class="lat-avatar" src="/media/{c.media_slug}/{logo}.jpg?v=' in client.get("/panel/asistente").text
-    r = client.post("/panel/contenido/marca", headers=ORIGEN, data={"accion": "quitar_logo"})
+    r = client.post(MARCA, headers=ORIGEN, data={"paso": "4", "accion": "quitar_logo"})
     assert "quitamos tu logo" in r.text and not contenido.archivo(c, logo).is_file()
     assert '<img class="lat-avatar"' not in r.text and '<span class="lat-avatar">' in r.text
 

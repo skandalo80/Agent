@@ -3,9 +3,9 @@
 console.skandar.online/panel/contenido, para las cuentas con contenido en su plan
 (IMAGES_PER_MONTH > 0: Community Manager).
 
-- Tu marca: colores (HEX, con su Pantone de referencia), tipografía y grosor de
-  los títulos, estilo de las fotos, plantilla de inicio y fotos reales de sus
-  productos. Se guarda en kv "marca" y la vista previa se rotula en el servidor.
+- Tu marca (igbot/marca.py): estilo visual, colores, tipografía, logo y recursos
+  visuales, en kv "marca". Aquí se convierte en el estilo de las fotos (estilo_foto)
+  y el contexto de marca del generador (contexto_marca).
 - Crear post: elige un objetivo (dar a conocer la marca, servicio o producto estrella,
   atraer clientes, explicar algo, contar una historia) y, si quiere, el tema.
   Claude escribe el título, el texto, la palabra clave y el DM con lo que el
@@ -22,9 +22,9 @@ publicado funciona como una regla de comentarios (ver reglas()).
 
 Todo son formularios y la imagen se genera en una respuesta en partes, como el
 chat de prueba. El único JavaScript es igbot/static/panel.js (el CSP solo deja
-scripts del mismo dominio): cambia la vista previa al momento en Tu marca y en el
-editor (/muestra.jpg y /post/<id>/muestra.jpg rotulan sin guardar). Sin él, los
-botones "Ver cómo queda" y "Actualizar imagen" hacen lo mismo.
+scripts del mismo dominio): cambia la vista previa al momento en el editor
+(/post/<id>/muestra.jpg rotula sin guardar). Sin él, el botón "Actualizar imagen"
+hace lo mismo.
 
 Publicados junta los posts del panel con los últimos de la cuenta en Instagram
 (también los subidos desde la app), pedidos cada 10 minutos como mucho.
@@ -39,15 +39,15 @@ import time
 from datetime import date, datetime, timedelta
 from html import escape
 from pathlib import Path
-from urllib.parse import urlencode
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response, StreamingResponse
-from PIL import Image, ImageDraw, ImageOps
+from PIL import Image, ImageOps
 
 from . import config, imagenes, panel, posicionamiento, tools
 from .admin import PANEL, parse_when
 from .comentarios import Rule, shortcode
+from .estilos import ESTILO_INICIAL, ESTILOS, MAX_ESTILOS, RECURSOS, USO_COLOR, VIEJOS_ESTILOS
 from .cuenta import Cuenta, usar
 from .store import Store
 
@@ -76,19 +76,6 @@ OBJETIVOS = {
 }
 OBJETIVO_INICIAL = "marca"
 
-ESTILOS = {
-    # clave: (nombre, cómo se ve, cómo se le pide al generador de imágenes)
-    "limpio": ("Limpio y profesional", "Foto de estudio, fondo liso en tonos neutros, luz suave y mucho espacio libre.",
-               "Studio photography, plain neutral background, soft diffused light, generous empty space,"
-               " nothing superfluous."),
-    "calido": ("Cálido y cercano", "Luz natural de tarde, texturas de madera y lino, ambiente acogedor.",
-               "Warm late-afternoon natural light, wood and linen textures, cozy atmosphere, earthy colors."),
-    "premium": ("Premium", "Fondo oscuro, luz lateral dramática y composición minimalista.",
-                "Dark background, dramatic side lighting, subtle reflections, minimalist composition."),
-    "colorido": ("Colorido", "Fondos de color sólido, sombras marcadas, estilo pop y moderno.",
-                 "Solid saturated color background, hard shadows, modern pop style."),
-}
-ESTILO_INICIAL = "limpio"
 
 NOMBRES_PLANTILLA = {"editorial": "Editorial", "minimal": "Minimal", "marco": "Marco", "banda": "Banda"}
 COLORES = [  # (campo, nombre, para qué se usa)
@@ -104,13 +91,9 @@ ESTADOS = {  # estado del post: (cómo se le dice al cliente, color de la etique
 EDITABLES = ("borrador", "programada")
 
 MAX_FOTOS = 6  # fotos de producto en el kit de marca
-# Identidad de la marca (Tu marca > 01): se usa al escribir los posts y en la vista previa del perfil.
-MAX_NOMBRE, MAX_FRASE, MAX_CARACTER = 60, 160, 3
-CARACTERES = ["Profesional", "Cercana", "Premium", "Tecnológica", "Divertida", "Natural", "Elegante", "Atrevida",
-              "Clásica", "Juvenil"]
 MAX_FOTO_BYTES = 10 * 1024 * 1024
 MAX_TEMA = 500
-MAX_ESTILO = 400  # "Describe tu estilo" en Tu marca
+MAX_ESTILO = 400  # "Describe tu estilo" (Diseño libre)
 MAX_CAPTION = 2200  # lo que acepta Instagram
 HORA_SUGERIDA = 19  # los borradores nuevos salen al día siguiente a esta hora
 
@@ -163,16 +146,41 @@ def contexto_marca(datos: dict) -> str:
     """La identidad y los colores de Tu marca para el generador, para que la foto se sienta de la marca."""
     lineas = [f"- {k}: {v}" for k, v in (("Name", datos.get("nombre", "")), ("In one sentence", datos.get("frase", "")),
                                          ("Personality", ", ".join(datos.get("caracter", [])))) if v]
-    colores = [f"{n} {datos[k]}" for k, n in (("principal", "main"), ("acento", "accent"), ("fondo", "background"))
-               if imagenes.HEX.match(str(datos.get(k, "")))]
+    colores = [f"{n} {datos[k]}" for k, n in (("principal", "main"), ("secundario", "secondary"), ("acento", "accent"),
+                                              ("fondo", "background")) if imagenes.HEX.match(str(datos.get(k, "")))]
     if colores:
         lineas.append("- Colors (use them subtly in props, backgrounds or light): " + ", ".join(colores))
+        if datos.get("uso_color") in USO_COLOR:
+            lineas.append(f"- How much color: {USO_COLOR[datos['uso_color']][2]}")
+    recursos = [RECURSOS[k][4] for k in datos.get("recursos", []) if k in RECURSOS]
+    if recursos:
+        lineas.append("- What the brand likes to show (only what fits this post): " + "; ".join(recursos))
     return ("\n\nBrand context, as the owner describes it (in Spanish); the image should feel like this brand."
             " Do not write the brand name in the image:\n" + "\n".join(lineas)) if lineas else ""
 
 
+def estilos_de(datos: dict) -> list[str]:
+    """Los estilos de Tu marca, en orden de preferencia. Una marca guardada antes tenía uno solo ("estilo")."""
+    elegidos = [k for k in datos.get("estilos", []) if k in ESTILOS][:MAX_ESTILOS]
+    if not elegidos and VIEJOS_ESTILOS.get(datos.get("estilo")):
+        elegidos = [VIEJOS_ESTILOS[datos["estilo"]]]
+    return elegidos
+
+
 def estilo_de(datos: dict) -> str:
-    return datos.get("estilo") if datos.get("estilo") in ESTILOS else ESTILO_INICIAL
+    """El estilo que manda: el elegido solo para un post (Crear post > Con otra plantilla) o el primero de Tu marca."""
+    if datos.get("estilo") in ESTILOS:
+        return datos["estilo"]
+    return (estilos_de(datos) or [ESTILO_INICIAL])[0]
+
+
+def estilo_foto(datos: dict) -> str:
+    """El estilo de la foto para el generador: el primero manda y los demás aportan matices."""
+    if datos.get("estilo") in ESTILOS:
+        return ESTILOS[datos["estilo"]][2]
+    elegidos = estilos_de(datos) or [ESTILO_INICIAL]
+    return ESTILOS[elegidos[0]][2] + "".join(
+        f"\nA lighter secondary influence: {ESTILOS[k][2]}" for k in elegidos[1:])
 
 
 def notas_estilo(datos: dict, modo: str) -> str:
@@ -323,12 +331,22 @@ def visual_marca(datos: dict, modo: str = "") -> str:
     """Cómo se ve la marca, para que Claude escriba la imagen ya con su estilo (no como un pegote al final)."""
     modo = modo or modo_de(datos)
     propio = notas_estilo(datos, modo)
-    lineas = [f"Estilo de fotos: {propio}" if propio else
-              f"Estilo de fotos: {ESTILOS[estilo_de(datos)][0]}. {ESTILOS[estilo_de(datos)][1]}"]
-    colores = [f"{n} {datos[k]}" for k, n in (("principal", "principal"), ("acento", "acento"), ("fondo", "fondo"))
+    if propio:
+        lineas = [f"Estilo de fotos: {propio}"]
+    else:
+        elegidos = [estilo_de(datos)] if datos.get("estilo") in ESTILOS else estilos_de(datos) or [ESTILO_INICIAL]
+        lineas = [f"Estilo de fotos: {ESTILOS[elegidos[0]][0]}. {ESTILOS[elegidos[0]][1]}"]
+        lineas += [f"Con un toque, más ligero, de: {ESTILOS[k][0]}. {ESTILOS[k][1]}" for k in elegidos[1:]]
+    colores = [f"{n} {datos[k]}" for k, n in (("principal", "principal"), ("secundario", "secundario"),
+                                              ("acento", "acento"), ("fondo", "fondo"))
                if imagenes.HEX.match(str(datos.get(k, "")))]
     if colores:
         lineas.append("Colores de la marca (para utilería, fondos o luz, con sutileza): " + ", ".join(colores))
+        if datos.get("uso_color") in USO_COLOR:
+            lineas.append(f"Cuánto color: {USO_COLOR[datos['uso_color']][0]}. {USO_COLOR[datos['uso_color']][1]}")
+    recursos = [RECURSOS[k][0] for k in datos.get("recursos", []) if k in RECURSOS]
+    if recursos:
+        lineas.append("Lo que la marca suele mostrar (solo lo que encaje con este post): " + ", ".join(recursos))
     if datos.get("caracter"):
         lineas.append("Carácter: " + ", ".join(datos["caracter"]))
     return escape("\n".join(lineas))
@@ -397,7 +415,7 @@ async def generar(c: Cuenta, objetivo: str = "", tema: str = "", fotos: list[str
             notas = notas_estilo(marca, modo)
             idea = p["imagen"] + (f"\n\nPhoto style, as the owner describes it (in Spanish): {notas}" if notas else "")
         else:
-            idea = f"{p['imagen']}\n\nPhoto style: {ESTILOS[estilo_de(marca)][2]}"
+            idea = f"{p['imagen']}\n\nPhoto style: {estilo_foto(marca)}"
         idea += contexto_marca(marca)
         if not referencias and marca.get("fotos_estilo", True):  # sin foto de producto: sus fotos guían el estilo
             referencias = [archivo(c, t).read_bytes() for t in marca.get("fotos", [])[:3] if archivo(c, t).is_file()]
@@ -476,7 +494,7 @@ async def resumen(c: Cuenta) -> str:
 
 
 async def pagina(c: Cuenta, actual: str, bajada: str, cuerpo: str, aviso: str = "",
-                 con_resumen: bool = False) -> HTMLResponse:
+                 con_resumen: bool = False, oscuro: bool = False) -> HTMLResponse:
     """Las secciones de Contenido van en el menú lateral. Los números del mes (con_resumen) solo salen
     en Calendario, el inicio de Contenido; las demás páginas llevan el encabezado delgado."""
     crear = '<a class="boton secundario ajuste" href="/panel/contenido/campanas/nueva">+ Nueva campaña</a>'
@@ -488,7 +506,7 @@ async def pagina(c: Cuenta, actual: str, bajada: str, cuerpo: str, aviso: str = 
         f'<p class="bajada" style="margin-left:0">{escape(bajada)}</p>'
         + (await resumen(c) if con_resumen else "")
         + "</div></section>"
-        '<main><div class="contenedor">'
+        + ('<main class="oscuro-pag">' if oscuro else "<main>") + '<div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
         + await panel.pendiente(c, actual)
         + cuerpo + "</div></main>"
@@ -882,22 +900,8 @@ async def editor(c: Cuenta, post_id: int, aviso: str = "", confirmar: bool = Fal
         return await pagina(c, "calendario", "Revisa, ajusta y apruébalo. Nada sale sin tu aprobación.", cuerpo, aviso)
 
 
-# --- tu marca ---
+# --- fotos de Tu marca ---
 
-def muestra_base() -> bytes:
-    """Una foto neutra para la vista previa cuando aún no hay fotos de producto."""
-    img = Image.new("RGB", (imagenes.ANCHO, imagenes.ALTO))
-    d = ImageDraw.Draw(img)
-    for y in range(imagenes.ALTO):
-        t = y / imagenes.ALTO
-        d.line([(0, y), (imagenes.ANCHO, y)], fill=(int(222 - 70 * t), int(214 - 72 * t), int(204 - 74 * t)))
-    d.ellipse((290, 330, 790, 830), fill=(186, 170, 152))
-    out = io.BytesIO()
-    img.save(out, "JPEG", quality=85)
-    return out.getvalue()
-
-
-_MUESTRA = muestra_base()
 # Una foto de ejemplo por estilo (las genera una vez scripts/ejemplos_estilo.py; sirven a todas las cuentas).
 EJEMPLOS = Path("data/estilos")
 
@@ -905,185 +909,6 @@ EJEMPLOS = Path("data/estilos")
 def ejemplo(estilo: str) -> Path | None:
     path = EJEMPLOS / f"{estilo}.jpg"
     return path if estilo in ESTILOS and path.is_file() else None
-
-
-def query_muestra(marca: dict, **cambios) -> str:
-    claves = ("fuente", "peso", "principal", "acento", "fondo", "plantilla", "estilo")
-    q = {k: marca[k] for k in claves if marca.get(k)}
-    q["modo"] = modo_de(marca)
-    return urlencode({**q, **cambios})
-
-
-MINIS = [("marco", "Marco: usa tu color de fondo"), ("banda", "Banda: usa tu color de acento")]
-
-
-async def perfil_muestra(c: Cuenta) -> str:
-    """La cuadrícula del mini perfil: lo próximo programado (con borde) y lo ya publicado."""
-    celdas = []
-    for p in (await c.store.posts(("programada",), user_id=PANEL))[:3]:
-        media = await c.store.media(p["media_ids"][0]) if p["media_ids"] else None
-        if media and archivo(c, media[0]).is_file():
-            celdas.append(f'<img class="nuevo" src="{url_imagen(c, media[0])}" alt="" loading="lazy">')
-    for m in await de_instagram(c):
-        if foto := m.get("thumbnail_url") or m.get("media_url"):
-            celdas.append(f'<img src="{escape(foto)}" alt="" loading="lazy" referrerpolicy="no-referrer">')
-    celdas = celdas[:9]
-    celdas += ["<span></span>"] * (9 - len(celdas))
-    return "".join(celdas)
-
-
-async def pagina_marca(c: Cuenta, marca: dict | None = None, aviso: str = "") -> HTMLResponse:
-    marca = marca if marca is not None else await marca_de(c)
-    m = kit(marca)
-    usuario = await panel.usuario(c)
-    nombre = marca.get("nombre", "")
-    frase = marca.get("frase", "")
-    elegidos = marca.get("caracter", [])
-    logo = marca.get("logo", "")
-    logo_url = url_imagen(c, logo) if logo and archivo(c, logo).is_file() else ""
-    # Cada color es un cuadro grande: el selector del navegador ocupa el cuadro (cambia al momento), y
-    # abajo su código, que se puede escribir o pegar (panel.js mantiene los dos iguales).
-    colores = "".join(
-        f'<div class="swatch"><input type="color" id="{k}" name="{k}" value="{getattr(m, k).lower()}"'
-        f' aria-label="Color {n.lower()}"><span><b>{n}</b>'
-        f'<input type="text" class="hex" name="{k}_hex" data-hex="{k}" value="{getattr(m, k)}" maxlength="7"'
-        f' spellcheck="false" autocomplete="off" aria-label="Código del color {n.lower()}, p. ej. #333D1F"></span></div>'
-        for k, n, _ in COLORES)
-    detalles_color = "".join(f'<div class="color-uso"><b>{n}</b><p class="ayuda">{uso}</p></div>'
-                             for k, n, uso in COLORES)
-    familia = {f: (f"'{f}', Georgia, serif" if f in imagenes.SERIF else f"'{f}', system-ui, sans-serif")
-               for f in imagenes.FUENTES}
-    fuentes = "".join(
-        f'<label class="letra" style="font-family:{familia[f]};font-weight:{m.peso}"><input type="radio" name="fuente"'
-        f' value="{f}"{" checked" if f == m.fuente else ""}>Aa<small>{f}</small></label>'
-        for f in imagenes.FUENTES)
-    pesos = "".join(
-        f'<label style="font-family:{familia[m.fuente]};font-weight:{w}"><input type="radio" name="peso" value="{w}"'
-        f'{" checked" if w == m.peso else ""}> {n}</label>'
-        for w, n in ((400, "Regular"), (600, "Semibold"), (700, "Bold")))
-    caracter = "".join(
-        f'<label><input type="checkbox" name="caracter" value="{k}"{" checked" if k in elegidos else ""}> {k}</label>'
-        for k in CARACTERES)
-    actual_estilo = estilo_de(marca)
-    estilos = "".join(
-        f'<label class="opcion"><input type="radio" name="estilo" value="{k}"{" checked" if k == actual_estilo else ""}>'
-        + (f'<img class="ejemplo" src="/panel/contenido/estilo/{k}.jpg" alt="">' if ejemplo(k) else "")
-        + f"<b>{nombre_}</b><span>{desc}</span></label>"
-        for k, (nombre_, desc, _) in ESTILOS.items())
-    fotos = "".join(
-        f'<figure><img src="{url_imagen(c, t)}" alt="Foto {i + 1}">'
-        f'<button class="quitar" name="accion" value="quitar_{i}" formnovalidate>Quitar</button></figure>'
-        for i, t in enumerate(marca.get("fotos", [])) if archivo(c, t).is_file())
-    actual = plantilla_de(marca)
-    plantillas = "".join(
-        f'<label><input type="radio" name="plantilla" value="{k}"{" checked" if k == actual else ""}> {n}</label>'
-        for k, n in NOMBRES_PLANTILLA.items())
-    sube = len(marca.get("fotos", [])) < MAX_FOTOS
-    inicial = escape((nombre or usuario)[:1].upper())
-    avatar = (f'<img class="avatar-marca" src="{logo_url}" alt="Tu logo">' if logo_url else
-              f'<span class="avatar-marca" data-fondo="principal" data-inicial style="background:{m.principal}">'
-              f"{inicial}</span>")
-    identidad = (
-        '<details class="tarjeta plegable seccion" id="identidad" open><summary><span class="titulo-sec"><h2>Identidad</h2></span></summary>'
-        '<p class="ayuda">Lo básico de tu marca. Lo usamos al escribir tus posts y en tu vista previa.</p>'
-        '<div class="pares"><div><label for="nombre">Nombre de tu marca</label>'
-        f'<input type="text" id="nombre" name="nombre" maxlength="{MAX_NOMBRE}" value="{escape(nombre)}"'
-        f' placeholder="Ej. Café Lunar"></div>'
-        f'<div><label>Logo</label><div class="logo-sube">{avatar}'
-        '<input type="file" name="logo" accept="image/jpeg,image/png,image/webp" aria-label="Subir logo">'
-        + ('<button class="boton secundario chico" name="accion" value="quitar_logo" formnovalidate>Quitar</button>'
-           if logo_url else "")
-        + "</div></div></div>"
-        f'<label for="frase">Tu marca en una frase</label>'
-        f'<input type="text" id="frase" name="frase" maxlength="{MAX_FRASE}" value="{escape(frase)}"'
-        ' placeholder="Ej. Café de especialidad tostado en casa, a dos cuadras del parque.">'
-        f'<label>Carácter <span class="suave">(elige hasta {MAX_CARACTER})</span></label>'
-        f'<div class="chips">{caracter}</div></details>')
-    vista_previa = (
-        '<aside class="lado"><div class="tarjeta"><span class="num">Vista previa</span>'
-        '<div class="pestanas-mini"><input type="radio" name="vista_previa" id="vp-perfil" value="perfil" checked>'
-        '<label for="vp-perfil">Tu perfil</label>'
-        '<input type="radio" name="vista_previa" id="vp-post" value="post"><label for="vp-post">Un post</label></div>'
-        f'<div class="vp-perfil"><div class="ig"><div class="ig-arriba">{avatar}'
-        f'<div><b>@{escape(usuario)}</b><span class="ig-nombre" data-espejo="nombre">{escape(nombre)}</span></div></div>'
-        f'<p class="ig-bio" data-espejo="frase">{escape(frase)}</p>'
-        f'<div class="ig-cuadricula">{await perfil_muestra(c)}</div></div>'
-        '<p class="ayuda chica">Con borde naranja: tus próximos posts programados, junto a lo que ya publicaste.</p></div>'
-        '<div class="vp-post">'
-        f'<img class="pieza" id="vista" src="/panel/contenido/muestra.jpg?{escape(query_muestra(marca))}"'
-        ' alt="Vista previa de tu marca">'
-        '<div class="minis si-plantilla">' + "".join(
-            f'<figure><img class="pieza" data-plantilla="{k}"'
-            f' src="/panel/contenido/muestra.jpg?{escape(query_muestra(marca, plantilla=k))}" alt=""'
-            f' loading="lazy"><figcaption>{n}</figcaption></figure>' for k, n in MINIS) + '</div>'
-        '<p class="ayuda chica">Cambia al momento. Pulsa Guardar para quedártela.</p>'
-        '<div class="acciones sin-js"><button class="boton secundario" name="accion" value="vista">'
-        "Ver cómo queda</button></div></div></div></aside>")
-    cuerpo = (
-        '<form method="post" action="/panel/contenido/marca" enctype="multipart/form-data"'
-        f' data-vista="/panel/contenido/muestra.jpg?v={escape((marca.get("fotos") or ["0"])[0][:8])}">'
-        '<button class="oculto" name="accion" value="guardar" tabindex="-1" aria-hidden="true">Guardar</button>'
-        '<div class="marca-pagina"><div>'
-        + identidad
-        + '<details class="tarjeta plegable seccion" id="colores" open><summary><span class="titulo-sec"><h2>Colores</h2></span></summary>'
-        f'<p class="ayuda">Toca un color para cambiarlo.</p><div class="paleta">{colores}</div>'
-        '<details class="mas"><summary>Dónde se usa cada color</summary>'
-        f"{detalles_color}</details></details>"
-        '<details class="tarjeta plegable seccion" id="tipografia" open><summary><span class="titulo-sec"><h2>Tipografía</h2></span></summary>'
-        f'<div class="letras">{fuentes}</div><label>Grosor</label><div class="chips">{pesos}</div></details>'
-        '<details class="tarjeta plegable seccion" id="fotos" open><summary><span class="titulo-sec"><h2>Fotos y estilo</h2></span></summary>'
-        '<div class="si-plantilla"><p class="ayuda">Así le pedimos las fotos al generador para tus plantillas.</p>'
-        f'<div class="opciones">{estilos}</div></div>'
-        '<div class="si-libre"><p class="ayuda">En Diseño libre el generador arma el post completo siguiendo'
-        ' lo que escribas aquí.</p><label for="estilo_propio">Describe tu estilo</label>'
-        f'<textarea id="estilo_propio" name="estilo_propio" rows="3" maxlength="{MAX_ESTILO}"'
-        ' placeholder="Ej. Fondos oscuros, minimalista y elegante, el celular como protagonista, detalles en naranja.">'
-        f'{escape(marca.get("estilo_propio", ""))}</textarea></div>'
-        '<label>Fotos de tu negocio</label>'
-        f'<p class="ayuda">Tu local, tu trabajo o tus productos: las usamos como base para que en tus posts salga lo real. Hasta {MAX_FOTOS}.</p>'
-        f'<div class="fotos">{fotos}</div>'
-        f'<label class="check"><input type="checkbox" name="fotos_estilo" value="1"'
-        f'{" checked" if marca.get("fotos_estilo", True) else ""}> Usarlas como referencia de estilo en todos mis posts</label>'
-        '<p class="ayuda">Si en un post no eliges una foto de producto, el generador copia el estilo de estas'
-        " (colores, luz, fondos). Sube tus mejores posts para que se parezcan a tu perfil.</p>"
-        + ('<input type="file" name="fotos" accept="image/jpeg,image/png,image/webp" multiple>'
-           '<div class="acciones"><button class="boton secundario" name="accion" value="subir">Subir fotos</button></div>'
-           if sube else "")
-        + '</details>'
-        '<details class="tarjeta plegable seccion" id="como-se-arman" open><summary><span class="titulo-sec"><h2>Cómo se arman tus posts</h2></span></summary>'
-        '<p class="ayuda">Lo que usan tus posts nuevos; en cada post nuevo lo puedes cambiar.</p>'
-        f'<div class="opciones">{opciones_modo(modo_de(marca))}</div>'
-        '<div class="si-plantilla"><label>Plantilla</label>'
-        f'<div class="chips">{plantillas}</div></div></details>'
-        '<div class="acciones"><button class="boton" name="accion" value="guardar">Guardar</button></div>'
-        f"</div>{vista_previa}</div></form>"
-    )
-    return await pagina(c, "marca", "Tu marca, una sola vez: así todos tus posts se ven de la misma casa.", cuerpo, aviso)
-
-
-def marca_del_form(f, antes: dict) -> dict:
-    datos = {"fotos": list(antes.get("fotos", []))}
-    for k, *_ in COLORES:
-        # El código escrito o pegado manda; si no es válido, el del selector de color.
-        datos[k] = antes.get(k, "")
-        for valor in (str(f.get(f"{k}_hex", "")).strip(), str(f.get(k, "")).strip()):
-            valor = valor if valor.startswith("#") else f"#{valor}"
-            if imagenes.HEX.match(valor):
-                datos[k] = valor.upper()
-                break
-    datos["fuente"] = f.get("fuente") if f.get("fuente") in imagenes.FUENTES else antes.get("fuente", "Inter")
-    datos["peso"] = int(f.get("peso")) if str(f.get("peso")) in ("400", "600", "700") else antes.get("peso", 600)
-    datos["estilo"] = f.get("estilo") if f.get("estilo") in ESTILOS else estilo_de(antes)
-    datos["plantilla"] = f.get("plantilla") if f.get("plantilla") in imagenes.PLANTILLAS else plantilla_de(antes)
-    datos["modo"] = f.get("modo") if f.get("modo") in MODOS else modo_de(antes)
-    datos["estilo_propio"] = str(f.get("estilo_propio", "")).strip()[:MAX_ESTILO]
-    datos["fotos_estilo"] = f.get("fotos_estilo") == "1"
-    datos["nombre"] = " ".join(str(f.get("nombre", "")).split())[:MAX_NOMBRE]
-    datos["frase"] = " ".join(str(f.get("frase", "")).split())[:MAX_FRASE]
-    datos["caracter"] = [k for k in CARACTERES if k in f.getlist("caracter")][:MAX_CARACTER]
-    if antes.get("logo"):
-        datos["logo"] = antes["logo"]
-    return datos
 
 
 TOKEN_FOTO = re.compile(r"^[\w-]{24}$")  # secrets.token_urlsafe(18)
@@ -1228,76 +1053,6 @@ async def editar(request: Request, post_id: int):
             return await editor(c, post_id, "Regla quitada.")
         return await editor(c, post_id, "Listo: la imagen ya tiene el texto nuevo." if accion == "actualizar"
                             else "Guardado.")
-
-
-@router.get("/marca")
-async def ver_marca(request: Request):
-    if not (c := panel.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
-    return await pagina_marca(c) if c.imagenes_mes > 0 else sin_plan()
-
-
-@router.post("/marca")
-async def guardar_marca(request: Request):
-    panel.de_aqui(request)
-    if not (c := panel.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
-    f = await request.form()
-    accion = str(f.get("accion", "guardar"))
-    antes = await marca_de(c)
-    datos = marca_del_form(f, antes)
-    if accion == "vista":
-        return await pagina_marca(c, datos, "Así se ve con estos cambios. Pulsa Guardar para quedártelos.")
-    aviso = "Guardado. Tus próximos posts ya usan tu marca."
-    if accion.startswith("quitar_") and accion[7:].isdigit():
-        i = int(accion[7:])
-        if i < len(datos["fotos"]):
-            archivo(c, datos["fotos"].pop(i)).unlink(missing_ok=True)
-        aviso = "Listo: quitamos esa foto."
-    if accion == "quitar_logo" and datos.get("logo"):
-        archivo(c, datos.pop("logo")).unlink(missing_ok=True)
-        aviso = "Listo: quitamos tu logo."
-    logo = f.get("logo")
-    if getattr(logo, "filename", ""):
-        tokens, _ = await guardar_fotos(c, [logo], 1)
-        if tokens:
-            if datos.get("logo"):
-                archivo(c, datos["logo"]).unlink(missing_ok=True)
-            datos["logo"] = tokens[0]
-            aviso = "Listo: guardamos tu logo."
-        else:
-            aviso = "No se pudo leer el logo (usa JPG o PNG de hasta 10 MB)."
-    nuevas = [s for s in f.getlist("fotos") if getattr(s, "filename", "")]
-    if nuevas:
-        tokens, fallidas = await guardar_fotos(c, nuevas, MAX_FOTOS - len(datos["fotos"]))
-        datos["fotos"] += tokens
-        subidas = len(tokens)
-        aviso = f"Listo: {subidas} foto{'s' if subidas != 1 else ''} nueva{'s' if subidas != 1 else ''}."
-        if fallidas:
-            aviso += f" {fallidas} no se pudieron leer (usa JPG o PNG de hasta 10 MB)."
-    await c.store.set("marca", json.dumps(datos, ensure_ascii=False))
-    log.info("@%s guardó su marca", await panel.usuario(c))
-    return await pagina_marca(c, datos, aviso)
-
-
-@router.get("/muestra.jpg")
-async def muestra(request: Request):
-    """La vista previa de la marca: con los valores de la URL (aún sin guardar) o los guardados."""
-    if not (c := panel.cuenta_de_sesion(request)):
-        raise HTTPException(status_code=404)
-    marca = await marca_de(c)
-    datos = {**marca, **dict(request.query_params)}
-    fotos = [t for t in marca.get("fotos", []) if archivo(c, t).is_file()]
-    # La foto de ejemplo del estilo elegido; si no hay, la de su producto o una neutra.
-    if modo_de(datos) != "libre" and (foto_estilo := ejemplo(estilo_de(datos))):
-        base = foto_estilo.read_bytes()
-    else:
-        base = archivo(c, fotos[0]).read_bytes() if fotos else _MUESTRA
-    texto = imagenes.Texto("Así se verán tus posts", "Con tu tipografía y tus colores.", "Agenda tu cita",
-                           f"@{await panel.usuario(c)}")
-    async with imagenes._turno:
-        jpg = await asyncio.to_thread(imagenes.rotular, base, plantilla_de(datos), texto, kit(datos))
-    return Response(jpg, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=600"})
 
 
 @router.get("/post/{post_id}/muestra.jpg")

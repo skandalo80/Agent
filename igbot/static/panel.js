@@ -1,4 +1,4 @@
-// Vista previa al momento en el panel: Tu marca y el editor de posts.
+// Vista previa al momento en el panel (el editor de posts) y ayudas de Tu marca.
 // Sin este archivo el panel funciona igual, con los botones "Ver cómo queda" y "Actualizar imagen".
 document.documentElement.classList.add("js");
 
@@ -106,16 +106,6 @@ document.querySelectorAll(".hamburguesa, .lateral .cerrar, .velo").forEach((a) =
 // Menú de perfil (<details class="perfil">): se cierra al hacer clic fuera de él.
 document.addEventListener("click", (e) => {
   document.querySelectorAll("details.perfil[open]").forEach((d) => { if (!d.contains(e.target)) d.open = false; });
-});
-
-// Tu marca: el nombre, la frase y el color principal se ven al momento en la vista previa del perfil.
-document.querySelectorAll("form[data-vista]").forEach((form) => {
-  form.addEventListener("input", (e) => {
-    const t = e.target;
-    form.querySelectorAll('[data-espejo="' + t.name + '"]').forEach((el) => { el.textContent = t.value; });
-    if (t.name === "principal") form.querySelectorAll('[data-fondo="principal"]').forEach((el) => { el.style.background = t.value; });
-    if (t.name === "nombre" && t.value.trim()) form.querySelectorAll("[data-inicial]").forEach((el) => { el.textContent = t.value.trim()[0].toUpperCase(); });
-  });
 });
 
 // Menú lateral: Tu asistente y Contenido despliegan sus opciones en vez de cambiar de página.
@@ -268,5 +258,64 @@ document.querySelectorAll("form[data-vivo]").forEach((form) => {
       try { sessionStorage.setItem("chats:buscando", "1"); } catch { /* sin almacenamiento */ }
       form.requestSubmit();
     }, 500);
+  });
+});
+
+// Tu marca: los estilos se numeran en el orden en que los tocas (hasta 3; "orden" lo lleva al servidor),
+// elegir una paleta llena los cuatro colores, el código y el selector de cada color van iguales y las
+// muestras de "¿Cuánto color?" usan los colores de la página. Sin esto, se guarda igual (en el orden de la página).
+document.querySelectorAll("form[data-marca]").forEach((form) => {
+  const ops = form.querySelector(".mrc-estilos");
+  const orden = form.querySelector('input[name="orden"]');
+  if (ops && orden) {
+    const max = +ops.dataset.max || 3;
+    let elegidos = orden.value ? orden.value.split(",") : [];
+    const pintar = () => {
+      orden.value = elegidos.join(",");
+      ops.querySelectorAll(".wiz-op").forEach((op) => {
+        const caja = op.querySelector("input");
+        const n = elegidos.indexOf(caja.value) + 1;
+        const em = op.querySelector(".wiz-orden");
+        em.hidden = !n;
+        em.textContent = n || "";
+        op.classList.toggle("apagada", !n && elegidos.length >= max);
+      });
+    };
+    ops.addEventListener("change", (e) => {
+      const caja = e.target;
+      if (caja.name !== "estilos") return;
+      elegidos = elegidos.filter((k) => k !== caja.value);
+      if (caja.checked) {
+        if (elegidos.length >= max) caja.checked = false;
+        else elegidos.push(caja.value);
+      }
+      pintar();
+    });
+  }
+  const poner = (campo, valor) => {
+    const color = form.querySelector('input[type=color][name="' + campo + '"]');
+    const hex = form.querySelector('[data-hex="' + campo + '"]');
+    if (color) color.value = valor.toLowerCase();
+    if (hex) hex.value = valor.toUpperCase();
+    form.style.setProperty("--m-" + campo, valor);
+  };
+  form.addEventListener("input", (e) => {
+    const t = e.target;
+    if (t.type === "color") poner(t.name, t.value);
+    if (t.dataset.hex) {
+      const v = t.value.trim().replace(/^#?/, "#");
+      if (/^#[0-9a-f]{6}$/i.test(v)) poner(t.dataset.hex, v);
+    }
+    // Un color cambiado a mano ya no es la paleta sugerida.
+    if (t.type === "color" || t.dataset.hex) form.querySelectorAll('input[name="paleta"]').forEach((r) => { r.checked = false; });
+  });
+  form.addEventListener("change", (e) => {
+    const t = e.target;
+    if (t.name !== "paleta" || !t.dataset.colores) return;
+    const campos = ["principal", "secundario", "acento", "fondo"];
+    t.dataset.colores.split(",").forEach((c, i) => poner(campos[i], c));
+    // Los colores ya van en sus campos: el servidor guarda esos (y respeta si luego ajustas uno).
+    const antes = form.querySelector('input[name="paleta_antes"]');
+    if (antes) antes.value = t.value;
   });
 });
