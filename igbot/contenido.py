@@ -286,66 +286,14 @@ def leer_respuesta(texto: str) -> dict:
     return out
 
 
-# Perfil de empresa: lo llena el dueño en /panel/empresa, aparte de su asistente. El dueño de esos datos
-# es igbot/empresa.py (kv "empresa" y kv "productos"); si ese módulo trae texto_para_prompt(c), se usa
-# ese. Si no, se lee aquí con el mismo modelo. Sin perfil, la empresa sale de Configura tu asistente.
-CAMPOS_EMPRESA = (  # (clave en kv "empresa", cómo se le dice en el prompt)
-    ("nombre", "Nombre"), ("giro", "A qué se dedica"), ("giro_otro", "Giro"), ("frase", "En una frase"),
-    ("descripcion", "Descripción"), ("zona", "Dónde atiende"), ("sitio_web", "Sitio web"), ("caracter", "Cómo es"),
-    ("atiende", "Cómo atiende"), ("clientes_tipo", "Vende a"), ("cliente_ideal", "Cliente ideal"),
-    ("problema", "Problema que resuelve"), ("distinto", "Por qué lo eligen"),
-    ("competencia", "Con quién lo comparan (no la nombres en los posts)"), ("horarios", "Horarios"),
-    ("direccion", "Dirección"), ("pagos", "Formas de pago"), ("envios", "Envíos"), ("cambios", "Cambios y devoluciones"),
-    ("apartados", "Apartados o reservaciones"), ("otras_politicas", "Otras políticas"))
-MAX_EMPRESA = 6000
-MAX_PRODUCTOS = 30
-
-
-async def _kv(c: Cuenta, clave: str, vacio):
-    try:
-        datos = json.loads(await c.store.get(clave) or "null")
-    except json.JSONDecodeError:
-        return vacio
-    return datos if isinstance(datos, type(vacio)) else vacio
-
-
-def _plano(v) -> str:
-    if isinstance(v, (list, tuple)):
-        return ", ".join(x for x in map(_plano, v) if x)
-    return "" if isinstance(v, dict) or v is None else re.sub(r"\s+", " ", str(v)).strip()
-
-
-def texto_empresa(datos: dict, productos: list) -> str:
-    """El perfil de empresa y su catálogo para el prompt, escapados: los escribió el cliente."""
-    lineas = [f"- {n}: {escape(_plano(datos.get(k)))[:1000]}" for k, n in CAMPOS_EMPRESA if _plano(datos.get(k))]
-    lista = []
-    for x in productos[:MAX_PRODUCTOS]:
-        if not isinstance(x, dict) or not _plano(x.get("nombre")):
-            continue
-        precio = _plano(x.get("precio"))
-        if precio:
-            precio = ("desde " if x.get("desde") else "") + precio + (f" {_plano(x.get('moneda'))}" if x.get("moneda") else "")
-        extra = "; ".join(v for v in (escape(_plano(x.get("descripcion")))[:400], escape(precio),
-                                      escape(_plano(x.get("url")))) if v)
-        lista.append(f"- {'(destacado) ' if x.get('destacado') else ''}{escape(_plano(x['nombre']))}"
-                     + (f": {extra}" if extra else ""))
-    if lista:
-        lineas.append("Productos y servicios:\n" + "\n".join(lista))
-    faq = [f"- {escape(_plano(q.get('p')))} {escape(_plano(q.get('r')))}"[:400] for q in datos.get("faq") or []
-           if isinstance(q, dict) and _plano(q.get("p")) and _plano(q.get("r"))]
-    if faq:
-        lineas.append("Preguntas frecuentes:\n" + "\n".join(faq))
-    return "\n".join(lineas)[:MAX_EMPRESA]
-
-
+# Perfil de empresa (/panel/empresa): sus datos y su catálogo los lee igbot/empresa.py, que ya los
+# entrega escapados y recortados. Sin perfil, la empresa sale de Configura tu asistente.
 async def empresa_texto(c: Cuenta) -> str:
     try:
         from . import empresa
-        if hasattr(empresa, "texto_para_prompt"):
-            return (await empresa.texto_para_prompt(c) or "")[:MAX_EMPRESA]
     except ImportError:
-        pass
-    return texto_empresa(await _kv(c, "empresa", {}), await _kv(c, "productos", []))
+        return ""
+    return await empresa.texto_para_prompt(c)
 
 
 async def negocio_de(c: Cuenta) -> str:
