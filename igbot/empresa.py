@@ -50,7 +50,10 @@ ATIENDE = [("local", "En local o tienda"), ("domicilio", "A domicilio"), ("linea
 CLIENTES = [("personas", "A personas"), ("empresas", "A empresas"), ("ambos", "A los dos")]
 PAGOS = [("efectivo", "Efectivo"), ("transferencia", "Transferencia"), ("tarjeta", "Tarjeta"),
          ("msi", "Meses sin intereses"), ("liga", "Liga de pago")]
-MAX_CARACTER = contenido.MAX_CARACTER
+# El carácter de la marca (antes en Tu marca; ahora vive aquí).
+CARACTERES = ["Profesional", "Cercana", "Premium", "Tecnológica", "Divertida", "Natural", "Elegante", "Atrevida",
+              "Clásica", "Juvenil"]
+MAX_CARACTER = 3
 
 # (clave, máximo) de los textos de cada paso; las listas de opciones van aparte.
 CAMPOS = {
@@ -62,7 +65,7 @@ CAMPOS = {
         ("apartados", 1000), ("otras_politicas", 1000)],
     5: [],
 }
-LISTAS = {1: [("caracter", contenido.CARACTERES, MAX_CARACTER), ("atiende", [k for k, _ in ATIENDE], 4)],
+LISTAS = {1: [("caracter", CARACTERES, MAX_CARACTER), ("atiende", [k for k, _ in ATIENDE], 4)],
           4: [("pagos", [k for k, _ in PAGOS], 5)]}
 MAX_PREGUNTAS, MIN_FILAS_FAQ = 40, 3
 
@@ -134,7 +137,7 @@ async def precarga(c: Cuenta) -> dict:
     temas = panel.politicas(perfil)
     faq = [q for q in panel.preguntas(perfil) if isinstance(q, dict) and (q.get("p") or q.get("r"))]
     e = {"nombre": marca.get("nombre", ""), "frase": marca.get("frase", ""),
-         "caracter": [k for k in marca.get("caracter", []) if k in contenido.CARACTERES][:MAX_CARACTER],
+         "caracter": [k for k in marca.get("caracter", []) if k in CARACTERES][:MAX_CARACTER],
          "descripcion": perfil.get("negocio", ""), "horarios": perfil.get("horarios", ""),
          "precios": perfil.get("precios", ""), "pagos_nota": temas.get("pagos", ""), "faq": faq,
          **{k: temas.get(k, "") for k in ("envios", "cambios", "apartados", "otras_politicas")},
@@ -543,7 +546,7 @@ def paso_1(e: dict) -> str:
                  "Qué haces, cómo lo haces y desde cuándo. Dos o tres frases bastan.", filas=3, req=True)
         + '<div class="dos">' + _texto("zona", "Ciudad o zona donde atiendes", e.get("zona", ""), 160)
         + _texto("sitio_web", "Sitio web", e.get("sitio_web", ""), 200, ejemplo="tusitio.com") + "</div>"
-        + _opciones("caracter", "¿Cómo es tu empresa?", [(k, k) for k in contenido.CARACTERES], e.get("caracter", []),
+        + _opciones("caracter", "¿Cómo es tu empresa?", [(k, k) for k in CARACTERES], e.get("caracter", []),
                     nota=f"elige hasta {MAX_CARACTER}")
         + _opciones("atiende", "¿Cómo atiendes?", ATIENDE, e.get("atiende", []))
         + "</div>" + pie(1, "* Obligatorio. Lo demás lo puedes llenar después.")

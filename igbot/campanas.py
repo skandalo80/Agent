@@ -40,7 +40,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response, Streamin
 
 from . import config, imagenes, informe, panel, semana, tools
 from .admin import PANEL
-from .contenido import (ESTADOS, ESTILO_REFERENCIA, ESTILOS, IMAGEN, MAX_CAPTION, archivo, contexto_marca, cuando, estilo_de,
+from .contenido import (ESTADOS, ESTILO_REFERENCIA, IMAGEN, MAX_CAPTION, archivo, contexto_marca, cuando, estilo_foto,
                         falta_cupo,
                         guardar_pieza, kit, libre, marca_de, modo_de, negocio_de, notas_estilo, plantilla_de, sin_plan,
                         texto_imagen, url_imagen, visual_marca)
@@ -624,7 +624,7 @@ async def generar_imagen(c: Cuenta, camp: dict, p: dict, extra: bool) -> int:
                 idea = p["idea"] + (f"\n\nPhoto style, as the owner describes it (in Spanish): {notas}" if notas else "")
             else:
                 idea = f"{p['idea']}\n\nNo text, letters or logos in the photo." + (
-                    f"\nPhoto style: {ESTILOS[estilo_de(marca)][2]}" if con_marca else "")
+                    f"\nPhoto style: {estilo_foto(marca)}" if con_marca else "")
             if con_marca:
                 idea += contexto_marca(marca)
             if formato == "vs":
