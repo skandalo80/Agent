@@ -480,6 +480,19 @@ async def _guardar(store: Store, user_id: str, final: bytes, base: bytes | None,
     return {"media_id": await store.add_media(user_id, token, origen), "token": token}
 
 
+async def crear_subida(store: Store, user_id: str, data: bytes, plantilla: str, texto: Texto,
+                       marca: Marca | None = None) -> dict:
+    """Una foto que subió el dueño para su post: se recorta a 4:5 y, si lleva título, se rotula como las
+    generadas. No usa el cupo de imágenes."""
+    async with _turno:
+        base = await asyncio.to_thread(_jpg, data)
+        final = (base if plantilla == LIBRE or not texto.titulo or plantilla not in PLANTILLAS
+                 else await asyncio.to_thread(rotular, base, plantilla, texto, marca))
+    hecha = await _guardar(store, user_id, final, base, "panel:subida")
+    log.info("Pieza %s (subida, sin cupo) para %s", hecha["media_id"], user_id)
+    return {**hecha, "tipo": "local"}
+
+
 async def crear_local(store: Store, user_id: str, como: str, *args) -> dict:
     """Una pieza hecha aquí, sin generador (solo_texto o collage): no usa el cupo de imágenes."""
     hacer = {"texto": solo_texto, "collage": collage}[como]

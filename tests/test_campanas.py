@@ -58,6 +58,16 @@ def cuando_sale(client, c, dia, hora):
     return calcular()
 
 
+def listo(client, c):
+    """Perfil de empresa y Tu marca llenos: sin ellos, Crear campaña pide completarlos primero."""
+    client.portal.call(c.store.set, "empresa", json.dumps({"nombre": "Café Lunar", "giro": "Restaurante o cafetería",
+                                                           "descripcion": "Café de especialidad"}))
+    marca = json.loads(client.portal.call(c.store.get, "marca") or "{}")
+    marca.setdefault("estilo", "calido")
+    marca["pasos"] = sorted({*marca.get("pasos", []), "estilo", "colores"})  # lo mínimo de Tu marca (marca.lista)
+    client.portal.call(c.store.set, "marca", json.dumps(marca))
+
+
 def datos_campana(**cambios):
     datos = {"accion": "proponer", "nombre": "Otoño", "inicio": LUNES.isoformat(), "semanas": "1",
              "publicar": "lmv", "tema": "Latte <b>de calabaza</b>", "t_dato": "1", "t_producto": "1",
@@ -75,14 +85,11 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
 
     r = client.get("/panel/contenido/campanas")
     assert 'href="/panel/contenido/campanas" class="on">Campañas' in r.text
-    assert "Temas que quieres probar" in r.text and "No usa imágenes" in r.text
-    assert 'value="repetir" disabled' in r.text and "Te faltan 12 posts con resultados" in r.text
-    assert "Sube 2 fotos en Tu marca" in r.text and 'name="f_collage" value="1" disabled' in r.text
-    assert 'option value="3" selected' in r.text  # 3 semanas de inicio
+    assert "Necesitamos conocer tu negocio" in r.text and "Completar tu empresa" in r.text  # sin empresa ni marca
 
     # Con un solo tema no se puede: vuelve con lo que marcó.
     r = client.post("/panel/contenido/campanas", headers=ORIGEN, data=datos_campana(t_producto=""))
-    assert "Elige de 2 a 6 temas." in r.text and 'name="t_dato" value="1" checked' in r.text
+    assert "Elige de 2 a 6 temas." in r.text
     assert not llamadas
 
     # Lunes, miércoles y viernes de una semana; dos temas, tres formatos, dos horarios.
@@ -133,7 +140,7 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
     assert (p3["hora"], p3["formato"], p3["subtitulo"], p3["caption"]) == ("10:30", "texto", "Que un americano",
                                                                           "Texto editado")
     r = client.get(f"{u}?post=3")
-    assert "Generar imagen · no usa imágenes" in r.text and 'name="idea"' not in r.text
+    assert "Generar no usa tu cupo" in r.text and 'name="idea"' not in r.text
     client.post(u, headers=ORIGEN, data={"accion": "otra", "k": "2"})
     assert campanas.buscar_post(leer(client, c), "2")["titulo"] == "Otra idea"
 
@@ -149,8 +156,8 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
     assert client.portal.call(contenido.imagenes.usadas, c.store) == (0, 0)
     # "Otra imagen" va junto a la imagen (envía el mismo form) y no entre los botones de abajo, junto a Aprobar.
     r = client.get(f"{u}?post=3")
-    assert 'form="f-cam" name="accion" value="generar"' in r.text and "↻ Otra imagen" in r.text
-    assert r.text.index("↻ Otra imagen") < r.text.index('id="f-cam"') < r.text.index('value="aprobar"')
+    assert 'name="accion" value="generar">↻ Otra imagen' in r.text and 'class="modal-cam"' in r.text
+    assert r.text.index("↻ Otra imagen") < r.text.index('value="aprobar"')
     if os.environ.get("GUARDAR_HTML"):
         open(os.environ["GUARDAR_HTML"], "w").write(r.text)
     r = client.post(u, headers=ORIGEN, data={"accion": "aprobar", "k": "3"})
@@ -190,7 +197,7 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
     # Con la imagen hecha, la idea se queda para irla puliendo: "Otra imagen" usa la nueva.
     foto = next(p for p in camp["posts"] if p["formato"] in ("foto", "titular"))
     r = client.get(f"{u}?post={foto['k']}")
-    assert 'name="idea"' in r.text and "sale con tu idea nueva" in r.text
+    assert 'name="idea"' in r.text and "Puedes editarlo antes de generar" in r.text
     client.post(u, headers=ORIGEN,
                 data={"accion": "generar", "k": str(foto["k"]), "idea": "Laptop en un escritorio de madera"})
     assert campanas.buscar_post(leer(client, c), foto["k"])["idea"] == "Laptop en un escritorio de madera"
@@ -234,7 +241,8 @@ def test_lo_que_preguntan_tus_clientes(cliente, monkeypatch):
                 "elogios": ["El latte está buenísimo"], "mensajes": 30}
 
     monkeypatch.setattr(campanas.semana, "temas", temas)
-    assert 'name="clientes" value="1" checked' in client.get("/panel/contenido/campanas").text
+    listo(client, c)
+    assert 'name="preguntan" value="1"' in client.get(f"{BASE}/nueva?paso=3").text
     client.post("/panel/contenido/campanas", headers=ORIGEN, data=datos_campana(clientes="1"))
     prompt = llamadas[-1][0]
     assert "<lo_que_preguntan>" in prompt and "Horario de fin de semana (9 personas)" in prompt
@@ -283,7 +291,9 @@ def test_collage_con_fotos_de_tu_marca(cliente, monkeypatch):
         contenido.archivo(c, token).write_bytes(foto(color))
         tokens.append(token)
     client.portal.call(c.store.set, "marca", json.dumps({"fotos": tokens}))
-    assert 'name="f_collage" value="1" checked' in client.get("/panel/contenido/campanas").text
+    listo(client, c)
+    r = client.get(f"{BASE}/nueva?paso=4")
+    assert 'value="collage"' in r.text and 'value="collage" disabled' not in r.text
 
     client.post("/panel/contenido/campanas", headers=ORIGEN,
                 data=datos_campana(f_titular="", f_texto="", f_foto="", f_collage="1"))
@@ -384,8 +394,12 @@ def test_tus_campanas_y_reporte(cliente, monkeypatch):
     assert len(pasadas[0]["posts"]) == 3
     r = client.get(BASE)
     assert 'class="on">Pasadas<small>2</small>' in r.text
-    assert "Otoño" in r.text and "Navidad" in r.text and f'value="{pasadas[0]["id"]}" checked' in r.text
-    assert "Aún sin posts publicados" in r.text and f'href="{BASE}/{pasadas[0]["id"]}">Ver' in r.text
+    assert "Otoño" in r.text and "Navidad" in r.text and f'value="{pasadas[0]["id"]}" form="tus-campanas" aria-label="Incluir en el reporte" checked' in r.text
+    assert f'href="{BASE}/{pasadas[0]["id"]}">Abrir' in r.text and '<div class="camp apagada">' in r.text  # Navidad
+    assert ">12.5%</b><span>Interacción" in r.text and ">200</b><span>Alcance" in r.text  # sus números en miniatura
+    # El filtro de Pasadas: un rango donde no terminó ninguna.
+    r = client.get(f"{BASE}?ver=pasada&periodo=rango&desde=2000-01-01&hasta=2000-02-01")
+    assert "No hay campañas que hayan terminado en esas fechas." in r.text and 'value="rango" checked' in r.text
 
     def filas():
         with usar(c):
@@ -414,9 +428,10 @@ def test_tasa_de_interaccion():
 
 
 def test_clases_sin_choque():
-    """Cada clase de CSS de Campañas se define en un solo bloque (fila-cam es la del formulario)."""
+    """Cada clase de CSS de Campañas se define en un solo bloque."""
     from igbot import panel
-    assert len(re.findall(r"^\.fila-cam\{", panel.ESTILO, re.M)) == 1 and ".hist-cam{" in panel.ESTILO
+    for clase in ("fila-cam", "camp", "modal-cam", "wiz"):
+        assert len(re.findall(rf"^\.{clase}\{{", panel.ESTILO, re.M)) == 1, clase
 
 
 def test_repetir_reparte_con_la_mezcla():
@@ -486,10 +501,10 @@ def test_repetir_lo_que_funciono(cliente, monkeypatch):
 
     monkeypatch.setattr(c.instagram, "media_insights", media_insights, raising=False)
 
-    r = client.get(f"{BASE}/nueva")
-    assert 'name="modo" value="repetir">' in r.text and "Lo que funcionó en tus campañas" in r.text
-    assert "Señal media · 12 posts con resultados" in r.text and "8.0% · 6 posts" in r.text
-    assert 'name="mezcla" value="equilibrado" checked' in r.text and "tus 12 posts anteriores" in r.text
+    listo(client, c)
+    r = client.get(f"{BASE}/nueva?paso=3")
+    assert 'name="funciona" value="1"' in r.text and 'name="funciona" value="1" disabled' not in r.text
+    assert "Ganó: " in r.text and 'name="mezcla" value="equilibrado" checked' in r.text
 
     client.post("/panel/contenido/campanas", headers=ORIGEN,
                 data={**datos_campana(semanas="2", publicar="lun-sab", clientes="1"), "modo": "repetir",
@@ -602,7 +617,7 @@ def test_varias_campanas(cliente, monkeypatch):
     monkeypatch.setattr(campanas.tools, "now", lambda: hoy)
     client.post(BASE, headers=ORIGEN, data=datos_campana(nombre="Febrero", inicio="2099-01-12"))
     r = client.get(BASE)
-    assert 'class="on">Activas<small>2</small>' in r.text and "día 3 de 14" in r.text and "6 sin imagen" in r.text
+    assert 'class="on">Activas<small>2</small>' in r.text and "día 3 de 14" in r.text and "<b>0 de 6</b>" in r.text
     r = client.get(f"{BASE}?ver=proxima")
     assert "Febrero" in r.text and "Se cruza 7 días con «Invierno»" in r.text and "empieza en 5 días" in r.text
 
