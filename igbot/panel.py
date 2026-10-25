@@ -40,7 +40,7 @@ from urllib.parse import parse_qs
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
 
-from . import config, imagenes, posicionamiento
+from . import config, conversaciones, imagenes, posicionamiento
 from .cuenta import Cuenta, usar
 
 log = logging.getLogger("igbot.panel")
@@ -866,7 +866,7 @@ PRINCIPIO = (
     '<link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" href="/favicon-32.png" sizes="32x32">'
     '<link rel="apple-touch-icon" href="/apple-touch-icon.png">'
     '<title>Tu asistente · Agentes IA by Skandar</title>'
-    f"<style>{ESTILO}{FUENTES_CSS}</style>"
+    f"<style>{ESTILO}{conversaciones.CSS}{FUENTES_CSS}</style>"
     # Solo JavaScript propio (CSP script-src 'self'): la vista previa al momento en Contenido.
     # menu.js sin defer: pliega el menú antes de pintar la página (si no, se ve abrirse y cerrarse).
     f'<script src="/panel/static/menu.js?v={VERSION_MENU}"></script>'
@@ -998,7 +998,7 @@ def caja(nombre: str, etiqueta: str, ayuda: str, valor: str, filas: int = 2) -> 
 async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt: str | None = None,
                    pares_minimos: int = MIN_PREGUNTAS, nota: str = "", ver: str = "",
                    confirmar: bool = False, vista: str = "", abrir: bool = False, buscar: str = "",
-                   hoja: int = 1) -> HTMLResponse:
+                   hoja: int = 1, chat: str = "", n: int = 0) -> HTMLResponse:
     """Tu asistente. Tres vistas, cada una con su dirección: las conversaciones (/panel/asistente),
     "configura" (el formulario, /panel/asistente/configura) y "conexion". `aviso` sale arriba;
     `nota`, junto a las instrucciones (ahí deja la página "Generar instrucciones", con #instrucciones)."""
@@ -1032,7 +1032,7 @@ async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt
                   + ("" if estado_conexion == "ok" else
                      '<div class="aviso">Hay algo que revisar en tu conexión.'
                      ' <a class="enlace" href="/panel/conexion">Ver conexión</a></div>')
-                  + await recientes(c, ver, buscar, hoja))
+                  + await conversaciones.bandeja(c, ver, buscar, hoja, chat, n))
     return pagina(
         # Conexión es de tu cuenta (está en el menú de perfil), no de una sección.
         cabecera(salir=True, menu="cuenta" if vista == "conexion" else "asistente", cuenta=c, sub=vista or "chats", perfil=await usuario(c), foto=await foto_perfil(c),
@@ -1119,20 +1119,6 @@ async def hoy(c: Cuenta) -> str:
     return f'<div class="hoy kpis">{"".join(cajas)}</div>'
 
 
-POR_HOJA = 10
-# "Abiertas": escribieron en las últimas 24 h (la ventana en que Instagram deja contestar) y el
-# asistente no está en pausa ahí. "Pidieron una persona": en pausa porque el asistente los pasó contigo.
-FILTROS = {"": "Todas", "abiertas": "Abiertas", "persona": "Pidieron una persona", "pausa": "En pausa",
-           "sin": "Sin contestar"}
-VENTANA = 24 * 3600
-
-
-def enlace_chats(ver: str, buscar: str = "", hoja: int = 1) -> str:
-    from urllib.parse import urlencode
-    q = urlencode({k: v for k, v in (("ver", ver), ("q", buscar), ("p", hoja if hoja > 1 else "")) if v})
-    return "/panel/asistente" + ("?" + q if q else "") + "#chats"
-
-
 def paginas(actual: int, total: int, enlace) -> str:
     """‹ 1 2 3 … 9 ›: la primera, la última y las de junto a la actual; lo demás, puntitos.
     `enlace(n)` da la dirección de la página n."""
@@ -1152,84 +1138,6 @@ def paginas(actual: int, total: int, enlace) -> str:
                 if 1 <= n <= total else f'<span class="apagada" aria-hidden="true">{signo}</span>')
     return (f'<nav class="paginas" aria-label="Páginas">{flecha(actual - 1, "‹", "Anterior")}'
             f'{"".join(partes)}{flecha(actual + 1, "›", "Siguiente")}</nav>')
-
-
-async def recientes(c: Cuenta, ver: str, buscar: str = "", hoja: int = 1) -> str:
-    """Los últimos chats, de 10 en 10, con buscador: quién los atiende y los botones para tomarlos,
-    reactivarlos o abrirlos en Instagram. Los que están en pausa salen siempre, aunque sean viejos."""
-    import asyncio
-
-    ahora = time.time()
-    ver = ver if ver in FILTROS else ""
-    buscar = buscar.strip()[:60]
-    # Quién pidió una persona: el asistente lo pasó contigo (pasar_a_humano) durante su pausa actual.
-    humano_desde = ahora - c.human_pause_hours * 3600 - 60
-
-    async def pagina(n: int):
-        return await c.store.chats_page(ahora, ahora - VENTANA, humano_desde, ver, buscar.lstrip("@"),
-                                        POR_HOJA, (n - 1) * POR_HOJA)
-    # La base filtra, busca y corta: solo llegan aquí los 10 chats de la página.
-    filas, cuantos, encontrados = await pagina(max(1, hoja))
-    total = max(1, -(-encontrados // POR_HOJA))
-    if hoja > total or hoja < 1:
-        hoja = min(max(1, hoja), total)
-        filas, cuantos, encontrados = await pagina(hoja)
-    suyos = {f[0] for f in filas if f[-1] == "persona"}
-    motivos = {u: d.get("motivo", "") for u, d, _ in await c.store.events("humano", humano_desde, ahora + 1)
-               if u in suyos} if suyos else {}
-    with usar(c):
-        nombres = await asyncio.gather(*(c.instagram.username(f[0]) for f in filas))
-    etiquetas = {"pausa": ("En pausa · tú", "acento"), "persona": ("Pidió una persona", "rojo"),
-                 "sin": ("Sin contestar", "rojo"),
-                 "tu": ("Contestaste tú", ""), "asistente": ("Asistente", "verde")}
-    html = []
-    for (u, t, _, _, ultimo, hasta, est), nombre in zip(filas, nombres):
-        nombre = nombre if nombre.startswith("@") else "Cliente de Instagram"
-        detalle = f"«{escape(ultimo[:90])}»" if ultimo else "Sin mensajes todavía"
-        if est == "persona" and motivos.get(u):
-            detalle = f"Motivo: {escape(motivos[u][:120])} · " + detalle
-        if est in ("pausa", "persona"):
-            horas = max(1, round((hasta - ahora) / 3600))
-            detalle += f" · vuelve a contestar solo en {horas} h"
-        elif t:
-            detalle += f" · {hace(t)}"
-        texto, color = etiquetas[est]
-        botones = (f'<button class="boton secundario chico" name="accion" value="extender">+{c.human_pause_hours:g} h</button>'
-                   '<button class="boton chico" name="accion" value="reactivar">Reactivar</button>'
-                   if est in ("pausa", "persona") else
-                   '<button class="boton secundario chico" name="accion" value="tomar">Tomar este chat</button>')
-        abrir = (f'<a class="boton secundario chico" href="https://ig.me/m/{escape(nombre[1:])}" target="_blank"'
-                 ' rel="noopener">Abrir</a>' if nombre.startswith("@") else "")
-        html.append(
-            f'<div class="fila"><span class="avatar">{escape(nombre[1:2].upper() or "?")}</span>'
-            f'<div class="datos"><b>{escape(nombre)}</b><span>{detalle}</span></div>'
-            f'<span class="chip {color}">{texto}</span>'
-            '<form method="post" action="/panel/pausas" class="acciones-fila">'
-            f'<input type="hidden" name="usuario" value="{escape(u)}">{botones}{abrir}</form></div>')
-    filtros = "".join(
-        f'<a href="{escape(enlace_chats(k, buscar))}" class="{"on" if k == ver else ""}">'
-        f'{nombre}{f" ({cuantos[k]})" if k else ""}</a>' for k, nombre in FILTROS.items())
-    vacio = {"": "Aún no te escribe nadie. Aquí vas a ver tus chats en cuanto lleguen.",
-             "abiertas": "Ninguna: nadie te ha escrito en las últimas 24 horas.",
-             "persona": "Nadie: ningún chat está esperando a que le contestes tú.",
-             "pausa": "Ninguno: tu asistente está contestando en todos tus chats.",
-             "sin": "Ninguno: todos tus chats tienen respuesta."}[ver]
-    if buscar:
-        vacio = f"No encontramos chats con «{escape(buscar)}»."
-    busqueda = ('<form method="get" action="/panel/asistente#chats" class="buscar-chats" role="search">'
-                + (f'<input type="hidden" name="ver" value="{ver}">' if ver else "")
-                + f'<input type="search" name="q" value="{escape(buscar)}" placeholder="Buscar un cliente o un mensaje"'
-                ' aria-label="Buscar un cliente o un mensaje" maxlength="60">'
-                '<button class="boton secundario chico">Buscar</button>'
-                + (f'<a class="enlace" href="{escape(enlace_chats(ver))}">Borrar</a>' if buscar else "") + "</form>")
-    cuenta = (f'<p class="ayuda cuantos">{encontrados} {"chat" if encontrados == 1 else "chats"}'
-              + (f" · página {hoja} de {total}" if total > 1 else "") + "</p>") if encontrados else ""
-    return ('<div class="tarjeta" id="chats"><span class="num">Conversaciones recientes</span>'
-            f'<p class="ayuda">Lo último que te escribieron. "Tomar este chat" pausa al asistente ahí'
-            f" {c.human_pause_hours:g} h para que contestes tú desde Instagram.</p>"
-            f'<div class="filtros">{filtros}</div>{busqueda}{cuenta}'
-            + ("".join(html) or f'<p class="ayuda vacio">{vacio}</p>')
-            + paginas(hoja, total, lambda n: enlace_chats(ver, buscar, n)) + "</div>")
 
 
 # La cuenta principal (la vendedora, la del .env) usa prompts/system.md, que vive en el
@@ -1447,8 +1355,9 @@ async def ver_asistente(request: Request):
         return RedirectResponse("/panel/conexion", status_code=303)
     vista = "configura" if q.get("vista") == "configura" else ""
     hoja = int(q["p"]) if q.get("p", "").isdigit() else 1
+    n = int(q["n"]) if q.get("n", "").isdigit() else 0
     return await panel_de(c, ver=q.get("ver", ""), vista=vista, abrir=q.get("abrir") == "1",
-                          buscar=q.get("q", ""), hoja=hoja) if c else entrar()
+                          buscar=q.get("q", ""), hoja=hoja, chat=q.get("chat", "")[:64], n=n) if c else entrar()
 
 
 @router.get("/conexion")
@@ -1589,25 +1498,33 @@ async def estado(request: Request):
     return await panel_de(c, "Tu asistente ya está contestando." if encender else "Tu asistente quedó en pausa.")
 
 
+def _bandeja_de(f: dict) -> dict:
+    """La bandeja a la que se vuelve después de un botón del chat: su filtro, búsqueda, página y chat."""
+    hoja = f.get("p", "")
+    return {"ver": f.get("ver", ""), "buscar": f.get("q", ""), "hoja": int(hoja) if hoja.isdigit() else 1,
+            "chat": f.get("chat", "")[:64]}
+
+
 @router.post("/pausas")
 async def cambiar_pausa(request: Request):
-    """Reactiva un chat en pausa o le da más tiempo a la persona que lo atiende."""
+    """El interruptor Asistente / Tú de un chat: lo toma (pausa al asistente), lo reactiva o le da más tiempo."""
     de_aqui(request)
     if not (c := cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     f = await form(request)
     usuario_chat, accion = f.get("usuario", ""), f.get("accion")
+    bandeja = _bandeja_de(f)
     if accion == "tomar":
         if not await c.store.has_chat(usuario_chat):
-            return await panel_de(c, "No encontramos ese chat.")
+            return await panel_de(c, "No encontramos ese chat.", **bandeja)
         await c.store.pause(usuario_chat, time.time() + c.human_pause_hours * 3600)
         with usar(c):
             nombre = await c.instagram.username(usuario_chat)
         log.info("@%s tomó el chat de %s desde el panel", await usuario(c), usuario_chat)
         return await panel_de(c, f"Listo: el asistente no le contesta a {nombre} en {c.human_pause_hours:g} h."
-                              " Contéstale tú desde Instagram.")
+                              " Contéstale tú desde aquí o desde Instagram.", **bandeja)
     if usuario_chat not in {u for u, *_ in await c.store.paused_list(time.time())}:
-        return await panel_de(c, "Ese chat ya no estaba en pausa.")
+        return await panel_de(c, "Ese chat ya no estaba en pausa.", **bandeja)
     with usar(c):
         nombre = await c.instagram.username(usuario_chat)
     if accion == "reactivar":
@@ -1617,7 +1534,39 @@ async def cambiar_pausa(request: Request):
         await c.store.pause(usuario_chat, time.time() + c.human_pause_hours * 3600)
         aviso = f"Listo: {nombre} sigue en pausa {c.human_pause_hours:g} h más."
     log.info("@%s cambió la pausa de %s desde el panel (%s)", await usuario(c), usuario_chat, accion)
-    return await panel_de(c, aviso)
+    return await panel_de(c, aviso, **bandeja)
+
+
+@router.post("/responder")
+async def responder(request: Request):
+    """Contestar un chat desde el panel: sale por Instagram como mensaje de la cuenta, queda en el
+    historial como respuesta a mano (el bot la ve) y el asistente se pausa ahí, como cuando contestas
+    desde Instagram. Su eco se ignora porque Instagram ya dio su id al enviarlo (store.add_sent)."""
+    de_aqui(request)
+    if not (c := cuenta_de_sesion(request)):
+        return RedirectResponse("/panel", status_code=303)
+    f = await form(request)
+    usuario_chat, texto = f.get("usuario", ""), f.get("texto", "").strip()[:conversaciones.MAX_RESPUESTA]
+    bandeja = _bandeja_de(f) | {"chat": usuario_chat}
+    if usuario_chat.startswith("admin:") or not await c.store.has_chat(usuario_chat):
+        return await panel_de(c, "No encontramos ese chat.", **(bandeja | {"chat": ""}))
+    if not texto:
+        return await panel_de(c, "Escribe tu respuesta antes de enviarla.", **bandeja)
+    if time.time() - await c.store.last_message_from(usuario_chat) >= conversaciones.VENTANA:
+        return await panel_de(c, "Ya pasaron 24 horas desde su último mensaje: Instagram no deja contestarle"
+                              " hasta que te vuelva a escribir.", **bandeja)
+    try:
+        with usar(c):
+            await c.instagram.send_text(usuario_chat, texto)
+    except Exception:
+        log.exception("No se pudo mandar la respuesta del panel a %s", usuario_chat)
+        return await panel_de(c, "Instagram no aceptó el mensaje. Intenta de nuevo en un momento o contéstale"
+                              " desde Instagram.", **bandeja)
+    await c.store.pause(usuario_chat, time.time() + c.human_pause_hours * 3600)
+    await c.store.add_owner_message(usuario_chat, None, texto)
+    log.info("@%s contestó a %s desde el panel", await usuario(c), usuario_chat)
+    return await panel_de(c, f"Enviado. Tu asistente no contesta en este chat las próximas {c.human_pause_hours:g} h.",
+                          **bandeja)
 
 
 # --- probar el asistente antes de encenderlo ---

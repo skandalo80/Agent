@@ -249,3 +249,24 @@ document.querySelectorAll('input[type="datetime-local"], input[type="date"], inp
     try { i.showPicker(); } catch { /* navegadores sin showPicker: queda como siempre */ }
   });
 });
+
+// Conversaciones: el buscador busca solo al dejar de escribir medio segundo (recarga la página con
+// la búsqueda; sin fetch). Al volver, el cursor sigue en el buscador para seguir escribiendo.
+document.querySelectorAll("form[data-vivo]").forEach((form) => {
+  const campo = form.querySelector('input[type="search"]');
+  let espera;
+  try {
+    if (sessionStorage.getItem("chats:buscando") === "1") {
+      sessionStorage.removeItem("chats:buscando");
+      campo.focus();
+      campo.setSelectionRange(campo.value.length, campo.value.length);
+    }
+  } catch { /* sin almacenamiento: solo no regresa el cursor */ }
+  campo.addEventListener("input", () => {
+    clearTimeout(espera);
+    espera = setTimeout(() => {
+      try { sessionStorage.setItem("chats:buscando", "1"); } catch { /* sin almacenamiento */ }
+      form.requestSubmit();
+    }, 500);
+  });
+});
