@@ -510,7 +510,7 @@ def test_diseno_libre_con_el_estilo_de_sus_fotos(cliente, monkeypatch):
     r = client.get("/panel/contenido/nuevo")
     assert 'name="como" value="marca" checked><b>Con mi diseño libre' in r.text and "celular como protagonista" in r.text
     client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "marca"})
-    assert "<estilo_de_la_marca>Fondos oscuros" in llamadas[-1][0]
+    assert "<estilo_de_la_marca>Estilo de fotos: Fondos oscuros" in llamadas[-1][0] and "acento #E8590C" in llamadas[-1][0]
     prompt, fotos = proveedor.llamadas[-1]
     assert 'Headline (largest): "Cartera Atelier"' in prompt and "#E8590C" in prompt
     assert "celular como protagonista" in prompt and "brand's own photos" in prompt and len(fotos) == 1
@@ -545,11 +545,11 @@ def test_el_estilo_depende_del_modo_del_post(cliente, monkeypatch):
     assert 'name="propio"' not in r.text and 'class="si-libre"' in r.text
     client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "marca", "modo": "plantilla"})
     assert "Studio photography" in proveedor.llamadas[-1][0] and "naranja" not in proveedor.llamadas[-1][0]
-    assert "<estilo_de_la_marca>" not in llamadas[-1][0]
+    assert "Estilo de fotos: Limpio y profesional" in llamadas[-1][0] and "naranja" not in llamadas[-1][0]
 
     client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "marca", "modo": "libre"})
     assert "naranja" in proveedor.llamadas[-1][0] and "Studio photography" not in proveedor.llamadas[-1][0]
-    assert "<estilo_de_la_marca>" in llamadas[-1][0]
+    assert "Estilo de fotos: Fondos oscuros y detalles en naranja." in llamadas[-1][0]
     # La vista previa en libre no usa la foto de ejemplo de un estilo de la lista.
     assert client.get("/panel/contenido/muestra.jpg?modo=libre").status_code == 200
 

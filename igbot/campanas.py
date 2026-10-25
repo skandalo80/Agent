@@ -40,10 +40,10 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response, Streamin
 
 from . import config, imagenes, informe, panel, semana, tools
 from .admin import PANEL
-from .contenido import (ESTADOS, ESTILO_REFERENCIA, ESTILOS, MAX_CAPTION, archivo, contexto_marca, cuando, estilo_de,
+from .contenido import (ESTADOS, ESTILO_REFERENCIA, ESTILOS, IMAGEN, MAX_CAPTION, archivo, contexto_marca, cuando, estilo_de,
                         falta_cupo,
                         guardar_pieza, kit, libre, marca_de, modo_de, negocio_de, notas_estilo, plantilla_de, sin_plan,
-                        texto_imagen, url_imagen)
+                        texto_imagen, url_imagen, visual_marca)
 from .cuenta import Cuenta, usar
 
 log = logging.getLogger("igbot.campanas")
@@ -116,7 +116,7 @@ DIAS = ("Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom")
 MESES = ("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic")
 HORA = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 HORA_INICIAL = "19:00"
-MAX_NOMBRE, MAX_TEMA, MAX_TITULO, MAX_IDEA = 60, 600, 80, 800
+MAX_NOMBRE, MAX_TEMA, MAX_TITULO, MAX_IDEA = 60, 600, 80, 1600
 MAX_CAMPANAS = 24  # las de más pasan al historial (informe.archivar)
 MAX_DIAS = 84  # lo más larga que puede quedar una campaña al editarla o estirarla
 IA_POR_DIA = 10  # propuestas y "otra idea" al día por cuenta: no gastan imagen, pero sí Claude
@@ -126,7 +126,8 @@ REGLAS = """- Usa solo datos de la información del negocio o del tema. No inven
 - Español de México, con el tono de las instrucciones del negocio (si no dicen, cercano y profesional, tuteando).
 - "titulo": máximo 6 palabras (o lo que pida el formato), sin punto final. "subtitulo": frase corta de máximo 12 palabras, o "".
 - "caption": el texto del post, de 2 a 5 frases cortas y luego de 3 a 6 hashtags. Máximo 1200 caracteres. En "Pregunta a tu comunidad" y "Esto o aquello", termina invitando a contestar en comentarios.
-- "idea": en español, la foto que hay que generar: escena, sujeto, encuadre y luz, en 2 o 3 frases. Sin texto, letras ni logos."""
+- "idea": en español, el prompt completo de la imagen, de 120 a 180 palabras en un solo párrafo, pensado para el tema, el formato y el objetivo de la campaña y con la forma de <marca_visual>. """ + IMAGEN + """
+- En el formato que no lleva foto, "idea" es ""; en el collage, una frase con lo que deben mostrar las fotos."""
 
 SISTEMA = """Eres el community manager de un negocio en Instagram. Armas una campaña para descubrir qué contenido le funciona: un post para cada línea de <posts>, con el tema y el formato que dice esa línea.
 
@@ -135,7 +136,8 @@ Formatos: {formatos}
 
 Reglas:
 - Respeta el tema y el formato de cada línea. Si un tema se repite, cada post de ese tema es distinto.
-- Si hay <tema>, la campaña gira alrededor de él.
+- Si hay <tema>, la campaña gira alrededor de él. Si hay <objetivo>, <mensaje> o <producto>, cada post (texto e imagen) sirve a eso. Si hay <lo_que_se_ve> o <estilo_de_campana>, las imágenes lo siguen (por encima del estilo general de <marca_visual>).
+- Todo es a la medida de esta empresa: sus productos, su cliente ideal, lo que la hace distinta y el tono de su marca. Nada que le sirva igual a cualquier negocio del ramo.
 - Si hay <lo_que_preguntan> (lo que más le preguntaron sus clientes por mensaje y en comentarios), como máximo {tope} posts responden a esas dudas, sobre todo de Enseña algo, Dato curioso, Producto en acción o Pregunta a tu comunidad. En esos, "responde" es el tema que contestan (tal cual viene); en los demás, "".
 - Si hay <ya_publicado> (títulos de sus campañas anteriores), ningún post repite el asunto de esos títulos: aunque el tema y el formato sean los mismos, cada post dice algo nuevo.
 - Si hay <lo_que_dicen> (cosas buenas que dijeron sus clientes), úsalo en "Lo que dicen tus clientes", parafraseado y sin nombres. No inventes otras.
@@ -370,6 +372,20 @@ def limpio(x: dict) -> dict:
             "idea": str(x.get("idea") or "").strip()[:MAX_IDEA]}
 
 
+# Lo que la campaña pide además del tema (los arma el paso 1 de Crear campaña cuando los tiene).
+PARAMETROS = (("objetivo", "objetivo"), ("mensaje", "mensaje"), ("producto", "producto"), ("visual", "lo_que_se_ve"),
+              ("estilo", "estilo_de_campana"))
+
+
+def parametros(camp: dict) -> str:
+    return "".join(f"<{etiqueta}>{escape(str(camp[k]).strip()[:MAX_TEMA])}</{etiqueta}>\n"
+                   for k, etiqueta in PARAMETROS if str(camp.get(k) or "").strip())
+
+
+async def de_la_marca(c: Cuenta) -> str:
+    return f"<marca_visual>\n{visual_marca(await marca_de(c))}\n</marca_visual>\n\n"
+
+
 async def proponer(c: Cuenta, camp: dict, anteriores: list[dict] | None = None, gano: dict | None = None,
                    fotos: int = 0) -> dict:
     """Llena con Claude los días libres de la campaña (los posts con imagen se quedan donde están).
@@ -396,8 +412,10 @@ async def proponer(c: Cuenta, camp: dict, anteriores: list[dict] | None = None, 
     titulos, respondidas = informe.ya_hecho(anteriores or [])
     ya = "\n".join(f"- {escape(t)}" for t in titulos[:MAX_YA_HECHO])
     tope = max(1, len(libres) // CLIENTES_CADA)
-    prompt = (f"<negocio>\n{await negocio_de(c)}\n</negocio>\n\n<campaña>{escape(camp['nombre'])}</campaña>\n"
-              f"<tema>{escape(camp['tema']) or 'Sin tema: un poco de todo del negocio.'}</tema>\n\n"
+    prompt = (f"<negocio>\n{await negocio_de(c)}\n</negocio>\n\n{await de_la_marca(c)}"
+              f"<campaña>{escape(camp['nombre'])}</campaña>\n"
+              f"<tema>{escape(camp['tema']) or 'Sin tema: un poco de todo del negocio.'}</tema>\n"
+              + parametros(camp) + "\n"
               + (await de_tus_clientes(c, respondidas) if camp.get("clientes") else "")
               + (f"<ya_publicado>\n{ya}\n</ya_publicado>\n\n" if ya else "")
               + f"<posts>\n{lineas}\n</posts>")
@@ -455,7 +473,8 @@ async def otra_idea(c: Cuenta, camp: dict, p: dict) -> None:
     from . import agent
 
     actual = f"Título: {p['titulo']}\nTexto: {p['caption']}\nFoto: {p['idea']}"
-    prompt = (f"<negocio>\n{await negocio_de(c)}\n</negocio>\n\n<tema>{escape(camp.get('tema', ''))}</tema>\n\n"
+    prompt = (f"<negocio>\n{await negocio_de(c)}\n</negocio>\n\n{await de_la_marca(c)}"
+              f"<tema>{escape(camp.get('tema', ''))}</tema>\n" + parametros(camp) + "\n"
               f"<actual>\n{escape(actual)}\n</actual>")
     tema, formato = tema_de(p["tipo"]), FORMATOS[formato_de(p)]
     sistema = SISTEMA_OTRA.format(tema=f"{tema[0]}: {tema[2]}", formato=f"{formato[0]}: {formato[2]}", reglas=REGLAS)
@@ -927,7 +946,7 @@ async def detalle(c: Cuenta, camp: dict, p: dict, quedan_ia: int) -> str:
     # La idea se queda después de generar (menos en el collage, que no la usa) para irla puliendo con "Otra imagen".
     idea = ("" if formato in SIN_IDEA or (post and formato == "collage") else
             f'<label for="d-idea">{"Qué deben mostrar las fotos" if formato == "collage" else "Idea de la imagen"}'
-            f'</label><textarea id="d-idea" name="idea" rows="4" maxlength="{MAX_IDEA}"{solo}>{escape(p["idea"])}'
+            f'</label><textarea id="d-idea" name="idea" rows="8" maxlength="{MAX_IDEA}"{solo}>{escape(p["idea"])}'
             "</textarea>"
             + ("" if formato == "collage" else
                '<input type="hidden" name="con_marca_en_form" value="1"><label class="check"><input type="checkbox"'
