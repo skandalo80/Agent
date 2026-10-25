@@ -1,8 +1,9 @@
 """Contenido en el panel: marca, crear post, editarlo, aprobarlo y publicarlo."""
 import io
 import json
-import re
 import os
+import re
+from functools import partial
 from datetime import timedelta
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -53,6 +54,11 @@ def png() -> bytes:
     return out.getvalue()
 
 
+def crear(client, c, objetivo="marca", **kw) -> int:
+    """Un post como lo arma Campañas (Crear post ya no existe): Claude escribe y se genera la imagen."""
+    return client.portal.call(partial(contenido.generar, c, objetivo, **kw))
+
+
 def test_leer_respuesta_de_claude():
     datos = contenido.leer_respuesta("Aquí va:\n```json\n" + json.dumps(POST) + "\n```")
     assert datos["titulo"] == "Cartera Atelier" and datos["palabra_clave"] == "PRECIO"
@@ -98,8 +104,7 @@ def test_sin_contenido_en_el_plan(cliente):
     assert c.imagenes_mes == 0
     assert 'title="Contenido"' not in client.get("/panel").text  # el menú solo sale si su plan lo tiene
     assert "Tu plan actual es el Asistente virtual" in client.get("/panel/contenido").text
-    r = client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "marca"})
-    assert "Tu plan actual es el Asistente virtual" in r.text
+    assert client.get("/panel/contenido/nuevo", follow_redirects=False).headers["location"] == "/panel/contenido/campanas"
 
 
 def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
@@ -108,8 +113,6 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     assert 'href="/panel/contenido" title="Contenido"' in client.get("/panel/asistente").text
     r = client.get("/panel/contenido")
     assert "Aún no tienes posts" in r.text and "DESDEAPP" in r.text  # lo de la app sale aunque no haya del panel
-    assert "Este post lleva precio" in client.get("/panel/contenido/nuevo").text
-    assert client.get("/panel/contenido/nuevo").text.count('name="objetivo"') == 5
 
     # Tu marca: colores, letra y una foto del producto.
     marca = {"principal": "1f3a5f", "acento": "#F7D046", "fondo": "#zzz", 
@@ -135,12 +138,8 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     assert Image.open(io.BytesIO(r.content)).size == (1080, 1350)
     assert client.get(f"/media/cafe_lunar/{token_foto}.jpg").status_code == 200
 
-    # Crear post: Claude escribe, Gemini pinta (con la foto real) y queda en borrador.
-    assert client.post("/panel/contenido/nuevo", data={"objetivo": "estrella"}).status_code == 403  # sin Origin
-    r = client.post("/panel/contenido/nuevo", headers=ORIGEN,
-                    data={"objetivo": "estrella", "tema": "La cartera Atelier", "foto_0": token_foto, "con_precio": "1"})
-    assert r.text.index('id="generando"') < r.text.index("#generando{display:none}")
-    assert 'url=/panel/contenido/post/1"' in r.text and r.text.endswith("</html>")
+    # Un post: Claude escribe, el generador pinta (con la foto real) y queda en borrador.
+    assert crear(client, c, "estrella", tema="La cartera Atelier", fotos=[token_foto], con_precio=True) == 1
     prompt, system, model = llamadas[0]
     assert "Vendemos carteras." in prompt and "La cartera Atelier" in prompt and "precio" in prompt
     assert "JSON" in system and model == "claude-sonnet-5-5"
@@ -231,16 +230,10 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
 def test_pasado_el_cupo_pide_confirmar_la_imagen_extra(cliente, monkeypatch):
     client, c, llamadas, proveedor = cliente
     monkeypatch.setattr(c, "imagenes_mes", 1)
-    client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "marca"})
+    crear(client, c)
     assert len(proveedor.llamadas) == 1
-
-    r = client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "historia", "tema": "Cómo empezamos"})
-    assert "Generar por US$0.25" in r.text and "Cómo empezamos" in r.text
-    assert len(proveedor.llamadas) == 1 and len(llamadas) == 1  # ni Claude ni Gemini antes de aceptar
-
-    r = client.post("/panel/contenido/nuevo", headers=ORIGEN,
-                    data={"objetivo": "historia", "tema": "Cómo empezamos", "extra": "1", "accion": "generar"})
-    assert "post/2" in r.text and len(proveedor.llamadas) == 2
+    assert client.portal.call(contenido.falta_cupo, c, False) == "extra"  # se acabó el cupo: hay que confirmar
+    assert crear(client, c, "historia", tema="Cómo empezamos", extra=True) == 2 and len(proveedor.llamadas) == 2
     assert client.portal.call(imagenes.usadas, c.store) == (1, 1)
     assert "1 imágenes extra este mes" in client.get("/panel/contenido").text
 
@@ -253,8 +246,8 @@ def test_si_falla_la_imagen_se_avisa_y_no_queda_post(cliente, monkeypatch):
     client, c, llamadas, _ = cliente
     monkeypatch.setattr(c, "imagenes_mes", 3)
     monkeypatch.setattr(imagenes, "proveedor", Falso(imagenes.ErrorImagen("Esa idea no se pudo ilustrar.")))
-    r = client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "explicar"})
-    assert "Esa idea no se pudo ilustrar." in r.text and "post/" not in r.text
+    with pytest.raises(imagenes.ErrorImagen, match="Esa idea no se pudo ilustrar."):
+        crear(client, c, "explicar")
     assert client.portal.call(c.store.posts, ("borrador",), None, admin.PANEL) == []
     assert client.portal.call(imagenes.usadas, c.store) == (0, 0)
 
@@ -262,7 +255,7 @@ def test_si_falla_la_imagen_se_avisa_y_no_queda_post(cliente, monkeypatch):
 def test_sin_precio_no_lleva_precio(cliente, monkeypatch):
     client, c, llamadas, _ = cliente
     monkeypatch.setattr(c, "imagenes_mes", 3)
-    client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "marca"})
+    crear(client, c)
     assert "<con_precio>no</con_precio>" in llamadas[0][0]
     assert client.portal.call(contenido.pieza, c.store, 1)["precio"] == ""
     datos = {"plantilla": "editorial", "titulo": "Hola", "precio": "$5", "caption": "x", "accion": "guardar"}
@@ -454,45 +447,24 @@ def con_mensajes(cliente, monkeypatch):
     return client, c, llamadas, proveedor
 
 
-def test_comentarios_y_dms(con_mensajes):
+def test_lo_que_mas_preguntan(con_mensajes):
+    """Los temas de DMs y comentarios los usa Campañas; sus páginas viejas llevan a Campañas."""
+    from igbot import semana
     client, c, llamadas, _ = con_mensajes
-    r = client.get("/panel/contenido/ideas")
-    assert "Horario de fin de semana" in r.text and "4 personas" in r.text and "De 2 mensajes" in r.text
-    assert 'href="/panel/contenido/ideas" class="on"' in r.text
+    datos = client.portal.call(semana.temas, c)
+    assert datos["temas"][0]["tema"] == "Horario de fin de semana" and datos["mensajes"] == 2
+    assert datos["elogios"] == ["Les encanta la atención"]
     prompt, system, model = llamadas[0]
     assert "(DM, persona 1) Hola, ¿abren el sábado?" in prompt and "(comentario, persona 2)" in prompt
     assert model == "claude-haiku-5-5"
-    client.get("/panel/contenido/ideas")
+    client.portal.call(semana.temas, c)
     assert len(llamadas) == 1  # una vez al día
-    from igbot import semana
-    assert client.portal.call(semana.temas, c)["elogios"] == ["Les encanta la atención"]
-    r = client.get("/panel/contenido/nuevo?objetivo=explicar&tema=Post+con+el+horario+del+s%C3%A1bado")
-    assert "Post con el horario del sábado</textarea>" in r.text and 'value="explicar" checked' in r.text
-
-
-def test_esta_semana(con_mensajes, monkeypatch):
-    client, c, llamadas, proveedor = con_mensajes
-    r = client.get("/panel/contenido/semana")
-    assert "Tu semana en un clic" in r.text and "Armar mi semana · usa 3 imágenes" in r.text
-    r = client.post("/panel/contenido/semana", headers=ORIGEN, data={"accion": "armar"})
-    assert "Post 3 de 3" in r.text and 'url=/panel/contenido/semana"' in r.text
-    assert len(proveedor.llamadas) == 3
-    r = client.get("/panel/contenido/semana")
-    assert r.text.count('class="propuesta"') == 3 and "Te preguntaron 4 veces." in r.text
-    assert "0 de 3 aprobadas" in r.text and "Proponer 3 más" in r.text
-    posts = client.portal.call(c.store.posts, ("borrador",), None, admin.PANEL)
-    fechas = sorted(p["publish_at"] for p in posts)
-    assert fechas[1] - fechas[0] == 2 * 86400
-    r = client.post("/panel/contenido/semana", headers=ORIGEN, data={"aprobar": str(posts[0]["id"])})
-    assert "Listo: sale el" in r.text and "1 de 3 aprobadas" in r.text
-    assert client.portal.call(c.store.post, posts[0]["id"])["status"] == "programada"
-    assert "ya no está en borrador" in client.post("/panel/contenido/semana", headers=ORIGEN,
-                                                   data={"aprobar": str(posts[0]["id"])}).text
-
-    # Sin cupo para 3 más, pide confirmar las extra antes de gastar.
-    monkeypatch.setattr(c, "imagenes_mes", 4)
-    r = client.post("/panel/contenido/semana", headers=ORIGEN, data={"accion": "armar"})
-    assert "Te queda 1 imagen de tu plan" in r.text and len(proveedor.llamadas) == 3
+    for vieja in ("ideas", "semana", "nuevo"):
+        r = client.get(f"/panel/contenido/{vieja}", follow_redirects=False)
+        assert r.headers["location"] == "/panel/contenido/campanas"
+    menu = client.get("/panel/contenido").text
+    assert "Esta semana" not in menu and "Contenido sugerido" not in menu and "Crear post" not in menu
+    assert 'href="/panel/contenido/campanas/nueva">+ Nueva campaña' in menu
 
 
 def test_diseno_libre_con_el_estilo_de_sus_fotos(cliente, monkeypatch):
@@ -507,9 +479,7 @@ def test_diseno_libre_con_el_estilo_de_sus_fotos(cliente, monkeypatch):
     assert guardada["modo"] == "libre" and guardada["fotos_estilo"] is True and "celular" in guardada["estilo_propio"]
     assert 'name="modo" value="libre" checked' in r.text
 
-    r = client.get("/panel/contenido/nuevo")
-    assert 'name="como" value="marca" checked><b>Con mi diseño libre' in r.text and "celular como protagonista" in r.text
-    client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "marca"})
+    crear(client, c)
     assert "<estilo_de_la_marca>Estilo de fotos: Fondos oscuros" in llamadas[-1][0] and "acento #E8590C" in llamadas[-1][0]
     prompt, fotos = proveedor.llamadas[-1]
     assert 'Headline (largest): "Cartera Atelier"' in prompt and "#E8590C" in prompt
@@ -530,7 +500,7 @@ def test_diseno_libre_con_el_estilo_de_sus_fotos(cliente, monkeypatch):
     assert 'Headline (largest): "Otro título"' in proveedor.llamadas[-1][0]
 
     # Con plantilla en este post, aunque la marca diga libre.
-    client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "marca", "modo": "plantilla"})
+    crear(client, c, modo="plantilla")
     assert client.portal.call(contenido.pieza, c.store, 2)["plantilla"] == "editorial"
     assert "Do not include any text" in proveedor.llamadas[-1][0]
 
@@ -543,11 +513,11 @@ def test_el_estilo_depende_del_modo_del_post(cliente, monkeypatch):
     # Ya no hay casilla: con plantilla mandan los estilos de la lista; en libre, su descripción.
     r = client.post("/panel/contenido/marca", headers=ORIGEN, data=base)
     assert 'name="propio"' not in r.text and 'class="si-libre"' in r.text
-    client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "marca", "modo": "plantilla"})
+    crear(client, c, modo="plantilla")
     assert "Studio photography" in proveedor.llamadas[-1][0] and "naranja" not in proveedor.llamadas[-1][0]
     assert "Estilo de fotos: Limpio y profesional" in llamadas[-1][0] and "naranja" not in llamadas[-1][0]
 
-    client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "marca", "modo": "libre"})
+    crear(client, c, modo="libre")
     assert "naranja" in proveedor.llamadas[-1][0] and "Studio photography" not in proveedor.llamadas[-1][0]
     assert "Estilo de fotos: Fondos oscuros y detalles en naranja." in llamadas[-1][0]
     # La vista previa en libre no usa la foto de ejemplo de un estilo de la lista.
@@ -662,7 +632,7 @@ def test_bienvenida_con_contenido_y_lo_que_falta(cliente, monkeypatch):
     assert client.get("/panel", follow_redirects=False).headers["location"] != "/panel/bienvenida"  # solo una vez
     client.portal.call(c.store.set, "perfil", "")
     client.portal.call(c.store.set, "asistente_listo", "0")
-    assert "Te falta configurar <b>Tu asistente</b>" in client.get("/panel/contenido/nuevo").text
+    assert "Te falta configurar <b>Tu asistente</b>" in client.get("/panel/contenido").text
     client.post("/panel/guardar", headers=ORIGEN, data={"negocio": "Café", "accion": "guardar", "prompt": "Hola"})
     assert "Te falta configurar <b>Tu marca</b>" in client.get("/panel/asistente").text
     assert "Te falta configurar <b>Tu marca</b>" in client.get("/panel/contenido").text
@@ -696,13 +666,9 @@ def test_crear_post_con_ajustes_solo_para_ese_post(cliente, monkeypatch):
     client.post("/panel/contenido/marca", headers=ORIGEN,
                 data={"principal": "#111111", "acento": "#E8590C", "fondo": "#000000", "fuente": "Inter", "peso": "700",
                       "estilo": "limpio", "plantilla": "editorial", "modo": "plantilla", "accion": "guardar"})
-    r = client.get("/panel/contenido/nuevo")
-    assert "Con mi plantilla" in r.text and "Con otra plantilla" in r.text and "Diseño libre solo para este post" in r.text
-
     # Otra plantilla: banda, otro acento y estilo premium; la marca no cambia.
-    client.post("/panel/contenido/nuevo", headers=ORIGEN,
-                data={"objetivo": "marca", "como": "plantilla", "plantilla": "banda", "acento": "#2255AA",
-                      "estilo": "premium", "fuente": "Lora", "principal": "#111111", "fondo": "#000000"})
+    crear(client, c, ajustes={"plantilla": "banda", "acento": "#2255AA", "estilo": "premium", "fuente": "Lora",
+                              "principal": "#111111", "fondo": "#000000"})
     p = client.portal.call(contenido.pieza, c.store, 1)
     assert p["plantilla"] == "banda" and p["marca"]["acento"] == "#2255AA" and p["marca"]["fuente"] == "Lora"
     assert "Dark background" in proveedor.llamadas[-1][0]  # el estilo premium
@@ -711,13 +677,12 @@ def test_crear_post_con_ajustes_solo_para_ese_post(cliente, monkeypatch):
     assert client.portal.call(contenido.marca_post, c, p)["acento"] == "#2255AA"
 
     # Otro diseño libre, con su propia descripción.
-    client.post("/panel/contenido/nuevo", headers=ORIGEN,
-                data={"objetivo": "marca", "como": "libre", "estilo_propio": "Estilo revista, fondo blanco."})
+    crear(client, c, modo="libre", ajustes={"estilo_propio": "Estilo revista, fondo blanco."})
     p = client.portal.call(contenido.pieza, c.store, 2)
     assert p["plantilla"] == "libre" and "Estilo revista" in proveedor.llamadas[-1][0]
 
     # Con mi plantilla: lo de la marca, sin ajustes guardados.
-    client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "marca", "como": "marca"})
+    crear(client, c)
     p = client.portal.call(contenido.pieza, c.store, 3)
     assert p["plantilla"] == "editorial" and "marca" not in p
 
@@ -737,59 +702,19 @@ def test_configura_tu_asistente_en_su_propia_pagina(cliente):
     assert 'href="/panel/asistente/configura">Configurar tu asistente' in client.get("/panel/asistente").text
 
 
-def test_subir_fotos_solo_para_un_post(cliente, monkeypatch):
-    client, c, llamadas, proveedor = cliente
+def test_un_token_inventado_no_lee_otro_archivo(cliente, monkeypatch):
+    client, c, *_ = cliente
     monkeypatch.setattr(c, "imagenes_mes", 5)
-    r = client.get("/panel/contenido/nuevo")
-    assert 'name="fotos_post"' in r.text and 'enctype="multipart/form-data"' in r.text
-    client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "producto"},
-                files={"fotos_post": ("bolsa.png", png(), "image/png")})
-    p = client.portal.call(contenido.pieza, c.store, 1)
-    assert len(p["fotos"]) == 1 and len(proveedor.llamadas[-1][1]) == 1
-    assert client.portal.call(contenido.marca_de, c).get("fotos", []) == []  # Tu marca no cambia
-    # Un token inventado no sirve para leer otro archivo.
-    client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "producto", "foto_0": "../../.env"})
-    assert client.portal.call(contenido.pieza, c.store, 2)["fotos"] == []
+    crear(client, c, "estrella", fotos=["../../.env"])
+    assert client.portal.call(contenido.pieza, c.store, 1)["fotos"] == []
 
 
-def test_ideas_para_el_tema_con_tope_diario(cliente, monkeypatch):
+def test_precio_escrito_por_el_dueno(cliente, monkeypatch):
     client, c, llamadas, _ = cliente
     monkeypatch.setattr(c, "imagenes_mes", 2)
-
-    async def fake_claude(prompt, system, mcp=None, allowed=(), max_turns=5, model=None):
-        llamadas.append((prompt, system, model))
-        return "Carrusel con los tres paquetes, su precio y lo que incluye cada uno."
-
-    monkeypatch.setattr(bot.agent, "run_claude", fake_claude)
-    assert "Te quedan 3 de 3 hoy" in client.get("/panel/contenido/nuevo").text
-    r = client.post("/panel/contenido/nuevo", headers=ORIGEN,
-                    data={"objetivo": "estrella", "tema": "comparar <paquetes>", "accion": "ampliar"})
-    assert "Carrusel con los tres paquetes" in r.text and "Te quedan 2 de 3 hoy" in r.text
-    assert "<idea>comparar &lt;paquetes&gt;</idea>" in llamadas[-1][0]  # lo del cliente va escapado
-    client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "estrella", "accion": "sugerir"})
-    assert "<idea>" not in llamadas[-1][0]
-    client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "estrella", "accion": "sugerir"})
-    n = len(llamadas)
-    r = client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "estrella", "accion": "sugerir"})
-    assert "Ya usaste las ideas de hoy" in r.text and len(llamadas) == n  # ya no se llama a Claude
-    assert client.portal.call(c.store.posts, ("borrador",)) == []  # las ideas no crean posts ni usan imagen
-
-
-def test_precio_escrito_y_fotos_para_ver_antes_de_generar(cliente, monkeypatch):
-    client, c, llamadas, _ = cliente
-    monkeypatch.setattr(c, "imagenes_mes", 2)
-    r = client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "marca", "accion": "subir_fotos"},
-                    files={"fotos_post": ("bolsa.png", png(), "image/png")})
-    assert "tus fotos ya están marcadas" in r.text and "Fotos solo para este post" in r.text
-    assert r.text.count('checked><img') == 1 and not llamadas[1:]  # se ve y queda marcada; no se generó nada
-    token = re.search(r'name="foto_0" value="([^"]+)"', r.text).group(1)
-    assert token not in client.portal.call(contenido.marca_de, c).get("fotos", [])  # no va a su marca
-
-    client.post("/panel/contenido/nuevo", headers=ORIGEN,
-                data={"objetivo": "marca", "con_precio": "1", "precio": "Desde $990 MXN", "foto_0": token})
+    crear(client, c, con_precio=True, precio="Desde $990 MXN")
     assert "<precio_del_dueño>Desde $990 MXN</precio_del_dueño>" in llamadas[-1][0]
-    p = client.portal.call(contenido.pieza, c.store, 1)
-    assert p["precio"] == "Desde $990 MXN" and p["fotos"] == [token]
+    assert client.portal.call(contenido.pieza, c.store, 1)["precio"] == "Desde $990 MXN"
 
 
 def test_filtro_pidieron_una_persona(cliente):

@@ -624,7 +624,17 @@ label.check input[type=email]{flex:1;max-width:22rem;margin:0}
 .sola{max-width:40rem;margin:0 auto}
 .bajada-bienvenida{color:#a1a1a6;font-size:1.15rem;max-width:40rem;margin:.75rem 0 0}
 .despues{margin-top:1.25rem;text-align:center;color:#6e6e73;font-size:.9rem}.despues a{color:inherit}
-@media(max-width:700px){.caminos{grid-template-columns:1fr}}
+.despues button{background:none;border:0;padding:0;font:inherit;color:inherit;text-decoration:underline;cursor:pointer}
+.pasos-bienv{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;color:#a1a1a6;font-size:.85rem;margin-top:1.25rem}
+.pasos-bienv span{display:inline-flex;align-items:center;gap:.4rem}
+.pasos-bienv b{width:1.5rem;height:1.5rem;border-radius:50%;display:grid;place-items:center;background:#2c2c2e;color:#a1a1a6;font-size:.75rem}
+.pasos-bienv .on{color:var(--claro)}.pasos-bienv .on b{background:var(--claro);color:var(--negro)}
+.pasos-bienv .hecho b{background:#30d158;color:var(--negro)}
+.pasos-bienv i{width:2rem;height:1px;background:#48484a}
+.explorar{margin-top:1.25rem;background:var(--blanco);border-radius:1.5rem;padding:1.25rem 2rem;display:flex;align-items:center;justify-content:space-between;gap:1rem}
+.explorar p{margin:0;color:#3a3a3c}.explorar b{color:var(--negro)}
+.sola+.explorar{max-width:40rem;margin-left:auto;margin-right:auto}
+@media(max-width:700px){.caminos{grid-template-columns:1fr}.explorar{flex-direction:column;align-items:flex-start;padding:1.25rem 1.5rem}}
 .regla{border-top:1px solid var(--linea-clara);margin-top:1rem;padding-top:1rem}
 .cab-regla{display:flex;justify-content:space-between;align-items:center;gap:.75rem}
 .nueva-regla{margin-top:1.25rem}.nueva-regla>summary{list-style:none;display:inline-flex}
@@ -902,10 +912,8 @@ SUBMENU = {
     "asistente": [("chats", "Conversaciones", "/panel/asistente"),
                   ("configura", "Configura tu asistente", "/panel/asistente/configura"),
                   ("probar", "Probar tu asistente", "/panel/probar#ultimo")],
-    "contenido": [("semana", "Esta semana", "/panel/contenido/semana"), ("campanas", "Campañas", "/panel/contenido/campanas"),
-                  ("calendario", "Calendario", "/panel/contenido"),
-                  ("ideas", "Contenido sugerido", "/panel/contenido/ideas"),
-                  ("nuevo", "Crear post", "/panel/contenido/nuevo"), ("marca", "Tu marca", "/panel/contenido/marca")],
+    "contenido": [("campanas", "Campañas", "/panel/contenido/campanas"), ("calendario", "Calendario", "/panel/contenido"),
+                  ("marca", "Tu marca", "/panel/contenido/marca")],
 }
 
 
@@ -1262,6 +1270,8 @@ def datos_de(f: dict[str, str]) -> dict:
 
 
 # --- bienvenida: la primera vez que entra una cuenta nueva ---
+# Paso 1: su Perfil de empresa (lo puede omitir). Paso 2: elige si configura su asistente o su marca,
+# o sigue explorando. El paso 2 sale una sola vez (kv bienvenida).
 
 async def asistente_listo(c: Cuenta) -> bool:
     """Ya guardó sus instrucciones (o llenó el formulario antes de que hubiera bienvenida).
@@ -1273,8 +1283,22 @@ async def marca_lista(c: Cuenta) -> bool:
     return c.imagenes_mes <= 0 or bool(await c.store.get("marca"))
 
 
+async def empresa_lista(c: Cuenta) -> bool:
+    """Su Perfil de empresa tiene lo esencial (igbot/empresa.py). La principal no lo necesita."""
+    if not c.slug:
+        return True
+    try:
+        from . import empresa
+    except ImportError:  # hasta que llegue el Perfil de empresa
+        return True
+    return await empresa.empresa_lista(c)
+
+
 async def pendiente(c: Cuenta, aqui: str) -> str:
-    """Un aviso arriba si le falta configurar la otra parte (no la de la página donde está)."""
+    """Un aviso arriba si le falta configurar otra parte (no la de la página donde está)."""
+    if aqui != "empresa" and not await empresa_lista(c):
+        return ('<div class="aviso">Te falta llenar tu <b>Perfil de empresa</b>: con eso tu asistente responde con'
+                ' tus datos y tus posts hablan de tu negocio. <a href="/panel/empresa">Llenarlo</a></div>')
     if aqui != "asistente" and not await asistente_listo(c):
         return ('<div class="aviso">Te falta configurar <b>Tu asistente</b>: sin eso no contesta tus mensajes.'
                 ' <a href="/panel/asistente">Configurarlo</a></div>')
@@ -1284,6 +1308,9 @@ async def pendiente(c: Cuenta, aqui: str) -> str:
     return ""
 
 
+PASOS_EMPRESA = ["Tu empresa: nombre, a qué se dedica y dónde atiendes", "Tus clientes y por qué te eligen",
+                 "Tus productos y servicios, con precio y fotos", "Cómo te compran: horarios, pagos y envíos",
+                 "Las preguntas que más te hacen"]
 PASOS_ASISTENTE = ["Cuéntanos de tu negocio: qué ofreces, horarios y precios", "Las preguntas que más te hacen",
                    "Elige su tono y revisa sus instrucciones", "Pruébalo y enciéndelo"]
 PASOS_MARCA = ["Cómo se arman tus posts", "Colores y tipografía", "El estilo de tus fotos", "Fotos de tu negocio"]
@@ -1298,36 +1325,72 @@ def camino(etiqueta: str, titulo: str, desc: str, pasos: list[str], tiempo: str,
             "</div></div>")
 
 
-async def bienvenida(c: Cuenta) -> HTMLResponse:
-    """Con contenido (Community Manager): elige por dónde empezar. Asistente virtual: solo su asistente."""
-    asistente_desc = "El que contesta tus mensajes directos por ti, de día y de noche."
-    if c.imagenes_mes > 0:
-        bajada = "Vamos a dejar todo listo. ¿Por dónde quieres empezar? Puedes hacer el otro después; te lo recordamos en el panel."
-        cuerpo = ('<div class="caminos">'
-                  + camino("Recomendado para empezar", "Tu asistente", asistente_desc, PASOS_ASISTENTE, "≈ 10 min",
-                           "Configurar tu asistente", "/panel/asistente", True)
-                  + camino("Contenido", "Tu marca", "Tus colores, tu letra y tus fotos, para que tus posts se vean"
-                           " de la misma casa.", PASOS_MARCA, "≈ 5 min", "Configurar tu marca",
-                           "/panel/contenido/marca", False)
-                  + "</div>")
+def pasos_bienvenida(actual: int, empresa: bool = False) -> str:
+    """Los dos pasos arriba, en el hero: en el segundo, la empresa sale con palomita si ya la llenó."""
+    if actual == 1:
+        uno = '<span class="on"><b>1</b>Tu empresa</span>'
     else:
-        bajada = "En 10 minutos dejas tu asistente contestando tus mensajes. Son 4 pasos y puedes guardar y seguir después."
-        cuerpo = ('<div class="sola">' + camino("Tu plan Asistente virtual", "Tu asistente", asistente_desc, PASOS_ASISTENTE,
-                                                "≈ 10 min", "Empezar", "/panel/asistente", True) + "</div>")
-    await c.store.set("bienvenida", "1")
+        uno = ('<span class="hecho"><b>✓</b>Tu empresa</span>' if empresa else
+               '<span><b>1</b>Tu empresa · después</span>')
+    dos = f'<span class="{"on" if actual == 2 else ""}"><b>2</b>Elige por dónde seguir</span>'
+    return f'<div class="pasos-bienv">{uno}<i></i>{dos}</div>'
+
+
+async def paso_empresa(c: Cuenta) -> bool:
+    """El paso 1 sigue pendiente: no ha llenado su empresa ni dijo que la llena después."""
+    return await c.store.get("bienvenida_empresa") != "omitida" and not await empresa_lista(c)
+
+
+async def bienvenida(c: Cuenta) -> HTMLResponse:
+    """Paso 1: su Perfil de empresa. Paso 2, con contenido (Community Manager): Tu asistente o Tu marca;
+    Asistente virtual: solo su asistente. En los dos, "Seguir explorando" entra al panel."""
+    if await paso_empresa(c):
+        titulo = f"Hola, @{escape(await usuario(c))}"
+        bajada = "Antes de configurar tu asistente o tus posts, cuéntanos de tu empresa. Puedes guardar y seguir después."
+        cuerpo = ('<div class="sola">' + camino(
+            "Primero lo esencial", "Perfil de empresa",
+            "Lo que tu asistente responde y lo que dicen tus posts sale de aquí. Lo llenas una vez y sirve para todo.",
+            PASOS_EMPRESA, "≈ 8 min", "Llenar mi perfil de empresa", "/panel/empresa", True)
+            + '<form class="despues" method="post" action="/panel/bienvenida">'
+            '<button name="accion" value="omitir">Omitir por ahora, lo lleno después</button></form></div>')
+        paso, empresa = 1, False
+    else:
+        titulo = "¿Por dónde seguimos?"
+        empresa = await empresa_lista(c)
+        bajada = ("Tu perfil de empresa quedó guardado." if empresa else
+                  "Tu perfil de empresa te espera en el menú de tu cuenta.")
+        asistente_desc = "El que contesta tus mensajes directos por ti, de día y de noche."
+        if c.imagenes_mes > 0:
+            bajada += " Ahora elige qué configurar; lo otro lo haces cuando quieras."
+            cuerpo = ('<div class="caminos">'
+                      + camino("Recomendado", "Tu asistente", asistente_desc, PASOS_ASISTENTE, "≈ 10 min",
+                               "Configurar tu asistente", "/panel/asistente/configura", True)
+                      + camino("Contenido", "Tu marca", "Tus colores, tu letra y tus fotos, para que tus posts se vean"
+                               " de la misma casa.", PASOS_MARCA, "≈ 5 min", "Configurar tu marca",
+                               "/panel/contenido/marca", False)
+                      + "</div>")
+        else:
+            bajada += " En 10 minutos dejas tu asistente contestando tus mensajes."
+            cuerpo = ('<div class="sola">' + camino("Tu plan Asistente virtual", "Tu asistente", asistente_desc,
+                                                    PASOS_ASISTENTE, "≈ 10 min", "Empezar",
+                                                    "/panel/asistente/configura", True) + "</div>")
+        cuerpo += ('<div class="explorar"><p><b>¿Prefieres verlo todo primero?</b> Entra al panel;'
+                   ' te recordamos lo que falta.</p><a class="boton secundario" href="/panel/asistente">Seguir explorando</a></div>')
+        await c.store.set("bienvenida", "1")
+        paso = 2
     return pagina(
         cabecera(salir=True)
         + '<section class="oscuro portada compacta"><div class="contenedor">'
-        f'<p class="antetitulo">Bienvenido</p><h1>Hola, @{escape(await usuario(c))}<span class="punto">.</span></h1>'
-        f'<p class="bajada-bienvenida">{bajada}</p></div></section>'
-        f'<main><div class="contenedor">{cuerpo}'
-        '<p class="despues"><a href="/panel/asistente">Prefiero verlo todo primero</a></p></div></main>'
+        f'<p class="antetitulo">Bienvenido</p><h1>{titulo}<span class="punto">.</span></h1>'
+        f'<p class="bajada-bienvenida">{bajada}</p>{pasos_bienvenida(paso, empresa)}</div></section>'
+        f'<main><div class="contenedor">{cuerpo}</div></main>'
     )
 
 
 async def inicio(c: Cuenta) -> str:
-    """A dónde lleva /panel: la primera vez de una cuenta nueva, a la bienvenida; a Resultados
-    si el asistente ya trabaja (encendido y con mensajes de clientes); si no, a Tu asistente."""
+    """A dónde lleva /panel: a la bienvenida hasta que pasa por su paso 2 (las cuentas de antes que ya
+    tenían todo listo no la ven); luego a Resultados si el asistente ya trabaja (encendido y con mensajes
+    de clientes); si no, a Tu asistente."""
     if c.slug and await c.store.get("bienvenida") != "1" and not (await asistente_listo(c) and await marca_lista(c)):
         return "/panel/bienvenida"
     if await activo(c) and await c.store.has_client_messages():
@@ -1345,6 +1408,17 @@ async def ver(request: Request):
 async def ver_bienvenida(request: Request):
     c = cuenta_de_sesion(request)
     return await bienvenida(c) if c else entrar()
+
+
+@router.post("/bienvenida")
+async def omitir_empresa(request: Request):
+    """"Omitir por ahora": pasa al paso 2; su Perfil de empresa lo llena después desde su cuenta."""
+    de_aqui(request)
+    if not (c := cuenta_de_sesion(request)):
+        return RedirectResponse("/panel", status_code=303)
+    if (await form(request)).get("accion") == "omitir":
+        await c.store.set("bienvenida_empresa", "omitida")
+    return RedirectResponse("/panel/bienvenida", status_code=303)
 
 
 @router.get("/asistente")
