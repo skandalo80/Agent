@@ -627,6 +627,11 @@ def test_conexion_avisa_si_falta_el_permiso_de_estadisticas(cliente, monkeypatch
 def test_bienvenida_con_contenido_y_lo_que_falta(cliente, monkeypatch):
     client, c, *_ = cliente
     monkeypatch.setattr(c, "imagenes_mes", 5)
+
+    async def con_empresa(c):
+        return True
+
+    monkeypatch.setattr(panel, "empresa_lista", con_empresa)  # ya llenó su Perfil de empresa
     r = client.get("/panel")
     assert "Configurar tu asistente" in r.text and "Configurar tu marca" in r.text and "Tu plan Asistente virtual" not in r.text
     assert client.get("/panel", follow_redirects=False).headers["location"] != "/panel/bienvenida"  # solo una vez

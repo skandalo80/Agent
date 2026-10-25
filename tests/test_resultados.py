@@ -153,7 +153,7 @@ def test_inicio_del_panel(cliente, monkeypatch):
     assert "te espera en el menú de tu cuenta" in r.text and "Seguir explorando" in r.text
     assert "Te falta llenar tu <b>Perfil de empresa</b>" in client.get("/panel/asistente").text
     lista["empresa"] = True
-    assert "Perfil de empresa" not in client.get("/panel/asistente").text
+    assert "Te falta llenar tu" not in client.get("/panel/asistente").text
     # Después (en pausa y sin mensajes): a configurar su asistente.
     r = client.get("/panel", follow_redirects=False)
     assert r.status_code == 303 and r.headers["location"] == "/panel/asistente"

@@ -836,6 +836,8 @@ async def guardar(request: Request):
     if accion == "terminar":
         if not cambio:  # si cambió, aplicar() ya las pidió
             programar_opciones(c)
+        if c.slug and await c.store.get("bienvenida") != "1":  # cuenta nueva: sigue al paso 2 de la bienvenida
+            return RedirectResponse("/panel/bienvenida", status_code=303)
         return RedirectResponse("/panel/empresa?paso=6&aviso=listo", status_code=303)
     destino = _paso(accion[3:]) if accion.startswith("ir_") else 0
     return RedirectResponse(f"/panel/empresa?paso={destino or paso}", status_code=303)

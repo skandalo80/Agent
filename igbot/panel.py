@@ -1287,10 +1287,7 @@ async def empresa_lista(c: Cuenta) -> bool:
     """Su Perfil de empresa tiene lo esencial (igbot/empresa.py). La principal no lo necesita."""
     if not c.slug:
         return True
-    try:
-        from . import empresa
-    except ImportError:  # hasta que llegue el Perfil de empresa
-        return True
+    from . import empresa  # empresa importa este módulo
     return await empresa.empresa_lista(c)
 
 

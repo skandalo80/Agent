@@ -319,6 +319,7 @@ def test_cuenta_grande_queda_en_revision(monkeypatch, tmp_path):
 
         c = bot.buscar("1784")
         client.get("/panel")  # bienvenida
+        client.post("/panel/bienvenida", headers=ORIGEN, data={"accion": "omitir"})
         r = client.get("/panel")
         assert "En revisión" in r.text and ">Encender<" not in r.text
         r = client.post("/panel/estado", headers=ORIGEN, data={"activo": "1"})
