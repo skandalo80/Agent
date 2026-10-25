@@ -136,7 +136,7 @@ Formatos: {formatos}
 
 Reglas:
 - Respeta el tema y el formato de cada línea. Si un tema se repite, cada post de ese tema es distinto.
-- Si hay <tema>, la campaña gira alrededor de él. Si hay <objetivo>, <mensaje> o <producto>, cada post (texto e imagen) sirve a eso.
+- Si hay <tema>, la campaña gira alrededor de él. Si hay <objetivo>, <mensaje> o <producto>, cada post (texto e imagen) sirve a eso. Si hay <lo_que_se_ve> o <estilo_de_campana>, las imágenes lo siguen (por encima del estilo general de <marca_visual>).
 - Todo es a la medida de esta empresa: sus productos, su cliente ideal, lo que la hace distinta y el tono de su marca. Nada que le sirva igual a cualquier negocio del ramo.
 - Si hay <lo_que_preguntan> (lo que más le preguntaron sus clientes por mensaje y en comentarios), como máximo {tope} posts responden a esas dudas, sobre todo de Enseña algo, Dato curioso, Producto en acción o Pregunta a tu comunidad. En esos, "responde" es el tema que contestan (tal cual viene); en los demás, "".
 - Si hay <ya_publicado> (títulos de sus campañas anteriores), ningún post repite el asunto de esos títulos: aunque el tema y el formato sean los mismos, cada post dice algo nuevo.
@@ -373,7 +373,8 @@ def limpio(x: dict) -> dict:
 
 
 # Lo que la campaña pide además del tema (los arma el paso 1 de Crear campaña cuando los tiene).
-PARAMETROS = (("objetivo", "objetivo"), ("mensaje", "mensaje"), ("producto", "producto"))
+PARAMETROS = (("objetivo", "objetivo"), ("mensaje", "mensaje"), ("producto", "producto"), ("visual", "lo_que_se_ve"),
+              ("estilo", "estilo_de_campana"))
 
 
 def parametros(camp: dict) -> str:

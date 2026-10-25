@@ -661,7 +661,8 @@ def test_la_campana_se_escribe_con_la_empresa_la_marca_y_sus_parametros(cliente,
     client.portal.call(c.store.set, "productos", json.dumps(productos))
     client.portal.call(c.store.set, "marca", json.dumps({"estilo": "calido", "acento": "#E8590C"}))
     camp = {**campanas.del_form(datos_campana()), "id": "x", "creada": 1, "posts": [],
-            "objetivo": "Vender más <lattes>", "producto": "Latte de calabaza"}
+            "objetivo": "Vender más <lattes>", "producto": "Latte de calabaza", "visual": "Personas",
+            "estilo": "Poco texto"}
     client.portal.call(campanas.proponer, c, camp)
     prompt, sistema = llamadas[-1]
     assert "- Descripción: Café de &lt;b&gt;especialidad&lt;/b&gt; en Puebla" in prompt
@@ -670,4 +671,5 @@ def test_la_campana_se_escribe_con_la_empresa_la_marca_y_sus_parametros(cliente,
     assert "- (destacado) Latte de calabaza: Solo en otoño; desde 75 MXN" in prompt
     assert "<marca_visual>\nEstilo de fotos: Cálido y cercano" in prompt and "acento #E8590C" in prompt
     assert "<objetivo>Vender más &lt;lattes&gt;</objetivo>" in prompt and "<producto>Latte de calabaza</producto>" in prompt
+    assert "<lo_que_se_ve>Personas</lo_que_se_ve>" in prompt and "<estilo_de_campana>Poco texto</estilo_de_campana>" in prompt
     assert "de 120 a 180 palabras" in sistema and "nunca algo genérico del ramo" in sistema
