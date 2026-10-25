@@ -103,7 +103,7 @@ def tarjeta(c: Cuenta) -> str:
         " resolviendo lo que pueda.</span></label>"
         f'<label class="opcion"><input type="radio" name="fuera" value="fijo"{" checked" if fijo else ""}>'
         "<b>Mensaje fijo</b><span>Escribes tú el mensaje que reciben.</span></label></div>"
-        f'<textarea class="si-fijo" name="fuera_texto" rows="2" maxlength="{MAX_FUERA}"'
+        f'<textarea class="si-fijo" name="fuera_texto" aria-label="Mensaje fijo" rows="2" maxlength="{MAX_FUERA}"'
         ' placeholder="Ej. Gracias por escribir. Te contestamos el lunes a primera hora.">'
         f"{escape(c.fuera_horario)}</textarea></div>"
         '<div class="sub"><label>Cuando alguien pide hablar con una persona, avísame por</label>'

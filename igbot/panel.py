@@ -1237,7 +1237,7 @@ def _formulario(c: Cuenta, datos: dict, prompt: str, pares_minimos: int, nota: s
         f'<div class="par"><label for="faq_p_{i}">Pregunta {i + 1}</label>'
         f'<input type="text" id="faq_p_{i}" name="faq_p_{i}" maxlength="300" value="{escape(q["p"])}"'
         f' placeholder="{EJEMPLOS[i % len(EJEMPLOS)][0]}">'
-        f'<textarea name="faq_r_{i}" rows="2" maxlength="{MAX_CAMPO}" placeholder="{EJEMPLOS[i % len(EJEMPLOS)][1]}">'
+        f'<textarea name="faq_r_{i}" aria-label="Respuesta {i + 1}" rows="2" maxlength="{MAX_CAMPO}" placeholder="{EJEMPLOS[i % len(EJEMPLOS)][1]}">'
         f'{escape(q["r"])}</textarea>'
         f'<button class="quitar" name="accion" value="quitar_{i}" formaction="/panel/guardar#preguntas">Quitar</button></div>'
         for i, q in enumerate(pares)
@@ -1252,7 +1252,7 @@ def _formulario(c: Cuenta, datos: dict, prompt: str, pares_minimos: int, nota: s
         '<form method="post" action="/panel/guardar">'
         # Enter en un campo no debe quitar una pregunta: el primer botón del formulario solo recarga.
         '<button class="oculto" name="accion" value="vista" tabindex="-1" aria-hidden="true">Actualizar</button>'
-        + seccion("negocio", "Tu negocio", negocio)
+        + seccion("tu-negocio", "Tu negocio", negocio)  # no "negocio": ese id es de su primera caja
         + seccion("preguntas", "Preguntas frecuentes",
                   '<p class="ayuda">Lo que más te preguntan, con la respuesta que darías tú.</p>'
                   f'<input type="hidden" name="faq_n" value="{len(pares)}">{faq}'
@@ -1316,8 +1316,8 @@ def tono_principal(tonos: str, prompt: str, nota: str, confirmar: bool) -> str:
            ' formaction="/panel/guardar#instrucciones">Sí, reemplazarlas</button>'
            '<a class="boton secundario" href="/panel/asistente/configura#instrucciones">Cancelar</a></div></div>'
            if confirmar else "") +
-        f'<label>Instrucciones de tu asistente</label><p class="ayuda">Puedes editarlas antes de guardar.</p>'
-        f'<textarea class="prompt" name="prompt" maxlength="{MAX_PROMPT}">{escape(prompt)}</textarea>'
+        f'<label for="prompt">Instrucciones de tu asistente</label><p class="ayuda">Puedes editarlas antes de guardar.</p>'
+        f'<textarea class="prompt" id="prompt" name="prompt" maxlength="{MAX_PROMPT}">{escape(prompt)}</textarea>'
     )
 
 
