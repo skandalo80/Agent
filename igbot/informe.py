@@ -76,7 +76,7 @@ def resumen_de(camp: dict) -> dict:
     """Lo que hace falta de una campaña para su reporte: solo los posts que tuvieron imagen."""
     return {"id": camp.get("id") or int(camp.get("creada", 0) * 1000), "nombre": camp.get("nombre", ""),
             "inicio": camp["inicio"], "fin": fin_de(camp).isoformat(), "semanas": camp.get("semanas", 1),
-            "modo": camp.get("modo", ""),
+            "modo": camp.get("modo", ""), "objetivo": str(camp.get("objetivo") or "").split(":")[0][:60],
             "posts": [{k: p.get(k) for k in ("post_id", "tipo", "formato", "hora", "titulo", "responde", "collage")}
                       for p in camp.get("posts", []) if p.get("post_id")]}
 
