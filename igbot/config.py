@@ -72,11 +72,21 @@ IG_OAUTH_SECRET = os.getenv("IG_OAUTH_SECRET", "") or APP_SECRET
 SITE_URL = os.getenv("SITE_URL", "https://skandar.online").rstrip("/")
 
 # --- Imágenes para contenido (igbot/imagenes.py) ---
-# Clave de la API de Gemini (aistudio.google.com/apikey; cuenta de prepago).
+# Quién pinta las imágenes: "openai" (desde 2026-10-23) o "gemini" (el de antes, por si se vuelve).
+IMAGE_PROVIDER = os.getenv("IMAGE_PROVIDER", "openai").strip().lower()
+# Clave de la API de OpenAI (platform.openai.com/api-keys); el tope de gasto se pone en esa cuenta.
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+# gpt-image-2.5-flare: rápido y de buena calidad; gpt-image-2.5-sunburst: el más capaz.
+OPENAI_IMAGE_MODEL = os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-2.5-flare")
+# Vertical 2:3; el servidor la recorta a 4:5 (1080x1350).
+OPENAI_IMAGE_SIZE = os.getenv("OPENAI_IMAGE_SIZE", "1024x1536")
+# low, medium o high (más calidad = más tokens = más caro).
+OPENAI_IMAGE_QUALITY = os.getenv("OPENAI_IMAGE_QUALITY", "medium")
+# Clave de la API de Gemini (aistudio.google.com/apikey; cuenta de prepago). Solo con IMAGE_PROVIDER=gemini.
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_IMAGE_MODEL = os.getenv("GEMINI_IMAGE_MODEL", "gemini-3.1-flash-lite-image")
 # Lo que cuesta cada imagen, para el gasto diario de la cuenta (DAILY_BUDGET_USD).
-IMAGE_COST_USD = float(os.getenv("IMAGE_COST_USD", "0.04"))
+IMAGE_COST_USD = float(os.getenv("IMAGE_COST_USD", "0.05"))
 # Lo que se le cobra al cliente por imagen pasado su cupo del mes (solo se muestra).
 EXTRA_IMAGE_USD = os.getenv("EXTRA_IMAGE_USD", "0.25")
 # Quién escribe los posts del panel (título, texto, palabra clave): mejor redacción que Haiku.

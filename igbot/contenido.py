@@ -9,7 +9,7 @@ console.skandar.online/panel/contenido, para las cuentas con contenido en su pla
 - Crear post: elige un objetivo (dar a conocer la marca, servicio o producto estrella,
   atraer clientes, explicar algo, contar una historia) y, si quiere, el tema.
   Claude escribe el título, el texto, la palabra clave y el DM con lo que el
-  cliente puso en su panel; Gemini pinta la imagen (imagenes.crear_pieza) y
+  cliente puso en su panel; OpenAI pinta la imagen (imagenes.crear_pieza) y
   queda un borrador en la tabla posts (user_id "panel").
 - Editor: cambia plantilla y textos (se rotula de nuevo, gratis), el texto del
   post, la hora y la palabra clave; aprueba y queda programado. Lo publica el
@@ -77,7 +77,7 @@ OBJETIVOS = {
 OBJETIVO_INICIAL = "marca"
 
 ESTILOS = {
-    # clave: (nombre, cómo se ve, cómo se le pide a Gemini)
+    # clave: (nombre, cómo se ve, cómo se le pide al generador de imágenes)
     "limpio": ("Limpio y profesional", "Foto de estudio, fondo liso en tonos neutros, luz suave y mucho espacio libre.",
                "Studio photography, plain neutral background, soft diffused light, generous empty space,"
                " nothing superfluous."),
@@ -1263,7 +1263,7 @@ def foto_valida(c: Cuenta, marca: dict, token: str) -> bool:
 
 
 def preparar_foto(data: bytes) -> bytes:
-    """Una foto de producto como JPG de hasta 1600 px (para la referencia de Gemini)."""
+    """Una foto de producto como JPG de hasta 1600 px (para la referencia del generador de imágenes)."""
     img = ImageOps.exif_transpose(Image.open(io.BytesIO(data))).convert("RGB")
     img.thumbnail((1600, 1600))
     out = io.BytesIO()

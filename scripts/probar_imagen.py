@@ -1,9 +1,9 @@
-"""Prueba las plantillas de contenido y la conexión con Gemini.
+"""Prueba las plantillas de contenido y la conexión con OpenAI.
 
     # Sin gastar: rotula una foto tuya con las 4 plantillas
     .venv/bin/python scripts/probar_imagen.py --foto producto.jpg
 
-    # Con Gemini (1 imagen, ~US$0.04): genera la imagen y la rotula con las 4
+    # Con OpenAI (1 imagen, ~US$0.05): genera la imagen y la rotula con las 4
     .venv/bin/python scripts/probar_imagen.py --idea "Cartera de piel sobre mesa de granito"
 
 Deja los JPG en data/pruebas/ (o en --salida). No cuenta para el cupo de ninguna cuenta.
@@ -21,8 +21,8 @@ from igbot import imagenes  # noqa: E402
 def main():
     p = argparse.ArgumentParser()
     fuente = p.add_mutually_exclusive_group(required=True)
-    fuente.add_argument("--foto", help="imagen propia (no llama a Gemini)")
-    fuente.add_argument("--idea", help="descripción de la imagen para Gemini")
+    fuente.add_argument("--foto", help="imagen propia (no llama a OpenAI)")
+    fuente.add_argument("--idea", help="descripción de la imagen para OpenAI")
     p.add_argument("--titulo", default="Cartera Atelier")
     p.add_argument("--subtitulo", default="Piel italiana, hecha a mano en Guadalajara.")
     p.add_argument("--precio", default="Desde $1,290 MXN")
