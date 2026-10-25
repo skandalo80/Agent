@@ -1,11 +1,14 @@
-"""Lo que vende el negocio y lo que lo hace distinto, sacado de Configura tu asistente.
+"""Lo que vende el negocio y lo que lo hace distinto, sacado del Perfil de empresa (o, si aún
+no lo llena, de Configura tu asistente).
 
-Se calcula solo cada vez que el dueño guarda Configura (en segundo plano, para no
-hacerlo esperar) y se guarda en el kv "posicionamiento". Lo usa el contenido para
-proponer qué publicar (contenido.negocio_de); la forma de los posts sale de Tu marca.
+Se calcula en segundo plano (para no hacer esperar) cada vez que el dueño guarda su Perfil de
+empresa ya terminado, o Configura, solo si cambió lo que dice, y se guarda en el kv
+"posicionamiento". Lo usa el contenido para proponer qué publicar (contenido.negocio_de); la
+forma de los posts sale de Tu marca.
 """
 import asyncio
 import hashlib
+import html
 import json
 import logging
 import re
@@ -50,11 +53,18 @@ def _huella(texto: str) -> str:
     return hashlib.sha256(texto.encode()).hexdigest()[:16]
 
 
+async def fuente_de(c: Cuenta, perfil: dict) -> str:
+    """El Perfil de empresa si ya lo tiene; si no, lo de Configura."""
+    from . import empresa  # empresa importa este módulo
+
+    return html.unescape(await empresa.texto_para_prompt(c)) or fuente(perfil)
+
+
 async def actualizar(c: Cuenta, perfil: dict) -> None:
-    """Lo vuelve a calcular si cambió lo de Configura. Si falla, se queda el de antes."""
+    """Lo vuelve a calcular si cambió su perfil. Si falla, se queda el de antes."""
     from . import agent  # import tardío: agent importa el SDK
 
-    texto = fuente(perfil)
+    texto = await fuente_de(c, perfil)
     antes = await de(c)
     if not texto or antes.get("huella") == _huella(texto):
         return

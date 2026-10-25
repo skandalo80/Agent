@@ -180,3 +180,32 @@ def test_opciones_malas_no_se_guardan(cliente, monkeypatch, respuesta):
     monkeypatch.setattr(bot.agent, "run_claude", fake_claude)
     client.portal.call(empresa.generar_opciones, c)
     assert client.portal.call(empresa.opciones_campana, c) is None
+
+
+def test_posicionamiento_sale_del_perfil_de_empresa(cliente, monkeypatch):
+    from igbot import posicionamiento
+    client, c, *_ = cliente
+    client.post("/panel/empresa", headers=ORIGEN, data=PASO_1)
+    programados = []
+    monkeypatch.setattr(empresa, "programar_opciones", lambda c: None)
+    monkeypatch.setattr(posicionamiento, "programar", lambda cuenta, perfil: programados.append(cuenta))
+    client.post("/panel/empresa", headers=ORIGEN, data={"paso": "2", "distinto": "Antes", "accion": "ir_3"})
+    assert programados == []  # antes de terminar el primer recorrido no se recalcula
+    client.post("/panel/empresa", headers=ORIGEN, data={"paso": "6", "accion": "terminar"})
+    client.post("/panel/empresa", headers=ORIGEN, data={"paso": "2", "distinto": "Tostado <b>propio</b>", "accion": "ir_3"})
+    assert programados
+
+    prompts = []
+
+    async def fake_claude(prompt, system, mcp=None, allowed=(), max_turns=5, model=None):
+        prompts.append(prompt)
+        return json.dumps({"ofrece": "Café", "cliente_ideal": "", "distinto": "Tostado propio", "competencia": ""})
+
+    monkeypatch.setattr(bot.agent, "run_claude", fake_claude)
+    client.portal.call(posicionamiento.actualizar, c, {"negocio": "Lo viejo de Configura"})
+    # Del perfil de empresa, escapado una sola vez, y no de Configura.
+    assert "Café Lunar" in prompts[0] and "Tostado &lt;b&gt;propio&lt;/b&gt;" in prompts[0]
+    assert "&amp;lt;" not in prompts[0] and "Lo viejo de Configura" not in prompts[0]
+    assert client.portal.call(posicionamiento.de, c)["distinto"] == "Tostado propio"
+    client.portal.call(posicionamiento.actualizar, c, {})  # sin cambios en el perfil no se vuelve a pedir
+    assert len(prompts) == 1
