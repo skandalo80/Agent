@@ -139,6 +139,7 @@ def test_opciones_de_campana_al_terminar(cliente, monkeypatch):
     client.post("/panel/empresa", headers=ORIGEN, data=PASO_1)
     programadas = []
     monkeypatch.setattr(empresa, "programar_opciones", lambda c: programadas.append(c))
+    monkeypatch.setattr(empresa.posicionamiento, "programar", lambda c, perfil: None)  # su prueba va aparte
     r = client.post("/panel/empresa", headers=ORIGEN, data={"paso": "6", "accion": "terminar"}, follow_redirects=False)
     assert r.headers["location"] == "/panel/bienvenida" and programadas  # cuenta nueva: al paso 2 de la bienvenida
     client.portal.call(c.store.set, "bienvenida", "1")
