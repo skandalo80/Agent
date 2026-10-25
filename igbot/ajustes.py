@@ -73,6 +73,13 @@ def prompt_horario(c: Cuenta) -> str:
 # --- tarjetas del panel ---
 
 def tarjeta(c: Cuenta) -> str:
+    # Va dentro del formulario de la cuenta principal: su Guardar de abajo guarda también esto.
+    return ('<details class="tarjeta plegable seccion" id="ajustes" open><summary><span class="titulo-sec">'
+            f'<h2>Horario y avisos</h2></span></summary>{campos(c)}</details>')
+
+
+def campos(c: Cuenta) -> str:
+    """Pausa, horario de atención de una persona y avisos (también el paso Tu equipo de asistente.py)."""
     pausas = "".join(
         f'<label><input type="radio" name="pausa" value="{h}"{" checked" if h == c.human_pause_hours else ""}> {h} h</label>'
         for h in PAUSAS)
@@ -84,9 +91,6 @@ def tarjeta(c: Cuenta) -> str:
     dm = ('<label class="check"><input type="checkbox" name="aviso_dm" value="1"'
           f'{" checked" if c.aviso_dm else ""}> DM a mi Instagram personal</label>' if c.admin_ig_ids else "")
     return (
-        # Va dentro del formulario de "Configura tu asistente": su Guardar de abajo guarda también esto.
-        '<details class="tarjeta plegable seccion" id="ajustes" open><summary><span class="titulo-sec">'
-        '<h2>Horario y avisos</h2></span></summary>'
         "<label>Cuando contestas tú un chat, el asistente se calla por</label>"
         f'<div class="chips">{pausas}</div>'
         '<p class="ayuda">Pasado ese tiempo vuelve a contestar solo. Siempre puedes reactivarlo antes desde'
@@ -110,7 +114,6 @@ def tarjeta(c: Cuenta) -> str:
         f"{dm}"
         f'<label class="check"><input type="checkbox" name="aviso_correo" value="1"{" checked" if c.aviso_correo else ""}>'
         f' Correo a <input type="email" name="correo" value="{escape(c.owner_email)}" aria-label="Correo"></label></div>'
-        "</details>"
     )
 
 
@@ -202,4 +205,8 @@ async def guardar(request: Request):
     if not (c := panel.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     await guardar_del_form(c, await request.form())
-    return await panel.panel_de(c, "Guardado: tu asistente ya trabaja con estos ajustes.", abrir=True)
+    aviso = "Guardado: tu asistente ya trabaja con estos ajustes."
+    if c.slug:  # los clientes los tienen en el paso Tu equipo
+        from . import asistente
+        return await asistente.pagina(c, "equipo", aviso=aviso)
+    return await panel.panel_de(c, aviso, abrir=True)
