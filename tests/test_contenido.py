@@ -328,15 +328,18 @@ def test_chats_en_pausa(cliente):
     client, c, *_ = cliente
     import time
     r = client.get("/panel/asistente")
-    assert "Conversaciones recientes" in r.text and "Aún no te escribe nadie" in r.text
+    assert '<div class="inbox" id="chats">' in r.text and "Aún no te escribe nadie" in r.text
     assert "Contestados hoy" in r.text and "Mensajes restantes" in r.text and "Gasto de hoy" not in r.text
     client.portal.call(c.store.pause, "ana", time.time() + 3600)
-    r = client.get("/panel/asistente?ver=pausa")
-    assert "@ana" in r.text and "vuelve a contestar solo en 1 h" in r.text and "Reactivar" in r.text
-    assert 'href="https://ig.me/m/ana"' in r.text and "En pausa (1)" in r.text
+    r = client.get("/panel/asistente?ver=todas")
+    assert "@ana" in r.text and "Lo atiendes tú · 1 h" in r.text and "Todas<b" in r.text
+    r = client.get("/panel/asistente?chat=ana")
+    assert 'class="inbox abierto"' in r.text and 'href="https://ig.me/m/ana"' in r.text
+    assert "Lo atiendes tú: tu asistente no le contesta en las próximas 1 h" in r.text
+    assert '<button name="accion" value="tomar" aria-pressed="true" disabled>Tú</button>' in r.text
     assert client.post("/panel/pausas", data={"usuario": "ana", "accion": "reactivar"}).status_code == 403  # sin Origin
-    r = client.post("/panel/pausas", headers=ORIGEN, data={"usuario": "ana", "accion": "extender"})
-    assert "sigue en pausa 12 h más" in r.text
+    r = client.post("/panel/pausas", headers=ORIGEN, data={"usuario": "ana", "accion": "extender", "chat": "ana"})
+    assert "sigue en pausa 12 h más" in r.text and 'class="inbox abierto"' in r.text  # sigue en el chat
     assert client.portal.call(c.store.paused_until, "ana") > time.time() + 11 * 3600
     r = client.post("/panel/pausas", headers=ORIGEN, data={"usuario": "ana", "accion": "reactivar"})
     assert "vuelve a contestarle a @ana" in r.text and client.portal.call(c.store.paused_until, "ana") == 0
@@ -344,26 +347,60 @@ def test_chats_en_pausa(cliente):
                                                   data={"usuario": "beto", "accion": "reactivar"}).text
 
 
-def test_conversaciones_recientes_y_tomar_un_chat(cliente):
+def test_conversaciones_y_tomar_un_chat(cliente):
     client, c, *_ = cliente
     store = c.store
     client.portal.call(store.add_incoming, "beto", "m1", "¿Tienen lugar mañana?")
     ids = [i for i, _ in client.portal.call(store.pending, "beto")]
     client.portal.call(store.mark_answered, "beto", ids, "Sí, a las 5.")
     client.portal.call(store.add_incoming, "caro", "m2", "Hola, ¿precios?")
+    # Sin filtro abre Sin contestar, porque hay uno.
     r = client.get("/panel/asistente")
-    assert "@beto" in r.text and "«¿Tienen lugar mañana?»" in r.text and "Asistente" in r.text
-    assert "@caro" in r.text and "Sin contestar" in r.text and r.text.index("@caro") < r.text.index("@beto")
-    assert "Tomar este chat" in r.text and "Sin contestar (1)" in r.text
+    assert 'class="on" aria-current="page">Sin contestar<b class="">1</b>' in r.text
+    assert "@caro" in r.text and "Hola, ¿precios?" in r.text and "@beto" not in r.text
     assert '<b>1</b><small>en 1 chat</small>' in r.text and "Mensajes restantes</span><b>999</b>" in r.text  # PLAN=basico: 1,000
-    r = client.get("/panel/asistente?ver=sin")
-    assert "@caro" in r.text and "@beto" not in r.text
+    r = client.get("/panel/asistente?ver=todas")
+    assert "@beto" in r.text and "Asistente: Sí, a las 5." in r.text
+    assert r.text.index("@caro") < r.text.index("@beto")
+    assert 'href="/panel/asistente?ver=todas&amp;chat=beto#chats"' in r.text
+    # El chat abierto: los mensajes en orden y el interruptor en Asistente.
+    r = client.get("/panel/asistente?ver=todas&chat=beto")
+    assert 'class="burbuja de-cliente">¿Tienen lugar mañana?' in r.text and 'de-bot">Sí, a las 5.' in r.text
+    assert r.text.index("¿Tienen lugar mañana?</div>") < r.text.index("Sí, a las 5.</div>")
+    assert '<button name="accion" value="reactivar" aria-pressed="true" disabled>Asistente</button>' in r.text
+    assert 'action="/panel/responder"' in r.text and 'href="/panel/asistente?ver=todas#chats">‹ Tus chats' in r.text
 
-    r = client.post("/panel/pausas", headers=ORIGEN, data={"usuario": "beto", "accion": "tomar"})
-    assert "el asistente no le contesta a @beto en 12 h" in r.text and "En pausa · tú" in r.text
+    r = client.post("/panel/pausas", headers=ORIGEN, data={"usuario": "beto", "accion": "tomar", "chat": "beto"})
+    assert "el asistente no le contesta a @beto en 12 h" in r.text and "Lo atiendes tú" in r.text
     assert client.portal.call(store.paused_until, "beto") > 0
     assert "No encontramos ese chat" in client.post("/panel/pausas", headers=ORIGEN,
                                                     data={"usuario": "nadie", "accion": "tomar"}).text
+    # Un chat que no es de la cuenta no se abre.
+    r = client.get("/panel/asistente?chat=nadie")
+    assert 'class="inbox abierto"' not in r.text and "Elige una conversación" in r.text
+
+
+def test_contestar_desde_el_panel(cliente):
+    import time
+    client, c, *_ = cliente
+    store = c.store
+    client.portal.call(store.add_incoming, "caro", "m2", "Hola, ¿precios?")
+    assert client.post("/panel/responder", data={"usuario": "caro", "texto": "Hola"}).status_code == 403  # sin Origin
+    r = client.post("/panel/responder", headers=ORIGEN, data={"usuario": "caro", "texto": "  "})
+    assert "Escribe tu respuesta" in r.text and c.instagram.sent == []
+    r = client.post("/panel/responder", headers=ORIGEN,
+                    data={"usuario": "caro", "texto": "Te paso la lista ahora.", "ver": "todas"})
+    assert c.instagram.sent == [("caro", "Te paso la lista ahora.")]
+    assert "Enviado." in r.text and 'class="burbuja de-ti">Te paso la lista ahora.' in r.text
+    assert client.portal.call(store.paused_until, "caro") > time.time() + 11 * 3600  # el asistente se calla
+    assert "No encontramos ese chat" in client.post("/panel/responder", headers=ORIGEN,
+                                                    data={"usuario": "nadie", "texto": "x"}).text
+    # Pasadas 24 h desde su último mensaje, Instagram ya no deja: ni caja ni envío.
+    client.portal.call(store.db.execute, "UPDATE messages SET created_at = created_at - 90000 WHERE role = 'user'")
+    r = client.get("/panel/asistente?chat=caro")
+    assert "Instagram solo deja contestar dentro de las 24 horas" in r.text and 'action="/panel/responder"' not in r.text
+    r = client.post("/panel/responder", headers=ORIGEN, data={"usuario": "caro", "texto": "¿Sigues ahí?"})
+    assert "Ya pasaron 24 horas" in r.text and len(c.instagram.sent) == 1
 
 
 def test_chats_de_10_en_10_con_buscador(cliente):
@@ -372,20 +409,20 @@ def test_chats_de_10_en_10_con_buscador(cliente):
         client.portal.call(c.store.add_incoming, f"u{i:02d}", f"m{i}", f"Hola, pregunta {i:02d}")
     client.portal.call(c.store.set, "username:u05", "@lupita.flores")
     r = client.get("/panel/asistente")
-    assert r.text.count('class="fila"') == 10 and "23 chats · página 1 de 3" in r.text
-    assert '<span class="on" aria-current="page">1</span>' in r.text and 'href="/panel/asistente?p=2#chats"' in r.text
+    assert r.text.count('class="conv') == 10 and "Sin contestar<b" in r.text
+    assert '<span class="on" aria-current="page">1</span>' in r.text and 'href="/panel/asistente?ver=sin&amp;p=2#chats"' in r.text
     assert '<span class="apagada" aria-hidden="true">‹</span>' in r.text and 'aria-label="Siguiente"' in r.text
     r = client.get("/panel/asistente?p=3")
-    assert r.text.count('class="fila"') == 3 and "pregunta 00" in r.text and "pregunta 22" not in r.text
-    assert client.get("/panel/asistente?p=99").text.count('class="fila"') == 3  # se queda en la última
-    # El filtro se mantiene al cambiar de página y al buscar.
-    r = client.get("/panel/asistente?ver=sin&p=2")
-    assert "23 chats · página 2 de 3" in r.text and 'href="/panel/asistente?ver=sin&amp;p=3#chats"' in r.text
+    assert r.text.count('class="conv') == 3 and "pregunta 00" in r.text and "pregunta 22" not in r.text
+    assert client.get("/panel/asistente?p=99").text.count('class="conv') == 3  # se queda en la última
+    # El filtro se mantiene al cambiar de página y al buscar; el buscador se manda solo (data-vivo).
+    r = client.get("/panel/asistente?ver=todas&p=2")
+    assert 'href="/panel/asistente?ver=todas&amp;p=3#chats"' in r.text
     r = client.get("/panel/asistente?q=lupita")
-    assert r.text.count('class="fila"') == 1 and "ig.me/m/u05" in r.text and 'class="paginas"' not in r.text
-    assert 'value="lupita"' in r.text and ">Borrar</a>" in r.text
+    assert r.text.count('class="conv') == 1 and "chat=u05" in r.text and 'class="paginas"' not in r.text
+    assert 'value="lupita"' in r.text and "data-vivo" in r.text and "1 chat</p>" in r.text
     r = client.get("/panel/asistente?ver=sin&q=pregunta+1")
-    assert r.text.count('class="fila"') == 10 and '<input type="hidden" name="ver" value="sin">' in r.text
+    assert r.text.count('class="conv') == 10 and '<input type="hidden" name="ver" value="sin">' in r.text
     assert "No encontramos chats con «zzz»" in client.get("/panel/asistente?q=zzz").text
 
 
@@ -755,7 +792,7 @@ def test_precio_escrito_y_fotos_para_ver_antes_de_generar(cliente, monkeypatch):
     assert p["precio"] == "Desde $990 MXN" and p["fotos"] == [token]
 
 
-def test_filtros_abiertas_y_pidieron_una_persona(cliente):
+def test_filtro_pidieron_una_persona(cliente):
     import time
     client, c, *_ = cliente
     store = c.store
@@ -767,13 +804,15 @@ def test_filtros_abiertas_y_pidieron_una_persona(cliente):
     client.portal.call(store.pause, "dani", time.time() + 3600)  # este lo tomó el dueño
 
     r = client.get("/panel/asistente")
-    assert "Abiertas (1)" in r.text and "Pidieron una persona (1)" in r.text and "En pausa (2)" in r.text
-    assert '<div class="tarjeta" id="chats">' in r.text  # una sola tarjeta: no se pliega
+    assert "Sin contestar<b" in r.text and "Pidieron una persona<b" in r.text and 'Todas<b class="gris">3</b>' in r.text
+    assert "Abiertas" not in r.text and "En pausa" not in r.text
     r = client.get("/panel/asistente?ver=persona")
-    assert "@caro" in r.text and "Pidió una persona" in r.text and "Motivo: Quiere negociar el precio" in r.text
-    assert "@beto" not in r.text and "@dani" not in r.text and "Reactivar" in r.text
-    r = client.get("/panel/asistente?ver=abiertas")
-    assert "@beto" in r.text and "@caro" not in r.text and "@dani" not in r.text
+    assert "@caro" in r.text and "Pidió hablar con una persona" in r.text
+    assert "@beto" not in r.text and "@dani" not in r.text
+    r = client.get("/panel/asistente?ver=persona&chat=caro")
+    assert "<b>Pidió hablar con una persona.</b> Motivo: Quiere negociar el precio." in r.text
+    r = client.get("/panel/asistente?ver=abiertas")  # enlace viejo: cae en Sin contestar
+    assert "@beto" in r.text and "@caro" not in r.text
 
 
 def test_menu_js_antes_de_pintar(cliente):

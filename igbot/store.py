@@ -231,7 +231,7 @@ class Store:
         await self.db.execute(f"UPDATE messages SET status = 'done' WHERE id IN ({marks})", ids)
         await self.db.commit()
 
-    async def add_owner_message(self, user_id: str, mid: str, text: str) -> None:
+    async def add_owner_message(self, user_id: str, mid: str | None, text: str) -> None:
         """Guarda lo que contestó el dueño a mano, para que el bot lo vea después."""
         await self.db.execute(
             "INSERT OR IGNORE INTO messages (user_id, role, text, mid, created_at)"
@@ -488,6 +488,21 @@ class Store:
             " x.user_id = c.user_id AND x.role = 'user' ORDER BY x.id DESC LIMIT 1), ''), hasta, est"
             f" FROM c WHERE {donde} ORDER BY id DESC LIMIT :limit OFFSET :offset", args)
         return list(await cur.fetchall()), cuantos, total
+
+    async def chat_messages(self, user_id: str, limit: int) -> tuple[list[tuple[str, str, float]], bool]:
+        """Los últimos `limit` mensajes de un chat, del más viejo al más nuevo: (rol, texto, hora).
+        También dice si hay más viejos (para "Ver mensajes anteriores")."""
+        cur = await self.db.execute(
+            "SELECT role, text, created_at FROM messages WHERE user_id = ? ORDER BY id DESC LIMIT ?",
+            (user_id, limit + 1))
+        filas = list(await cur.fetchall())
+        return list(reversed(filas[:limit])), len(filas) > limit
+
+    async def last_message_from(self, user_id: str) -> float:
+        """Hora del último mensaje del cliente en ese chat (0 si nunca escribió)."""
+        cur = await self.db.execute(
+            "SELECT MAX(created_at) FROM messages WHERE user_id = ? AND role = 'user'", (user_id,))
+        return (await cur.fetchone())[0] or 0.0
 
     async def last_client_message(self) -> float:
         cur = await self.db.execute(
