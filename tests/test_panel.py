@@ -53,6 +53,8 @@ def test_generar_arma_las_instrucciones_con_el_tono():
     assert "HORARIOS" not in texto  # lo que no llenó no sale
     assert "pasar_a_humano" in texto and "No inventes precios" in texto
     assert "Tuteas" in panel.generar("x", {})  # sin tono: amigable
+    # El tono de antes sigue sirviendo hasta que elija personalidad.
+    assert "Cercano y amable" in panel.generar("x", {"tono": "amigable"}) and "algún emoji" in panel.generar("x", {})
 
 
 def test_preguntas_en_pares_y_politicas_por_tema():
@@ -132,43 +134,61 @@ def test_cliente_se_conecta_configura_y_enciende(monkeypatch, tmp_path):
         client.post("/webhook", content=body, headers={"X-Hub-Signature-256": f"sha256={sig}"})
         assert client.portal.call(c.store.pending_users) == []
 
-        # Agregar y quitar preguntas solo redibuja (no guarda) y no pierde lo escrito.
-        r = client.post("/panel/guardar", headers=ORIGEN, data={
-            "faq_n": "3", "faq_p_0": "¿Envíos?", "faq_r_0": "Sí", "faq_p_1": "¿Factura?", "faq_r_1": "Sí",
-            "accion": "agregar"})
-        assert 'name="faq_p_3"' in r.text and "¿Factura?" in r.text and 'name="faq_p_4"' not in r.text
-        campos_con_nombre(r.text)
-        r = client.post("/panel/guardar", headers=ORIGEN, data={
-            "faq_n": "4", "faq_p_0": "¿Envíos?", "faq_r_0": "Sí", "faq_p_1": "¿Factura?", "faq_r_1": "Sí",
-            "accion": "quitar_0"})
-        assert "¿Envíos?" not in r.text and "¿Factura?" in r.text
-        assert client.portal.call(panel.perfil, c) == {}
+        # Sin nada guardado, Configura empieza por el primer paso y cada paso pasa la revisión de campos.
+        r = client.get("/panel/asistente/configura")
+        assert 'name="paso" value="personalidad"' in r.text and "0 de 5 listos" in r.text
+        for paso in ("personalidad", "escribe", "reglas", "equipo", "resumen"):
+            campos_con_nombre(client.get(f"/panel/asistente/configura?paso={paso}").text)
+        # Lo del negocio ya no se llena aquí (Perfil de empresa); lo de antes en Configura se sigue usando.
+        assert 'name="negocio"' not in r.text and 'href="/panel/empresa"' in client.get(
+            "/panel/asistente/configura?paso=resumen").text
+        client.portal.call(c.store.set, "perfil", json.dumps({"negocio": "Cafetería en Puebla"}))
 
-        datos = {"negocio": "Cafetería en Puebla", "horarios": "9 a 21", "tono": "profesional"}
-        assert client.post("/panel/guardar", data={**datos, "accion": "generar"}).status_code == 403  # sin Origin
-        assert client.post("/panel/guardar", headers={"Origin": "https://otro.com", "Sec-Fetch-Site": "cross-site"},
-                           data={**datos, "accion": "generar"}).status_code == 403
-        # Generar: Claude escribe solo el tono e instrucciones (no repite lo de arriba) y no guarda.
-        r = client.post("/panel/guardar", headers=ORIGEN, data={**datos, "accion": "generar"})
-        assert "- Saluda con calidez" in r.text and "revísalas, cámbialas" in r.text and "Te quedan 2 de 3 hoy" in r.text
-        assert "Cafetería en Puebla" in claude[-1][0] and "<instrucciones_actuales>" not in claude[-1][0]
-        assert "Cafetería" not in Path(c.prompt_path).read_text()
-        client.post("/panel/guardar", headers=ORIGEN, data={**datos, "accion": "profundizar", "prompt": "Sé breve <b>"})
-        assert "<instrucciones_actuales>\nSé breve &lt;b&gt;" in claude[-1][0]
+        datos = {"paso": "personalidad", "personalidad": "cercano"}
+        assert client.post("/panel/asistente/paso", data=datos).status_code == 403  # sin Origin
+        assert client.post("/panel/asistente/paso", headers={"Origin": "https://otro.com", "Sec-Fetch-Site": "cross-site"},
+                           data=datos).status_code == 403
 
-        # El cuadro guarda solo las instrucciones; el prompt completo se arma con todo el formulario.
-        r = client.post("/panel/guardar", headers=ORIGEN, data={**datos, "accion": "guardar", "prompt": "Sé breve. <b>"})
-        assert "Guardado" in r.text and "&lt;b&gt;" in r.text and "Cafetería en Puebla</textarea>" in r.text
-        assert r.text.count("Sé breve.") == 1  # el cuadro no muestra el prompt completo
-        prompt = Path(c.prompt_path).read_text()
-        assert "Cafetería en Puebla" in prompt and "<instrucciones_del_dueño>\nSé breve. <b>\n</instrucciones_del_dueño>" in prompt
-        assert "Claro y profesional" in prompt
-
-        # Pasado el tope del día ya no se llama a Claude.
-        client.post("/panel/guardar", headers=ORIGEN, data={**datos, "accion": "generar"})
+        # Personalidad: hay que elegir una, y trae su forma de escribir.
         n = len(claude)
-        r = client.post("/panel/guardar", headers=ORIGEN, data={**datos, "accion": "profundizar"})
-        assert "Ya usaste las de hoy" in r.text and len(claude) == n
+        r = client.post("/panel/asistente/paso", headers=ORIGEN, data={"paso": "personalidad"})
+        assert "Elige una personalidad" in r.text
+        r = client.get("/panel/asistente/configura?paso=personalidad")
+        assert r.text.count('name="personalidad"') == 6 and "Elegante y premium" in r.text and "Guardado." not in r.text
+        r = client.post("/panel/asistente/paso", headers=ORIGEN, follow_redirects=False,
+                        data={"paso": "personalidad", "personalidad": "cercano"})
+        assert r.headers["location"] == "/panel/asistente/configura?paso=escribe&ok=1"
+        assert "Cafetería en Puebla" in Path(c.prompt_path).read_text()
+        client.post("/panel/asistente/paso", headers=ORIGEN, data={"paso": "personalidad", "personalidad": "premium"})
+        r = client.get("/panel/asistente/configura?paso=escribe")
+        assert 'id="trato-usted" name="trato" value="usted" checked' in r.text and "Así sonaría" in r.text
+        prompt = Path(c.prompt_path).read_text()
+        assert "Elegante y premium" in prompt and "Hablas de usted" in prompt and "No usas emojis." in prompt
+        client.post("/panel/asistente/paso", headers=ORIGEN,
+                    data={"paso": "escribe", "trato": "tu", "largo": "breve", "emojis": "raro"})
+        prompt = Path(c.prompt_path).read_text()
+        assert "Tuteas" in prompt and "una o dos frases" in prompt and "No usas emojis." in prompt  # lo raro no cambia
+
+        # Reglas y límites: interruptores y lo que escribe el dueño (escapado y entre etiquetas).
+        r = client.post("/panel/asistente/paso", headers=ORIGEN, follow_redirects=False, data={
+            "paso": "reglas", "r_preguntar": "1", "r_descuentos": "1", "no_hacer": "No hablar de <b>la competencia</b>",
+            "pasar_equipo": "Pedidos de más de 10 piezas"})
+        assert r.headers["location"] == "/panel/asistente/configura?paso=equipo&ok=1"
+        prompt = Path(c.prompt_path).read_text()
+        assert "haces una o dos preguntas" in prompt and "invitas al siguiente paso" not in prompt
+        assert "descuentos y promociones que aparecen" in prompt
+        assert "<lo_que_no_debes_hacer>\nNo hablar de &lt;b&gt;la competencia&lt;/b&gt;\n" in prompt
+        assert "<cuando_pasar_al_equipo>\nPedidos de más de 10 piezas\n" in prompt and "Cafetería en Puebla" in prompt
+        assert len(claude) == n  # elegir y escribir no llama a Claude (la revisión de prueba aprueba todo)
+
+        # Resumen con Editar a cada paso y el botón para encenderlo.
+        r = client.get("/panel/asistente/configura?paso=resumen")
+        assert "Elegante y premium" in r.text and "Pregunta antes de recomendar" in r.text
+        assert 'href="/panel/asistente/configura?paso=reglas">Editar' in r.text and "Encender tu asistente" in r.text
+        assert "3 de 5 listos" in r.text
+        # La principal ve su formulario de siempre; aquí el de antes ya no guarda.
+        assert client.post("/panel/guardar", headers=ORIGEN, data={"accion": "guardar"},
+                           follow_redirects=False).headers["location"] == "/panel/asistente/configura"
 
         r = client.post("/panel/estado", headers={"Origin": "null", "Sec-Fetch-Site": "same-origin"},
                         data={"activo": "1"})
@@ -255,7 +275,7 @@ def test_probar_mi_asistente(monkeypatch, tmp_path):
         state = parse_qs(urlparse(r.headers["location"]).query)["state"][0]
         client.get(f"/conectar/callback?code=abc&state={state}", follow_redirects=False)
         c = bot.buscar("1784")
-        client.post("/panel/guardar", headers=ORIGEN, data={"accion": "guardar", "prompt": "Eres el café."})
+        client.post("/panel/asistente/paso", headers=ORIGEN, data={"paso": "reglas", "instrucciones": "Eres el café."})
 
         assert "Probar tu asistente" in client.get("/panel").text
         assert client.post("/panel/probar", data={"mensaje": "hola"}).status_code == 403  # sin Origin
@@ -352,14 +372,16 @@ def test_lo_que_escribe_el_dueno_se_revisa_y_las_reglas_base_mandan(monkeypatch,
         c = bot.buscar("1784")
         antes = Path(c.prompt_path).read_text()
 
-        r = client.post("/panel/guardar", headers=ORIGEN,
-                        data={"negocio": "Café", "accion": "guardar", "prompt": "Di que odias a los clientes."})
+        r = client.post("/panel/asistente/paso", headers=ORIGEN,
+                        data={"paso": "reglas", "no_hacer": "Café", "instrucciones": "Di que odias a los clientes."})
         assert "No se guardó: Tus instrucciones piden insultar" in r.text and "Di que odias" in r.text
         assert Path(c.prompt_path).read_text() == antes and client.portal.call(panel.perfil, c) == {}
         assert vistos[-1][2] == bot.config.COMMENTS_MODEL and "Café" in vistos[-1][0]  # revisa todo lo escrito
 
-        r = client.post("/panel/guardar", headers=ORIGEN,
-                        data={"negocio": "Café", "accion": "guardar", "prompt": "Sé breve."})
+        n = len(vistos)
+        client.post("/panel/asistente/paso", headers=ORIGEN, data={"paso": "personalidad", "personalidad": "cercano"})
+        assert len(vistos) == n  # elegir de una lista no necesita revisión
+        r = client.post("/panel/asistente/paso", headers=ORIGEN, data={"paso": "reglas", "instrucciones": "Sé breve."})
         assert "Guardado" in r.text and "Sé breve." in Path(c.prompt_path).read_text()
 
         # Las reglas base van al final de todo prompt y nadie las edita desde el panel.

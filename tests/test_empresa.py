@@ -27,8 +27,8 @@ OPCIONES = {"objetivos": [{"k": f"Obj {i}", "titulo": f"Objetivo {i}", "descripc
 def test_pasos_guardan_y_el_asistente_usa_el_perfil(cliente):
     client, c, llamadas, _ = cliente
     # Lo que ya llenó en Configura se precarga (sin guardarse todavía).
-    client.post("/panel/guardar", headers=ORIGEN, data={"accion": "guardar", "negocio": "Café en Puebla",
-                                                         "horarios": "L a V 8 a 20", "envios": "No enviamos"})
+    client.portal.call(c.store.set, "perfil", json.dumps({"negocio": "Café en Puebla", "horarios": "L a V 8 a 20",
+                                                          "envios": "No enviamos"}))
     r = client.get("/panel/empresa")
     assert "Empecemos por tu empresa" in r.text and "Café en Puebla" in r.text and "Te precargamos" in r.text
     assert 'href="/panel/empresa" class="on"' in r.text  # el menú de perfil la marca
@@ -65,8 +65,8 @@ def test_pasos_guardan_y_el_asistente_usa_el_perfil(cliente):
     assert "Café Lunar (Restaurante o cafetería)" in prompt and "Diario 8 a 22" in prompt
     assert "Formas de pago: Tarjeta" in prompt and "¿Tienen wifi?" in prompt and "No enviamos" not in prompt
     # Guardar Configura después no lo pisa.
-    client.post("/panel/guardar", headers=ORIGEN, data={"accion": "guardar", "negocio": "Otra cosa"})
-    assert "Café Lunar" in Path(c.prompt_path).read_text()
+    client.post("/panel/asistente/paso", headers=ORIGEN, data={"paso": "personalidad", "personalidad": "premium"})
+    assert "Café Lunar" in Path(c.prompt_path).read_text() and "Elegante y premium" in Path(c.prompt_path).read_text()
 
     r = client.get("/panel/empresa")  # con lo esencial lleno abre el resumen
     assert "Así queda tu empresa" in r.text and "Se preparan cuando guardes" in r.text

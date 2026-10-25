@@ -95,7 +95,7 @@ def cliente(monkeypatch, tmp_path):
         state = parse_qs(urlparse(r.headers["location"]).query)["state"][0]
         client.get(f"/conectar/callback?code=abc&state={state}", follow_redirects=False)
         c = bot.buscar("1784")
-        client.post("/panel/guardar", headers=ORIGEN, data={"accion": "guardar", "prompt": "Vendemos carteras."})
+        client.post("/panel/asistente/paso", headers=ORIGEN, data={"paso": "reglas", "instrucciones": "Vendemos carteras."})
         yield client, c, llamadas, proveedor
 
 
@@ -563,7 +563,7 @@ def test_ajustes_y_conexion(cliente, monkeypatch):
     from igbot.cuenta import usar
     client, c, *_ = cliente
     ajustes._revision.clear()
-    assert 'name="pausa" value="12" checked' in client.get("/panel/asistente/configura").text
+    assert 'name="pausa" value="12" checked' in client.get("/panel/asistente/configura?paso=equipo").text
     r = client.get("/panel/asistente")
     assert 'id="ajustes"' not in r.text  # Horario y avisos va en Configura
     # Conexión va en el menú lateral (con su semáforo) y abre su propia vista.
@@ -603,11 +603,15 @@ def test_ajustes_y_conexion(cliente, monkeypatch):
     assert c.human_pause_hours == 24 and c.business_hours == "10:00-19:30" and c.owner_email == "ana@cafe.mx"
     assert c.fuera_horario == "" and c.business_days == [1, 2, 3, 4, 5, 6]
 
-    # El Guardar de abajo de Configura guarda también Horario y avisos (va en el mismo formulario).
-    r = client.get("/panel/asistente/configura")
-    assert "Guardar ajustes" not in r.text and r.text.index('id="ajustes"') < r.text.index('class="acciones guardar-todo"')
-    r = client.post("/panel/guardar", headers=ORIGEN, data={**datos, "pausa": "48", "accion": "guardar"})
+    # El paso Tu equipo de Configura guarda Horario y avisos junto con qué decir si piden una persona.
+    r = client.get("/panel/asistente/configura?paso=equipo")
+    assert "Guardar ajustes" not in r.text and r.text.index('name="humano"') < r.text.index('name="pausa"')
+    r = client.post("/panel/asistente/paso", headers=ORIGEN,
+                    data={**datos, "pausa": "48", "paso": "equipo", "humano": "Te escribe Ana."},
+                    follow_redirects=False)
+    assert r.headers["location"] == "/panel/probar#ultimo"
     assert c.human_pause_hours == 48 and c.business_hours == "10:00-19:30"
+    assert "Te escribe Ana." in Path(c.prompt_path).read_text()
 
 
 def test_conexion_avisa_si_falta_el_permiso_de_estadisticas(cliente, monkeypatch):
@@ -638,7 +642,7 @@ def test_bienvenida_con_contenido_y_lo_que_falta(cliente, monkeypatch):
     client.portal.call(c.store.set, "perfil", "")
     client.portal.call(c.store.set, "asistente_listo", "0")
     assert "Te falta configurar <b>Tu asistente</b>" in client.get("/panel/contenido").text
-    client.post("/panel/guardar", headers=ORIGEN, data={"negocio": "Café", "accion": "guardar", "prompt": "Hola"})
+    client.post("/panel/asistente/paso", headers=ORIGEN, data={"paso": "personalidad", "personalidad": "cercano"})
     assert "Te falta configurar <b>Tu marca</b>" in client.get("/panel/asistente").text
     assert "Te falta configurar <b>Tu marca</b>" in client.get("/panel/contenido").text
     assert "Te falta configurar" not in client.get("/panel/contenido/marca").text  # ya está ahí
@@ -699,7 +703,7 @@ def test_configura_tu_asistente_en_su_propia_pagina(cliente):
     assert 'id="chats"' in r.text and 'id="configura"' not in r.text and "Configurar tu asistente" not in r.text
     assert '<a href="/panel/asistente" class="on">Conversaciones' in r.text
     r = client.get("/panel/asistente/configura")
-    assert 'id="configura"' in r.text and 'id="chats"' not in r.text and "Tu asistente · Configura" in r.text
+    assert 'class="asis"' in r.text and 'id="chats"' not in r.text and "Tu asistente · Configura" in r.text
     assert '<a href="/panel/asistente/configura" class="on">Configura tu asistente' in r.text
     # Sin configurar: las conversaciones invitan a configurarlo.
     client.portal.call(c.store.set, "asistente_listo", "0")
@@ -811,10 +815,5 @@ def test_posicionamiento_sale_de_configura_y_llega_a_los_posts(cliente, monkeypa
     assert "- Con quién lo comparan (no la nombres en los posts): Marcas de Asia" in negocio
     client.portal.call(posicionamiento.actualizar, c, perfil)  # sin cambios en Configura no se vuelve a pedir
     assert len(llamadas) == 1
-    # Guardar Configura lo manda a calcular (en segundo plano).
-    programados = []
-    monkeypatch.setattr(posicionamiento, "programar", lambda cuenta, datos: programados.append(datos["negocio"]))
-    client.post("/panel/guardar", headers=ORIGEN, data={"accion": "guardar", "negocio": "Bolsos", "prompt": ""})
-    assert programados == ["Bolsos"]
     # Ya no vive en Tu marca.
     assert "lo que te hace distinto" not in client.get("/panel/contenido/marca").text
