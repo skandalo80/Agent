@@ -3,7 +3,7 @@
     .venv/bin/python scripts/ejemplos_estilo.py            # solo los que faltan
     .venv/bin/python scripts/ejemplos_estilo.py --todos    # los vuelve a generar
 
-Son 4 imágenes de Gemini (~US$0.16 en total), una sola vez para todos los clientes.
+Son 4 imágenes de OpenAI (~US$0.20 en total), una sola vez para todos los clientes.
 Quedan en data/estilos/<estilo>.jpg; el panel las muestra en cada opción y en la vista
 previa de la marca. No cuentan para el cupo de ninguna cuenta.
 """

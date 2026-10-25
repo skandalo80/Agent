@@ -1,6 +1,6 @@
-"""Piezas de contenido: la imagen la pinta Gemini y el texto lo pone el servidor.
+"""Piezas de contenido: la imagen la pinta OpenAI (GPT Image) y el texto lo pone el servidor.
 
-Gemini recibe la idea (y, si hay, las fotos reales del producto) y devuelve una
+El generador recibe la idea (y, si hay, las fotos reales del producto) y devuelve una
 imagen sin letras. El título, el precio y la firma los escribe Pillow encima con
 una plantilla de la marca: así el precio sale exacto, con acentos, siempre en la
 misma tipografía, y cambiar el texto no cuesta otra imagen (ver rerotular()).
@@ -46,8 +46,55 @@ class SinCupo(ErrorImagen):
 
 # --- proveedor ---
 
+class OpenAI:
+    """Imágenes con GPT Image (platform.openai.com). Sin fotos se usa images/generations;
+    con fotos de referencia, images/edits (las fotos van como image[]). El tope de gasto lo
+    pone Skandar en su cuenta de OpenAI: si se alcanza, OpenAI contesta con error de cuota
+    y no se genera nada."""
+
+    API = "https://api.openai.com/v1"
+
+    def __init__(self, api_key: str, model: str, size: str = "1024x1536", quality: str = "medium"):
+        self.api_key, self.model, self.size, self.quality = api_key, model, size, quality
+
+    async def generar(self, prompt: str, fotos: list[bytes] = ()) -> bytes:
+        if not self.api_key:
+            raise ErrorImagen("Falta OPENAI_API_KEY en la configuración del servidor.")
+        campos = {"model": self.model, "prompt": prompt, "size": self.size, "quality": self.quality,
+                  "n": "1", "output_format": "jpeg"}
+        cabeceras = {"Authorization": f"Bearer {self.api_key}"}
+        async with httpx.AsyncClient(timeout=180) as http:
+            if fotos:
+                r = await http.post(f"{self.API}/images/edits", headers=cabeceras, data=campos,
+                                    files=[("image[]", (f"ref{i}.jpg", f, "image/jpeg")) for i, f in enumerate(fotos)])
+            else:
+                r = await http.post(f"{self.API}/images/generations", headers=cabeceras,
+                                    json={**campos, "n": 1})
+        if r.status_code != 200:
+            try:
+                error = r.json().get("error") or {}
+            except ValueError:
+                error = {}
+            codigo = f"{error.get('code') or ''} {error.get('type') or ''}"
+            if "quota" in codigo or "billing" in codigo:
+                log.error("OpenAI sin saldo o en el tope de gasto: %s", r.text[:300])
+                raise ErrorImagen("El generador de imágenes no está disponible en este momento.")
+            if "moderation" in codigo or "safety" in codigo or "content_policy" in codigo:
+                raise ErrorImagen("Esa idea no se pudo ilustrar; prueba con otra descripción.")
+            if r.status_code == 429:
+                raise ErrorImagen("Hay muchas imágenes en proceso; intenta de nuevo en un minuto.")
+            log.error("OpenAI respondió %s: %s", r.status_code, r.text[:500])
+            raise ErrorImagen("No se pudo generar la imagen; intenta de nuevo.")
+        datos = (r.json().get("data") or [{}])[0]
+        if datos.get("b64_json"):
+            return base64.b64decode(datos["b64_json"])
+        log.warning("OpenAI no devolvió imagen: %s", r.text[:300])
+        raise ErrorImagen("Esa idea no se pudo ilustrar; prueba con otra descripción.")
+
+
 class Gemini:
-    """Imágenes con la API de Gemini (aistudio.google.com). Cuenta de prepago:
+    """Imágenes con la API de Gemini (aistudio.google.com). Ya no se usa (desde 2026-10-23 todo
+    va con OpenAI); se deja por si se vuelve a él con IMAGE_PROVIDER=gemini. Cuenta de prepago:
     si se acaba el saldo, Google contesta 402 y no se genera nada."""
 
     API = "https://generativelanguage.googleapis.com/v1beta"
@@ -86,7 +133,9 @@ class Gemini:
 
 
 # Para cambiar de proveedor basta otro objeto con el mismo generar().
-proveedor = Gemini(config.GEMINI_API_KEY, config.GEMINI_IMAGE_MODEL)
+proveedor = (Gemini(config.GEMINI_API_KEY, config.GEMINI_IMAGE_MODEL) if config.IMAGE_PROVIDER == "gemini"
+             else OpenAI(config.OPENAI_API_KEY, config.OPENAI_IMAGE_MODEL, config.OPENAI_IMAGE_SIZE,
+                         config.OPENAI_IMAGE_QUALITY))
 
 
 # --- plantillas ---
@@ -111,8 +160,12 @@ PLANTILLAS = tuple(ESPACIO)
 PLANTILLA_INICIAL = "editorial"
 
 
+# OpenAI entrega 2:3 (1024x1536) y aquí se recorta a 4:5: se pierde un poco arriba y abajo.
+RECORTE = "It will be cropped to 4:5, so keep every important element away from the top and bottom edges."
+
+
 def prompt_final(idea: str, plantilla: str) -> str:
-    return (f"{idea.strip()}\n\nVertical 4:5 Instagram image. {ESPACIO[plantilla]} "
+    return (f"{idea.strip()}\n\nVertical Instagram image. {RECORTE} {ESPACIO[plantilla]} "
             "Do not include any text, letters, numbers, logos or watermarks.")
 
 
@@ -131,7 +184,8 @@ def prompt_libre(idea: str, texto: "Texto", marca: "Marca | None" = None) -> str
     if texto.firma:
         lineas.append(f'- Small signature at the bottom: "{texto.firma}"')
     return (
-        "Design a finished, professional vertical 4:5 Instagram post (a graphic design, not just a photo).\n\n"
+        "Design a finished, professional vertical Instagram post (a graphic design, not just a photo).\n"
+        f"{RECORTE} Keep all text inside the central 4:5 area.\n\n"
         f"Visual: {idea.strip()}\n\n"
         "Write exactly this text in the design, in Spanish, spelled exactly as given (keep every accent and"
         " punctuation mark), and no other words:\n" + "\n".join(lineas) + "\n\n"
@@ -373,7 +427,7 @@ async def devolver(store: Store, tipo: str) -> None:
 
 # De una en una: cada imagen ocupa memoria al decodificarla y rotularla.
 _turno = asyncio.Semaphore(1)
-# Las llamadas a Gemini (esperan red, no ocupan memoria): dos a la vez como mucho.
+# Las llamadas al generador (esperan red, no ocupan memoria): dos a la vez como mucho.
 _generando = asyncio.Semaphore(2)
 
 
@@ -396,7 +450,7 @@ async def crear_pieza(store: Store, user_id: str, idea: str, plantilla: str, tex
         raise ErrorImagen(f"Plantilla desconocida: {plantilla}")
     tipo = await reservar(store, permitir_extra)
     try:
-        # La espera a Gemini va aparte: mientras tanto, las vistas previas siguen rotulando.
+        # La espera al generador va aparte: mientras tanto, las vistas previas siguen rotulando.
         async with _generando:
             prompt = prompt_libre(idea, texto, marca) if plantilla == LIBRE else prompt_final(idea, plantilla)
             crudo = await proveedor.generar(prompt, list(fotos))

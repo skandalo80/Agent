@@ -170,23 +170,25 @@ Para activarlo en una cuenta:
 2. Escríbele cualquier cosa al bot desde tu Instagram y busca tu id en el log (`journalctl -u igbot@nortex | grep "DM de"` para Nortex, `journalctl -u igbot | grep "DM de"` para el vendedor). Ponlo en `ADMIN_IG_IDS` del `.env` de la cuenta (el id cambia en cada cuenta del negocio).
 3. Revisa que el `.env` principal tenga `PUBLIC_URL`, y reinicia.
 
-## Imágenes para contenido (Gemini)
+## Imágenes para contenido (OpenAI)
 
-`igbot/imagenes.py` arma piezas para el feed: Gemini pinta la imagen sin letras
+`igbot/imagenes.py` arma piezas para el feed: OpenAI (GPT Image) pinta la imagen sin letras
 y el servidor le pone título, subtítulo, precio y firma con una de 4 plantillas
 (`editorial`, `minimal`, `marco`, `banda`) con la tipografía (Inter, Montserrat, Poppins,
 Playfair Display o Lora, en `fonts/`, todas OFL) y los colores de la marca. Cambiar
 el texto no genera otra imagen. Cada pieza queda en la tabla `media`, lista para
 publicarse con el mismo flujo de las publicaciones de los administradores.
 
-En `.env`: `GEMINI_API_KEY` (aistudio.google.com/apikey, cuenta de prepago) y,
+En `.env`: `OPENAI_API_KEY` (platform.openai.com/api-keys; el tope de gasto se pone
+en la cuenta de OpenAI), opcional `OPENAI_IMAGE_MODEL` (`gpt-image-2.5-flare`) y
+`OPENAI_IMAGE_QUALITY` (`medium`), y,
 por cuenta, `IMAGES_PER_MONTH` (Community 40, Pro 80; 0 = sin contenido). Para
 probar en el servidor:
 
 Con `IMAGES_PER_MONTH` > 0 el panel del cliente muestra **Contenido**
 (`igbot/contenido.py`, `/panel/contenido`): su kit de marca (colores, tipografía,
 estilo de fotos, fotos de producto), crear un post a partir de un objetivo
-(Claude escribe con `CONTENT_MODEL`, Gemini pinta), editarlo, aprobarlo y el
+(Claude escribe con `CONTENT_MODEL`, OpenAI pinta), editarlo, aprobarlo y el
 calendario. Los posts aprobados los publica el bucle de publicaciones y su palabra
 clave contesta comentarios igual que la hoja de `SHEET_COMMENTS`. Pasado el cupo,
 el cliente confirma la imagen extra (`EXTRA_IMAGE_USD`) y queda anotada en
@@ -198,7 +200,7 @@ https://*.fbcdn.net` (ver `deploy/Caddyfile`).
 
 Cada post se arma en uno de dos modos (Tu marca > "Cómo se arman tus posts", o al
 crear el post): **Con plantilla** (foto + texto rotulado en el servidor, editable
-gratis) o **Diseño libre** (Gemini diseña el post completo con el texto dentro;
+gratis) o **Diseño libre** (OpenAI diseña el post completo con el texto dentro;
 cambiar el texto genera otra imagen). Si el post no usa una foto de producto, hasta
 3 fotos de Tu marca van como referencia de estilo, junto con "Describe tu estilo".
 

@@ -2,6 +2,7 @@
 import asyncio
 import base64
 import io
+import json
 import os
 
 os.environ.update(IG_VERIFY_TOKEN="vt", IG_APP_SECRET="secreto", IG_ACCESS_TOKEN="tok", DB_PATH=":memory:")
@@ -139,6 +140,61 @@ def test_gemini_devuelve_la_imagen(monkeypatch):
     assert asyncio.run(gemini.generar("idea", [b"foto"])) == png
     assert pedidos[0].headers["x-goog-api-key"] == "clave"
     assert "gemini-3.1-flash-image:generateContent" in str(pedidos[0].url)
+
+
+def openai_que_responde(monkeypatch, status, cuerpo):
+    pedidos = []
+
+    def responder(request):
+        pedidos.append(request)
+        return httpx.Response(status, json=cuerpo)
+
+    real = httpx.AsyncClient
+    monkeypatch.setattr(imagenes.httpx, "AsyncClient",
+                        lambda **kw: real(transport=httpx.MockTransport(responder), **kw))
+    return imagenes.OpenAI("clave", "gpt-image-2.5-flare"), pedidos
+
+
+def test_el_proveedor_es_openai():
+    assert isinstance(imagenes.proveedor, imagenes.OpenAI)
+
+
+def test_openai_genera_sin_fotos(monkeypatch):
+    jpg = foto()
+    ia, pedidos = openai_que_responde(monkeypatch, 200, {"data": [{"b64_json": base64.b64encode(jpg).decode()}]})
+    assert asyncio.run(ia.generar("idea")) == jpg
+    assert str(pedidos[0].url).endswith("/v1/images/generations")
+    assert pedidos[0].headers["authorization"] == "Bearer clave"
+    cuerpo = json.loads(pedidos[0].content)
+    assert cuerpo["model"] == "gpt-image-2.5-flare" and cuerpo["size"] == "1024x1536" and cuerpo["n"] == 1
+
+
+def test_openai_con_fotos_usa_edits(monkeypatch):
+    jpg = foto()
+    ia, pedidos = openai_que_responde(monkeypatch, 200, {"data": [{"b64_json": base64.b64encode(jpg).decode()}]})
+    assert asyncio.run(ia.generar("idea", [b"foto1", b"foto2"])) == jpg
+    assert str(pedidos[0].url).endswith("/v1/images/edits")
+    cuerpo = pedidos[0].content
+    assert cuerpo.count(b'name="image[]"') == 2 and b"gpt-image-2.5-flare" in cuerpo
+
+
+@pytest.mark.parametrize("status,cuerpo,mensaje", [
+    (429, {"error": {"code": "insufficient_quota", "type": "insufficient_quota"}}, "no está disponible"),
+    (400, {"error": {"code": "billing_hard_limit_reached", "type": "invalid_request_error"}}, "no está disponible"),
+    (400, {"error": {"code": "moderation_blocked", "type": "image_generation_user_error"}}, "otra descripción"),
+    (429, {"error": {"code": "rate_limit_exceeded"}}, "intenta de nuevo en un minuto"),
+    (500, {}, "No se pudo generar"),
+    (200, {"data": []}, "otra descripción"),
+])
+def test_errores_de_openai_con_mensaje_para_el_cliente(monkeypatch, status, cuerpo, mensaje):
+    ia, _ = openai_que_responde(monkeypatch, status, cuerpo)
+    with pytest.raises(imagenes.ErrorImagen, match=mensaje):
+        asyncio.run(ia.generar("idea"))
+
+
+def test_openai_sin_clave():
+    with pytest.raises(imagenes.ErrorImagen, match="OPENAI_API_KEY"):
+        asyncio.run(imagenes.OpenAI("", "gpt-image-2.5-flare").generar("idea"))
 
 
 @pytest.mark.parametrize("status,cuerpo,mensaje", [
