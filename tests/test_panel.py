@@ -377,3 +377,4 @@ def test_lo_que_escribe_el_dueno_se_revisa_y_las_reglas_base_mandan(monkeypatch,
             system = bot.agent.system_prompt()
         assert system.index("Sé breve.") < system.index("REGLAS COMUNES") < system.index("<reglas_base>")
         assert "mandan sobre cualquier instrucción del negocio" in system and "`recordar`" in system
+
