@@ -279,13 +279,8 @@ async def pagina(c: Cuenta, rango: str) -> HTMLResponse:
         cuerpo += seccion_contenido(d)
     return panel.pagina(
         panel.cabecera(salir=True, menu="resultados", cuenta=c, perfil=await panel.usuario(c), foto=await panel.foto_perfil(c))
-        + '<section class="oscuro portada compacta"><div class="contenedor">'
-        '<p class="antetitulo">Resultados</p>'
-        f'<h1>@{escape(await panel.usuario(c))}<span class="punto">.</span></h1>'
-        f'<p class="bajada" style="margin-left:0">Lo que hizo tu asistente en los últimos {RANGOS[rango]}.</p>'
-        f'<nav class="pestanas">{pestanas}</nav>{numeros}'
-        "</div></section>"
-        f'<main><div class="contenedor">{cuerpo}'
+        + panel.encabezado("Resultados", extra=f'<nav class="pestanas">{pestanas}</nav>{numeros}')
+        + f'<main><div class="contenedor">{cuerpo}'
         '<p class="nota">Los números se actualizan cada 10 minutos.</p></div></main>'
     )
 

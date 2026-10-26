@@ -470,43 +470,12 @@ def generando(c: Cuenta, trabajo, volver: str, mensaje: str) -> StreamingRespons
 NOMBRE_SECCION = {"campanas": "Campañas", "calendario": "Calendario", "marca": "Tu marca"}
 
 
-async def resumen(c: Cuenta) -> str:
-    """Los números del mes arriba, como en Tu asistente: posts e imágenes que le quedan del plan,
-    lo programado y lo publicado. Un post cuenta el mes en que sale (o se publicó al momento)."""
-    with usar(c):
-        incluidas, extra = await imagenes.usadas(c.store)
-        ahora = tools.now()
-    mes = ahora.replace(day=1, hour=0, minute=0, second=0, microsecond=0).timestamp()
-    # Se cuentan en la base, sin cargar todos los posts.
-    del_mes = await c.store.posts_count(("programada", "publicando", "publicada"), mes)
-    programados = [p["publish_at"] for p in await c.store.posts(("programada",))]
-    publicados = await c.store.posts_count(("publicada",), mes)
-    if c.posts_mes > 0:
-        caja_posts = panel.restantes("Posts restantes", del_mes, c.posts_mes, "posts")
-    else:
-        caja_posts = panel.kpi("Posts este mes", str(del_mes), "programados y publicados")
-    with usar(c):
-        proximo = f"el próximo: {cuando(programados[0])}" if programados else "ninguno por ahora"
-    return ('<div class="hoy kpis">' + caja_posts
-            + panel.kpi("Programados", str(len(programados)), proximo)
-            + panel.kpi("Publicados este mes", str(publicados), "desde tu panel")
-            + panel.restantes("Imágenes restantes", incluidas + extra, c.imagenes_mes, "imágenes")
-            + "</div>")
-
-
-async def pagina(c: Cuenta, actual: str, bajada: str, cuerpo: str, aviso: str = "",
-                 con_resumen: bool = False, oscuro: bool = False) -> HTMLResponse:
-    """Las secciones de Contenido van en el menú lateral. Los números del mes (con_resumen) solo salen
-    en Calendario, el inicio de Contenido; las demás páginas llevan el encabezado delgado."""
+async def pagina(c: Cuenta, actual: str, cuerpo: str, aviso: str = "", oscuro: bool = False) -> HTMLResponse:
+    """Las secciones de Contenido van en el menú lateral; arriba solo el antetítulo y + Nueva campaña."""
     crear = '<a class="boton ajuste" href="/panel/contenido/campanas/nueva">+ Nueva campaña</a>'
     return panel.pagina(
         panel.cabecera(salir=True, menu="contenido", cuenta=c, sub=actual, perfil=await panel.usuario(c), foto=await panel.foto_perfil(c))
-        + f'<section class="oscuro portada compacta{"" if con_resumen else " delgada"}"><div class="contenedor">'
-        f'<p class="antetitulo">Contenido · {NOMBRE_SECCION.get(actual, "Calendario")}</p>'
-        f'<div class="titulo-fila"><h1>@{escape(await panel.usuario(c))}<span class="punto">.</span></h1>{crear}</div>'
-        f'<p class="bajada" style="margin-left:0">{escape(bajada)}</p>'
-        + (await resumen(c) if con_resumen else "")
-        + "</div></section>"
+        + panel.encabezado(f"Contenido · {NOMBRE_SECCION.get(actual, 'Calendario')}", crear)
         + ('<main class="oscuro-pag">' if oscuro else "<main>") + '<div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
         + await panel.pendiente(c, actual)
@@ -579,8 +548,7 @@ async def calendario(c: Cuenta, aviso: str = "", vista: str = "mes", fecha: date
     """Solo el calendario: las listas (próximos, borradores, publicados) salen en su vista Lista."""
     from . import calendario as cal  # calendario importa este módulo
     cuerpo = await cal.seccion(c, vista, fecha, ver, q, estado, campana)
-    return await pagina(c, "calendario", "Tus publicaciones: lo que viene y lo que ya salió.", cuerpo, aviso,
-                        con_resumen=True)
+    return await pagina(c, "calendario", cuerpo, aviso)
 
 
 METRICAS = [  # (métrica de Instagram, cómo se le dice al cliente, qué es)
@@ -622,7 +590,7 @@ async def pagina_insights(c: Cuenta, media_id: str) -> HTMLResponse:
            "Ver en Instagram</a>" if m.get("permalink") else "")
     cuerpo = (f'<div class="tarjeta"><span class="num">Insights</span><h2>{escape(titulo)}</h2>{cifras}'
               f'<div class="acciones"><a class="boton" href="/panel/contenido">Volver</a>{ver}</div></div>')
-    return await pagina(c, "calendario", "Cómo le fue a este post en Instagram.", cuerpo)
+    return await pagina(c, "calendario", cuerpo)
 
 
 def tarjeta_extra(c: Cuenta, accion: str) -> str:
@@ -707,7 +675,7 @@ async def editor(c: Cuenta, post_id: int, aviso: str = "", confirmar: bool = Fal
                       + ('<button class="boton" name="accion" value="reintentar">Volver a borrador</button>'
                          if post["status"] == "fallida" else "")
                       + '<a class="boton secundario" href="/panel/contenido">← Calendario</a></form></div></div>')
-            return await pagina(c, "calendario", "Así quedó tu post.", cuerpo, aviso)
+            return await pagina(c, "calendario", cuerpo, aviso)
 
         variables = escape(" · ".join(await de_campana(c, p, post_id)) or objetivo)
         valor_cuando = (datetime.fromtimestamp(post["publish_at"], tools.tz()).strftime("%Y-%m-%dT%H:%M")
@@ -774,7 +742,7 @@ async def editor(c: Cuenta, post_id: int, aviso: str = "", confirmar: bool = Fal
             f'<div class="acciones">{botones}</div>'
             "</div></div></form>"
         )
-        return await pagina(c, "calendario", "Revisa, ajusta y apruébalo. Nada sale sin tu aprobación.", cuerpo, aviso)
+        return await pagina(c, "calendario", cuerpo, aviso)
 
 
 # --- fotos de Tu marca ---

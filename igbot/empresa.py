@@ -879,15 +879,12 @@ async def pagina(c: Cuenta, paso: int, e: dict | None = None, aviso: str = "", e
         avisos = ('<div class="aviso">Te precargamos lo que ya escribiste en tu asistente y en Tu marca.'
                   " Revísalo y pulsa Siguiente para guardarlo.</div>" if e else "")
     usuario = await panel.usuario(c)
-    titulo = escape(guardado.get("nombre") or f"@{usuario}")
     return panel.pagina(
         f"<style>{ESTILO}</style>"
         + panel.cabecera(salir=True, menu="cuenta", cuenta=c, sub="empresa", perfil=usuario,
                          foto=await panel.foto_perfil(c))
-        + '<section class="oscuro portada compacta delgada"><div class="contenedor">'
-        f'<p class="antetitulo">Tu cuenta · Perfil de empresa</p><h1>{titulo}<span class="punto">.</span></h1>'
-        '<p class="bajada" style="margin-left:0">Lo que tu asistente y tu contenido saben de tu negocio.</p></div></section>'
-        f'<main class="emp"><div class="contenedor">{avisos}<div class="mago">'
+        + panel.encabezado("Tu cuenta · Perfil de empresa")
+        + f'<main class="emp"><div class="contenedor">{avisos}<div class="mago">'
         f'{riel(e, prods, paso, con_form=True)}<div>{cuerpo}</div></div></div></main>'
     )
 

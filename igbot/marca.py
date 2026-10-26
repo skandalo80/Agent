@@ -358,8 +358,7 @@ async def pagina_marca(c: Cuenta, paso: str, marca: dict | None = None, aviso: s
                      + cabeza(i) + hacer()
                      + pie(i, "Ver resumen →" if i == len(PASOS) else "Guardar y continuar →") + "</form>")
     cuerpo = f'<div class="wiz mrc">{menu_pasos(actual, hechos_)}<div class="wiz-main">{contenido}</div></div>'
-    return await pagina(c, "marca", "Cómo se ven tus publicaciones. Lo configuras una vez y se aplica a todas tus campañas.",
-                        cuerpo, aviso, oscuro=True)
+    return await pagina(c, "marca", cuerpo, aviso, oscuro=True)
 
 
 # --- guardar ---

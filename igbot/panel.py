@@ -383,6 +383,7 @@ main .boton.secundario{background:transparent;color:var(--negro);border-color:rg
 .compacta .antetitulo{margin-bottom:.5rem}.compacta .pestanas{margin-top:1rem}.compacta .estado{margin-top:1rem;padding:.75rem 1.1rem}
 .compacta .hoy{margin-top:auto;grid-template-columns:repeat(auto-fit,minmax(11rem,1fr))}.compacta .hoy .kpi{padding:.9rem 1.15rem}
 .titulo-fila{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap}
+.titulo-fila .antetitulo{margin:0}.titulo-fila:has(.boton){min-height:2.75rem}
 .oscuro .boton.ajuste{padding:.55rem 1.1rem;font-size:.9rem}
 .oscuro .boton.ajuste.on,.oscuro .acciones-estado .boton.on{background:var(--acento);color:var(--tinta);border-color:var(--acento)}
 .boton .semaforo{display:inline-block;margin:0 .5rem 0 0;vertical-align:.05em}
@@ -1052,7 +1053,7 @@ img.mrc-logo-mini{background:#fff}
 /* Clay ligero sobre el tema morado: relieve en tarjetas y botones, texto plano. */
 :root{--clay-sombra:10px 14px 28px rgba(12,11,16,.55);--clay-luz:inset 2px 2px 0 rgba(255,255,255,.07),inset -6px -8px 16px rgba(0,0,0,.22),inset 6px 6px 14px rgba(255,255,255,.035)}
 .lateral{border-radius:2rem;border:0;box-shadow:var(--clay-sombra),var(--clay-luz)}
-.tarjeta,.kpi,.estado,.aviso,.inbox,.wiz-main,.wiz-pasos,.as-pasos,.as-caja,.riel,.caja-o,.as-pers,.wiz-op,.camp,.barra-cam,.modal-cam,.chat{border-radius:1.75rem!important;border-color:transparent!important;box-shadow:var(--clay-sombra),var(--clay-luz)}
+.tarjeta,.kpi,.estado,.aviso,.inbox,.wiz-main,.wiz-pasos,.as-pasos,.as-cont,.as-caja,.riel,.caja-o,.as-pers,.wiz-op,.camp,.barra-cam,.modal-cam,.chat{border-radius:1.75rem!important;border-color:transparent!important;box-shadow:var(--clay-sombra),var(--clay-luz)}
 .wiz-op,.as-pers{box-shadow:6px 9px 18px rgba(12,11,16,.45),var(--clay-luz)}
 .wiz-op:has(input:checked),.as-pers:has(input:checked){box-shadow:0 0 0 2px var(--acento),6px 9px 18px rgba(12,11,16,.45),var(--clay-luz)!important}
 .boton,.wiz-pie .boton{border-radius:999px;box-shadow:5px 7px 14px rgba(12,11,16,.5),inset 2px 3px 4px rgba(255,255,255,.35),inset -3px -4px 6px rgba(120,60,10,.35);border-color:transparent}
@@ -1231,12 +1232,12 @@ async def panel_de(c: Cuenta, aviso: str = "", ver: str = "", vista: str = "", a
     estado_conexion, tarjeta_conexion = await ajustes.conexion(c)
 
     if vista == "conexion":
-        titulo, bajada, cuerpo = "Conexión", "Cómo está conectada tu cuenta de Instagram.", tarjeta_conexion
+        titulo, cuerpo = "Conexión", tarjeta_conexion
     elif vista == "configura":  # todas las cuentas, también la principal, configuran por pasos
         from . import asistente
         return await asistente.pagina(c, aviso=aviso)
     else:
-        titulo = bajada = ""
+        titulo = ""
         cuerpo = (await pendiente(c, "asistente")
                   + ("" if await asistente_listo(c) else
                      '<div class="tarjeta"><h2>Configura tu asistente para empezar</h2>'
@@ -1251,22 +1252,16 @@ async def panel_de(c: Cuenta, aviso: str = "", ver: str = "", vista: str = "", a
         # Conexión es de tu cuenta (está en el menú de perfil), no de una sección.
         cabecera(salir=True, menu="cuenta" if vista == "conexion" else "asistente", cuenta=c, sub=vista or "chats", perfil=await usuario(c), foto=await foto_perfil(c),
                  luces={"conexion": estado_conexion})
-        + (f'<section class="oscuro portada compacta delgada"><div class="contenedor">'
-           f'<p class="antetitulo">{"Tu cuenta" if vista == "conexion" else "Tu asistente"} · {titulo}</p>'
-           f'<h1>@{escape(await usuario(c))}<span class="punto">.</span></h1>'
-           f'<p class="bajada" style="margin-left:0">{bajada}</p></div></section>'
-           if titulo else
-           '<section class="oscuro portada compacta"><div class="contenedor">'
-           '<p class="antetitulo">Tu asistente</p>'
-           f'<h1>@{escape(await usuario(c))}<span class="punto">.</span></h1>'
-           f'<div class="estado"><div><span class="luz{" on" if encendido else ""}"></span>'
-           f'{"Está contestando tus mensajes." if encendido else REVISION if c.en_revision else "Está en pausa: no contesta mensajes."}</div>'
-           + ("" if c.en_revision else
-              '<form method="post" action="/panel/estado">'
-              f'<input type="hidden" name="activo" value="{"0" if encendido else "1"}"><div class="acciones-estado">'
-              f'<button class="boton{" secundario" if encendido else ""}">{"Pausar" if encendido else "Encender"}</button>'
-              "</div></form>")
-           + "</div>" + await hoy(c) + "</div></section>")
+        + (encabezado(f"Tu cuenta · {titulo}") if titulo else
+           encabezado("Tu asistente", extra=(
+               f'<div class="estado"><div><span class="luz{" on" if encendido else ""}"></span>'
+               f'{"Está contestando tus mensajes." if encendido else REVISION if c.en_revision else "Está en pausa: no contesta mensajes."}</div>'
+               + ("" if c.en_revision else
+                  '<form method="post" action="/panel/estado">'
+                  f'<input type="hidden" name="activo" value="{"0" if encendido else "1"}"><div class="acciones-estado">'
+                  f'<button class="boton{" secundario" if encendido else ""}">{"Pausar" if encendido else "Encender"}</button>'
+                  "</div></form>")
+               + "</div>")))
         + '<main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
         + cuerpo + "</div></main>"
@@ -1284,53 +1279,11 @@ def hace(t: float) -> str:
     return "ayer" if s < 2 * 86400 else f"hace {int(s // 86400)} días"
 
 
-def kpi(etiqueta: str, valor: str, nota: str, extra: str = "") -> str:
-    return f'<div class="kpi"><span>{etiqueta}</span><b>{valor}</b><small>{nota}</small>{extra}</div>'
-
-
-def restantes(etiqueta: str, usados: int, tope: int, que: str) -> str:
-    """Cuánto le queda del plan este mes, con su barra. Pasarse no corta nada: se ve como extra."""
-    barra = f'<div class="barra"><i style="width:{min(100, usados / tope * 100):.0f}%"></i></div>'
-    if usados > tope:
-        return kpi(etiqueta, "0", f"{usados - tope:,} {que} extra este mes", barra)
-    return kpi(etiqueta, f"{tope - usados:,}", f"de {tope:,} este mes", barra)
-
-
-async def hoy(c: Cuenta) -> str:
-    """Los números del día, debajo del estado. El gasto en dólares solo lo ve la cuenta principal:
-    a un cliente le diría cuánto cuesta su asistente; él ve los mensajes que le quedan de su plan."""
-    from datetime import datetime
-    from zoneinfo import ZoneInfo
-
-    from . import limites, resultados
-    zona = ZoneInfo(c.timezone)
-    ahora = datetime.now(zona)
-    inicio = ahora.replace(hour=0, minute=0, second=0, microsecond=0)
-    stats = await resultados.conversaciones(c.store.message_times(inicio.timestamp(), ahora.timestamp()), c, inicio, 1)
-    en_pausa = len(await c.store.paused_list(time.time()))
-
-    chats = stats["chats_contestados"]
-    cajas = [
-        kpi("Contestados hoy", str(stats["contestados"]), f"en {chats} chat{'s' if chats != 1 else ''}"),
-        kpi("Tiempo de respuesta", resultados.duracion(stats["respuesta"]), "mediana de hoy"),
-        kpi("Chats en pausa", str(en_pausa), "los atiendes tú" if en_pausa else "ninguno"),
-    ]
-    if not c.slug:
-        with usar(c):
-            gasto = await limites.spent_today(c.store)
-        tope = c.daily_budget_usd
-        barra = (f'<div class="barra"><i style="width:{min(100, gasto / tope * 100):.0f}%"></i></div>'
-                 if tope > 0 else "")
-        cajas.append(kpi("Gasto de hoy", f"US${gasto:.2f}",
-                         f"de US${tope:.2f} al día" if tope > 0 else "sin límite diario", barra))
-    else:
-        mes = inicio.replace(day=1).timestamp()
-        if c.mensajes_mes > 0:
-            cajas.append(restantes("Mensajes restantes", await c.store.all_bot_replies_since(mes), c.mensajes_mes,
-                                   "respuestas"))
-        else:
-            cajas.append(kpi("Mensajes este mes", str(await c.store.client_messages_since(mes)), "de tus clientes"))
-    return f'<div class="hoy kpis">{"".join(cajas)}</div>'
+def encabezado(ante: str, botones: str = "", extra: str = "") -> str:
+    """La franja de arriba de cada sección: solo el antetítulo (Contenido · Campañas) y sus botones.
+    Sin título ni bajada; `extra` va debajo (el estado del asistente, las pestañas, los pasos)."""
+    return ('<section class="oscuro portada compacta delgada"><div class="contenedor">'
+            f'<div class="titulo-fila"><p class="antetitulo">{ante}</p>{botones}</div>{extra}</div></section>')
 
 
 def paginas(actual: int, total: int, enlace) -> str:
@@ -1703,12 +1656,8 @@ async def prueba_inicio(c: Cuenta, mensajes: list[list[str]], aviso: str = "") -
     return (
         PRINCIPIO
         + cabecera(salir=True, menu="asistente", cuenta=c, sub="probar", perfil=await usuario(c), foto=await foto_perfil(c))
-        + '<section class="oscuro portada compacta delgada"><div class="contenedor">'
-        '<p class="antetitulo">Tu asistente · Probar</p>'
-        f'<h1>@{escape(await usuario(c))}<span class="punto">.</span></h1>'
-        '<p class="bajada" style="margin-left:0">Así contestaría tus mensajes. Nada de esto llega a Instagram.</p>'
-        "</div></section>"
-        '<main><div class="contenedor">'
+        + encabezado("Tu asistente · Probar")
+        + '<main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
         + f'<div class="chat">{burbujas}'
     )

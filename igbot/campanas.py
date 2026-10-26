@@ -1160,20 +1160,9 @@ def pasos_de(camp: dict) -> str:
         for i, t in enumerate(("Arma tu campaña", "Acomoda el calendario", "Genera imágenes y aprueba"), 1)) + "</div>"
 
 
-def bajada_de(camp: dict) -> str:
-    return (f"{de_a(date.fromisoformat(camp['inicio']), informe.fin_de(camp))} · {len(camp['posts'])} posts ·"
-            + (" para descubrir qué le gusta a tu audiencia." if camp.get("modo") == "explorar"
-               else " con lo que mejor le funcionó a tu audiencia." if camp.get("modo") == "repetir"
-               else " un poco de todo para que tu cuenta se vea viva."))
-
-
-def cabeza(titulo: str, bajada: str, boton: str = "", pasos: str = "") -> str:
-    """El encabezado negro de Campañas; titulo ya viene escapado."""
-    return ('<section class="oscuro portada compacta delgada"><div class="contenedor">'
-            '<p class="antetitulo">Contenido · Campañas</p>'
-            f'<div class="titulo-fila"><h1>{titulo}<span class="punto">.</span></h1>{boton}</div>'
-            f'<p class="bajada" style="margin-left:0">{escape(bajada)}</p>{pasos}'
-            "</div></section>")
+def cabeza(boton: str = "", pasos: str = "", donde: str = "") -> str:
+    """El encabezado de Campañas: antetítulo y botones. `donde` (ya escapado) se suma al antetítulo."""
+    return panel.encabezado("Contenido · Campañas" + (f" · {donde}" if donde else ""), boton, pasos)
 
 
 def boton_todas(ver: str = "") -> str:
@@ -1276,7 +1265,7 @@ async def pagina_campana(c: Cuenta, camp: dict, aviso: str = "", sel: str = "", 
     return panel.pagina(
         panel.cabecera(salir=True, menu="contenido", cuenta=c, sub="campanas", perfil=await panel.usuario(c),
                        foto=await panel.foto_perfil(c))
-        + cabeza(escape(camp["nombre"]), bajada_de(camp), botones, pasos_de(camp))
+        + cabeza(botones, pasos_de(camp), escape(camp["nombre"]))
         + '<div class="oscuro-pag"><main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
         + await panel.pendiente(c, "campanas") + cuerpo + "</div></main>" + modal + "</div>")
@@ -1442,8 +1431,7 @@ async def pagina_lista(c: Cuenta, ver: str = "", aviso: str = "", q: dict | None
     return panel.pagina(
         panel.cabecera(salir=True, menu="contenido", cuenta=c, sub="campanas", perfil=await panel.usuario(c),
                        foto=await panel.foto_perfil(c))
-        + cabeza("Campañas", "Lo que está corriendo, lo que viene y lo que ya terminó.",
-                 f'<a class="boton ajuste" href="{BASE}/nueva">+ Nueva campaña</a>')
+        + cabeza(f'<a class="boton ajuste" href="{BASE}/nueva">+ Nueva campaña</a>')
         + '<div class="oscuro-pag"><main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
         + await panel.pendiente(c, "campanas")
