@@ -1092,6 +1092,21 @@ input[type=text],input[type=search],textarea,select,.inbox input[type=search],.e
 
 /* Paleta gris ciruela: menú en el tono más profundo. */
 .lateral{background:#25232F}
+/* Números en naranja; barras de avance y lo seleccionado en lima; el paso actual se marca
+   solo con el resaltado, sin su número. */
+.wiz-pasos a b,.wiz-pasos .wiz-paso b{color:var(--acento);border-color:rgba(243,154,54,.45)}
+.wiz-op .wiz-orden{background:var(--acento);color:var(--tinta)}
+.wiz-pasos a.actual b,.wiz-pasos .wiz-paso.actual b{visibility:hidden}
+.paso-cam.actual b{display:none}
+.barra i,.wiz-barra i,.camp .prog i,.barrita-cam i{background:var(--neon)}
+.opcion:has(input:checked),.letra:has(input:checked),.obj-cam .obj:has(input:checked),.mz:has(input:checked){border-color:var(--neon);box-shadow:0 0 0 1px var(--neon);background:rgba(198,250,44,.07)}
+.fmt-op:has(input:checked),.foto:has(input:checked){border-color:var(--neon)}
+.op-cam:has(input:checked){border-color:var(--neon);background:rgba(198,250,44,.07)}
+.fmt-op .op-cam:has(input:checked) .nom-cam:after{background:var(--neon);border-color:var(--neon)}
+.chips label:has(input:checked),.wiz-chip:has(input:checked) span{background:var(--neon);border-color:var(--neon);color:var(--tinta)}
+.wiz-op:has(input:checked){border-color:var(--neon)}
+.wiz-op:has(input:checked),.as-pers:has(input:checked){box-shadow:0 0 0 2px var(--neon),6px 9px 18px rgba(12,11,16,.45),var(--clay-luz)!important}
+.wiz-op:has(input:checked)::after{background:var(--neon);color:var(--tinta)}
 """
 
 

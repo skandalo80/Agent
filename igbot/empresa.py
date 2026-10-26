@@ -568,6 +568,10 @@ main.emp{color:var(--claro);padding-bottom:4rem}
 .pie-paso .der{width:100%}.pie-paso .der .boton{flex:1;text-align:center;padding:.8rem 1rem}.riel{position:static}.riel .lista{flex-direction:row;overflow-x:auto}
 .riel .paso{flex:none;width:auto}.riel .paso small{display:none}.dos,.ideas{grid-template-columns:1fr}.fotos-o{grid-template-columns:repeat(3,1fr)}
 .prod{grid-template-columns:3.5rem 1fr}.prod .foto{width:3.5rem;height:3.5rem}.prod>div:last-child{grid-column:2}.prod .precio{text-align:left}.prod .acc{justify-content:flex-start}}
+.paso .n{color:var(--acento);border-color:rgba(243,154,54,.45)}
+.paso.on .n{visibility:hidden}
+.barra-av i{background:var(--neon)}
+.opc:has(input:checked){border-color:var(--neon);background:rgba(198,250,44,.07)}
 """
 
 

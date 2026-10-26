@@ -541,4 +541,12 @@ form:has(#emojis-nunca:checked) .v-emoji{display:none}form:has(#emojis-seguido:c
 @media(max-width:900px){.asis{grid-template-columns:1fr}.as-pasos{position:static;display:flex;gap:.4rem;overflow-x:auto;padding:.75rem}
 .as-t,.as-barra,.as-pasos .as-nota,.as-paso small,.as-paso:not(.on) b{display:none}.as-paso{flex:none;padding:.35rem}.as-paso.on{padding-right:.8rem}.as-paso b{font-size:.82rem;white-space:nowrap}}
 @media(max-width:560px){.as-cont{padding:1.4rem 1.1rem}.as-img{aspect-ratio:2/1}.as-h{font-size:1.55rem}.as-caja{padding:1.1rem}.as-seg{display:flex}.as-seg label{flex:1;text-align:center;padding:.5rem .6rem}}
+.as-n{color:var(--acento);border-color:rgba(243,154,54,.45)}
+.as-paso.on .as-n{visibility:hidden}
+.as-barra i{background:var(--neon)}
+.as-pers:has(input:checked){border-color:var(--neon)}
+.as-ck{background:var(--neon);color:var(--tinta)}
+.as-main .opcion:has(input:checked){background:rgba(198,250,44,.07);border-color:var(--neon);box-shadow:inset 0 0 0 1px var(--neon)}
+.as-main .chips label:has(input:checked),.as-seg label:has(input:checked){background:var(--neon);border-color:var(--neon);color:var(--tinta)}
+.as-sw:checked{background:var(--neon)}
 """
