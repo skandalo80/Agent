@@ -78,7 +78,8 @@ def resumen_de(camp: dict) -> dict:
             "inicio": camp["inicio"], "fin": fin_de(camp).isoformat(), "semanas": camp.get("semanas", 1),
             "modo": camp.get("modo", ""), "objetivo": str(camp.get("objetivo") or "").split(":")[0][:60],
             "posts": [{k: p.get(k) for k in ("post_id", "tipo", "formato", "hora", "titulo", "responde", "collage")}
-                      for p in camp.get("posts", []) if p.get("post_id")]}
+                      for p in camp.get("posts", []) if p.get("post_id")],
+            **({"brief": camp["brief"]} if camp.get("brief") else {})}  # el brief se queda para descargarlo
 
 
 async def historial(c: Cuenta) -> list[dict]:
@@ -425,6 +426,38 @@ async def propuesta(c: Cuenta, camp: dict, marca: dict, cuenta: str) -> bytes:
     doc.seccion("¿Te gusta? ¿Cambiamos algo?", [
         "Podemos mover cualquier post a otro día u hora, cambiar su formato o su texto, o pedir otra idea.",
         "Las imágenes que dicen «Imagen pendiente» se generan cuando el calendario quede aprobado."])
+    return doc.bytes()
+
+
+class Brief(Cotizacion):
+    etiqueta = "BRIEF DE CAMPAÑA"
+
+
+async def brief_pdf(c: Cuenta, camp: dict, marca: dict, cuenta: str) -> bytes:
+    """El brief de la campaña (la idea que eligió y ajustó), para guardarlo o compartirlo con su equipo."""
+    b = camp["brief"]
+    inicio, fin = date.fromisoformat(camp["inicio"]), fin_de(camp)
+    doc = Brief(f"@{cuenta.lstrip('@')}", f"{fecha(inicio)} – {fecha(fin)}", fecha(tools.now().date()),
+                marca.get("acento", ""))
+    doc.alias_nb_pages()
+    poner_logo(doc, c, marca)
+    doc.titulo(f"Brief · {camp['nombre']}", b.get("titulo", ""), b.get("resumen", ""))
+    objetivo = str(camp.get("objetivo") or "").split(":")[0]
+    producto = str(camp.get("producto") or "").split(":")[0].split(". Qué quiere")[0]
+    doc.datos([("Objetivo", objetivo or "—"), ("Posts", cifra(camp.get("n_posts") or len(camp.get("posts", [])))),
+               ("Fechas", f"{fecha(inicio)} – {fecha(fin)}"), ("Producto", producto or "—")])
+    for titulo, clave in (("Insight", "insight"), ("Mensaje clave", "mensaje_clave")):
+        if b.get(clave):
+            doc.seccion(titulo, [b[clave]])
+    if b.get("pilares"):
+        doc.seccion("Pilares", [f"{p['nombre']}: {p.get('detalle', '')}".strip(": ") for p in b["pilares"]])
+    for titulo, clave in (("Cómo avanza", "arco"), ("Dirección visual", "direccion_visual"),
+                          ("Lo que no se dice", "no_decir")):
+        if b.get(clave):
+            doc.seccion(titulo, [b[clave]])
+    if camp.get("visual") or camp.get("estilo"):
+        doc.seccion("Cómo se ve", [x for x in (f"Qué se ve: {camp['visual']}" if camp.get("visual") else "",
+                                               camp.get("estilo", "")) if x], chica=True)
     return doc.bytes()
 
 

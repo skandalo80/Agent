@@ -1156,6 +1156,23 @@ async def barra(c: Cuenta, camp: dict) -> str:
             f'<div class="acciones">{botones}</div></form>')
 
 
+def ver_brief(camp: dict) -> str:
+    """El brief que eligió en el asistente, plegado debajo del calendario (se cambia en Editar estrategia)."""
+    if not (b := camp.get("brief")):
+        return ""
+    filas = [(t, b.get(k, "")) for t, k in (("Insight", "insight"), ("Mensaje clave", "mensaje_clave"))]
+    filas.append(("Pilares", "<br>".join(f"<b>{escape(p['nombre'])}</b>: {escape(p.get('detalle', ''))}"
+                                         for p in b.get("pilares", []))))
+    filas += [(t, b.get(k, "")) for t, k in (("Cómo avanza", "arco"), ("Dirección visual", "direccion_visual"),
+                                             ("Lo que no se dice", "no_decir"))]
+    cuerpo = "".join(f'<div><h4>{t}</h4><p>{v if t == "Pilares" else escape(v)}</p></div>' for t, v in filas if v)
+    return (f'<details class="tarjeta plegable" id="brief"><summary><span class="titulo-sec"><h2>Brief:'
+            f' {escape(b.get("titulo", ""))}</h2></span></summary><p class="ayuda">{escape(b.get("resumen", ""))}</p>'
+            f'<div class="brief-cam">{cuerpo}</div><div class="acciones"><a class="boton secundario chico"'
+            f' href="{url_de(camp)}/brief">↓ Descargar brief (PDF)</a><a class="boton secundario chico"'
+            f' href="{BASE}/nueva?editar={camp["id"]}">Cambiar el brief</a></div></details>')
+
+
 def editar(camp: dict) -> str:
     """Nombre y fechas. Cambiar las fechas solo mueve el rango: los posts se quedan en su día."""
     return (f'<details class="tarjeta plegable" id="editar"><summary><span class="titulo-sec"><h2>Nombre y fechas</h2>'
@@ -1199,13 +1216,15 @@ async def pagina_campana(c: Cuenta, camp: dict, aviso: str = "", sel: str = "", 
     quedan_ia = await ia_restantes(c)
     with usar(c):
         cuerpo = tarjeta_extra(confirmar, k, url_de(camp)) if confirmar else ""
-        cuerpo += await calendario(c, camp, sel) + await barra(c, camp) + editar(camp)
+        cuerpo += await calendario(c, camp, sel) + await barra(c, camp) + ver_brief(camp) + editar(camp)
         p = buscar_post(camp, sel) if sel else None
         modal = await detalle(c, camp, p, quedan_ia) if p else ""
         await guardar(c, camp)  # por si se descartó algún post en Calendario
     botones = ('<span class="botones-cab">'
                f'<a class="boton secundario ajuste" href="{BASE}/nueva?editar={camp["id"]}">Editar estrategia</a>'
                f'<a class="boton secundario ajuste" href="{url_de(camp)}/propuesta">↓ Descargar planeación</a>'
+               + (f'<a class="boton secundario ajuste" href="{url_de(camp)}/brief">↓ Descargar brief</a>'
+                  if camp.get("brief") else "")
                + boton_todas(estado(camp, hoy)) + "</span>")
     return panel.pagina(
         panel.cabecera(salir=True, menu="contenido", cuenta=c, sub="campanas", perfil=await panel.usuario(c),
@@ -1282,7 +1301,8 @@ async def tarjeta_campana(c: Cuenta, camp: dict, cual: str, hoy: date, otras: li
                + (f'<a class="boton secundario chico" href="{BASE}/reporte?c={camp["id"]}">Reporte PDF</a>'
                   if cual == "pasada" and publicados else "")
                + (f'<a class="boton secundario chico" href="{url_de(camp)}/propuesta">Planeación</a>'
-                  if cual != "pasada" and completa else ""))
+                  if cual != "pasada" and completa else "")
+               + (f'<a class="boton secundario chico" href="{url_de(camp)}/brief">Brief</a>' if camp.get("brief") else ""))
     return (f'<div class="camp{"" if publicados or cual != "pasada" else " apagada"}">'
             f'<span class="barra-c {COLOR[cual]}"></span>{casilla}'
             f'<div><h3>{escape(camp["nombre"])}</h3><span class="f">{fechas}</span></div>'
@@ -1548,6 +1568,22 @@ async def ver_campana(request: Request, cid: str):
     if not (camp := await leer(c, cid)):
         return RedirectResponse(BASE, status_code=303)
     return await pagina_campana(c, camp, sel=request.query_params.get("post", ""))
+
+
+@router.get("/campanas/{cid}/brief")
+async def descargar_brief(request: Request, cid: str):
+    """El brief de la campaña en PDF (también de las que ya pasaron al historial)."""
+    if not (c := panel.cuenta_de_sesion(request)):
+        return RedirectResponse("/panel", status_code=303)
+    if c.imagenes_mes <= 0:
+        return sin_plan()
+    with usar(c):
+        camp = await leer(c, cid) or next((x for x in await informe.historial(c) if str(x["id"]) == cid), {})
+        if not camp.get("brief"):
+            return RedirectResponse(BASE, status_code=303)
+        contenido_pdf = await informe.brief_pdf(c, camp, await marca_de(c), await panel.usuario(c))
+    return Response(contenido_pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="brief-{archivo_de(camp["nombre"])}.pdf"'})
 
 
 @router.get("/campanas/{cid}/propuesta")

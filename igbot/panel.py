@@ -879,7 +879,11 @@ select,input[type=date],input[type=number]{color:var(--negro);background:var(--c
 .brief-ed .pilares div{border:1px solid var(--linea-clara);border-radius:.8rem;padding:.6rem .75rem}
 .brief-ed .pilares input{font-weight:600}
 .wiz-main:has(#concepto-0:checked) #brief-0,.wiz-main:has(#concepto-1:checked) #brief-1,.wiz-main:has(#concepto-2:checked) #brief-2{display:block}
-@media(max-width:900px){.conceptos{grid-template-columns:1fr}}
+.brief-cam{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem;margin:1rem 0}
+.brief-cam div{border:1px solid var(--linea-clara);border-radius:1rem;padding:.85rem 1rem}
+.brief-cam h4{margin:0 0 .35rem;font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:var(--gris)}
+.brief-cam p{margin:0;line-height:1.5}
+@media(max-width:900px){.conceptos,.brief-cam{grid-template-columns:1fr}}
 @media(max-width:900px){.wiz{grid-template-columns:1fr}.wiz-pasos{position:static}.wiz-ops.tres,.wiz-resumen{grid-template-columns:1fr}.wiz-main{padding:1.4rem}}
 /* Pasos de la marca (igbot/marca.py): el menú de pasos se pliega en el celular; paletas, letras, logo y fotos. */
 .wiz-pasos summary{display:none}
