@@ -1137,6 +1137,15 @@ input[type=text],input[type=search],textarea,select,.inbox input[type=search],.e
 .wiz-pasos a span small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media(max-width:900px){.wiz-pasos a,.wiz-pasos .wiz-paso{flex:none}.wiz-pasos a span small{display:none}
 .wiz-pasos a:not(.actual) span,.wiz-pasos .wiz-paso:not(.actual){font-size:0;gap:0}.wiz-pasos .wiz-paso:not(.actual) b{font-size:.75rem}}
+/* Encabezados parejos: la fila del antetítulo mide lo mismo con o sin botón, y lo que va debajo
+   (pasos, tarjetas, calendario) arranca a la misma altura en todas las páginas. */
+.compacta .titulo-fila{min-height:3rem}
+.compacta.delgada{padding:1.5rem 0 1rem}
+.compacta.delgada~main,.compacta.delgada~.oscuro-pag>main{padding-top:1.5rem}
+.estado-mini{display:flex;align-items:center;gap:.75rem;font-size:.9rem;color:var(--gris)}
+.estado-mini .luz{margin-right:0}.estado-mini form{margin:0}
+.der-cam{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;justify-content:flex-end}
+.der-cam .listo-cam{margin:0}
 """
 
 
@@ -1319,15 +1328,17 @@ async def panel_de(c: Cuenta, aviso: str = "", ver: str = "", vista: str = "", a
         # Conexión es de tu cuenta (está en el menú de perfil), no de una sección.
         cabecera(salir=True, menu="cuenta" if vista == "conexion" else "asistente", cuenta=c, sub=vista or "chats", perfil=await usuario(c), foto=await foto_perfil(c),
                  luces={"conexion": estado_conexion})
+        # Sin la barra de estado: solo una luz y Pausar/Encender a la derecha del antetítulo, como los
+        # botones de las demás páginas, para que todas arranquen a la misma altura.
         + (encabezado(f"Tu cuenta · {titulo}") if titulo else
-           encabezado("Tu asistente", extra=(
-               f'<div class="estado"><div><span class="luz{" on" if encendido else ""}"></span>'
-               f'{"Está contestando tus mensajes." if encendido else REVISION if c.en_revision else "Está en pausa: no contesta mensajes."}</div>'
+           encabezado("Tu asistente", (
+               f'<div class="estado-mini"><span class="luz{" on" if encendido else ""}"></span>'
+               f'{"Contestando tus mensajes" if encendido else "En revisión" if c.en_revision else "Está en pausa"}'
                + ("" if c.en_revision else
                   '<form method="post" action="/panel/estado">'
-                  f'<input type="hidden" name="activo" value="{"0" if encendido else "1"}"><div class="acciones-estado">'
-                  f'<button class="boton{" secundario" if encendido else ""}">{"Pausar" if encendido else "Encender"}</button>'
-                  "</div></form>")
+                  f'<input type="hidden" name="activo" value="{"0" if encendido else "1"}">'
+                  f'<button class="boton chico{" secundario" if encendido else ""}">{"Pausar" if encendido else "Encender"}</button>'
+                  "</form>")
                + "</div>")))
         + '<main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")

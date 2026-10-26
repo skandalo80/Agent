@@ -596,7 +596,7 @@ form:has(#emojis-nunca:checked) .v-emoji{display:none}form:has(#emojis-seguido:c
 .as-sw:checked{background:var(--acento)}
 /* Pasos arriba en horizontal; la barra de avance corre por debajo de los pasos. */
 .asis{grid-template-columns:minmax(0,1fr);gap:1.25rem}
-.as-pasos{position:relative;display:flex;gap:.35rem;align-items:stretch;overflow-x:auto;scrollbar-width:none;padding:.6rem .7rem 1.05rem}
+.as-pasos{position:relative;top:auto;display:flex;gap:.35rem;align-items:stretch;overflow-x:auto;scrollbar-width:none;padding:.6rem .7rem 1.05rem}
 .as-t,.as-pasos .as-nota{display:none}
 .as-barra{position:absolute;left:1.3rem;right:1.3rem;bottom:.45rem;margin:0;height:.3rem!important}
 .as-paso{flex:1 1 0;min-width:0;line-height:1.2}

@@ -382,7 +382,9 @@ async def pagina_marca(c: Cuenta, paso: str, marca: dict | None = None, aviso: s
                      '<button class="oculto" name="accion" value="guardar" tabindex="-1" aria-hidden="true">Guardar</button>'
                      + cabeza(i) + hacer()
                      + pie(i, "Ver resumen →" if i == len(PASOS) else "Guardar y continuar →") + "</form>")
-    cuerpo = f'<div class="wiz mrc">{menu_pasos(actual, hechos_)}<div class="wiz-main">{contenido}</div></div>'
+    # El aviso de lo que falta va dentro del paso, para que los pasos queden a la altura de las demás páginas.
+    falta = await panel.pendiente(c, "marca")
+    cuerpo = f'<div class="wiz mrc">{menu_pasos(actual, hechos_)}<div class="wiz-main">{falta}{contenido}</div></div>'
     # Tu marca es de la cuenta (menú de perfil, abajo), no una sección de Contenido.
     return panel.pagina(
         panel.cabecera(salir=True, menu="cuenta", cuenta=c, sub="marca", perfil=await panel.usuario(c),
@@ -390,7 +392,7 @@ async def pagina_marca(c: Cuenta, paso: str, marca: dict | None = None, aviso: s
         + panel.encabezado("Tu cuenta · Tu marca")
         + '<main class="oscuro-pag"><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
-        + await panel.pendiente(c, "marca") + cuerpo + "</div></main>")
+        + cuerpo + "</div></main>")
 
 
 # --- guardar ---

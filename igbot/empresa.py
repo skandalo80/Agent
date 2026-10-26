@@ -576,7 +576,7 @@ main.emp{color:var(--claro);padding-bottom:4rem}
 .opc:has(input:checked){border-color:var(--acento);background:rgba(243,154,54,.10)}
 /* Pasos arriba en horizontal; la barra de avance corre por debajo de los pasos. */
 .mago{grid-template-columns:minmax(0,1fr);gap:1.25rem}
-.riel{position:relative!important;padding:.6rem .7rem 1.05rem;margin-bottom:.75rem}
+.riel{position:relative!important;top:auto;padding:.6rem .7rem 1.05rem;margin-bottom:.75rem}
 .riel h2{display:none}
 .riel .lista{flex-direction:row;gap:.35rem;overflow-x:auto;scrollbar-width:none}
 .riel .paso{flex:1 1 0;min-width:0;width:auto;line-height:1.2}
