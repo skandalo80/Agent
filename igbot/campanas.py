@@ -1443,7 +1443,7 @@ async def pagina_lista(c: Cuenta, ver: str = "", aviso: str = "", q: dict | None
         panel.cabecera(salir=True, menu="contenido", cuenta=c, sub="campanas", perfil=await panel.usuario(c),
                        foto=await panel.foto_perfil(c))
         + cabeza("Campañas", "Lo que está corriendo, lo que viene y lo que ya terminó.",
-                 f'<a class="boton secundario ajuste" href="{BASE}/nueva">+ Nueva campaña</a>')
+                 f'<a class="boton ajuste" href="{BASE}/nueva">+ Nueva campaña</a>')
         + '<div class="oscuro-pag"><main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
         + await panel.pendiente(c, "campanas")

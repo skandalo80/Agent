@@ -33,27 +33,27 @@ CSS = """
 .inbox{display:grid;grid-template-columns:24rem minmax(0,1fr);background:var(--blanco);border-radius:1.5rem;overflow:hidden;min-height:38rem;margin-bottom:1.25rem;scroll-margin-top:1rem}
 .inbox .lista{border-right:1px solid var(--linea-clara);display:flex;flex-direction:column;min-width:0}
 .inbox .buscar{padding:1rem 1rem .5rem;margin:0}
-.inbox input[type=search]{width:100%;box-sizing:border-box;font:inherit;font-size:.95rem;padding:.65rem 1rem .65rem 2.4rem;border:1px solid var(--linea-clara);border-radius:999px;background:var(--claro) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%23716a75' stroke-width='2' viewBox='0 0 24 24'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-4-4'/%3E%3C/svg%3E") no-repeat .9rem center}
+.inbox input[type=search]{width:100%;box-sizing:border-box;font:inherit;font-size:.95rem;padding:.65rem 1rem .65rem 2.4rem;border:1px solid var(--linea-clara);border-radius:999px;background:var(--claro) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%23C9B8D1' stroke-width='2' viewBox='0 0 24 24'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-4-4'/%3E%3C/svg%3E") no-repeat .9rem center}
 .inbox .buscar button{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 .js .inbox .buscar button{display:none}
 .filtros-chat{display:flex;gap:.1rem;padding:0 .75rem;overflow-x:auto;border-bottom:1px solid var(--linea-clara);font-size:.82rem}
 .filtros-chat a{padding:.7rem .45rem;color:var(--gris);text-decoration:none;font-weight:500;border-bottom:2px solid transparent;white-space:nowrap}
-.filtros-chat a.on{color:var(--morado);border-color:var(--morado);font-weight:600}
-.filtros-chat b{display:inline-block;min-width:1.2rem;padding:0 .35rem;margin-left:.25rem;border-radius:999px;background:var(--acento);color:#fff;font-size:.7rem;text-align:center;line-height:1.2rem}
+.filtros-chat a.on{color:var(--negro);border-color:var(--acento);font-weight:600}
+.filtros-chat b{display:inline-block;min-width:1.2rem;padding:0 .35rem;margin-left:.25rem;border-radius:999px;background:var(--acento);color:var(--tinta);font-size:.7rem;text-align:center;line-height:1.2rem}
 .filtros-chat b.gris{background:var(--claro);color:var(--gris)}
 .inbox .cuantos{font-size:.75rem;color:var(--gris);padding:.5rem 1rem 0;margin:0}
-.conv{display:flex;gap:.75rem;padding:.85rem 1rem;text-decoration:none;color:inherit;border-bottom:1px solid #efe9f1;position:relative}
-.conv:hover{background:#faf7fb}.conv.on{background:var(--hundido);box-shadow:inset 3px 0 0 var(--morado)}
-.inbox .avatar{flex:none;width:2.6rem;height:2.6rem;border-radius:50%;background:var(--morado);color:var(--neon);display:grid;place-items:center;font-weight:700;font-size:.95rem}
+.conv{display:flex;gap:.75rem;padding:.85rem 1rem;text-decoration:none;color:inherit;border-bottom:1px solid var(--linea-clara);position:relative}
+.conv:hover{background:rgba(255,255,255,.04)}.conv.on{background:var(--claro)}
+.inbox .avatar{flex:none;width:2.6rem;height:2.6rem;border-radius:50%;background:#5A3A68;color:var(--negro);display:grid;place-items:center;font-weight:600;font-size:.95rem}
 .conv .txt{min-width:0;flex:1}
 .conv .arriba{display:flex;justify-content:space-between;gap:.5rem;font-size:.9rem}
 .conv .arriba b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .conv .arriba small{color:var(--gris);font-size:.75rem;white-space:nowrap}
-.conv .ult{display:block;font-size:.85rem;color:#5f5863;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:.1rem 0 .25rem}
+.conv .ult{display:block;font-size:.85rem;color:var(--texto2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:.1rem 0 .25rem}
 .conv.sin .ult{color:var(--negro);font-weight:600}
 .conv .lo-tiene{display:block;font-size:.7rem;color:var(--gris)}
-.conv .lo-tiene.rojo{color:#b42318;font-weight:600}
-.punto-sin{position:absolute;left:.35rem;top:50%;width:.4rem;height:.4rem;border-radius:50%;background:var(--acento)}
+.conv .lo-tiene.rojo{color:var(--naranja-t);font-weight:600}
+.punto-sin{position:absolute;left:.35rem;top:50%;width:.4rem;height:.4rem;border-radius:50%;background:var(--neon)}
 .inbox .vacio{padding:1.5rem 1rem;font-size:.9rem;color:var(--gris)}
 .inbox .lista .paginas{margin:auto 0 0;padding:.75rem;justify-content:center}
 .hilo{display:flex;flex-direction:column;min-width:0}
@@ -61,19 +61,20 @@ CSS = """
 .hilo .cab .nom{flex:1;min-width:0}.hilo .cab .nom small{display:block;color:var(--gris);font-size:.8rem}
 .quien-contesta{display:flex;align-items:center;border:1px solid var(--linea-clara);border-radius:999px;padding:.2rem;background:var(--claro);margin:0}
 .quien-contesta button{font:inherit;font-size:.85rem;font-weight:600;border:0;background:transparent;padding:.4rem .9rem;border-radius:999px;cursor:pointer;color:var(--gris)}
-.quien-contesta button[aria-pressed=true]{background:var(--morado);color:#fff;cursor:default;box-shadow:0 3px 0 var(--ciruela)}
-.hilo .alerta{margin:1rem 1.5rem 0;padding:.75rem 1rem;border-radius:1rem;background:#fdecea;color:#7a1c12;font-size:.9rem}
-.hilo .alerta.tuyo{background:var(--claro);color:#4a3f50}
+.quien-contesta button[aria-pressed=true]{background:var(--acento);color:var(--tinta);cursor:default}
+.hilo .alerta{margin:1rem 1.5rem 0;padding:.75rem 1rem;border-radius:1rem;background:rgba(210,148,65,.12);border:1px solid rgba(210,148,65,.35);color:#E6DCEB;font-size:.9rem}
+.hilo .alerta b,.hilo .alerta strong{color:var(--naranja-t)}
+.hilo .alerta.tuyo{background:var(--claro);border-color:var(--linea-clara);color:#E6DCEB}
 .hilo .alerta form{display:inline;margin:0}
 .hilo .alerta button{font:inherit;font-weight:600;background:none;border:0;padding:0;color:inherit;text-decoration:underline;cursor:pointer}
 /* column-reverse: el chat abre ya abajo, en lo más nuevo, sin JS. */
-.mensajes{flex:1;padding:1.25rem 1.5rem;background:#faf7fb;overflow:auto;max-height:32rem;display:flex;flex-direction:column-reverse}
+.mensajes{flex:1;padding:1.25rem 1.5rem;background:var(--suave);overflow:auto;max-height:32rem;display:flex;flex-direction:column-reverse}
 .mensajes>div{display:flex;flex-direction:column}
 .mensajes .dia{text-align:center;font-size:.75rem;color:var(--gris);margin:.5rem 0 1rem}
 .mensajes .anteriores{text-align:center;font-size:.85rem;margin-bottom:1rem}
-.mensajes .burbuja.de-cliente{background:var(--blanco);border:1px solid var(--linea-clara);border-bottom-left-radius:.35rem}
-.mensajes .burbuja.de-bot{background:var(--morado);color:#fff;margin-left:auto;border-bottom-right-radius:.35rem}
-.mensajes .burbuja.de-ti{background:#e8f8b9;color:var(--negro);margin-left:auto;border-bottom-right-radius:.35rem}
+.mensajes .burbuja.de-cliente{background:var(--claro);border:1px solid var(--linea-clara);border-bottom-left-radius:.35rem}
+.mensajes .burbuja.de-bot{background:#5A3A68;color:var(--negro);margin-left:auto;border-bottom-right-radius:.35rem}
+.mensajes .burbuja.de-ti{background:var(--acento);color:var(--tinta);margin-left:auto;border-bottom-right-radius:.35rem}
 .mensajes .hora-msg{font-size:.7rem;color:var(--gris);margin:-.3rem 0 .8rem;text-align:right}
 .mensajes .hora-msg.izq{text-align:left}
 .responder{border-top:1px solid var(--linea-clara);padding:1rem 1.5rem;margin:0}
