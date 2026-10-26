@@ -118,7 +118,8 @@ CREATE TABLE IF NOT EXISTS posts (
     status      TEXT NOT NULL,             -- borrador | programada | publicando | publicada | fallida | cancelada
     permalink   TEXT NOT NULL DEFAULT '',
     error       TEXT NOT NULL DEFAULT '',
-    created_at  REAL NOT NULL
+    created_at  REAL NOT NULL,
+    tipo        TEXT NOT NULL DEFAULT 'post' -- post | historia
 );
 
 -- Cosas que pasaron en las conversaciones, para el reporte semanal
@@ -173,6 +174,10 @@ class Store:
         cur = await self.db.execute("PRAGMA table_info(conexiones)")
         if "slug" not in {row[1] for row in await cur.fetchall()}:
             await self.db.execute("ALTER TABLE conexiones ADD COLUMN slug TEXT")
+        # Bases de antes de las historias: todo lo que había era post.
+        cur = await self.db.execute("PRAGMA table_info(posts)")
+        if "tipo" not in {row[1] for row in await cur.fetchall()}:
+            await self.db.execute("ALTER TABLE posts ADD COLUMN tipo TEXT NOT NULL DEFAULT 'post'")
         await self.db.commit()
 
     async def close(self) -> None:
@@ -549,16 +554,18 @@ class Store:
         await self.db.execute("UPDATE media SET note = ? WHERE id = ?", (note, media_id))
         await self.db.commit()
 
-    async def add_post(self, user_id: str, media_ids: list[int], caption: str, publish_at: float) -> int:
+    async def add_post(self, user_id: str, media_ids: list[int], caption: str, publish_at: float,
+                       tipo: str = "post") -> int:
+        """Un borrador; `tipo` es "post" (feed) o "historia"."""
         cur = await self.db.execute(
-            "INSERT INTO posts (user_id, media_ids, caption, publish_at, status, created_at)"
-            " VALUES (?, ?, ?, ?, 'borrador', ?)",
-            (user_id, ",".join(map(str, media_ids)), caption, publish_at, time.time()),
+            "INSERT INTO posts (user_id, media_ids, caption, publish_at, status, created_at, tipo)"
+            " VALUES (?, ?, ?, ?, 'borrador', ?, ?)",
+            (user_id, ",".join(map(str, media_ids)), caption, publish_at, time.time(), tipo),
         )
         await self.db.commit()
         return cur.lastrowid
 
-    POST_FIELDS = "id, user_id, media_ids, caption, publish_at, status, permalink, error, created_at"
+    POST_FIELDS = "id, user_id, media_ids, caption, publish_at, status, permalink, error, created_at, tipo"
 
     def _post(self, row) -> dict | None:
         if not row:

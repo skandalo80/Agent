@@ -639,11 +639,6 @@ label.check input[type=email]{flex:1;max-width:22rem;margin:0}
 .tarjeta .kpis{margin:1rem 0 0}
 .tarjeta .kpi{background:var(--claro)}
 /* Contenido > Campañas */
-.pasos-cam{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:1rem}
-.paso-cam{display:flex;align-items:center;gap:.5rem;padding:.4rem .85rem;border-radius:999px;border:1px solid var(--linea-oscura);color:var(--gris);font-size:.88rem}
-.paso-cam b{display:grid;place-items:center;width:1.35rem;height:1.35rem;border-radius:50%;background:var(--linea-oscura);font-size:.72rem;color:var(--claro)}
-.paso-cam.hecho b{background:var(--neon);color:var(--tinta)}
-.paso-cam.hecho{color:var(--claro)}.paso-cam.actual{color:var(--claro);border-color:var(--acento)}.paso-cam.actual b{background:var(--acento);color:var(--tinta)}
 .seccion>summary .resumen-cam{margin:0 0 0 auto;padding-right:1rem}
 .fila-cam{display:grid;grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:1rem;margin:1rem 0}
 .fila-cam input,.fila-cam select{width:100%;font:inherit;font-size:1rem;padding:.65rem .8rem;border:1px solid var(--linea-clara);border-radius:.85rem;background:var(--claro);color:var(--negro)}
@@ -1103,7 +1098,6 @@ input[type=text],input[type=search],textarea,select,.inbox input[type=search],.e
 .wiz-pasos a b,.wiz-pasos .wiz-paso b{color:var(--acento);border-color:rgba(243,154,54,.45)}
 .wiz-op .wiz-orden{background:var(--acento);color:var(--tinta)}
 .wiz-pasos a.actual b,.wiz-pasos .wiz-paso.actual b{visibility:hidden}
-.paso-cam.actual b{display:none}
 .barra i,.wiz-barra i,.camp .prog i,.barrita-cam i{background:var(--neon)}
 .opcion:has(input:checked),.letra:has(input:checked),.obj-cam .obj:has(input:checked),.mz:has(input:checked){border-color:var(--neon);box-shadow:0 0 0 1px var(--neon);background:rgba(198,250,44,.07)}
 .fmt-op:has(input:checked),.foto:has(input:checked){border-color:var(--neon)}
@@ -1146,6 +1140,18 @@ input[type=text],input[type=search],textarea,select,.inbox input[type=search],.e
 .estado-mini .luz{margin-right:0}.estado-mini form{margin:0}
 .der-cam{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;justify-content:flex-end}
 .der-cam .listo-cam{margin:0}
+/* Post o historia: en las tarjetas de la campaña y en su ventana (PR de historias). La historia en naranja. */
+.medio-cam{align-self:flex-start;font-size:.68rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:.12rem .5rem;border-radius:999px;background:#3A3746;color:#F7F5FA}
+.medio-cam.m-historia{background:rgba(243,154,54,.16);color:var(--naranja-t)}
+.modal-cam .img-modal.h{aspect-ratio:9/16;max-height:70vh;width:auto;max-width:100%;margin:0 auto}
+/* Calendario: miniatura a la izquierda, título arriba y abajo la hora y si es post o historia. */
+.ev.con-img{display:grid;grid-template-columns:2.1rem minmax(0,1fr);gap:.15rem .45rem;align-items:center}
+.ev.con-img img{grid-row:span 2;width:2.1rem;aspect-ratio:4/5;object-fit:cover;border-radius:.35rem;background:#25232F}
+.ev.con-img b{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.2}
+.wiz-campos.cinco{grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr))}
+.ev .m-historia{color:var(--naranja-t);font-weight:600}
+.cal-horas[style*="--dias:1"] .ev.con-img{grid-template-columns:3rem minmax(0,1fr)}.cal-horas[style*="--dias:1"] .ev.con-img img{width:3rem}
+@media(max-width:900px){.cal-d .ev.con-img{display:block}.cal-d .ev img{display:none}}
 """
 
 

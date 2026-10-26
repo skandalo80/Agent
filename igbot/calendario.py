@@ -41,6 +41,7 @@ class Item:
     imagen: str = ""
     externo: bool = False  # abre Instagram
     ig_id: str = ""
+    tipo: str = "post"  # o "historia" (campanas.MEDIOS)
 
 
 def rango(vista: str, fecha: date) -> tuple[date, date]:
@@ -107,7 +108,7 @@ async def items_de(c: Cuenta, ini: date, fin: date, con_sin_fecha: bool = False)
         zona = tools.tz()
         desde = campanas.momento(ini.isoformat(), "00:00")
         hasta = campanas.momento((fin + timedelta(days=1)).isoformat(), "00:00")
-    de_camp = {p["post_id"]: x for x in camps for p in x.get("posts", []) if p.get("post_id")}
+    de_camp = {p["post_id"]: (x, p) for x in camps for p in x.get("posts", []) if p.get("post_id")}
     posts = await c.store.posts(tuple(DE_POST), due_before=hasta - 1, user_id=PANEL, desde=desde)
     if con_sin_fecha:
         posts += [p for p in await c.store.posts(("borrador",), user_id=PANEL) if not p["publish_at"]]
@@ -115,20 +116,21 @@ async def items_de(c: Cuenta, ini: date, fin: date, con_sin_fecha: bool = False)
     for post in posts:
         p = await contenido.pieza(c.store, post["id"])
         media = await c.store.media(post["media_ids"][0]) if post["media_ids"] else None
-        camp = de_camp.get(post["id"])
+        camp, de_la_campana = de_camp.get(post["id"], (None, {}))
         publicado = post["status"] == "publicada" and post["permalink"]
         items.append(Item(
             datetime.fromtimestamp(post["publish_at"], zona) if post["publish_at"] else None,
-            p.get("titulo") or contenido.recortar(post["caption"], 50) or "Sin título",
+            # El título de la campaña también en foto sola, collage e historias, que no lo llevan en la imagen.
+            de_la_campana.get("titulo") or p.get("titulo") or contenido.recortar(post["caption"], 50) or "Sin título",
             camp["nombre"] if camp else "Post suelto", DE_POST[post["status"]],
             post["permalink"] if publicado else f"{BASE}/post/{post['id']}",
-            contenido.url_imagen(c, media[0]) if media else "", externo=bool(publicado)))
+            contenido.url_imagen(c, media[0]) if media else "", externo=bool(publicado), tipo=post.get("tipo") or "post"))
     for camp in camps:  # propuestas sin imagen: borradores que llevan a su campaña
         for p in camp.get("posts", []):
             if not p.get("post_id") and ini.isoformat() <= p["dia"] <= fin.isoformat():
                 items.append(Item(datetime.fromisoformat(f"{p['dia']}T{p['hora']}").replace(tzinfo=zona),
                                   p.get("titulo") or "Sin título", camp["nombre"], "borrador",
-                                  f"{campanas.url_de(camp)}?post={p['k']}#detalle"))
+                                  f"{campanas.url_de(camp)}?post={p['k']}#detalle", tipo=campanas.medio_de(p)))
     del_panel = {shortcode(post["permalink"]) for post in posts if post["permalink"]}
     with usar(c):
         items += await de_instagram(c, desde, hasta, del_panel)
@@ -152,13 +154,20 @@ def enlace(estado_: dict, **cambios) -> str:
     return BASE + ("?" + urlencode(limpio) if limpio else "") + "#cal"
 
 
-def tarjeta(x: Item, corta: bool = False) -> str:
+def medio(x: Item) -> str:
+    return campanas.MEDIOS.get(x.tipo, campanas.MEDIOS["post"])[0]
+
+
+def tarjeta(x: Item) -> str:
+    """El título arriba; abajo la hora y si es post o historia; a la izquierda la miniatura, si ya tiene imagen
+    (para acordarse de cuál era). La campaña va en el título flotante."""
     nombre, clase = ESTADOS[x.estado]
     hora = f"{x.cuando:%H:%M}" if x.cuando else "Sin fecha"
     destino = ' target="_blank" rel="noopener"' if x.externo else ""
-    detalle = f"{hora} · {escape(x.sub)}" if not corta else hora
-    return (f'<a class="ev {clase}" href="{escape(x.href)}"{destino} title="{escape(x.titulo)} · {nombre}">'
-            f'<b>{escape(x.titulo)}</b><small>{detalle}</small></a>')
+    mini = (f'<img src="{escape(x.imagen)}" alt="" loading="lazy" referrerpolicy="no-referrer">' if x.imagen else "")
+    return (f'<a class="ev {clase}{" con-img" if mini else ""}" href="{escape(x.href)}"{destino}'
+            f' title="{escape(x.titulo)} · {escape(x.sub)} · {nombre}">{mini}'
+            f'<b>{escape(x.titulo)}</b><small>{hora} · <span class="m-{x.tipo}">{medio(x)}</span></small></a>')
 
 
 def vista_mes(items: list[Item], fecha: date, hoy: date, est: dict) -> str:
@@ -213,7 +222,7 @@ def fila(x: Item) -> str:
               + contenido.boton_insights(x.ig_id) if x.externo
               else f'<a class="boton secundario chico" href="{escape(x.href)}">Editar</a>')
     return (f'<div class="fila cal-fila">{imagen}<div class="datos"><b>{escape(x.titulo)}</b>'
-            f'<span>{escape(cuando)} · {escape(x.sub)}</span></div>'
+            f'<span>{escape(cuando)} · {medio(x)} · {escape(x.sub)}</span></div>'
             f'<span class="chip {clase}">{nombre}</span>{accion}</div>')
 
 

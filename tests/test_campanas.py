@@ -126,7 +126,10 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
     r = client.get(u)
     assert "Otoño" in r.text and r.text.count("sin imagen") == 3 and 'draggable="true"' in r.text
     assert f'data-dia="{lun}" data-publica>' in r.text and 'data-dia="2099-01-06">' in r.text  # martes no publica
-    assert "Se prueba:" in r.text and "3 formatos" in r.text and "Solo texto" in r.text
+    assert "Se prueba:" in r.text and "3 formatos" in r.text
+    # Las tarjetas dicen si es post o historia, sin el tema ni el formato en gris.
+    assert '<span class="medio-cam m-post">Post</span>' in r.text and '<span class="fmt-cam">' not in r.text
+    assert "Arma tu campaña" not in r.text and "↓ Descargar planeación" in r.text  # sin los tres pasos arriba
     assert "Generar las 3 que faltan · usa 2" in r.text  # el de solo texto no usa cupo
 
     # Arrastrar el del lunes al miércoles: se intercambian.
@@ -664,16 +667,18 @@ def test_varias_campanas(cliente, monkeypatch):
     post_id = campanas.buscar_post(invierno(), k)["post_id"]
     r = client.get("/panel/contenido?mes=2099-01")
     assert "Enero de 2099" in r.text and 'class="cal-mes"' in r.text and "fecha=2099-02-01" in r.text
-    assert f'class="ev e-borrador" href="/panel/contenido/post/{post_id}"' in r.text
-    assert f'href="{u}?post=' in r.text and " · Invierno &lt;b&gt;</small>" in r.text  # las propuestas sin imagen
+    # Con miniatura, el título arriba y abajo la hora y si es post o historia; la campaña, en el título flotante.
+    assert f'class="ev e-borrador con-img" href="/panel/contenido/post/{post_id}"' in r.text
+    assert f'href="{u}?post=' in r.text and " · Invierno &lt;b&gt; · Borrador" in r.text  # las propuestas sin imagen
+    assert '<span class="m-post">Post</span></small>' in r.text
     assert "Próximos posts" not in r.text and "Ya publicados" not in r.text  # sin listas debajo
     r = client.get("/panel/contenido?vista=semana&fecha=2099-01-05")
     assert "5 al 11 de enero de 2099" in r.text and 'class="cal-horas" style="--dias:7"' in r.text
-    assert " · Invierno &lt;b&gt;</small>" in r.text
+    assert " · Invierno &lt;b&gt; · Borrador" in r.text
     r = client.get("/panel/contenido?vista=dia&fecha=2099-01-05&ver=lista")
     assert "Lunes 5 de enero" in r.text and "Borradores" in r.text and "Próximos posts" not in r.text
     r = client.get("/panel/contenido?fecha=2099-01-05&estado=publicado")
-    assert 'e-borrador" href' not in r.text and 'class="ev e-publicado" href="https://www.instagram.com/p/DESDEAPP/"' in r.text
+    assert 'e-borrador" href' not in r.text and 'class="ev e-publicado con-img" href="https://www.instagram.com/p/DESDEAPP/"' in r.text
 
     # En el editor del post se sabe de qué campaña viene.
     p = campanas.buscar_post(invierno(), k)
