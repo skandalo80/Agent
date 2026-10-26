@@ -57,7 +57,7 @@ def test_el_asistente_de_punta_a_punta(cliente, monkeypatch):
     listo(client, c)
     client.portal.call(c.store.set, "productos", json.dumps([PRODUCTO]))
     r = client.get(URL)
-    assert "Paso 1 de 7" in r.text and 'name="objetivo" value="interaccion"' in r.text
+    assert "Paso 1 de 6" in r.text and 'name="objetivo" value="interaccion"' in r.text
     assert 'class="wiz-img' not in r.text  # el objetivo va sin miniaturas
     assert 'class="enter-cam" name="ir" value="2"' in r.text  # Enter sigue al paso 2, no salta en el riel
 
@@ -79,9 +79,13 @@ def test_el_asistente_de_punta_a_punta(cliente, monkeypatch):
     # Enfoque del contenido: tarjetas con imagen, las que van con el objetivo marcadas; al menos una.
     paso(client, 1, ir=1, objetivo="interaccion")
     r = client.get(f"{URL}?paso=3")
-    assert "Paso 3 de 7 · Enfoque del contenido" in r.text and r.text.count('name="enfoques"') == 7
+    assert "Paso 3 de 6 · Enfoque del contenido" in r.text and r.text.count('name="enfoques"') == 7
     assert "tarjetas/campana/enfoque-consejos.webp" in r.text and r.text.count("Va con tu objetivo") == 3
     assert "Elige al menos un enfoque." in paso(client, 3).text
+    # Qué se ve está fuera: de Formatos se sigue a Estilo y variedad.
+    r = client.get(f"{URL}?paso=4")
+    assert 'name="ir" value="6">Continuar' in r.text and ">Qué se ve<" not in r.text
+    assert "Paso 5 de 6 · Estilo y variedad" in client.get(f"{URL}?paso=5").text
 
     # Cantidad: no caben más de dos por día.
     llenar(client)
@@ -91,7 +95,7 @@ def test_el_asistente_de_punta_a_punta(cliente, monkeypatch):
     llenar(client)
     r = client.get(f"{URL}?paso=8")
     assert "Revisa tu campaña antes de generarla" in r.text and "Latte de calabaza · Promoción con descuento 20 %" in r.text
-    assert r.text.count("Editar</button>") == 8 and "Crear el brief" in r.text
+    assert r.text.count("Editar</button>") == 7 and "Crear el brief" in r.text
     assert "Consejos e ideas útiles · Historias y situaciones cotidianas" in r.text
     assert 'class="cruce"' in r.text and "Con 6 posts cubrimos" in r.text
 

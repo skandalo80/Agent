@@ -33,6 +33,17 @@ BORRADOR = "campana_borrador"
 
 PASOS = ("Objetivo", "Mensaje", "Enfoque del contenido", "Formatos", "Qué se ve", "Estilo y variedad", "Cantidad y fechas")
 RESUMEN = len(PASOS) + 1
+OCULTOS = {5}  # Qué se ve: fuera del asistente (las imágenes usan lo de siempre: productos, personas, tus fotos)
+VISIBLES = [i for i in range(1, RESUMEN) if i not in OCULTOS]
+
+
+def vecino(n: int, paso: int) -> int:
+    """El paso visible siguiente (paso=1) o anterior (paso=-1); RESUMEN después del último."""
+    i = n + paso
+    while i in OCULTOS:
+        i += paso
+    return i
+
 BRIEF = RESUMEN + 1  # después del resumen: elegir la idea de la campaña y ajustar su brief
 MAX_MENSAJES = 2
 MAX_TEXTO, MAX_CONDICION = 400, 120
@@ -355,7 +366,7 @@ def del_form(f, paso: int, b: dict, objetivos: list[dict], mensajes: list[dict],
 
 
 def faltan(b: dict) -> list[int]:
-    return [i for i in range(1, RESUMEN) if i not in b.get("hechos", [])]
+    return [i for i in VISIBLES if i not in b.get("hechos", [])]
 
 
 # --- páginas ---
@@ -392,8 +403,8 @@ def riel(b: dict, actual: int) -> str:
     hechos = set(b.get("hechos", []))
     filas = "".join(
         f'<button class="wiz-paso{" hecho" if i in hechos and i != actual else ""}{" actual" if i == actual else ""}"'
-        f' name="ir" value="{i}"><b>{"✓" if i in hechos and i != actual else i}</b>{t}</button>'
-        for i, t in enumerate(PASOS, 1))
+        f' name="ir" value="{i}"><b>{"✓" if i in hechos and i != actual else n}</b>{PASOS[i - 1]}</button>'
+        for n, i in enumerate(VISIBLES, 1))
     listo = not faltan(b)
     return (f'<nav class="wiz-pasos" aria-label="Pasos de la campaña"><p>Tu campaña</p>{filas}<div class="sep"></div>'
             f'<button class="wiz-paso{" actual" if actual == RESUMEN else ""}{"" if listo else " apagado"}" name="ir"'
@@ -403,17 +414,19 @@ def riel(b: dict, actual: int) -> str:
 
 
 def cab(n: int, titulo: str, bajada: str) -> str:
-    return (f'<div class="wiz-cab"><p class="ante">Paso {n} de {len(PASOS)} · {PASOS[n - 1]}</p><h2>{titulo}</h2>'
-            f'<p class="baj">{bajada}</p><div class="wiz-barra"><i style="width:{round(100 * n / len(PASOS))}%"></i>'
+    v = VISIBLES.index(n) + 1  # el número que ve: sin contar los pasos ocultos
+    return (f'<div class="wiz-cab"><p class="ante">Paso {v} de {len(VISIBLES)} · {PASOS[n - 1]}</p><h2>{titulo}</h2>'
+            f'<p class="baj">{bajada}</p><div class="wiz-barra"><i style="width:{round(100 * v / len(VISIBLES))}%"></i>'
             "</div></div>")
 
 
 def pie(n: int) -> str:
-    siguiente = "Ver resumen" if n == len(PASOS) else "Continuar"
-    return ('<div class="wiz-pie">' + (f'<button class="boton secundario" name="ir" value="{n - 1}">‹ Anterior</button>'
-                                         if n > 1 else f'<a class="boton secundario" href="{campanas.BASE}">Cancelar</a>')
-            + f'<span>Paso {n} de {len(PASOS)}</span><button class="boton" name="ir" value="{n + 1}">{siguiente} ›</button>'
-            "</div>")
+    siguiente = "Ver resumen" if n == VISIBLES[-1] else "Continuar"
+    return ('<div class="wiz-pie">'
+            + (f'<button class="boton secundario" name="ir" value="{vecino(n, -1)}">‹ Anterior</button>'
+               if n > VISIBLES[0] else f'<a class="boton secundario" href="{campanas.BASE}">Cancelar</a>')
+            + f'<span>Paso {VISIBLES.index(n) + 1} de {len(VISIBLES)}</span>'
+            f'<button class="boton" name="ir" value="{vecino(n, 1)}">{siguiente} ›</button></div>')
 
 
 def nota(titulo: str, texto: str) -> str:
@@ -570,7 +583,6 @@ async def resumen(c: Cuenta, b: dict, objetivos: list[dict], mensajes: list[dict
         ("Objetivo", obj, 1, False), ("Mensaje", msgs + (f" · «{b['texto']}»" if b["texto"] else ""), 2, False),
         ("Producto", producto, 2, True), ("Enfoque del contenido", enfoques, 3, False),
         ("Formatos", " · ".join(FORMATOS[k][0] for k in b["formatos"] if k in FORMATOS), 4, False),
-        ("Qué se ve", " · ".join(VISUAL[k][0] for k in b["visual"] if k in VISUAL), 5, False),
         ("Estilo y variedad", f"{APARIENCIA[b['apariencia']][0]} · Texto {TEXTO[b['texto_img']].lower()} ·"
          f" {VARIEDAD[b['variedad']][0]} · {ARMADO[b['armado']]}", 6, False),
         ("Cantidad y fechas", f"{escape(b['nombre']) or 'Sin nombre'} · {b['n_posts']} posts ·"
@@ -720,6 +732,8 @@ async def pagina(c: Cuenta, paso: int, aviso: str = "", b: dict | None = None):
         prods = await productos(c)
         if paso == BRIEF and not b.get("brief"):
             paso = RESUMEN
+        if paso in OCULTOS:
+            paso = vecino(paso, 1)
         if paso >= RESUMEN and faltan(b):
             paso = faltan(b)[0]
         if paso == 1:
@@ -743,7 +757,7 @@ async def pagina(c: Cuenta, paso: int, aviso: str = "", b: dict | None = None):
         else:
             contenido = await resumen(c, b, objetivos, mensajes, prods)
         # Un solo formulario con el riel adentro; el primer botón (invisible) es el que usa Enter: seguir.
-        sigue = BRIEF if paso == BRIEF else min(paso + 1, RESUMEN)
+        sigue = BRIEF if paso == BRIEF else min(vecino(paso, 1), RESUMEN)
         cuerpo = (f'<form method="post" action="{URL}" class="wiz" id="wiz-form">'
                   f'<button class="enter-cam" name="ir" value="{sigue}" tabindex="-1" aria-hidden="true">Seguir</button>'
                   f'<input type="hidden" name="paso" value="{paso}">{riel(b, paso)}'
