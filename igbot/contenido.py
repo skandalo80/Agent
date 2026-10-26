@@ -826,8 +826,30 @@ async def ver(request: Request):
         dia = date.fromisoformat(fecha)
     except ValueError:
         dia = None
-    return await calendario(c, vista=q.get("vista", "mes"), fecha=dia, ver=q.get("ver", ""), q=q.get("q", "")[:80],
-                            estado=q.get("estado", ""), campana=q.get("campana", "")[:80])
+    from .calendario import ERRORES
+    return await calendario(c, ERRORES.get(q.get("error", ""), ""), vista=q.get("vista", "mes"), fecha=dia,
+                            ver=q.get("ver", ""), q=q.get("q", "")[:80], estado=q.get("estado", ""),
+                            campana=q.get("campana", "")[:80])
+
+
+@router.post("/mover")
+async def mover_en_calendario(request: Request):
+    """Lo manda el arrastre del calendario (panel.js), como formulario: la CSP no deja usar fetch."""
+    panel.de_aqui(request)
+    if not (c := panel.cuenta_de_sesion(request)):
+        return RedirectResponse("/panel", status_code=303)
+    from . import calendario as cal
+    f = await panel.form(request)
+    error = await cal.mover_item(c, f.get("ref", ""), f.get("dia", ""), f.get("h", ""))
+    if not error and f.get("suave") == "1":  # panel.js ya movió la tarjeta: 204 deja la página como está
+        return Response(status_code=204)
+    volver = f.get("volver", "")
+    if not volver.startswith("/panel/contenido") or volver.startswith("//"):
+        volver = "/panel/contenido#cal"
+    if error:
+        base, _, ancla = volver.partition("#")
+        volver = f"{base}{'&' if '?' in base else '?'}error={error}" + (f"#{ancla}" if ancla else "")
+    return RedirectResponse(volver, status_code=303)
 
 
 @router.get("/nuevo")

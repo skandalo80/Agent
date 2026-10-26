@@ -201,6 +201,65 @@ document.querySelectorAll(".lat-item[data-sub]").forEach((item) => {
   });
 })();
 
+// Calendario: arrastrar un post (borrador o programado) a otro día; en Semana y Día, también a otra hora (con sus
+// mismos minutos). La tarjeta se mueve aquí mismo y el servidor contesta 204; si no se puede (ya pasó, ya salió),
+// la página se recarga y dice por qué. Sin esto, el día y la hora se cambian en el editor del post.
+(() => {
+  const cal = document.getElementById("cal");
+  if (!cal || !cal.querySelector("[data-mover]")) return;
+  const celdas = cal.querySelectorAll("[data-dia]");
+  let arrastrado = null;
+  cal.querySelectorAll("[data-mover]").forEach((t) => {
+    t.addEventListener("dragstart", (e) => {
+      arrastrado = t;
+      t.classList.add("arrastrando");
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", t.dataset.mover);
+    });
+    t.addEventListener("dragend", () => {
+      t.classList.remove("arrastrando");
+      celdas.forEach((c) => c.classList.remove("sobre"));
+      arrastrado = null;
+    });
+  });
+  celdas.forEach((c) => {
+    c.addEventListener("dragover", (e) => {
+      if (!arrastrado) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      c.classList.add("sobre");
+    });
+    c.addEventListener("dragleave", () => c.classList.remove("sobre"));
+    c.addEventListener("drop", (e) => {
+      e.preventDefault();
+      c.classList.remove("sobre");
+      const t = arrastrado;
+      if (!t || t.closest("[data-dia]") === c) return;
+      const mas = c.querySelector(".ev-mas");
+      if (mas) c.insertBefore(t, mas); else c.append(t);
+      const hora = t.querySelector("small");
+      if (c.dataset.h && hora) {  // "19:30 · Post" → "21:30 · Post"
+        hora.firstChild.textContent = hora.firstChild.textContent.replace(/^\d{2}/, c.dataset.h.padStart(2, "0"));
+      }
+      t.classList.remove("movido");
+      void t.offsetWidth;  // para que la animación corra otra vez si se vuelve a mover
+      t.classList.add("movido");
+      // Un formulario y no fetch: la CSP del panel (default-src 'none') bloquea fetch.
+      const f = document.createElement("form");
+      f.method = "post";
+      f.action = "/panel/contenido/mover";
+      for (const [n, v] of Object.entries({ref: t.dataset.mover, dia: c.dataset.dia, h: c.dataset.h || "",
+        volver: cal.dataset.volver, suave: "1"})) {
+        const i = document.createElement("input");
+        i.type = "hidden"; i.name = n; i.value = v;
+        f.append(i);
+      }
+      document.body.append(f);
+      f.submit();
+    });
+  });
+})();
+
 // Botones que piden confirmar (p. ej. Descartar post): sin el sí, no se manda el formulario.
 document.addEventListener("click", (e) => {
   const b = e.target.closest("[data-confirma]");

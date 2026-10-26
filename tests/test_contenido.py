@@ -303,6 +303,9 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     assert "Ya publicados" in r.text and r.text.count("instagram.com/p/ABC123") == 1 and "Post suelto" in r.text
     r = client.get("/panel/contenido?fecha=2099-01-01&ver=lista")
     assert "instagram.com/p/DESDEAPP" in r.text and "Desde Instagram" in r.text
+    r = client.post("/panel/contenido/mover", headers=ORIGEN, follow_redirects=False,
+                    data={"ref": "p:1", "dia": "2099-01-01", "suave": "1"})
+    assert r.headers["location"] == "/panel/contenido?error=publicado#cal"  # lo publicado ya no se mueve
     assert "ya no se puede cambiar" in client.post("/panel/contenido/post/1", headers=ORIGEN,
                                                    data={**editado, "accion": "guardar"}).text
 

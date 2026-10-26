@@ -693,6 +693,9 @@ p.cli-cam{margin:.5rem 0 0;font-size:.78rem;border-radius:.6rem;padding:.3rem .6
 .cal-n{align-self:flex-end;font-size:.8rem;font-weight:600;color:#F7F5FA;text-decoration:none;min-width:1.6rem;height:1.6rem;display:grid;place-items:center;border-radius:.5rem}
 .cal-n:hover{background:#3A3746}.cal-d.es-hoy .cal-n{background:var(--acento);color:var(--tinta)}
 .ev-mas{font-size:.72rem;font-weight:600;color:#B9B5C5;margin-top:.3rem;text-decoration:none}.ev-mas:hover{color:#fff}
+.ev[draggable=true]{cursor:grab}.ev.arrastrando{opacity:.4}
+.ev.movido{animation:llega-cam .25s ease-out}
+.cal-d.sobre,.cal-c.sobre{outline:2px dashed #C6FA2C;outline-offset:-2px;background:rgba(243,154,54,.1)}
 .cal-scroll{overflow-x:auto;border:1px solid var(--linea-clara);border-radius:1rem}
 .cal-horas{display:grid;grid-template-columns:3.6rem repeat(var(--dias),minmax(7.5rem,1fr))}
 .cal-hc{font-size:.75rem;color:#B9B5C5;text-align:center;padding:.5rem .3rem;background:#2A2834;border-bottom:1px solid var(--linea-clara);border-left:1px solid var(--linea-clara);text-decoration:none}
