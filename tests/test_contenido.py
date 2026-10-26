@@ -771,7 +771,7 @@ def test_encabezados_sin_titulo_ni_numeros(cliente, monkeypatch):
         texto = client.get(ruta).text
         assert "compacta delgada" in texto and "<h1>" not in texto and 'class="bajada"' not in texto, ruta
     r = client.get("/panel/asistente")
-    assert "Mensajes restantes" not in r.text and 'class="hoy kpis"' not in r.text and 'class="estado"' in r.text
+    assert "Mensajes restantes" not in r.text and 'class="hoy kpis"' not in r.text and 'class="estado-mini"' in r.text
 
 
 def test_crear_post_con_ajustes_solo_para_ese_post(cliente, monkeypatch):
