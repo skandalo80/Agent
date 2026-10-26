@@ -922,6 +922,7 @@ select,input[type=date],input[type=number]{color:var(--negro);background:var(--c
 .mrc-tip b{display:block;color:var(--negro);margin-bottom:.15rem}
 .mrc .wiz-op .cuerpo em{margin-right:.15rem}
 .mrc .wiz-op .wiz-orden[hidden]{display:none}
+.mrc-estilos .wiz-img{aspect-ratio:1/1;background-position:center 40%}
 .mrc-roles{list-style:none;margin:.2rem 0 1rem;padding:0;display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.85rem;color:var(--texto2,#B9B5C5)}
 .mrc-roles b{color:var(--negro);font-weight:600}
 .mrc .mrc-rol{display:inline-block;margin:.2rem 0 .1rem;font-size:.72rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--acento-claro)}

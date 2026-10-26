@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from PIL import Image  # noqa: E402
 
 import app as bot  # noqa: E402
-from igbot import admin, contenido, imagenes, panel, tools  # noqa: E402
+from igbot import admin, contenido, estilos, imagenes, panel, tools  # noqa: E402
 from igbot.cuenta import usar  # noqa: E402
 from test_conectar import setup  # noqa: E402
 from test_cuenta import FakeInstagram  # noqa: E402
@@ -579,22 +579,14 @@ def test_tu_marca_menu_de_pasos_y_marca_de_antes(cliente, monkeypatch):
     assert f'href="{MARCA}?paso=3" class="actual"' in r.text and "Paso 3 de 5" in r.text
     assert r.text.count('name="fuente"') == 12 and "font-family:'Oswald';font-weight:700" in r.text
     assert f'href="{MARCA}?paso=2">← Anterior' in r.text
-    # Las tarjetas sin imagen pintan su color; con imagen en static/tarjetas/marca, la usan.
+    # Las tarjetas usan su imagen de static/tarjetas/marca (los 9 estilos la tienen); sin imagen, su color.
+    from igbot import marca as tu_marca
     r = client.get(f"{MARCA}?paso=1")
-    assert 'style="--fondo:#5a4e44"' in r.text
-    carpeta = panel.STATIC / "tarjetas" / "marca"
-    nueva = not carpeta.exists()
-    carpeta.mkdir(parents=True, exist_ok=True)
-    try:
-        (carpeta / "editorial.webp").write_bytes(b"RIFF")
-        assert "--fondo:#5a4e44 url(/panel/static/tarjetas/marca/editorial.webp)" in client.get(f"{MARCA}?paso=1").text
-        assert client.get("/panel/static/tarjetas/marca/editorial.webp").status_code == 200
-        assert client.get("/panel/static/tarjetas/otra/lujo.webp").status_code == 404
-        assert client.get("/panel/static/tarjetas/marca/..%2Fpanel.js").status_code == 404
-    finally:
-        (carpeta / "editorial.webp").unlink()
-        if nueva:
-            carpeta.rmdir()
+    assert all(f"url(/panel/static/tarjetas/marca/{k}.webp)" in r.text for k in estilos.ESTILOS)
+    assert tu_marca.imagen_tarjeta("sin-imagen", "#123456") == '<span class="wiz-img" style="--fondo:#123456"></span>'
+    assert client.get("/panel/static/tarjetas/marca/editorial.webp").status_code == 200
+    assert client.get("/panel/static/tarjetas/otra/editorial.webp").status_code == 404
+    assert client.get("/panel/static/tarjetas/marca/..%2Fpanel.js").status_code == 404
     # Una marca guardada con el formulario de antes cuenta como lista y abre en el resumen; lo que falta dice Completar.
     client.portal.call(c.store.set, "marca", json.dumps({"principal": "#111111", "acento": "#E8590C", "fondo": "#F7F5F1",
                                                          "fuente": "Lora", "peso": 700, "estilo": "premium"}))
