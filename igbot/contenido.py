@@ -3,8 +3,8 @@
 console.skandar.online/panel/contenido, para las cuentas con contenido en su plan
 (IMAGES_PER_MONTH > 0: Community Manager).
 
-- Tu marca (igbot/marca.py): estilo visual, colores, tipografía, logo y recursos
-  visuales, en kv "marca". Aquí se convierte en el estilo de las fotos (estilo_foto)
+- Tu marca (igbot/marca.py): estilo visual, colores, tipografía y logo, en kv
+  "marca". Aquí se convierte en el estilo de las fotos (estilo_foto)
   y el contexto de marca del generador (contexto_marca).
 - Crear post: elige un objetivo (dar a conocer la marca, servicio o producto estrella,
   atraer clientes, explicar algo, contar una historia) y, si quiere, el tema.
@@ -47,7 +47,7 @@ from PIL import Image, ImageOps
 from . import config, imagenes, panel, posicionamiento, tools
 from .admin import PANEL, parse_when
 from .comentarios import Rule, shortcode
-from .estilos import ESTILO_INICIAL, ESTILOS, MAX_ESTILOS, RECURSOS, USO_COLOR, VIEJOS_ESTILOS, VIEJOS_USOS
+from .estilos import ESTILO_INICIAL, ESTILOS, MAX_ESTILOS, USO_COLOR, VIEJOS_ESTILOS, VIEJOS_USOS
 from .cuenta import Cuenta, usar
 from .store import Store
 
@@ -155,9 +155,6 @@ def contexto_marca(datos: dict) -> str:
     if datos.get("fuente"):
         lineas.append(f"- Typography (only if the image itself carries text): headlines in {datos['fuente']}"
                       + (f", secondary text in {datos['fuente_texto']}" if datos.get("fuente_texto") else ""))
-    recursos = [RECURSOS[k][4] for k in datos.get("recursos", []) if k in RECURSOS]
-    if recursos:
-        lineas.append("- What the brand likes to show (only what fits this post): " + "; ".join(recursos))
     return ("\n\nBrand context, as the owner describes it (in Spanish); the image should feel like this brand."
             " Do not write the brand name in the image:\n" + "\n".join(lineas)) if lineas else ""
 
@@ -357,9 +354,6 @@ def visual_marca(datos: dict, modo: str = "") -> str:
         lineas.append("Colores de la marca (para utilería, fondos o luz, con sutileza): " + ", ".join(colores))
         if uso := uso_color(datos):
             lineas.append(f"Cuánto destacan sus colores: {USO_COLOR[uso][0]}. {USO_COLOR[uso][1]}")
-    recursos = [RECURSOS[k][0] for k in datos.get("recursos", []) if k in RECURSOS]
-    if recursos:
-        lineas.append("Lo que la marca suele mostrar (solo lo que encaje con este post): " + ", ".join(recursos))
     if datos.get("caracter"):
         lineas.append("Carácter: " + ", ".join(datos["caracter"]))
     return escape("\n".join(lineas))
