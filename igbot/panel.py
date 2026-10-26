@@ -835,7 +835,7 @@ select,input[type=date],input[type=number]{color:var(--negro);background:var(--c
 .chip{background:var(--claro);color:#d2d2d7;border-color:var(--linea-clara)}
 .chip.verde{background:rgba(198,250,44,.14);color:#C6FA2C}.chip.azul{background:#142742;color:#8db8f2}.chip.rojo{background:#3d1712;color:#f59c8a}
 .chip.acento{background:rgba(243,154,54,.16);color:#F6B262}
-.wiz{display:grid;grid-template-columns:15.5rem minmax(0,1fr);gap:1.5rem;align-items:start}
+.wiz{display:grid;grid-template-columns:minmax(0,1fr);gap:1.25rem;align-items:start}
 .wiz-pasos{position:sticky;top:1rem;background:var(--blanco);border-radius:1.25rem;padding:1rem .75rem;border:1px solid var(--linea-clara)}
 .wiz-pasos p{margin:0 .6rem .6rem;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--gris);font-weight:600}
 .wiz-pasos a{display:flex;align-items:center;gap:.65rem;padding:.55rem .6rem;border-radius:.75rem;font-size:.92rem;color:var(--gris);text-decoration:none}
@@ -850,7 +850,7 @@ select,input[type=date],input[type=number]{color:var(--negro);background:var(--c
 .wiz-cab .baj{margin:0;color:var(--texto2,#B9B5C5);font-size:1rem;max-width:46rem}
 .wiz-barra{height:4px;background:var(--claro);border-radius:2px;margin:1.25rem 0 1.6rem;overflow:hidden}.wiz-barra i{display:block;height:100%;background:var(--acento-claro);border-radius:2px}
 .wiz-sub{margin:1.75rem 0 .2rem;font-size:1.05rem}.wiz-sub+.ayuda{margin:0 0 .8rem}
-.wiz-ops{display:grid;grid-template-columns:repeat(auto-fill,minmax(14.5rem,1fr));gap:.85rem}
+.wiz-ops{display:grid;grid-template-columns:repeat(auto-fit,minmax(14.5rem,1fr));gap:.85rem}
 .wiz-ops.tres{grid-template-columns:repeat(3,minmax(0,1fr))}
 .wiz-op{position:relative;display:flex;flex-direction:column;border:1px solid var(--linea-clara);border-radius:1rem;overflow:hidden;cursor:pointer;background:var(--suave,var(--blanco));margin:0;font-weight:400;transition:border-color .12s,box-shadow .12s}
 .wiz-op input{position:absolute;opacity:0;pointer-events:none}
@@ -1118,6 +1118,19 @@ input[type=text],input[type=search],textarea,select,.inbox input[type=search],.e
 .wiz-op:has(input:checked){border-color:var(--acento)}
 .wiz-op:has(input:checked),.as-pers:has(input:checked){box-shadow:0 0 0 2px var(--acento),6px 9px 18px rgba(12,11,16,.45),var(--clay-luz)!important}
 .wiz-op:has(input:checked)::after{background:var(--acento);color:var(--tinta)}
+/* Ancho fluido: al alejar (zoom out) el contenido usa el ancho disponible, como Metricool. */
+.contenedor{max-width:160rem;padding:0 2.5rem}
+@media(max-width:900px){.contenedor{padding:0 1.25rem}}
+/* Pasos arriba: barra horizontal entre el antetítulo y el paso; el paso usa todo el ancho. */
+.wiz-pasos{position:static!important;padding:.6rem .7rem}
+.wiz-pasos summary,.wiz-pasos>p,.wiz-pasos .mrc-tip{display:none!important}
+.wiz-pasos>nav,nav.wiz-pasos{display:flex;gap:.35rem;align-items:stretch;overflow-x:auto;scrollbar-width:none}
+.wiz-pasos .sep{flex:none;border-top:0;border-left:1px solid var(--linea-clara);margin:.45rem .25rem}
+.wiz-pasos a,.wiz-pasos .wiz-paso{flex:1 1 0;min-width:0;width:auto;line-height:1.2}
+.wiz-pasos a span{min-width:0}
+.wiz-pasos a span small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:900px){.wiz-pasos a,.wiz-pasos .wiz-paso{flex:none}.wiz-pasos a span small{display:none}
+.wiz-pasos a:not(.actual) span,.wiz-pasos .wiz-paso:not(.actual){font-size:0;gap:0}.wiz-pasos .wiz-paso:not(.actual) b{font-size:.75rem}}
 """
 
 
