@@ -666,7 +666,7 @@ def test_ajustes_y_conexion(cliente, monkeypatch):
     r = client.post("/panel/asistente/paso", headers=ORIGEN,
                     data={**datos, "pausa": "48", "paso": "equipo", "humano": "Te escribe Ana."},
                     follow_redirects=False)
-    assert r.headers["location"] == "/panel/probar#ultimo"
+    assert r.headers["location"] == "/panel/asistente/configura?paso=resumen&ok=1"
     assert c.human_pause_hours == 48 and c.business_hours == "10:00-19:30"
     assert "Te escribe Ana." in Path(c.prompt_path).read_text()
 

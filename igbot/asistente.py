@@ -2,8 +2,8 @@
 
 1 Personalidad (6 tarjetas), 2 Cómo escribe (trato, largo y emojis), 3 Reglas y límites
 (interruptores y dos cajas), 4 Tu equipo (qué decir si piden una persona, y de ajustes.py la
-pausa, el horario en que atiende una persona y los avisos), 5 Pruébalo (/panel/probar) y un
-resumen con Editar. Lo que sabe del negocio (datos, catálogo, preguntas y políticas) viene del
+pausa, el horario en que atiende una persona y los avisos) y un resumen con Editar, desde donde
+se prueba (/panel/probar) y se enciende. Lo que sabe del negocio (datos, catálogo, preguntas y políticas) viene del
 Perfil de empresa (empresa.py); si aún no lo llena, de lo que guardó antes en Configura.
 
 Cada paso guarda solo lo suyo en kv "perfil" y vuelve a escribir el prompt (panel.generar).
@@ -102,7 +102,6 @@ PASOS = [
     ("escribe", "Cómo escribe", "Trato, largo y emojis"),
     ("reglas", "Reglas y límites", "Qué hace y qué evita"),
     ("equipo", "Tu equipo", "Cuándo entra una persona"),
-    ("probar", "Pruébalo", "Escríbele como un cliente"),
 ]
 ORDEN = [k for k, *_ in PASOS]
 ESCRITOS = {"reglas", "equipo"}  # traen texto del dueño: pasan por la revisión
@@ -147,11 +146,8 @@ def tono_prompt(perfil: dict) -> list[str]:
 
 # --- páginas ---
 
-def _hechos(perfil: dict, probado: bool) -> set[str]:
-    hechos = set(perfil.get("pasos") or [])
-    if probado:
-        hechos.add("probar")
-    return hechos
+def _hechos(perfil: dict) -> set[str]:
+    return set(perfil.get("pasos") or [])
 
 
 def _href(paso: str) -> str:
@@ -283,7 +279,7 @@ def _equipo(c: Cuenta, perfil: dict) -> str:
             + '<div class="as-caja">' + panel.caja("humano", "Cuando alguien pide hablar con una persona, ¿qué le dice?",
                                                    ayuda, perfil.get("humano", ""), filas)
             + "</div>" + f'<div class="as-caja">{ajustes.campos(c)}</div>'
-            + _pie("equipo", "Siguiente: pruébalo"))
+            + _pie("equipo", "Siguiente: ver resumen"))
 
 
 def _servidor(c: Cuenta) -> str:
@@ -327,7 +323,7 @@ async def _resumen(c: Cuenta, perfil: dict) -> str:
     else:
         boton = ('<form method="post" action="/panel/estado"><input type="hidden" name="activo" value="1">'
                  '<button class="boton">Encender tu asistente</button></form>')
-    faltan = [t for k, t, _ in PASOS if k not in _hechos(perfil, True)]
+    faltan = [t for k, t, _ in PASOS if k not in _hechos(perfil)]
     titulo = ("Tu asistente está contestando" if encendido else
               "Tu asistente está listo" if not faltan else "Ya casi está")
     bajada = ("Revisa que todo se vea bien. Con Editar regresas a ese paso." if not faltan else
@@ -353,14 +349,14 @@ async def _resumen(c: Cuenta, perfil: dict) -> str:
             + _servidor(c)
             + '<p class="as-nota">Además siempre sigue las reglas base de la plataforma: no inventa precios, no comparte'
             " datos de otras personas y respeta los límites de Instagram.</p>"
-            f'<div class="as-pie"><a class="boton secundario" href="{_href("probar")}">Probar otra vez</a>{boton}</div>')
+            f'<div class="as-pie"><a class="boton secundario" href="{_href("probar")}">Probar tu asistente</a>{boton}</div>')
 
 
 async def pagina(c: Cuenta, paso: str = "", aviso: str = "", nota: str = "", perfil: dict | None = None) -> HTMLResponse:
     """Un paso de Configura. `perfil`: lo que trae el formulario cuando no se guardó (para no perderlo)."""
     guardado = await panel.perfil(c)
     perfil = guardado if perfil is None else perfil
-    hechos = _hechos(guardado, bool(await panel.historial(c)))
+    hechos = _hechos(guardado)
     if paso not in ORDEN and paso != "resumen":
         paso = next((k for k in ORDEN if k not in hechos), "resumen")
     if paso == "probar":
@@ -414,7 +410,7 @@ async def guardar(request: Request):
         return RedirectResponse("/panel", status_code=303)
     f = await panel.form(request)
     paso = f.get("paso", "")
-    if paso not in ORDEN or paso == "probar":
+    if paso not in ORDEN:
         return RedirectResponse("/panel/asistente/configura", status_code=303)
     antes = await panel.perfil(c)
     datos = dict(antes)
@@ -451,9 +447,8 @@ async def guardar(request: Request):
     c.prompt_destino().write_text(prompt, encoding="utf-8")
     await c.store.set("asistente_listo", "1")
     log.info("@%s guardó %s de su asistente desde el panel", nombre, paso)
-    siguiente = ORDEN[ORDEN.index(paso) + 1]
-    return RedirectResponse(_href(siguiente) if siguiente == "probar" else f"{_href(siguiente)}&ok=1",
-                            status_code=303)
+    siguiente = ORDEN[ORDEN.index(paso) + 1] if paso != ORDEN[-1] else "resumen"
+    return RedirectResponse(f"{_href(siguiente)}&ok=1", status_code=303)
 
 
 ESTILO = """

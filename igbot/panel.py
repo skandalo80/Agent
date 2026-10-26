@@ -1372,7 +1372,7 @@ PASOS_EMPRESA = ["Tu empresa: nombre, a qué se dedica y dónde atiendes", "Tus 
                  "Tus productos y servicios, con precio y fotos", "Cómo te compran: horarios, pagos y envíos",
                  "Las preguntas que más te hacen"]
 PASOS_ASISTENTE = ["Elige su personalidad", "Cómo escribe",
-                   "Sus reglas y cuándo entra tu equipo", "Pruébalo y enciéndelo"]
+                   "Sus reglas y cuándo entra tu equipo", "Revisa y enciéndelo"]
 PASOS_MARCA = ["Cómo se arman tus posts", "Colores y tipografía", "El estilo de tus fotos", "Fotos de tu negocio"]
 
 
