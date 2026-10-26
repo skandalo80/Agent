@@ -319,3 +319,46 @@ def test_limite_de_propuestas_al_dia(cliente, monkeypatch):
     assert client.portal.call(campanas.ia_restantes, c) == campanas.SIN_LIMITE
     monkeypatch.setattr(campanas, "IA_POR_DIA", 2)
     assert client.portal.call(campanas.ia_restantes, c) == 0
+
+
+def test_los_mensajes_dependen_del_objetivo(cliente, monkeypatch):
+    """Los mensajes del paso 2 son los del objetivo elegido, ya escritos al guardar el Perfil de empresa: abrir el
+    asistente no le pregunta nada a Claude. Cambiar de objetivo pide elegir los mensajes de nuevo."""
+    from igbot import empresa
+    client, c, *_ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 4)
+    listo(client, c)
+
+    def objetivo(k, titulo, mensajes):
+        return {"k": k, "titulo": titulo, "descripcion": "d",
+                "mensajes": [{"k": m, "titulo": f"Comunicar {m}", "descripcion": "x", "ejemplo": "e"} for m in mensajes]}
+    opciones = {"version": empresa.VERSION_OPCIONES, "huella": "h",
+                "objetivos": [objetivo("vender-latte", "Vender el latte", ["precio", "receta"]),
+                              objetivo("mas-visitas", "Más visitas al local", ["ambiente", "horario"])],
+                "mensajes": [{"k": "general", "titulo": "Comunicar general", "descripcion": "x"}]}
+    client.portal.call(c.store.set, "campana_opciones", json.dumps(opciones))
+    programadas = []
+    monkeypatch.setattr(empresa, "programar_opciones", lambda c: programadas.append(c))
+
+    paso(client, 1, objetivo="vender-latte")
+    r = client.get(f"{URL}?paso=2")
+    assert "Comunicar precio" in r.text and "Comunicar ambiente" not in r.text and "«Vender el latte»" in r.text
+    paso(client, 2, mensajes=["precio"])
+    assert client.portal.call(nueva_campana.leer, c)["mensajes"] == ["precio"]
+
+    # Otro objetivo: sus mensajes, y el paso 2 se vuelve a elegir.
+    paso(client, 1, objetivo="mas-visitas")
+    b = client.portal.call(nueva_campana.leer, c)
+    assert b["mensajes"] == [] and 2 not in b["hechos"]
+    r = client.get(f"{URL}?paso=2")
+    assert "Comunicar horario" in r.text and "Comunicar precio" not in r.text
+    paso(client, 2, mensajes=["precio"])
+    assert client.portal.call(nueva_campana.leer, c)["mensajes"] == []
+    assert not programadas
+
+    # Las de antes (sin mensajes por objetivo) se rehacen una vez en segundo plano; mientras, las generales.
+    viejas = {"huella": "h", "objetivos": [{"k": "vender", "titulo": "Vender", "descripcion": "d"}],
+              "mensajes": opciones["mensajes"]}
+    client.portal.call(c.store.set, "campana_opciones", json.dumps(viejas))
+    paso(client, 1, objetivo="vender")
+    assert "Comunicar general" in client.get(f"{URL}?paso=2").text and programadas

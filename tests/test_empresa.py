@@ -20,8 +20,9 @@ PASO_1 = {"paso": "1", "nombre": "Café Lunar", "giro": "Restaurante o cafeterí
           "sitio_web": "cafelunar.mx", "caracter": ["Cercana", "Premium", "Natural", "Elegante"],
           "atiende": ["local", "nada"], "accion": "ir_2"}
 
-OPCIONES = {"objetivos": [{"k": f"Obj {i}", "titulo": f"Objetivo {i}", "descripcion": "x"} for i in range(7)],
-            "mensajes": [{"k": f"m{i}", "titulo": f"Mensaje {i}", "descripcion": "y", "ejemplo": "z"} for i in range(6)]}
+OPCIONES = {"objetivos": [{"k": f"Obj {i}", "titulo": f"Objetivo {i}", "descripcion": "x",
+                           "mensajes": [{"k": f"m{i}-{j}", "titulo": f"Mensaje {i}.{j}", "descripcion": "y",
+                                         "ejemplo": "z"} for j in range(5)]} for i in range(7)]}
 
 
 def test_pasos_guardan_y_el_asistente_usa_el_perfil(cliente):
@@ -60,7 +61,8 @@ def test_pasos_guardan_y_el_asistente_usa_el_perfil(cliente):
     e = client.portal.call(empresa.de, c)
     assert e["faq"] == [{"p": "¿Tienen wifi?", "r": "Sí, gratis."}] and e["envios"] == ""
 
-    # El asistente ya contesta con el perfil (y no con lo viejo de Configura).
+    # El asistente contesta con el perfil (y no con lo viejo de Configura) en cuanto se aprueba.
+    client.portal.call(empresa.esperar_revision, c)
     prompt = Path(c.prompt_path).read_text()
     assert "Café Lunar (Restaurante o cafetería)" in prompt and "Diario 8 a 22" in prompt
     assert "Formas de pago: Tarjeta" in prompt and "¿Tienen wifi?" in prompt and "No enviamos" not in prompt
@@ -107,6 +109,7 @@ def test_catalogo_con_fotos_y_texto_para_prompt(cliente):
     texto = client.portal.call(empresa.texto_para_prompt, c)
     assert "Latte (destacado): Desde $70 MXN" in texto and "Enlace" not in texto  # el enlace es para el asistente
     assert "Con quién" not in texto and "Carácter de la marca: Cercana" in texto
+    client.portal.call(empresa.esperar_revision, c)
     assert "Latte: Desde $70 MXN" in Path(c.prompt_path).read_text()
     assert "Enlace: https://cafelunar.mx/latte" in Path(c.prompt_path).read_text()
 
@@ -124,12 +127,44 @@ def test_la_revision_puede_rechazar(cliente, monkeypatch):
         return "No prometas lo que no das." if "garantizado" in texto else ""
 
     monkeypatch.setattr(panel, "revisar_instrucciones", rechazar)
-    r = client.post("/panel/empresa", headers=ORIGEN, data={**PASO_1, "descripcion": "Éxito garantizado"})
-    assert "No se guardó: No prometas" in r.text and "Éxito garantizado" in r.text
-    assert client.portal.call(empresa.de, c) == {}
-    r = client.post("/panel/empresa/producto", headers=ORIGEN, data={"nombre": "Curso garantizado"})
-    assert "No se guardó" in r.text and 'name="id" value=""' in r.text  # sigue siendo uno nuevo
+    client.post("/panel/empresa", headers=ORIGEN, data=PASO_1)  # lo aprobado
+    client.portal.call(empresa.esperar_revision, c)
+    prompt = Path(c.prompt_path).read_text()
+    # Se guarda sin esperar; la revisión corre después y, si rechaza, vuelve lo aprobado.
+    r = client.post("/panel/empresa", headers=ORIGEN, data={**PASO_1, "descripcion": "Éxito garantizado"},
+                    follow_redirects=False)
+    assert r.headers["location"] == "/panel/empresa?paso=2"
+    client.portal.call(empresa.esperar_revision, c)
+    assert client.portal.call(empresa.de, c)["descripcion"] == PASO_1["descripcion"]
+    assert Path(c.prompt_path).read_text() == prompt and "garantizado" not in prompt  # nunca llegó al asistente
+    r = client.get("/panel/empresa?paso=1")  # el aviso, con lo que escribió para corregirlo
+    assert "No se guardó tu último cambio: No prometas" in r.text and "Éxito garantizado" in r.text
+    client.post("/panel/empresa", headers=ORIGEN, data={**PASO_1, "descripcion": "Café de verdad."})
+    client.portal.call(empresa.esperar_revision, c)
+    assert "No se guardó" not in client.get("/panel/empresa?paso=1").text
+    assert "Café de verdad." in Path(c.prompt_path).read_text()
+
+    client.post("/panel/empresa/producto", headers=ORIGEN, data={"nombre": "Curso garantizado"})
+    client.portal.call(empresa.esperar_revision, c)
     assert client.portal.call(empresa.productos, c) == []
+    r = client.get("/panel/empresa?paso=3")
+    assert "No se guardó tu último cambio" in r.text and "Curso garantizado" in r.text
+    assert 'name="id" value=""' in r.text  # sigue siendo uno nuevo
+
+
+def test_cuentas_de_antes_conservan_lo_aprobado(cliente, monkeypatch):
+    client, c, *_ = cliente
+    client.post("/panel/empresa", headers=ORIGEN, data=PASO_1)
+    client.portal.call(empresa.esperar_revision, c)
+    client.portal.call(c.store.set, empresa.CLAVE_APROBADO, "")  # como una cuenta de antes de este cambio
+
+    async def rechazar(c, texto):
+        return "No." if "garantizado" in texto else ""
+
+    monkeypatch.setattr(panel, "revisar_instrucciones", rechazar)
+    client.post("/panel/empresa", headers=ORIGEN, data={**PASO_1, "descripcion": "Éxito garantizado"})
+    client.portal.call(empresa.esperar_revision, c)
+    assert client.portal.call(empresa.de, c)["descripcion"] == PASO_1["descripcion"]
 
 
 def test_opciones_de_campana_al_terminar(cliente, monkeypatch):
@@ -141,6 +176,7 @@ def test_opciones_de_campana_al_terminar(cliente, monkeypatch):
     monkeypatch.setattr(empresa, "programar_opciones", lambda c: programadas.append(c))
     monkeypatch.setattr(empresa.posicionamiento, "programar", lambda c, perfil: None)  # su prueba va aparte
     r = client.post("/panel/empresa", headers=ORIGEN, data={"paso": "6", "accion": "terminar"}, follow_redirects=False)
+    client.portal.call(empresa.esperar_revision, c)
     assert r.headers["location"] == "/panel/bienvenida" and programadas  # cuenta nueva: al paso 2 de la bienvenida
     client.portal.call(c.store.set, "bienvenida", "1")
     r = client.post("/panel/empresa", headers=ORIGEN, data={"paso": "6", "accion": "terminar"}, follow_redirects=False)
@@ -158,19 +194,26 @@ def test_opciones_de_campana_al_terminar(cliente, monkeypatch):
     client.portal.call(empresa.generar_opciones, c)
     op = client.portal.call(empresa.opciones_campana, c)
     assert [o["k"] for o in op["objetivos"]] == ["obj-0", "obj-1", "obj-2", "obj-3", "obj-4", "obj-5"]
-    assert op["mensajes"][0] == {"k": "m0", "titulo": "Mensaje 0", "descripcion": "y", "ejemplo": "z"}
+    # Cada objetivo con sus propios mensajes (hasta 4), y todos juntos arriba para lo de antes.
+    assert op["version"] == empresa.VERSION_OPCIONES and len(op["objetivos"][1]["mensajes"]) == 4
+    assert op["objetivos"][1]["mensajes"][0] == {"k": "m1-0", "titulo": "Mensaje 1.0", "descripcion": "y",
+                                                 "ejemplo": "z"}
+    assert [m["k"] for m in empresa.mensajes_de(op, "obj-2")] == ["m2-0", "m2-1", "m2-2", "m2-3"]
+    assert len(op["mensajes"]) == 6
     assert "<empresa>" in respuestas[0] and "Café Lunar" in respuestas[0]
     client.portal.call(empresa.generar_opciones, c)  # sin cambios en el perfil no se vuelve a pedir
     assert len(respuestas) == 1
     r = client.get("/panel/empresa?paso=6&aviso=listo")
-    assert "Objetivo 0" in r.text and "Mensaje 5" in r.text and "ya usan tu perfil" in r.text
+    assert "Objetivo 0" in r.text and "Mensaje 5.3" in r.text and "tus campañas usan tu perfil" in r.text
     # Ya terminado, cambiar un paso vuelve a pedirlas (en segundo plano).
     client.post("/panel/empresa", headers=ORIGEN, data={"paso": "2", "distinto": "Nuevo", "accion": "ir_3"})
+    client.portal.call(empresa.esperar_revision, c)
     assert len(programadas) == 3
 
 
-@pytest.mark.parametrize("respuesta", ["no sé", json.dumps({"objetivos": OPCIONES["objetivos"][:2],
-                                                            "mensajes": OPCIONES["mensajes"]})])
+@pytest.mark.parametrize("respuesta", [
+    "no sé", json.dumps({"objetivos": OPCIONES["objetivos"][:2]}),
+    json.dumps({"objetivos": [{**o, "mensajes": o["mensajes"][:1]} for o in OPCIONES["objetivos"]]})])
 def test_opciones_malas_no_se_guardan(cliente, monkeypatch, respuesta):
     client, c, *_ = cliente
     client.post("/panel/empresa", headers=ORIGEN, data=PASO_1)
@@ -194,6 +237,7 @@ def test_posicionamiento_sale_del_perfil_de_empresa(cliente, monkeypatch):
     assert programados == []  # antes de terminar el primer recorrido no se recalcula
     client.post("/panel/empresa", headers=ORIGEN, data={"paso": "6", "accion": "terminar"})
     client.post("/panel/empresa", headers=ORIGEN, data={"paso": "2", "distinto": "Tostado <b>propio</b>", "accion": "ir_3"})
+    client.portal.call(empresa.esperar_revision, c)
     assert programados
 
     prompts = []
