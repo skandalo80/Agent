@@ -484,7 +484,7 @@ def programar_opciones(c: Cuenta) -> None:
 # --- la página ---
 
 ESTILO = """
-body:has(main.emp){background:var(--negro)}
+body:has(main.emp){background:#fff}
 main.emp{color:var(--claro);padding-bottom:4rem}
 .emp .aviso{background:#36203E;color:var(--claro)}
 .mago{display:grid;grid-template-columns:17.5rem 1fr;gap:2rem;align-items:start}.mago>*{min-width:0}
@@ -504,7 +504,7 @@ main.emp{color:var(--claro);padding-bottom:4rem}
 .barra-av i{display:block;height:100%;background:var(--acento-claro);border-radius:9px}
 .cab-paso .antetitulo{color:var(--acento-claro);margin-bottom:.4rem}
 .cab-paso h2{font-size:2rem;letter-spacing:-.02em;margin:0 0 .4rem;line-height:1.15}
-.cab-paso p{color:#C9B8D1;margin:0 0 1.5rem;max-width:44rem}
+.cab-paso p{color:#716a75;margin:0 0 1.5rem;max-width:44rem}
 .caja-o{background:var(--grafito);border:1px solid #44294F;border-radius:1.25rem;padding:1.6rem 1.75rem;margin-bottom:1.1rem}
 .caja-o h3{margin:0 0 .2rem;font-size:1.05rem;display:flex;justify-content:space-between;align-items:center;gap:1rem}
 .caja-o .sub{color:var(--gris);font-size:.88rem;margin:0 0 1.2rem}

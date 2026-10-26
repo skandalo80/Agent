@@ -452,8 +452,8 @@ async def guardar(request: Request):
 
 
 ESTILO = """
-body:has(.asis){background:var(--negro)}
-.as-main{background:var(--negro);color:var(--claro)}
+body:has(.asis){background:#fff}
+.as-main{background:#fff;color:var(--claro)}
 .asis{display:grid;grid-template-columns:17rem minmax(0,1fr);gap:1.75rem;align-items:start}
 .as-pasos{background:var(--grafito);border:1px solid var(--linea-oscura);border-radius:1.25rem;padding:1.25rem;position:sticky;top:1rem}
 .as-t{font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--gris);margin:0 0 .75rem}
