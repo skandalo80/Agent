@@ -939,3 +939,12 @@ def test_personalidad_sin_imagenes_y_con_toque_personal(cliente):
     assert perfil["toque"] == "Que explique <todo> con calma." and perfil["personalidad"] == "empatico"
     prompt = Path(c.prompt_path).read_text()
     assert "<como_quiere_que_hables>\nQue explique &lt;todo&gt; con calma.\n</como_quiere_que_hables>" in prompt
+
+
+def test_menu_de_tu_cuenta_en_tres_grupos(cliente, monkeypatch):
+    client, c, *_ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 5)
+    menu = client.get("/panel/contenido").text.split('class="perfil-menu"')[1].split("</details>")[0]
+    orden = [menu.index(t) for t in ("Conectado como", "Información de empresa", "Tu marca", 'class="sep"',
+                                     "Conexión", "Ver mi Instagram", "Salir")]
+    assert orden == sorted(orden)
