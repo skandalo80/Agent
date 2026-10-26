@@ -10,7 +10,7 @@ from PIL import Image  # noqa: E402
 from test_campanas import BASE, LUNES, claude_de_campana, leer, listo  # noqa: E402
 from test_contenido import ORIGEN, cliente  # noqa: E402
 
-from igbot import campanas, contenido, nueva_campana  # noqa: E402
+from igbot import brief, campanas, contenido, nueva_campana  # noqa: E402
 
 assert cliente  # el fixture de test_contenido, que usan estas pruebas
 
@@ -35,6 +35,13 @@ def llenar(client, objetivo="interaccion"):
     paso(client, 6, apariencia="natural", texto_img="minimo", variedad="coherencia", armado="plantilla")
     return paso(client, 7, nombre="Otoño", inicio=LUNES.isoformat(), semanas="1", n_posts="6",
                 dias=["0", "2", "4"], horarios=["manana"])
+
+
+def generar(client, **brief):
+    """Resumen › Crear el brief › Escribir los posts (con lo que se ajuste del brief)."""
+    r = client.post(URL, headers=ORIGEN, data={"paso": "8", "accion": "brief"})
+    assert "Pensando las ideas de tu campaña" in r.text, r.text[-500:]
+    return client.post(URL, headers=ORIGEN, data={"paso": "9", "accion": "proponer", **brief})
 
 
 def test_el_asistente_de_punta_a_punta(cliente, monkeypatch):
@@ -70,14 +77,34 @@ def test_el_asistente_de_punta_a_punta(cliente, monkeypatch):
     llenar(client)
     r = client.get(f"{URL}?paso=8")
     assert "Revisa tu campaña antes de generarla" in r.text and "Latte de calabaza · Promoción con descuento 20 %" in r.text
-    assert r.text.count("Editar</button>") == 8 and "Generar campaña" in r.text
+    assert r.text.count("Editar</button>") == 8 and "Crear el brief" in r.text
+    assert 'class="cruce"' in r.text and "Con 6 posts cubrimos" in r.text
 
-    # Generar: 6 posts en 3 días (dos por día, a distinta hora), con el producto y su regla.
-    r = client.post(URL, headers=ORIGEN, data={"paso": "8", "accion": "proponer"})
+    # Sin brief no se escriben posts: vuelve al resumen.
+    r = client.post(URL, headers=ORIGEN, data={"paso": "8", "accion": "proponer"}, follow_redirects=False)
+    assert r.headers["location"] == f"{URL}?paso=8" and not llamadas
+
+    # El brief: tres ideas; elige la segunda y ajusta su mensaje clave.
+    r = client.post(URL, headers=ORIGEN, data={"paso": "8", "accion": "brief"})
+    assert "Pensando las ideas de tu campaña" in r.text and f"{URL}?paso=9" in r.text
+    assert "estratega de contenido" in llamadas[-1][1] and "<producto>Latte de calabaza" in llamadas[-1][0]
+    r = client.get(f"{URL}?paso=9")
+    assert "Elige la idea de tu campaña" in r.text and r.text.count('name="concepto"') == 3
+    assert 'id="concepto-0" checked' in r.text and 'id="brief-2"' in r.text and "Escribir los posts" in r.text
+    assert 'value="9"><b>✓</b>Brief' in r.text  # el riel ya tiene el paso Brief
+    r = client.get(f"{URL}?paso=8")
+    assert "Ver el brief" in r.text and "Otras ideas de brief" in r.text
+
+    # Escribir los posts: 6 posts en 3 días (dos por día, a distinta hora), con el producto y su regla.
+    r = client.post(URL, headers=ORIGEN, data={"paso": "9", "accion": "proponer", "concepto": "1",
+                                               "b1_mensaje_clave": "Tostado <b>esta</b> semana", "b1_p0_nombre": "El tueste"})
     assert "Armando tu campaña" in r.text
     prompt, sistema = llamadas[-1]
     assert "<producto>Latte de calabaza ($75 MXN)" in prompt and "20 % de descuento" in prompt and "<regla>sí</regla>" in prompt
+    assert "Concepto: Idea 2." in prompt and "Mensaje clave: Tostado &lt;b&gt;esta&lt;/b&gt; semana" in prompt
+    assert "- El tueste:" in prompt and "ya tiene su brief" in sistema and "| pilar: " in prompt
     camp = leer(client, c)
+    assert camp["brief"]["titulo"] == "Idea 2" and all(p["ve"] == "productos" for p in camp["posts"])
     assert camp["nombre"] == "Otoño" and len(camp["posts"]) == 6
     dias = sorted(p["dia"] for p in camp["posts"])
     assert len(set(dias)) == 3 and all(dias.count(d) == 2 for d in dias)
@@ -92,8 +119,10 @@ def test_el_asistente_de_punta_a_punta(cliente, monkeypatch):
     r = client.get(f"{URL}?editar={camp['id']}", follow_redirects=False)
     assert r.headers["location"] == f"{URL}?paso=8"
     r = client.get(r.headers["location"])
-    assert "Revisa la estrategia de tu campaña" in r.text and "Volver a generar" in r.text
-    client.post(URL, headers=ORIGEN, data={"paso": "8", "accion": "proponer"})
+    assert "Revisa la estrategia de tu campaña" in r.text and "Ver el brief" in r.text
+    r = client.get(f"{URL}?paso=9")
+    assert "Volver a escribir los posts" in r.text and "Idea 2" in r.text
+    client.post(URL, headers=ORIGEN, data={"paso": "9", "accion": "proponer"})
     assert len(client.portal.call(campanas.todas_las, c)) == 1
 
 
@@ -105,7 +134,7 @@ def test_sin_interaccion_no_hay_regla(cliente, monkeypatch):
     monkeypatch.setattr(bot.agent, "run_claude", claude_de_campana(llamadas))
     listo(client, c)
     llenar(client, objetivo="vender")
-    client.post(URL, headers=ORIGEN, data={"paso": "8", "accion": "proponer"})
+    generar(client)
     assert "<regla>" not in llamadas[-1][0]
     assert not any(p.get("regla") for p in leer(client, c)["posts"])
 
@@ -127,7 +156,7 @@ def test_editor_regla_subir_y_dos_en_un_dia(cliente, monkeypatch):
     monkeypatch.setattr(bot.agent, "run_claude", claude_de_campana([]))
     listo(client, c)
     llenar(client)
-    client.post(URL, headers=ORIGEN, data={"paso": "8", "accion": "proponer"})
+    generar(client)
     camp = leer(client, c)
     u = campanas.url_de(camp)
     p1 = next(p for p in camp["posts"] if p["formato"] == "titular")
@@ -184,3 +213,63 @@ def test_editor_regla_subir_y_dos_en_un_dia(cliente, monkeypatch):
     for k in (p1["k"], p2["k"]):
         client.post(u, headers=ORIGEN, data={"accion": "mover", "k": str(k), "dia": martes, "juntar": "1"})
     assert sorted(p["k"] for p in leer(client, c)["posts"] if p["dia"] == martes) == sorted([p1["k"], p2["k"]])
+
+
+def test_cruzar_no_repite_hasta_usar_todas():
+    from collections import Counter
+    ves, formatos = ["productos", "personas", "graficos"], ["foto", "titular", "texto", "vs"]
+    pares = brief.cruzar(15, ves, formatos, semilla=3)
+    assert len(set(pares[:12])) == 12  # las 12 combinaciones antes de repetir alguna
+    assert max(Counter(v for v, _ in pares).values()) - min(Counter(v for v, _ in pares).values()) <= 1
+    assert max(Counter(f for _, f in pares).values()) - min(Counter(f for _, f in pares).values()) <= 1
+    assert brief.cruzar(15, ves, formatos, semilla=3) == pares  # misma semilla, mismo cruce (resumen = posts)
+
+
+def test_pilares_siguen_el_arco_y_temas_sin_respaldo():
+    pil = brief.repartir_pilares(15, ["A", "B", "C", "D"])
+    assert pil[0] == "A" and pil[-2] == "D" and set(pil) == {"A", "B", "C", "D"}
+    assert brief.repartir_pilares(6, ["A", "B", "C", "D"]) == ["A", "B", "C", "D", "A", "B"]
+    tipos = brief.sin_respaldo(["clientes", "promo", "ensena"], False, False, ["producto", "promo", "clientes", "ensena"])
+    assert "clientes" not in tipos and "promo" not in tipos and tipos[2] == "ensena"
+    assert brief.sin_respaldo(["clientes", "promo"], True, True, ["producto"]) == ["clientes", "promo"]
+
+
+def test_la_imagen_usa_el_prompt_en_ingles_salvo_que_cambie_la_idea():
+    p = {"idea": "Un vaso", "idea_base": "Un vaso", "prompt": "A glass"}
+    assert campanas.imagen_de(p) == "A glass"
+    assert campanas.imagen_de({**p, "idea": "Dos vasos"}) == "Dos vasos"
+    assert campanas.imagen_de({"idea": "Un vaso"}) == "Un vaso"
+
+
+def test_cambiar_un_paso_borra_el_brief(cliente, monkeypatch):
+    client, c, *_ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 4)
+    import app as bot
+    monkeypatch.setattr(bot.agent, "run_claude", claude_de_campana([]))
+    listo(client, c)
+    client.portal.call(c.store.set, "productos", json.dumps([PRODUCTO]))
+    llenar(client)
+    client.post(URL, headers=ORIGEN, data={"paso": "8", "accion": "brief"})
+    assert client.portal.call(nueva_campana.leer, c).get("brief")
+    paso(client, 5, visual=["productos"])  # sin cambios: el brief se queda
+    assert client.portal.call(nueva_campana.leer, c).get("brief")
+    paso(client, 5, visual=["personas"])
+    assert not client.portal.call(nueva_campana.leer, c).get("brief")
+    assert client.get(f"{URL}?paso=9").text.count('name="concepto"') == 0  # sin brief, vuelve al resumen
+
+
+def test_con_brief_la_imagen_es_el_prompt_de_claude(cliente, monkeypatch):
+    client, c, _, proveedor = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 10)
+    import app as bot
+    monkeypatch.setattr(bot.agent, "run_claude", claude_de_campana([]))
+    listo(client, c)
+    client.portal.call(c.store.set, "productos", json.dumps([PRODUCTO]))
+    llenar(client)
+    generar(client)
+    camp = leer(client, c)
+    foto = next(p for p in camp["posts"] if p["formato"] == "titular")
+    client.post(campanas.url_de(camp), headers=ORIGEN, data={"accion": "generar", "k": str(foto["k"]), "idea": foto["idea"]})
+    prompt = proveedor.llamadas[-1][0]
+    assert prompt.startswith(foto["prompt"]) and "Photo style" not in prompt and "Brand context" not in prompt
+    assert prompt.count("Do not include any text") == 1

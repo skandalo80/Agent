@@ -256,8 +256,8 @@ IMAGEN = ("Escríbelo en este orden: 1) el sujeto principal, concreto y propio d
           " materiales, utilería y detalles reales; 3) el encuadre y la composición (plano, ángulo, lente, dónde va"
           " el sujeto y dónde queda espacio libre); 4) la luz (fuente, dirección, hora, contraste); 5) la paleta,"
           " usando los colores de la marca con sutileza; 6) el ambiente y la emoción que sirven al objetivo del post"
-          " y al tono de la marca. Sigue el estilo visual de la marca. Fotografía realista y creíble, sin"
-          " contradicciones. Sin texto, letras, números ni logos en la escena. Si hay fotos de referencia, el"
+          " y al tono de la marca. Sigue el estilo visual de la marca. Fotografía realista y creíble (salvo que se pida una"
+          " ilustración), sin contradicciones. Sin texto, letras, números ni logos en la escena. Si hay fotos de referencia, el"
           " producto debe verse exactamente como en ellas.")
 
 SISTEMA = """Eres el community manager de un negocio en Instagram. Escribes un post a partir de la información del negocio, el objetivo del post y, si lo hay, el tema que te da el dueño.
