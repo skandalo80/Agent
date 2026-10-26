@@ -3,8 +3,9 @@
 Siete pasos y un resumen: Objetivo, Mensaje (con el producto, si es sobre uno), Ideas sugeridas (lo que le
 preguntan sus clientes y lo que mejor le funciona), Formatos, Qué se ve, Estilo y variedad, y Cantidad y fechas.
 Sin JavaScript: cada paso es ?paso=N y cada botón (también los del riel de pasos) es un formulario normal que
-guarda el borrador (kv "campana_borrador") y lleva al paso que se tocó. En el resumen, "Generar campaña" arma
-la campaña con campanas.armar.
+guarda el borrador (kv "campana_borrador") y lleva al paso que se tocó. En el resumen, "Crear el brief" le pide a
+Claude tres ideas de campaña (brief.conceptos); en el paso Brief elige una, la ajusta y "Escribir los posts" arma la
+campaña con campanas.armar a partir de ese brief.
 
 Por dentro, lo que eligió se traduce a lo que ya usa campanas.proponer: los temas salen del objetivo y del
 mensaje, los formatos y horarios tal cual (o todos, con "Que la IA decida"), y el resto viaja a Claude como
@@ -15,13 +16,14 @@ guardar el perfil); si aún no hay, van las de respaldo de aquí. Sin empresa o 
 se le pide llenarlas: es lo que se usa para que el contenido sea suyo y no genérico.
 """
 import json
+import time
 from datetime import date, timedelta
 from html import escape
 
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
-from . import campanas, empresa, informe, panel, tools
+from . import brief, campanas, empresa, informe, panel, tools
 from .contenido import marca_de, modo_de, sin_plan
 from .cuenta import Cuenta, usar
 
@@ -31,6 +33,7 @@ BORRADOR = "campana_borrador"
 
 PASOS = ("Objetivo", "Mensaje", "Ideas sugeridas", "Formatos", "Qué se ve", "Estilo y variedad", "Cantidad y fechas")
 RESUMEN = len(PASOS) + 1
+BRIEF = RESUMEN + 1  # después del resumen: elegir la idea de la campaña y ajustar su brief
 MAX_MENSAJES = 2
 MAX_TEXTO, MAX_CONDICION = 400, 120
 
@@ -144,6 +147,8 @@ def de_campana(camp: dict) -> dict:
     b.update(nombre=camp.get("nombre", ""), inicio=camp["inicio"], semanas=camp.get("semanas", 2),
              n_posts=camp.get("n_posts") or len(camp.get("posts", [])) or 8, cid=camp["id"],
              hechos=list(range(1, RESUMEN)))
+    if camp.get("brief") and not b.get("brief"):  # campañas armadas antes de guardar las tres ideas
+        b["brief"] = {"conceptos": [camp["brief"]], "elegido": 0}
     if not b.get("dias"):
         b["dias"] = list(campanas.PUBLICAR.get(camp.get("publicar"), campanas.PUBLICAR["lun-sab"])[1])
     return b
@@ -230,6 +235,8 @@ async def a_campana(c: Cuenta, b: dict) -> dict:
             "mensaje": "; ".join(f"{m['titulo']}: {m.get('descripcion', '')}" for m in msgs),
             "producto": producto, "producto_id": prod["id"] if prod else "", "visual": visual, "estilo": estilo,
             "fotos_propias": "propias" in b["visual"], "modo_img": b["armado"], "regla": base == "interaccion",
+            "ves": [[k, f"{VISUAL[k][0]}: {VISUAL[k][1]}"] for k in b["visual"] if k in VISUAL and k != "propias"],
+            "semilla": b.get("semilla") or 0,
             "asistente": {k: v for k, v in b.items() if k not in ("cid", "hechos")}}
 
 
@@ -339,7 +346,9 @@ def riel(b: dict, actual: int) -> str:
     listo = not faltan(b)
     return (f'<nav class="wiz-pasos" aria-label="Pasos de la campaña"><p>Tu campaña</p>{filas}<div class="sep"></div>'
             f'<button class="wiz-paso{" actual" if actual == RESUMEN else ""}{"" if listo else " apagado"}" name="ir"'
-            f' value="{RESUMEN}"><b>✓</b>Resumen</button></nav>')
+            f' value="{RESUMEN}"><b>✓</b>Resumen</button>'
+            + (f'<button class="wiz-paso{" actual" if actual == BRIEF else ""}" name="ir" value="{BRIEF}"><b>✓</b>Brief'
+               "</button>" if b.get("brief") else "") + "</nav>")
 
 
 def cab(n: int, titulo: str, bajada: str) -> str:
@@ -547,20 +556,114 @@ async def resumen(c: Cuenta, b: dict, objetivos: list[dict], mensajes: list[dict
     editar = bool(b.get("cid"))
     return ('<div class="wiz-cab"><p class="ante">Resumen</p>'
             f'<h2>{"Revisa la estrategia de tu campaña" if editar else "Revisa tu campaña antes de generarla"}</h2>'
-            '<p class="baj">Toca Editar en cualquier bloque para cambiarlo. Generar no gasta imágenes: primero ves el'
-            " calendario con textos e ideas, y las imágenes las generas al final."
+            '<p class="baj">Toca Editar en cualquier bloque para cambiarlo. Antes de los posts armamos el brief: la idea'
+            " central de la campaña. Nada de esto gasta imágenes: primero ves el calendario con textos e ideas, y las"
+            " imágenes las generas al final."
             + (" Los posts que ya tienen imagen se quedan en su día." if editar else "")
             + '</p><div class="wiz-barra"><i style="width:100%"></i></div></div>'
-            f'<div class="wiz-resumen">{tarjetas}</div>'
+            f'<div class="wiz-resumen">{tarjetas}</div>{await cruce(c, b)}'
             f'<div class="wiz-total"><div><b>{b["n_posts"]} posts</b><span>en {b["semanas"]} semana'
             f'{"s" if b["semanas"] > 1 else ""}</span></div><div><b>{len(b["formatos"])} formato'
             f'{"s" if len(b["formatos"]) != 1 else ""}</b><span>repartidos parejo</span></div>'
             f'<div><b>~{imagenes_} imágenes</b><span>de tu cupo, solo al generarlas</span></div>'
             '<div><b>Tu empresa + Tu marca</b><span>como contexto de cada post</span></div></div>'
             f'<div class="wiz-pie"><button class="boton secundario" name="ir" value="{len(PASOS)}">‹ Anterior</button>'
-            f'<span>{"Listo para generar" if quedan else "Por hoy ya no quedan propuestas; mañana puedes pedir más."}'
-            f'</span><button class="boton" name="accion" value="proponer"{"" if quedan else " disabled"}>'
-            f'{"Volver a generar" if editar else "Generar campaña"} ›</button></div>')
+            + (f'<span><button class="boton secundario" name="accion" value="brief"{"" if quedan else " disabled"}>'
+               f'Otras ideas de brief</button></span><button class="boton" name="ir" value="{BRIEF}">Ver el brief ›'
+               "</button></div>" if b.get("brief") else
+               f'<span>{"Primero armamos el brief" if quedan else "Por hoy ya no quedan propuestas; mañana puedes pedir más."}'
+               f'</span><button class="boton" name="accion" value="brief"{"" if quedan else " disabled"}>'
+               "Crear el brief ›</button></div>"))
+
+
+async def cruce(c: Cuenta, b: dict) -> str:
+    """Cómo se cruzan lo que se ve y el formato: el mismo plan que usará campanas.proponer (misma semilla)."""
+    camp = await a_campana(c, b)
+    ves = camp["ves"]
+    if not ves:
+        return ""
+    with usar(c):
+        fichas = campanas.plan_de(camp, campanas.huecos(camp))
+    dias: dict[tuple, list[str]] = {}
+    for f in fichas:
+        dias.setdefault((f["ve"], f["formato"]), []).append(f["dia"])
+    total = len(ves) * len(camp["formatos"])
+
+    def celda(ve: str, formato: str) -> str:
+        if not (lista := dias.get((ve, formato))):
+            return "<td>·</td>"
+        d = date.fromisoformat(lista[0])
+        mas = f"<small>y {len(lista) - 1} más</small>" if len(lista) > 1 else ""
+        return f'<td class="si">{DIAS[d.weekday()]} {d.day}{mas}</td>'
+
+    filas = "".join(f'<tr><th class="fila">{escape(VISUAL[k][0])}</th>'
+                    + "".join(celda(k, f) for f in camp["formatos"]) + "</tr>" for k, _ in ves)
+    n = len(fichas)
+    return ('<div class="cruce"><h4>Cómo se cruzan</h4><p>Cada post lleva una combinación distinta de lo que se ve y'
+            f" su formato. Con {n} posts cubrimos {len(dias)} de las {total} combinaciones"
+            + (", sin repetir ninguna.</p>" if n <= total else "; cuando ya salieron todas, empiezan a repetirse.</p>")
+            + "<table><tr><th></th>" + "".join(f"<th>{escape(campanas.FORMATOS[f][0])}</th>" for f in camp["formatos"])
+            + f"</tr>{filas}</table></div>")
+
+
+def paso_brief(b: dict, quedan: int) -> str:
+    """Las tres ideas de campaña (tarjetas) y, debajo, el brief de la elegida para ajustarlo. Sin JavaScript:
+    el brief de cada idea está en la página y el CSS enseña el de la tarjeta marcada."""
+    conceptos, elegido = b["brief"]["conceptos"], b["brief"].get("elegido", 0)
+    tarjetas = "".join(
+        f'<label class="wiz-op"><input type="radio" name="concepto" value="{i}" id="concepto-{i}"'
+        f'{" checked" if i == elegido else ""}><span class="cuerpo"><b>{escape(x["titulo"])}</b>'
+        f'<small>{escape(x["resumen"])}</small>'
+        + (f'<em>Pilar fuerte: {escape(x["pilar_fuerte"])}</em>' if x.get("pilar_fuerte") else "")
+        + "</span></label>" for i, x in enumerate(conceptos))
+
+    def editor(i: int, x: dict) -> str:
+        def campos(lista) -> str:
+            return "".join(
+                f'<div class="campo"><label for="b{i}_{k}">{t}</label><textarea id="b{i}_{k}" name="b{i}_{k}"'
+                f' rows="{r}" maxlength="{brief.LIMITES[k]}">{escape(x.get(k, ""))}</textarea></div>' for k, t, r in lista)
+
+        pilares = "".join(
+            f'<div><input name="b{i}_p{j}_nombre" value="{escape(p["nombre"])}" maxlength="{brief.LIMITES_PILAR["nombre"]}"'
+            f' aria-label="Pilar {j + 1}"><textarea name="b{i}_p{j}_detalle" rows="3" aria-label="Detalle del pilar {j + 1}"'
+            f' maxlength="{brief.LIMITES_PILAR["detalle"]}">{escape(p.get("detalle", ""))}</textarea></div>'
+            for j, p in enumerate(x.get("pilares", [])))
+        # Los pilares van después del mensaje clave, como en el brief.
+        cuerpo = (campos(brief.CAMPOS[:2]) + f'<div class="campo"><label>Pilares</label><div class="pilares">{pilares}'
+                  "</div></div>" + campos(brief.CAMPOS[2:]))
+        return (f'<div class="brief-ed" id="brief-{i}"><h3>Brief de “{escape(x["titulo"])}”</h3>'
+                "<p>Puedes cambiar cualquier texto. Lo que dejes aquí es lo que se sigue en cada post.</p>"
+                f"{cuerpo}</div>")
+
+    return ('<div class="wiz-cab"><p class="ante">Brief</p><h2>Elige la idea de tu campaña</h2><p class="baj">Con tu'
+            " empresa, tu marca y lo que elegiste, te proponemos tres ideas distintas a tus campañas anteriores. Elige"
+            " una y ajusta su brief: cada post se escribe a partir de él.</p>"
+            '<div class="wiz-barra"><i style="width:100%"></i></div></div>'
+            f'<div class="conceptos">{tarjetas}</div>' + "".join(editor(i, x) for i, x in enumerate(conceptos))
+            + f'<div class="wiz-pie"><button class="boton secundario" name="ir" value="{RESUMEN}">‹ Resumen</button>'
+            f'<button class="boton secundario" name="accion" value="brief"{"" if quedan else " disabled"}>Otras 3 ideas'
+            f'</button><button class="boton" name="accion" value="proponer"{"" if quedan else " disabled"}>'
+            f'{"Volver a escribir los posts" if b.get("cid") else "Escribir los posts"} ›</button></div>'
+            + ("" if quedan else nota("Por hoy ya no quedan propuestas.", "Mañana puedes pedir más.")))
+
+
+def brief_del_form(f, b: dict) -> None:
+    """Lo que ajustó del brief (de las tres ideas) y cuál eligió."""
+    conceptos = b["brief"]["conceptos"]
+    for i, x in enumerate(conceptos):
+        for k, _, _ in brief.CAMPOS:
+            if (v := f.get(f"b{i}_{k}")) is not None:
+                x[k] = " ".join(str(v).split())[:brief.LIMITES[k]]
+        pilares = []
+        for j, p in enumerate(x.get("pilares", [])):
+            nombre = " ".join(str(f.get(f"b{i}_p{j}_nombre", p["nombre"])).split())[:brief.LIMITES_PILAR["nombre"]]
+            detalle = " ".join(str(f.get(f"b{i}_p{j}_detalle", p.get("detalle", ""))).split())
+            if nombre:
+                pilares.append({"nombre": nombre, "detalle": detalle[:brief.LIMITES_PILAR["detalle"]]})
+        x["pilares"] = pilares or x.get("pilares", [])
+    elegido = str(f.get("concepto", ""))
+    if elegido.isdigit() and int(elegido) < len(conceptos):
+        b["brief"]["elegido"] = int(elegido)
 
 
 def bloqueo(hay_empresa: bool, hay_marca: bool) -> str:
@@ -588,7 +691,9 @@ async def pagina(c: Cuenta, paso: int, aviso: str = "", b: dict | None = None):
     else:
         objetivos, mensajes = await opciones(c)
         prods = await productos(c)
-        if paso == RESUMEN and faltan(b):
+        if paso == BRIEF and not b.get("brief"):
+            paso = RESUMEN
+        if paso >= RESUMEN and faltan(b):
             paso = faltan(b)[0]
         if paso == 1:
             contenido = paso_1(b, objetivos)
@@ -611,10 +716,12 @@ async def pagina(c: Cuenta, paso: int, aviso: str = "", b: dict | None = None):
             contenido = paso_6(b)
         elif paso == 7:
             contenido = paso_7(b)
+        elif paso == BRIEF:
+            contenido = paso_brief(b, await campanas.ia_restantes(c))
         else:
             contenido = await resumen(c, b, objetivos, mensajes, prods)
         # Un solo formulario con el riel adentro; el primer botón (invisible) es el que usa Enter: seguir.
-        sigue = min(paso + 1, RESUMEN)
+        sigue = BRIEF if paso == BRIEF else min(paso + 1, RESUMEN)
         cuerpo = (f'<form method="post" action="{URL}" class="wiz" id="wiz-form">'
                   f'<button class="enter-cam" name="ir" value="{sigue}" tabindex="-1" aria-hidden="true">Seguir</button>'
                   f'<input type="hidden" name="paso" value="{paso}">{riel(b, paso)}'
@@ -632,7 +739,7 @@ async def pagina(c: Cuenta, paso: int, aviso: str = "", b: dict | None = None):
 
 
 def _paso(valor) -> int:
-    return int(valor) if str(valor).isdigit() and 1 <= int(valor) <= RESUMEN else 1
+    return int(valor) if str(valor).isdigit() and 1 <= int(valor) <= BRIEF else 1
 
 
 @router.get("/campanas/nueva")
@@ -662,8 +769,12 @@ async def guardar(request: Request):
     f = await request.form()
     paso, b = _paso(f.get("paso")), await leer(c)
     objetivos, mensajes = await opciones(c)
+    b.setdefault("semilla", int(time.time()))  # el mismo cruce en el resumen y al escribir los posts
     if paso < RESUMEN:
+        antes = {k: v for k, v in b.items() if k not in ("hechos", "brief")}
         error = del_form(f, paso, b, objetivos, mensajes, await productos(c))
+        if b.get("brief") and {k: v for k, v in b.items() if k not in ("hechos", "brief")} != antes:
+            b.pop("brief")  # cambió la campaña: el brief de antes ya no le queda
         hechos = set(b.get("hechos", []))
         (hechos.discard if error else hechos.add)(paso)
         b["hechos"] = sorted(hechos)
@@ -672,8 +783,12 @@ async def guardar(request: Request):
         if error and ir > paso:  # adelante no se pasa con algo que falta; atrás o a otro paso, sí
             return await pagina(c, paso, error, b)
         return RedirectResponse(f"{URL}?paso={ir}", status_code=303)
-    if f.get("accion") != "proponer":
-        return RedirectResponse(f"{URL}?paso={_paso(f.get('ir', RESUMEN))}", status_code=303)
+    if paso == BRIEF and b.get("brief"):
+        brief_del_form(f, b)
+    await escribir(c, b)
+    accion = f.get("accion")
+    if accion not in ("brief", "proponer") or (accion == "proponer" and not b.get("brief")):
+        return RedirectResponse(f"{URL}?paso={_paso(f.get('ir', paso))}", status_code=303)
     if faltan(b):
         return RedirectResponse(f"{URL}?paso={faltan(b)[0]}", status_code=303)
     hay_empresa, hay_marca = await lista_para_empezar(c)
@@ -685,4 +800,26 @@ async def guardar(request: Request):
         hoy = tools.now().date()
     if not camp and date.fromisoformat(datos["inicio"]) < hoy:
         return await pagina(c, 7, "La campaña no puede empezar en un día que ya pasó.", b)
+    if accion == "brief":
+        return await crear_brief(c, b, datos)
+    datos["brief"] = b["brief"]["conceptos"][b["brief"].get("elegido", 0)]
     return await campanas.armar(c, datos, camp, borrador=True)
+
+
+async def crear_brief(c: Cuenta, b: dict, datos: dict):
+    """Las tres ideas de campaña con su brief (una llamada a Claude, cuenta como una propuesta del día)."""
+    if not await campanas.ia_restantes(c):
+        return await pagina(c, RESUMEN, "Por hoy ya no quedan propuestas; mañana puedes pedir más.", b)
+    with usar(c):
+        otras = [x for x in await campanas.todas_las(c) if x.get("id") != b.get("cid")]
+
+    async def trabajo():
+        with usar(c):
+            await campanas.usar_ia(c)
+            conceptos = await brief.conceptos(c, datos, otras)
+        b["brief"] = {"conceptos": conceptos, "elegido": 0}
+        await escribir(c, b)
+        yield f"{URL}?paso={BRIEF}"
+
+    return campanas.trabajando(c, "Pensando las ideas de tu campaña…", "Tarda unos segundos.", trabajo,
+                               f"{URL}?paso={RESUMEN}")

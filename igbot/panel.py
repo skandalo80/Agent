@@ -857,6 +857,29 @@ select,input[type=date],input[type=number]{color:var(--negro);background:var(--c
 .wiz-res.ancho{grid-column:1/-1}
 .wiz-total{display:flex;gap:1.5rem 2.5rem;flex-wrap:wrap;margin-top:1.25rem;padding:1.1rem 1.25rem;border-radius:1rem;background:var(--claro)}
 .wiz-total div b{display:block;font-size:1.35rem}.wiz-total div span{font-size:.82rem;color:var(--gris)}
+/* Cruce de lo que se ve × formato (resumen de Nueva campaña) y el brief. */
+.cruce{margin-top:1.25rem;border:1px solid var(--linea-clara);border-radius:1rem;padding:1.1rem 1.2rem;overflow-x:auto}
+.cruce h4{margin:0;font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:var(--gris)}
+.cruce>p{margin:.3rem 0 .9rem;color:var(--gris);font-size:.92rem}
+.cruce table{width:100%;min-width:34rem;table-layout:fixed;border-collapse:separate;border-spacing:.4rem;font-size:.85rem}
+.cruce th{font-weight:500;color:var(--gris);text-align:center;padding:.2rem}
+.cruce th.fila{text-align:left;color:inherit;font-weight:600;width:24%;line-height:1.3}
+.cruce td{height:3.1rem;border-radius:.7rem;text-align:center;vertical-align:middle;border:1px dashed var(--linea-clara);color:var(--gris);font-size:.78rem;padding:.3rem}
+.cruce td.si{border:1px solid var(--acento-claro);color:inherit;font-weight:600}
+.cruce td small{display:block;font-weight:400;color:var(--gris);font-size:.72rem}
+.conceptos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.85rem}
+.conceptos .wiz-op .cuerpo b{padding-right:1.6rem}
+.conceptos .wiz-op .cuerpo em{color:var(--acento-claro);font-style:normal;font-size:.75rem;margin-top:.6rem;display:block}
+.brief-ed{display:none;margin-top:1.6rem}
+.brief-ed h3{margin:0 0 .2rem;font-size:1.05rem}.brief-ed>p{margin:0 0 1rem;color:var(--gris)}
+.brief-ed .campo{border:1px solid var(--linea-clara);border-radius:1rem;padding:.85rem 1rem;margin-bottom:.8rem}
+.brief-ed label{display:block;font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:var(--gris);margin-bottom:.35rem}
+.brief-ed textarea,.brief-ed input{width:100%;background:transparent;border:0;color:inherit;font:inherit;padding:0;line-height:1.5;resize:vertical}
+.brief-ed .pilares{display:grid;grid-template-columns:repeat(auto-fit,minmax(14rem,1fr));gap:.6rem}
+.brief-ed .pilares div{border:1px solid var(--linea-clara);border-radius:.8rem;padding:.6rem .75rem}
+.brief-ed .pilares input{font-weight:600}
+.wiz-main:has(#concepto-0:checked) #brief-0,.wiz-main:has(#concepto-1:checked) #brief-1,.wiz-main:has(#concepto-2:checked) #brief-2{display:block}
+@media(max-width:900px){.conceptos{grid-template-columns:1fr}}
 @media(max-width:900px){.wiz{grid-template-columns:1fr}.wiz-pasos{position:static}.wiz-ops.tres,.wiz-resumen{grid-template-columns:1fr}.wiz-main{padding:1.4rem}}
 /* Pasos de la marca (igbot/marca.py): el menú de pasos se pliega en el celular; paletas, letras, logo y fotos. */
 .wiz-pasos summary{display:none}

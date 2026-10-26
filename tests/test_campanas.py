@@ -24,15 +24,27 @@ assert LUNES.weekday() == 0
 LINEA = re.compile(r"^- (\d{4}-\d{2}-\d{2}) .*\| formato: (.+)$", re.M)
 
 
+CONCEPTO = {"titulo": "Idea", "resumen": "El latte de temporada sale del tueste de esta semana.",
+            "pilar_fuerte": "lo que te hace distinto", "insight": "Quien trabaja cerca toma café de cadena por prisa.",
+            "mensaje_clave": "Un latte hecho con café que tostamos esta semana.",
+            "pilares": [{"nombre": "El tueste del lunes", "detalle": "Granos frescos de la casa."},
+                        {"nombre": "Para llevar", "detalle": "Listo en tres minutos."}],
+            "arco": "Semana 1 presenta; semana 2 empuja la compra.", "direccion_visual": "Luz de mañana, barra de madera.",
+            "no_decir": "Nada de descuentos que no estén en tu perfil."}
+
+
 def claude_de_campana(llamadas):
     async def fake(prompt, system, mcp=None, allowed=(), max_turns=5, model=None):
         llamadas.append((prompt, system))
-        if "Armas una campaña" in system:
+        if "estratega de contenido" in system:  # el brief: tres ideas de campaña
+            return json.dumps({"conceptos": [{**CONCEPTO, "titulo": f"Idea {i + 1}"} for i in range(3)]})
+        if "Armas una campaña" in system or "ya tiene su brief" in system:
             return json.dumps({"posts": [
                 {"dia": d, "titulo": f"Post {i + 1}", "subtitulo": "", "caption": f"Texto {i + 1} #cafe",
-                 "idea": "" if formato == "Solo texto" else f"Foto {i + 1}",
+                 "idea": "" if formato.split(" | ")[0] == "Solo texto" else f"Foto {i + 1}",
+                 "prompt": "" if formato.split(" | ")[0] == "Solo texto" else f"Photo {i + 1}",
                  "responde": "Horario de fin de semana" if i == 0 and "<lo_que_preguntan>" in prompt else ""}
-                for i, (d, formato) in enumerate(LINEA.findall(prompt))]})
+                for i, (d, formato) in enumerate(LINEA.findall(prompt.split("<posts>")[-1]))]})
         if "otra versión" in system:
             return json.dumps({"titulo": "Otra idea", "subtitulo": "", "caption": "Texto nuevo", "idea": "Foto nueva"})
         return "{}"
