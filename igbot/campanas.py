@@ -164,6 +164,7 @@ Reglas:
 - Si la línea trae "plan", síguelo: su titular es el punto de partida de "titulo", su ángulo y su objetivo guían el caption, su llamada a la acción lo cierra y su concepto visual manda en "idea" y "prompt". Puedes pulir las palabras, no cambiar la idea.
 - Usa el dato de la ficha de forma concreta: el nombre del producto, el problema, la pregunta. Nada que le sirva igual a otro negocio del ramo.
 - Respeta el tema y el formato de cada línea. Si hay <ya_escritos> (posts de esta campaña) o <ya_publicado> (títulos de campañas anteriores), ningún post repite su ángulo, su gancho ni su estructura.
+- Si la línea trae "escena", la imagen usa ese encuadre y esa luz; el lugar y la utilería los eliges tú, distintos en cada post. Respeta <variedad_visual>; <marca_visual> es el ambiente (luz, color, sensación), no objetos que deban salir siempre.
 - "se ve" manda en la imagen: Tus productos = el producto real como protagonista; Personas y momentos = gente y gestos reales; Tu espacio = el lugar; Procesos = cómo se hace o se entrega; Ilustraciones y gráficos = una ilustración o un gráfico limpio, no una foto. En "Solo texto" no hay imagen: "se ve" guía de qué trata la frase.
 - Si hay <lo_que_preguntan>, como máximo {tope} posts responden a esas dudas; en esos, "responde" es el tema que contestan (tal cual viene); en los demás, "". Si hay <lo_que_dicen>, úsalo en "Lo que dicen tus clientes", parafraseado y sin nombres.
 - Usa solo datos de <empresa>, del brief o de la campaña. No inventes precios, promociones, horarios, cifras ni testimonios.
@@ -517,7 +518,7 @@ def leer_posts(respuesta: dict, fichas: list[dict], siguiente: int, regla: bool,
             responde = ""  # más de 1 de cada 4: el post se queda, pero ya no cuenta como de tus clientes
         nuevo = {"k": siguiente, "tipo": ficha["tipo"], "formato": ficha["formato"], "dia": ficha["dia"],
                  "hora": ficha["hora"], **texto, "responde": responde, "rol": ficha["rol"], "post_id": None}
-        for k in ("ve", "pilar", "plan"):
+        for k in ("ve", "pilar", "plan", "escena"):
             if ficha.get(k):
                 nuevo[k] = ficha[k]
         prompt = str(x.get("prompt") or "").strip()[:MAX_IDEA * 2]
@@ -589,13 +590,14 @@ async def escribir_desde_brief(c: Cuenta, camp: dict, fichas: list[dict], ya: st
         re.search(r"promo|descuento|%|2x1|oferta", camp.get("tema", ""), re.I))
     tipos = brief.sin_respaldo([f["tipo"] for f in fichas], "<lo_que_dicen>" in clientes, hay_promo,
                                camp.get("temas") or list(TEMAS_INICIALES))
+    escenas = brief.escenas(fichas, camp.get("variedad", "coherencia"), int(camp.get("semilla") or 0))
     for i, ficha in enumerate(fichas):
-        ficha["tipo"], ficha["pilar"], ficha["dato"] = tipos[i], pilares[i], datos[i]
+        ficha["tipo"], ficha["pilar"], ficha["dato"], ficha["escena"] = tipos[i], pilares[i], datos[i], escenas[i]
     base = (f"<empresa>\n{await empresa.texto_para_prompt(c)}\n</empresa>\n\n{await de_la_marca(c)}"
             f"<brief>\n{brief.texto(b)}\n</brief>\n\n"
             f"<campaña>{escape(camp['nombre'])}</campaña>\n"
             + (f"<tema>{escape(camp['tema'])}</tema>\n" if camp.get("tema") else "")
-            + parametros(camp) + "\n"
+            + parametros(camp) + "\n" + brief.variedad_tag(camp)
             + clientes
             + (f"<ya_publicado>\n{ya}\n</ya_publicado>\n\n" if ya else "")
             + ("<regla>sí</regla>\n\n" if camp.get("regla") else ""))
@@ -623,7 +625,8 @@ async def escribir_desde_brief(c: Cuenta, camp: dict, fichas: list[dict], ya: st
 def linea_ficha(camp: dict, f: dict) -> str:
     return (f"{f['dia']} ({fecha_larga(f['dia'])}, {semana_de(camp, f['dia'])}) | tema: {TEMAS[f['tipo']][0]}"
             f" | formato: {FORMATOS[f['formato']][0]}" + (f" | se ve: {escape(ve_de(camp, f['ve']))}" if f["ve"] else "")
-            + (f" | pilar: {escape(f['pilar'])}" if f["pilar"] else "") + (f" | dato: {f['dato']}" if f["dato"] else ""))
+            + (f" | pilar: {escape(f['pilar'])}" if f["pilar"] else "") + (f" | dato: {f['dato']}" if f["dato"] else "")
+            + (f" | escena: {f['escena']}" if f.get("escena") else ""))
 
 
 async def planear(base: str, camp: dict, fichas: list[dict]) -> None:
@@ -872,7 +875,14 @@ async def generar_imagen(c: Cuenta, camp: dict, p: dict, extra: bool) -> int:
                 idea = ("A single photo split vertically down the middle into two halves, one option on each side,"
                         f" same light and style on both.\n{idea}")
             referencias = []
-            if con_marca and marca.get("fotos_estilo", True):  # sus fotos guían el estilo
+            if camp.get("brief"):  # con brief, solo donde sale el producto: si no, todas las fotos se parecen
+                if p.get("ve") == "productos" or (not p.get("ve") and camp.get("producto_id")):
+                    tokens = (await fotos_producto(c, camp))[:2] or (
+                        marca.get("fotos", []) if camp.get("variedad") == "reconocible" else [])
+                    referencias = [archivo(c, t).read_bytes() for t in tokens[:3] if archivo(c, t).is_file()]
+                    if referencias:
+                        idea += f"\n{ESTILO_REFERENCIA}"
+            elif con_marca and marca.get("fotos_estilo", True):  # sus fotos guían el estilo
                 # Las del producto de la campaña van primero: así se ve el producto real.
                 tokens = (await fotos_producto(c, camp))[:2] + marca.get("fotos", [])
                 referencias = [archivo(c, t).read_bytes() for t in tokens[:3] if archivo(c, t).is_file()]
