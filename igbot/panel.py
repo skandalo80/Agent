@@ -1107,6 +1107,17 @@ input[type=text],input[type=search],textarea,select,.inbox input[type=search],.e
 .wiz-op:has(input:checked){border-color:var(--neon)}
 .wiz-op:has(input:checked),.as-pers:has(input:checked){box-shadow:0 0 0 2px var(--neon),6px 9px 18px rgba(12,11,16,.45),var(--clay-luz)!important}
 .wiz-op:has(input:checked)::after{background:var(--neon);color:var(--tinta)}
+/* Naranja como secundario: pasos hechos y todo lo seleccionado. El lima queda solo para dar
+   punch: barras de avance y puntos de estado. */
+.wiz-pasos a.hecho b,.wiz-pasos .wiz-paso.hecho b,.paso-cam.hecho b,.pasos-bienv .hecho b{background:var(--acento);border-color:var(--acento);color:var(--tinta)}
+.opcion:has(input:checked),.letra:has(input:checked),.obj-cam .obj:has(input:checked),.mz:has(input:checked){border-color:var(--acento);box-shadow:0 0 0 1px var(--acento);background:rgba(243,154,54,.10)}
+.fmt-op:has(input:checked),.foto:has(input:checked){border-color:var(--acento)}
+.op-cam:has(input:checked){border-color:var(--acento);background:rgba(243,154,54,.10)}
+.fmt-op .op-cam:has(input:checked) .nom-cam:after{background:var(--acento);border-color:var(--acento)}
+.chips label:has(input:checked),.wiz-chip:has(input:checked) span{background:var(--acento);border-color:var(--acento);color:var(--tinta)}
+.wiz-op:has(input:checked){border-color:var(--acento)}
+.wiz-op:has(input:checked),.as-pers:has(input:checked){box-shadow:0 0 0 2px var(--acento),6px 9px 18px rgba(12,11,16,.45),var(--clay-luz)!important}
+.wiz-op:has(input:checked)::after{background:var(--acento);color:var(--tinta)}
 """
 
 

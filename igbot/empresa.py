@@ -572,6 +572,8 @@ main.emp{color:var(--claro);padding-bottom:4rem}
 .paso.on .n{visibility:hidden}
 .barra-av i{background:var(--neon)}
 .opc:has(input:checked){border-color:var(--neon);background:rgba(198,250,44,.07)}
+.paso.ok .n{background:var(--acento);border-color:var(--acento);color:var(--tinta)}
+.opc:has(input:checked){border-color:var(--acento);background:rgba(243,154,54,.10)}
 """
 
 
