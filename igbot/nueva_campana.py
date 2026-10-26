@@ -1,7 +1,7 @@
 """Contenido › Campañas › Nueva campaña: el asistente por pasos (sencillo por fuera, dimensiones claras por dentro).
 
-Siete pasos y un resumen: Objetivo, Mensaje (con el producto, si es sobre uno), Ideas sugeridas (lo que le
-preguntan sus clientes y lo que mejor le funciona), Formatos, Qué se ve, Estilo y variedad, y Cantidad y fechas.
+Siete pasos y un resumen: Objetivo, Mensaje (con el producto, si es sobre uno), Enfoque del contenido (de qué
+tratan los posts), Formatos, Qué se ve, Estilo y variedad, y Cantidad y fechas.
 Sin JavaScript: cada paso es ?paso=N y cada botón (también los del riel de pasos) es un formulario normal que
 guarda el borrador (kv "campana_borrador") y lleva al paso que se tocó. En el resumen, "Crear el brief" le pide a
 Claude tres ideas de campaña (brief.conceptos); en el paso Brief elige una, la ajusta y "Escribir los posts" arma la
@@ -23,7 +23,7 @@ from html import escape
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
-from . import brief, campanas, empresa, informe, panel, tools
+from . import brief, campanas, empresa, panel, tools
 from .contenido import marca_de, modo_de, sin_plan
 from .cuenta import Cuenta, usar
 
@@ -31,18 +31,8 @@ router = APIRouter(prefix="/panel/contenido")
 URL = f"{campanas.BASE}/nueva"
 BORRADOR = "campana_borrador"
 
-PASOS = ("Objetivo", "Mensaje", "Ideas sugeridas", "Formatos", "Qué se ve", "Estilo y variedad", "Cantidad y fechas")
+PASOS = ("Objetivo", "Mensaje", "Enfoque del contenido", "Formatos", "Qué se ve", "Estilo y variedad", "Cantidad y fechas")
 RESUMEN = len(PASOS) + 1
-OCULTOS = {3}  # Ideas sugeridas: fuera por ahora (la campaña sale solo de lo que elige)
-VISIBLES = [i for i in range(1, RESUMEN) if i not in OCULTOS]
-
-
-def vecino(n: int, paso: int) -> int:
-    """El paso visible siguiente (paso=1) o anterior (paso=-1); RESUMEN después del último."""
-    i = n + paso
-    while i in OCULTOS:
-        i += paso
-    return i
 BRIEF = RESUMEN + 1  # después del resumen: elegir la idea de la campaña y ajustar su brief
 MAX_MENSAJES = 2
 MAX_TEXTO, MAX_CONDICION = 400, 120
@@ -50,6 +40,32 @@ MAX_TEXTO, MAX_CONDICION = 400, 120
 # Las imágenes de las tarjetas: igbot/static/tarjetas/campana/<sección>-<clave>.webp (el usuario las hace aparte).
 # Mientras no estén, cada tarjeta lleva su color de respaldo.
 TARJETAS = campanas.panel.STATIC / "tarjetas" / "campana"
+
+# enfoque del contenido: (título, descripción, tema de campanas.TEMAS, color de respaldo)
+ENFOQUES = {
+    "consejos": ("Consejos e ideas útiles", "Enseña algo práctico que la audiencia pueda aplicar.",
+                 "ensena", "#2d2640"),
+    "beneficios": ("Beneficios y ventajas", "Destaca qué gana el cliente con tu producto o servicio.",
+                   "beneficios", "#3a2f25"),
+    "problemas": ("Problemas y soluciones", "Conecta con una necesidad y muestra cómo puedes resolverla.",
+                  "problemas", "#1f3029"),
+    "datos": ("Datos curiosos y descubrimientos", "Despierta curiosidad con datos, mitos o información inesperada.",
+              "dato", "#26262a"),
+    "demostraciones": ("Demostraciones y ejemplos", "Explica cómo funciona algo o muestra un caso concreto.",
+                       "producto", "#33302a"),
+    "historias": ("Historias y situaciones cotidianas", "Presenta escenas con las que tus clientes puedan"
+                  " identificarse.", "historias", "#4a2312"),
+    "ofertas": ("Ofertas y promociones", "Comunica descuentos, paquetes, novedades o incentivos de compra.",
+                "promo", "#36203E"),
+}
+MAX_ENFOQUES = campanas.MAX_TEMAS
+
+
+def sugeridos(obj: dict) -> set[str]:
+    """Los enfoques que van con el objetivo (los temas que ya le servían)."""
+    temas = OBJETIVOS[base_de(obj, OBJETIVOS, PALABRAS_OBJETIVO)][2]
+    return {k for k, v in ENFOQUES.items() if v[2] in temas}
+
 
 # objetivo: (título, descripción, temas que más le sirven, color de respaldo)
 OBJETIVOS = {
@@ -101,13 +117,15 @@ MENSAJES_DE = {"atraer": ("distinto", "producto", "humano", "clientes"),
                "marca": ("distinto", "humano", "clientes", "consejos")}
 ACCIONES = {"lanzar": "Lanzarlo", "conocer": "Darlo a conocer", "promo": "Promoción con descuento",
             "impulsar": "Volver a impulsarlo"}
-FORMATOS = {  # clave: (título, descripción, color); "ia" = todos
-    "foto": ("Foto protagonista", "Una imagen natural que habla por sí sola.", "#3a2f25"),
-    "titular": ("Foto con titular", "Una foto con una frase corta encima.", "#33302a"),
-    "texto": ("Diseño de texto", "Una frase o un dato en grande sobre tus colores.", "#26262a"),
-    "collage": ("Collage", "Varias fotos tuyas en una sola publicación.", "#1f3029"),
-    "vs": ("Esto o aquello", "Dos opciones lado a lado para que voten en comentarios.", "#2d2640"),
-    "ia": ("Que la IA decida", "Elegimos el formato que mejor le va a cada idea.", "#4a2312"),
+FORMATOS = {  # clave: (título, descripción, color)
+    "foto": ("Foto protagonista", "Una fotografía que destaca el producto, servicio o escena sin textos gráficos"
+             " añadidos.", "#3a2f25"),
+    "titular": ("Foto con titular", "Una fotografía acompañada de una frase breve que destaca la idea principal.",
+                "#33302a"),
+    "texto": ("Diseño de texto", "Una frase, consejo o mensaje destacado con los colores y la tipografía de la marca.",
+              "#26262a"),
+    "collage": ("Collage", "Varias fotografías reunidas en una composición para mostrar opciones, detalles o"
+                " distintos aspectos de algo.", "#1f3029"),
 }
 VISUAL = {
     "productos": ("Tus productos", "Lo que vendes, sus detalles y cómo se ve en uso.", "#3a2f25"),
@@ -143,7 +161,7 @@ def inicial(marca: dict) -> dict:
     lunes = campanas.lunes_que_viene()
     return {"objetivo": "", "mensajes": [], "producto": "", "accion": "conocer", "descuento": "", "desde": "",
             "hasta": "", "condicion": "", "texto": "", "con_producto": False, "con_texto": False, "preguntan": True, "funciona": False,
-            "mezcla": campanas.MEZCLA_INICIAL, "formatos": ["foto", "titular", "vs"],
+            "mezcla": campanas.MEZCLA_INICIAL, "formatos": ["foto", "titular"],
             "visual": ["productos", "personas", "propias"], "apariencia": "natural", "texto_img": "minimo",
             "variedad": "coherencia", "armado": modo_de(marca), "nombre": "", "inicio": lunes.isoformat(),
             "semanas": 2, "n_posts": 8, "dias": [0, 1, 2, 3, 4], "horarios": ["manana", "noche"], "hechos": []}
@@ -219,6 +237,8 @@ async def a_campana(c: Cuenta, b: dict) -> dict:
         for t in MENSAJES[base_de(m, MENSAJES, PALABRAS_MENSAJE)][2]:
             if t not in temas:
                 temas.insert(0, t)
+    if enfoques := [ENFOQUES[k][2] for k in b.get("enfoques", []) if k in ENFOQUES]:
+        temas = enfoques + [t for t in temas if t not in enfoques][:max(0, campanas.MIN_TEMAS - len(enfoques))]
     temas = temas[:campanas.MAX_TEMAS]
     with usar(c):
         fotos = len(campanas.fotos_marca(c, await marca_de(c)))
@@ -250,8 +270,8 @@ async def a_campana(c: Cuenta, b: dict) -> dict:
     return {"nombre": b["nombre"].strip() or f"{obj['titulo']} · {campanas.fecha_larga(b['inicio'])}"[:campanas.MAX_NOMBRE],
             "inicio": inicio.isoformat(), "semanas": b["semanas"], "publicar": "lun-sab",
             "dias_semana": sorted(b["dias"]), "n_posts": b["n_posts"], "tema": b["texto"],
-            "modo": "repetir" if b["funciona"] and 3 not in OCULTOS else "explorar", "mezcla": b["mezcla"],
-            "temas": temas, "formatos": formatos, "horarios": horarios, "clientes": b["preguntan"] and 3 not in OCULTOS,
+            "modo": "explorar", "mezcla": b["mezcla"], "temas": temas, "formatos": formatos, "horarios": horarios,
+            "clientes": False,  # Ideas sugeridas (lo que preguntan, repetir lo que funcionó) está fuera por ahora
             "objetivo": f"{obj['titulo']}: {obj.get('descripcion', '')}".strip(": "),
             "mensaje": "; ".join(f"{m['titulo']}: {m.get('descripcion', '')}" for m in msgs),
             "producto": producto, "producto_id": prod["id"] if prod else "", "visual": visual, "estilo": estilo,
@@ -300,9 +320,8 @@ def del_form(f, paso: int, b: dict, objetivos: list[dict], mensajes: list[dict],
             return "La promoción no puede terminar antes de empezar."
         return ""
     if paso == 3:
-        b["preguntan"], b["funciona"] = g("preguntan") == "1", g("funciona") == "1"
-        b["mezcla"] = g("mezcla") if g("mezcla") in campanas.MEZCLAS else campanas.MEZCLA_INICIAL
-        return ""
+        b["enfoques"] = _lista(f, "enfoques", set(ENFOQUES))[:MAX_ENFOQUES]
+        return "" if b["enfoques"] else "Elige al menos un enfoque."
     if paso == 4:
         b["formatos"] = _lista(f, "formatos", FORMATOS)
         return "" if b["formatos"] else "Elige al menos un formato."
@@ -336,15 +355,16 @@ def del_form(f, paso: int, b: dict, objetivos: list[dict], mensajes: list[dict],
 
 
 def faltan(b: dict) -> list[int]:
-    return [i for i in VISIBLES if i not in b.get("hechos", [])]
+    return [i for i in range(1, RESUMEN) if i not in b.get("hechos", [])]
 
 
 # --- páginas ---
 
-def img(seccion: str, clave: str, color: str, texto: str = "") -> str:
+def img(seccion: str, clave: str, color: str, texto: str = "", alta: bool = False) -> str:
+    """alta: 4:5 como un post (los formatos se ven completos); si no, 16:10."""
     archivo = f"{seccion}-{clave}.webp"
     fondo = f"{color} url(/panel/static/tarjetas/campana/{archivo})" if (TARJETAS / archivo).is_file() else color
-    return f'<span class="wiz-img" style="--fondo:{fondo}">{"" if (TARJETAS / archivo).is_file() else escape(texto)}</span>'
+    return f'<span class="wiz-img{" alta" if alta else ""}" style="--fondo:{fondo}">{"" if (TARJETAS / archivo).is_file() else escape(texto)}</span>'
 
 
 def op(nombre: str, valor: str, titulo: str, desc: str, tipo: str = "radio", marcada: bool = False,
@@ -372,8 +392,8 @@ def riel(b: dict, actual: int) -> str:
     hechos = set(b.get("hechos", []))
     filas = "".join(
         f'<button class="wiz-paso{" hecho" if i in hechos and i != actual else ""}{" actual" if i == actual else ""}"'
-        f' name="ir" value="{i}"><b>{"✓" if i in hechos and i != actual else n}</b>{PASOS[i - 1]}</button>'
-        for n, i in enumerate(VISIBLES, 1))
+        f' name="ir" value="{i}"><b>{"✓" if i in hechos and i != actual else i}</b>{t}</button>'
+        for i, t in enumerate(PASOS, 1))
     listo = not faltan(b)
     return (f'<nav class="wiz-pasos" aria-label="Pasos de la campaña"><p>Tu campaña</p>{filas}<div class="sep"></div>'
             f'<button class="wiz-paso{" actual" if actual == RESUMEN else ""}{"" if listo else " apagado"}" name="ir"'
@@ -383,19 +403,17 @@ def riel(b: dict, actual: int) -> str:
 
 
 def cab(n: int, titulo: str, bajada: str) -> str:
-    v = VISIBLES.index(n) + 1
-    return (f'<div class="wiz-cab"><p class="ante">Paso {v} de {len(VISIBLES)} · {PASOS[n - 1]}</p><h2>{titulo}</h2>'
-            f'<p class="baj">{bajada}</p><div class="wiz-barra"><i style="width:{round(100 * v / len(VISIBLES))}%"></i>'
+    return (f'<div class="wiz-cab"><p class="ante">Paso {n} de {len(PASOS)} · {PASOS[n - 1]}</p><h2>{titulo}</h2>'
+            f'<p class="baj">{bajada}</p><div class="wiz-barra"><i style="width:{round(100 * n / len(PASOS))}%"></i>'
             "</div></div>")
 
 
 def pie(n: int) -> str:
-    siguiente = "Ver resumen" if n == VISIBLES[-1] else "Continuar"
-    return ('<div class="wiz-pie">'
-            + (f'<button class="boton secundario" name="ir" value="{vecino(n, -1)}">‹ Anterior</button>'
-               if n > VISIBLES[0] else f'<a class="boton secundario" href="{campanas.BASE}">Cancelar</a>')
-            + f'<span>Paso {VISIBLES.index(n) + 1} de {len(VISIBLES)}</span>'
-            f'<button class="boton" name="ir" value="{vecino(n, 1)}">{siguiente} ›</button></div>')
+    siguiente = "Ver resumen" if n == len(PASOS) else "Continuar"
+    return ('<div class="wiz-pie">' + (f'<button class="boton secundario" name="ir" value="{n - 1}">‹ Anterior</button>'
+                                         if n > 1 else f'<a class="boton secundario" href="{campanas.BASE}">Cancelar</a>')
+            + f'<span>Paso {n} de {len(PASOS)}</span><button class="boton" name="ir" value="{n + 1}">{siguiente} ›</button>'
+            "</div>")
 
 
 def nota(titulo: str, texto: str) -> str:
@@ -449,40 +467,17 @@ def paso_2(b: dict, mensajes: list[dict], prods: list[dict], objetivos: list[dic
             f' de otoño: queremos más visitas entre semana.">{escape(b["texto"])}</textarea></div></div>' + pie(2))
 
 
-def paso_3(b: dict, sugerido: dict, resultados: int, gano: dict | None) -> str:
-    temas = sugerido.get("temas", [])
-    preguntan = ("Esta semana te preguntaron por: " + ", ".join(
-        f"{t['tema']} ({campanas.semana.personas(t['personas'])})" for t in temas[:3])
-        + f". Hasta 1 de cada {campanas.CLIENTES_CADA} posts responde a eso." if temas else
-        "Tomamos lo que más se repite en tus mensajes y comentarios de los últimos 7 días, y lo bueno que te dicen."
-        f" Hasta 1 de cada {campanas.CLIENTES_CADA} posts responde a eso.")
-    puede = resultados >= campanas.CON_RESULTADOS and bool(gano)
-    ganador = ""
-    if puede:
-        partes = [campanas.nombre_de(d, gano[d][0][0]) for d in ("formato", "franja") if gano.get(d)]
-        ganador = ("Ganó: " + " por la ".join(escape(p) for p in partes).lower().capitalize()) if partes else ""
-    falta = max(0, campanas.CON_RESULTADOS - resultados)
-    mezclas = "".join(chip("mezcla", k, f"{v[0]} · {v[1]} / {100 - v[1]}", b["mezcla"] == k)
-                      for k, v in campanas.MEZCLAS.items())
-    return (cab(3, "¿Usamos lo que ya sabemos de tu cuenta?",
-                "Tus mensajes, tus comentarios y tus resultados dicen qué quiere ver tu audiencia. Activa lo que"
-                " quieras sumar.")
-            + '<div class="wiz-bloque ideas-cam" style="margin-top:0"><div class="wiz-ops dos">'
-            + op("preguntan", "1", "Lo que te preguntan", preguntan, "checkbox", b["preguntan"],
-                 img("ideas", "preguntan", "#2d2640", "Mensajes"))
-            + op("funciona", "1", "Lo que mejor te funciona",
-                 "Repetimos la forma que tuvo más interacción en tus campañas (tema, formato y horario), nunca el"
-                 " mismo asunto.", "checkbox", b["funciona"] and puede, img("ideas", "funciona", "#1f3029", "Resultados"),
-                 em=ganador if puede else f"Te falta{'n' if falta != 1 else ''} {falta} post{'s' if falta != 1 else ''}"
-                 " con resultados", apagada=not puede)
-            + '</div><div class="wiz-si mezcla"><label class="t">¿Cuánto repetimos y cuánto probamos?</label>'
-            f'<div class="wiz-chips">{mezclas}</div></div></div>'
-            + nota("Si no activas ninguna,", "la campaña sale solo de lo que elegiste en los pasos anteriores.")
-            + ("" if puede else nota("Sin resultados todavía:", f"«Lo que mejor te funciona» se activa cuando tengas"
-                                     f" {campanas.CON_RESULTADOS} posts publicados con métricas. Mientras, la campaña"
-                                     " prueba un poco de todo para descubrirlo."))
-            + pie(3))
-
+def paso_3(b: dict, objetivos: list[dict]) -> str:
+    obj = next((o for o in objetivos if o["k"] == b["objetivo"]), None)
+    van = sugeridos(obj) if obj else set()
+    ops = "".join(op("enfoques", k, v[0], v[1], "checkbox", k in b.get("enfoques", []),
+                     img("enfoque", k, v[3], v[0]), em="Va con tu objetivo" if k in van else "")
+                  for k, v in ENFOQUES.items())
+    return (cab(3, "¿De qué van a tratar tus posts?",
+                f"Elige uno o varios (hasta {MAX_ENFOQUES}). Los posts de la campaña se reparten entre ellos.")
+            + f'<div class="wiz-ops tres">{ops}</div>'
+            + nota("Cómo lo usamos:", "cada post toma uno de estos enfoques, con lo que sabemos de tu negocio y lo que"
+                   " elegiste en Mensaje.") + pie(3))
 
 def paso_4(b: dict, fotos: int) -> str:
     sin_collage = fotos < campanas.MIN_FOTOS_COLLAGE
@@ -492,10 +487,10 @@ def paso_4(b: dict, fotos: int) -> str:
         em = ("Sube 2 fotos en Tu marca" if k == "collage" and sin_collage else
               "" if usa is None else "1 imagen" if usa else "No usa tu cupo")
         ops += op("formatos", k, t, d, "checkbox", k in b["formatos"] and not (k == "collage" and sin_collage),
-                  img("formato", k, color, t), em, apagada=k == "collage" and sin_collage)
+                  img("formato", k, color, t, alta=True), em, apagada=k == "collage" and sin_collage)
     return (cab(4, "¿Qué formatos te gustan?",
                 "Elige uno o varios. Se reparten parejo para que veas cuál le funciona mejor a tu audiencia.")
-            + f'<div class="wiz-ops tres">{ops}</div>'
+            + f'<div class="wiz-ops cuatro">{ops}</div>'
             + nota("Carrusel y reel", "llegarán después. Las historias de Instagram también están en camino.") + pie(4))
 
 
@@ -561,9 +556,7 @@ async def resumen(c: Cuenta, b: dict, objetivos: list[dict], mensajes: list[dict
         if b["accion"] == "promo" and b["descuento"]:
             producto += f" {b['descuento']} %" + (f" del {campanas.fecha_larga(b['desde'])} al"
                                                    f" {campanas.fecha_larga(b['hasta'])}" if b["desde"] and b["hasta"] else "")
-    ideas = " · ".join(t for t, si in (("Lo que te preguntan", b["preguntan"]),
-                                       (f"Lo que mejor te funciona ({campanas.MEZCLAS[b['mezcla']][0].lower()})",
-                                        b["funciona"])) if si) or "Solo lo que elegiste"
+    enfoques = " · ".join(ENFOQUES[k][0] for k in b.get("enfoques", []) if k in ENFOQUES) or "Según tu objetivo"
     ini = date.fromisoformat(b["inicio"])
     fin = ini + timedelta(days=7 * b["semanas"] - 1)
     dias = ", ".join(DIAS[d] for d in b["dias"])
@@ -575,7 +568,7 @@ async def resumen(c: Cuenta, b: dict, objetivos: list[dict], mensajes: list[dict
     imagenes_ = round(b["n_posts"] * sum(campanas.FORMATOS[k][1] for k in formatos) / len(formatos))
     bloques = [
         ("Objetivo", obj, 1, False), ("Mensaje", msgs + (f" · «{b['texto']}»" if b["texto"] else ""), 2, False),
-        ("Producto", producto, 2, True), *([("Ideas sugeridas", ideas, 3, False)] if 3 not in OCULTOS else []),
+        ("Producto", producto, 2, True), ("Enfoque del contenido", enfoques, 3, False),
         ("Formatos", " · ".join(FORMATOS[k][0] for k in b["formatos"] if k in FORMATOS), 4, False),
         ("Qué se ve", " · ".join(VISUAL[k][0] for k in b["visual"] if k in VISUAL), 5, False),
         ("Estilo y variedad", f"{APARIENCIA[b['apariencia']][0]} · Texto {TEXTO[b['texto_img']].lower()} ·"
@@ -727,8 +720,6 @@ async def pagina(c: Cuenta, paso: int, aviso: str = "", b: dict | None = None):
         prods = await productos(c)
         if paso == BRIEF and not b.get("brief"):
             paso = RESUMEN
-        if paso in OCULTOS:
-            paso = vecino(paso, 1)
         if paso >= RESUMEN and faltan(b):
             paso = faltan(b)[0]
         if paso == 1:
@@ -736,12 +727,7 @@ async def pagina(c: Cuenta, paso: int, aviso: str = "", b: dict | None = None):
         elif paso == 2:
             contenido = paso_2(b, mensajes, prods, objetivos)
         elif paso == 3:
-            quedan_ia, fotos, anteriores, sugerido, resultados = await campanas.contexto_form(c)
-            with usar(c):
-                gano = await informe.ganadores(c, anteriores) if resultados >= campanas.CON_RESULTADOS else None
-            if gano:
-                resultados = gano["posts"]
-            contenido = paso_3(b, sugerido, resultados, gano)
+            contenido = paso_3(b, objetivos)
         elif paso == 4:
             with usar(c):
                 fotos = len(campanas.fotos_marca(c, await marca_de(c)))
@@ -757,7 +743,7 @@ async def pagina(c: Cuenta, paso: int, aviso: str = "", b: dict | None = None):
         else:
             contenido = await resumen(c, b, objetivos, mensajes, prods)
         # Un solo formulario con el riel adentro; el primer botón (invisible) es el que usa Enter: seguir.
-        sigue = BRIEF if paso == BRIEF else min(vecino(paso, 1), RESUMEN)
+        sigue = BRIEF if paso == BRIEF else min(paso + 1, RESUMEN)
         cuerpo = (f'<form method="post" action="{URL}" class="wiz" id="wiz-form">'
                   f'<button class="enter-cam" name="ir" value="{sigue}" tabindex="-1" aria-hidden="true">Seguir</button>'
                   f'<input type="hidden" name="paso" value="{paso}">{riel(b, paso)}'

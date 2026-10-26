@@ -59,6 +59,12 @@ TEMAS = {
              " su origen), o un \"mito o realidad\". Nada de cifras del negocio que no estén en su información."),
     "producto": ("Producto en acción", "estrella", "Un producto o servicio concreto de la información del negocio,"
                  " mostrado en uso, no como anuncio; con su precio si está ahí."),
+    "beneficios": ("Beneficios y ventajas", "estrella", "El resultado o el valor concreto que da un producto o servicio"
+                   " de la información del negocio: qué gana quien lo usa. Sin promesas que no estén ahí."),
+    "problemas": ("Problemas y soluciones", "explicar", "Una necesidad o duda concreta de sus clientes y cómo el"
+                  " negocio la resuelve, contado con calma, sin dramatizar."),
+    "historias": ("Historias y situaciones cotidianas", "historia", "Una escena reconocible del día a día del negocio,"
+                  " con personas y emociones naturales: atender, conversar, compartir un momento."),
     "detras": ("Detrás de cámaras", "historia", "Cómo se hace algo en el negocio: el proceso, el equipo, la"
                " preparación."),
     "marca": ("Conoce la marca", "marca", "Presentar el negocio: su historia, quiénes son, sus valores, qué los hace"
