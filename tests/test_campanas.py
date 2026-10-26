@@ -536,7 +536,7 @@ def test_repetir_lo_que_funciono(cliente, monkeypatch):
     assert sum(1 for p in camp["posts"] if p["responde"]) == 3  # 12 posts: máximo 1 de cada 4
     r = client.get(url(client, c))
     assert "Repite:</span>" in r.text and "Sigue probando" in r.text and 'class="rol-cam rep">Repite' in r.text
-    assert "con lo que mejor le funcionó" in r.text
+    assert '<p class="antetitulo">Contenido · Campañas · ' in r.text and 'class="bajada"' not in r.text
 
     # Sin resultados suficientes no se puede repetir aunque lo pidan.
     client.portal.call(c.store.set, "campanas_pasadas", "[]")

@@ -224,7 +224,7 @@ def test_la_cuenta_principal_se_configura_igual_y_guarda_aparte(monkeypatch, tmp
         assert 'name="paso" value="personalidad"' in configura and "Generar instrucciones" not in configura
         campos_con_nombre(configura)
         r = client.get("/panel/asistente")
-        assert "Gasto de hoy" in r.text and "Mensajes este mes" not in r.text
+        assert "Gasto de hoy" not in r.text and "Mensajes este mes" not in r.text
         assert "Límite de gasto" in client.get("/panel/conexion").text
         assert '<div class="inbox" id="chats">' in r.text
         r = client.get("/panel/asistente/configura?paso=resumen")

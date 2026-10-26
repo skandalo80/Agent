@@ -269,7 +269,6 @@ def test_pasado_el_cupo_pide_confirmar_la_imagen_extra(cliente, monkeypatch):
     assert client.portal.call(contenido.falta_cupo, c, False) == "extra"  # se acabó el cupo: hay que confirmar
     assert crear(client, c, "historia", tema="Cómo empezamos", extra=True) == 2 and len(proveedor.llamadas) == 2
     assert client.portal.call(imagenes.usadas, c.store) == (1, 1)
-    assert "1 imágenes extra este mes" in client.get("/panel/contenido").text
 
     # Otra imagen para un post también pide confirmar.
     r = client.post("/panel/contenido/post/2", headers=ORIGEN, data={"titulo": "Cómo empezamos", "accion": "otra"})
@@ -348,7 +347,7 @@ def test_chats_en_pausa(cliente):
     import time
     r = client.get("/panel/asistente")
     assert '<div class="inbox" id="chats">' in r.text and "Aún no te escribe nadie" in r.text
-    assert "Contestados hoy" in r.text and "Mensajes restantes" in r.text and "Gasto de hoy" not in r.text
+    assert "Contestados hoy" not in r.text and "Mensajes restantes" not in r.text  # sin tarjetas de números
     client.portal.call(c.store.pause, "ana", time.time() + 3600)
     r = client.get("/panel/asistente?ver=todas")
     assert "@ana" in r.text and "Lo atiendes tú · 1 h" in r.text and "Todas<b" in r.text
@@ -377,7 +376,6 @@ def test_conversaciones_y_tomar_un_chat(cliente):
     r = client.get("/panel/asistente")
     assert 'class="on" aria-current="page">Sin contestar<b class="">1</b>' in r.text
     assert "@caro" in r.text and "Hola, ¿precios?" in r.text and "@beto" not in r.text
-    assert '<b>1</b><small>en 1 chat</small>' in r.text and "Mensajes restantes</span><b>999</b>" in r.text  # PLAN=basico: 1,000
     r = client.get("/panel/asistente?ver=todas")
     assert "@beto" in r.text and "Asistente: Sí, a las 5." in r.text
     assert r.text.index("@caro") < r.text.index("@beto")
@@ -705,22 +703,23 @@ def test_bienvenida_con_contenido_y_lo_que_falta(cliente, monkeypatch):
     assert "Te falta configurar" not in client.get("/panel/contenido").text
 
 
-def test_resumen_del_plan_arriba(cliente, monkeypatch):
+def test_encabezados_sin_titulo_ni_numeros(cliente, monkeypatch):
+    """Arriba solo va el antetítulo y sus botones: ni título, ni bajada, ni las tarjetas de números."""
     client, c, *_ = cliente
     monkeypatch.setattr(c, "imagenes_mes", 40)
     monkeypatch.setattr(c, "posts_mes", 12)
     monkeypatch.setattr(c, "mensajes_mes", 1000)
     r = client.get("/panel/contenido")
-    assert "Posts restantes" in r.text and "de 12 este mes" in r.text and "de 40 este mes" in r.text
-    # Las secciones van en el menú lateral; los números solo en Calendario (el inicio de Contenido).
+    assert '<p class="antetitulo">Contenido · Calendario</p>' in r.text and "+ Nueva campaña" in r.text
+    assert "Posts restantes" not in r.text and 'class="hoy kpis"' not in r.text
     assert '<nav class="pestanas">' not in r.text and 'class="lat-sub"' in r.text
-    marca = client.get("/panel/contenido/marca").text
-    assert "Posts restantes" not in marca and "compacta delgada" in marca and "Contenido · Tu marca" in marca
+    for ruta in ("/panel/contenido", "/panel/contenido/marca", "/panel/contenido/campanas",
+                 "/panel/contenido/campanas/nueva", "/panel/asistente", "/panel/asistente/configura",
+                 "/panel/probar", "/panel/conexion", "/panel/empresa", "/panel/resultados"):
+        texto = client.get(ruta).text
+        assert "compacta delgada" in texto and "<h1>" not in texto and 'class="bajada"' not in texto, ruta
     r = client.get("/panel/asistente")
-    assert "Mensajes restantes" in r.text and "de 1,000 este mes" in r.text and "Gasto de hoy" not in r.text
-    # Sin tope en su plan, sale solo el conteo del mes.
-    monkeypatch.setattr(c, "mensajes_mes", 0)
-    assert "Mensajes este mes" in client.get("/panel/asistente").text
+    assert "Mensajes restantes" not in r.text and 'class="hoy kpis"' not in r.text and 'class="estado"' in r.text
 
 
 def test_crear_post_con_ajustes_solo_para_ese_post(cliente, monkeypatch):

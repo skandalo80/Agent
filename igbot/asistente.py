@@ -382,11 +382,8 @@ async def pagina(c: Cuenta, paso: str = "", aviso: str = "", nota: str = "", per
         f"<style>{ESTILO}</style>"
         + panel.cabecera(salir=True, menu="asistente", cuenta=c, sub="configura", perfil=nombre,
                          foto=await panel.foto_perfil(c))
-        + '<section class="oscuro portada compacta delgada"><div class="contenedor">'
-        '<p class="antetitulo">Tu asistente · Configura</p>'
-        f'<h1>@{escape(nombre)}<span class="punto">.</span></h1>'
-        '<p class="bajada" style="margin-left:0">Unos pasos cortos. Puedes volver a cualquiera cuando quieras.</p>'
-        '</div></section><main class="as-main"><div class="contenedor">'
+        + panel.encabezado("Tu asistente · Configura")
+        + '<main class="as-main"><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
         + f'<div class="asis">{_lista(paso, guardado, hechos)}<div class="as-cont">'
         + (f'<div class="aviso as-aviso">{escape(nota)}</div>' if nota else "")
@@ -471,7 +468,10 @@ body:has(.asis){background:var(--negro)}
 .as-num{color:var(--acento-claro);font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;font-weight:600;margin:0}
 .as-h{font-size:1.9rem;letter-spacing:-.02em;margin:.3rem 0 .25rem}
 .as-baj{color:var(--gris);margin:0 0 1.4rem}
-.as-cont .aviso,.as-main .aviso{background:var(--grafito);color:var(--claro)}
+/* Cada paso va en su tarjeta, como en Tu marca y Crear campaña; lo de adentro, un tono más hondo. */
+.as-cont{background:var(--grafito);border-radius:1.5rem;padding:2rem 2.25rem;min-width:0}
+.as-cont .as-caja,.as-cont .as-pers{background:#2A2834}
+.as-cont .aviso,.as-main .aviso{background:var(--grafito);color:var(--claro)}.as-cont .aviso{background:#2A2834}
 .as-caja{background:var(--grafito);border:1px solid var(--linea-oscura);border-radius:1.25rem;padding:1.4rem 1.5rem;margin:0 0 1rem;min-width:0}
 fieldset.as-caja legend{float:left;width:100%;padding:0;font-weight:600;font-size:1.02rem}
 .as-caja h3{margin:0 0 .25rem;font-size:1.05rem}
@@ -540,5 +540,5 @@ form:has(#emojis-nunca:checked) .v-emoji{display:none}form:has(#emojis-seguido:c
 .as-srv{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-top:1rem;color:#d1d1d6;font-size:.9rem}
 @media(max-width:900px){.asis{grid-template-columns:1fr}.as-pasos{position:static;display:flex;gap:.4rem;overflow-x:auto;padding:.75rem}
 .as-t,.as-barra,.as-pasos .as-nota,.as-paso small,.as-paso:not(.on) b{display:none}.as-paso{flex:none;padding:.35rem}.as-paso.on{padding-right:.8rem}.as-paso b{font-size:.82rem;white-space:nowrap}}
-@media(max-width:560px){.as-img{aspect-ratio:2/1}.as-h{font-size:1.55rem}.as-caja{padding:1.1rem}.as-seg{display:flex}.as-seg label{flex:1;text-align:center;padding:.5rem .6rem}}
+@media(max-width:560px){.as-cont{padding:1.4rem 1.1rem}.as-img{aspect-ratio:2/1}.as-h{font-size:1.55rem}.as-caja{padding:1.1rem}.as-seg{display:flex}.as-seg label{flex:1;text-align:center;padding:.5rem .6rem}}
 """

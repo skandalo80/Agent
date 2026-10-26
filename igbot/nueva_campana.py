@@ -747,9 +747,7 @@ async def pagina(c: Cuenta, paso: int, aviso: str = "", b: dict | None = None):
     return panel.pagina(
         panel.cabecera(salir=True, menu="contenido", cuenta=c, sub="campanas", perfil=await panel.usuario(c),
                        foto=await panel.foto_perfil(c))
-        + campanas.cabeza("Editar estrategia" if editar else "Nueva campaña",
-                          "Siete pasos cortos. Usamos tu empresa y tu marca para que cada post hable como tú.",
-                          campanas.boton_todas(), hero)
+        + campanas.cabeza(campanas.boton_todas(), hero, "Editar estrategia" if editar else "Nueva campaña")
         + '<div class="oscuro-pag"><main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
         + cuerpo + "</div></main></div>")
