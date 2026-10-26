@@ -4,7 +4,7 @@ import json
 import os
 import re
 from functools import partial
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -77,7 +77,6 @@ def cliente(monkeypatch, tmp_path):
     monkeypatch.setattr(bot, "Instagram", lambda store: ConPosts())
     monkeypatch.setattr(contenido, "_de_instagram", {})
     monkeypatch.setattr(contenido, "_cursores", {})
-    monkeypatch.setattr(contenido, "_total_instagram", {})
     monkeypatch.setattr(bot, "cuentas", list(bot.cuentas))
     monkeypatch.setattr(bot, "dispatchers", dict(bot.dispatchers))
     monkeypatch.setattr(bot.principal, "ig_account_id", "negocio")
@@ -113,7 +112,9 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     monkeypatch.setattr(c, "imagenes_mes", 2)
     assert 'href="/panel/contenido" title="Contenido"' in client.get("/panel/asistente").text
     r = client.get("/panel/contenido")
-    assert "Aún no tienes posts" in r.text and "DESDEAPP" in r.text  # lo de la app sale aunque no haya del panel
+    assert 'id="cal"' in r.text and "Próximos posts" not in r.text  # Calendario: solo el calendario
+    r = client.get("/panel/contenido?fecha=2099-01-01&ver=lista")
+    assert "DESDEAPP" in r.text and "Ya publicados" in r.text  # lo de la app sale aunque no haya del panel
 
     # Tu marca, paso a paso: sin marca abre el paso 1; cada paso guarda y lleva al siguiente.
     r = client.get("/panel/contenido/marca")
@@ -250,10 +251,12 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     reglas = client.portal.call(contenido.reglas, c.store)
     assert [(r.post, r.keywords, r.dm, r.public) for r in reglas] == [("ABC123", ["PRECIO"], "Cuesta $1,190.", "¡Listo!"),
                                                                     ("ABC123", ["ENVIO"], "Enviamos.", "")]
-    r = client.get("/panel/contenido")
-    assert "Ya publicados" in r.text and r.text.count("instagram.com/p/ABC123") == 1
+    with usar(c):
+        dia = datetime.fromtimestamp(1.0, tools.tz()).date()
+    r = client.get(f"/panel/contenido?fecha={dia}&ver=lista")
+    assert "Ya publicados" in r.text and r.text.count("instagram.com/p/ABC123") == 1 and "Post suelto" in r.text
+    r = client.get("/panel/contenido?fecha=2099-01-01&ver=lista")
     assert "instagram.com/p/DESDEAPP" in r.text and "Desde Instagram" in r.text
-    assert r.text.index("DESDEAPP") < r.text.index("ABC123")  # el más nuevo primero
     assert "ya no se puede cambiar" in client.post("/panel/contenido/post/1", headers=ORIGEN,
                                                    data={**editado, "accion": "guardar"}).text
 
@@ -303,40 +306,32 @@ def test_si_instagram_falla_la_pagina_sale(cliente, monkeypatch):
 
     monkeypatch.setattr(c.instagram, "media_count", falla)
     monkeypatch.setattr(c.instagram, "media_page", falla)
-    r = client.get("/panel/contenido")
-    assert r.status_code == 200 and "Aún no tienes posts" in r.text
+    r = client.get("/panel/contenido?ver=lista")
+    assert r.status_code == 200 and "Nada en estas fechas" in r.text
 
 
-def test_ya_publicados_de_10_en_10(cliente, monkeypatch):
-    """Solo se pide a Instagram la página que se ve; para saltar lejos avanza pidiendo solo ids."""
+def test_publicados_de_instagram_solo_del_rango(cliente, monkeypatch):
+    """De Instagram se piden páginas de 10 solo hasta pasar el inicio de las fechas que se ven."""
     client, c, *_ = cliente
     monkeypatch.setattr(c, "imagenes_mes", 3)
     todos = [{"id": str(i), "caption": f"Post {i:02d}", "permalink": f"https://www.instagram.com/p/P{i:02d}/",
-              "timestamp": f"2026-01-{31 - i // 2:02d}T{10 + i % 2}:00:00+0000"} for i in range(35)]
+              "timestamp": f"2026-01-{31 - i // 2:02d}T{18 + i % 2}:00:00+0000"} for i in range(35)]
     pedidos = []
-
-    async def media_count():
-        return len(todos)
 
     async def media_page(limit, after="", fields=""):
         pedidos.append((limit, after, fields))
         i = int(after or 0)
         return todos[i:i + limit], str(i + limit) if i + limit < len(todos) else ""
 
-    monkeypatch.setattr(c.instagram, "media_count", media_count)
     monkeypatch.setattr(c.instagram, "media_page", media_page)
-    r = client.get("/panel/contenido")
-    assert r.text.count("Desde Instagram") == 10 and "Post 00" in r.text and "Post 10" not in r.text
-    assert 'href="/panel/contenido?p=4#publicados"' in r.text and '<span class="resumen">35</span>' in r.text
-    pedidos.clear()
-    r = client.get("/panel/contenido?p=4")
-    assert r.text.count("Desde Instagram") == 5 and "Post 30" in r.text and "Post 29" not in r.text
-    # Desde la página 2 (su cursor ya se conocía): ids sin fotos hasta llegar, luego solo 10.
-    assert pedidos == [(20, "10", "id"), (10, "30", "")]
-    pedidos.clear()
-    assert "Post 30" in client.get("/panel/contenido?p=4").text and pedidos == []  # ya estaba
-    assert "Post 20" in client.get("/panel/contenido?p=3").text and pedidos == [(10, "10", "id"), (10, "20", "")]
-    assert "Post 30" in client.get("/panel/contenido?p=99").text  # se queda en la última
+    r = client.get("/panel/contenido?vista=dia&fecha=2026-01-30&ver=lista")
+    assert r.text.count("Desde Instagram") == 2 and "Post 02" in r.text and "Post 04" not in r.text
+    assert pedidos == [(10, "", "")]  # la primera página ya llega antes del 30
+    r = client.get("/panel/contenido?fecha=2026-01-01&ver=lista")
+    assert r.text.count("· Desde Instagram") == 35
+    assert pedidos == [(10, "", ""), (10, "10", ""), (10, "20", ""), (10, "30", "")]
+    r = client.get("/panel/contenido?fecha=2026-01-01&ver=lista&q=post+3")
+    assert r.text.count("· Desde Instagram") == 5  # Post 30 a 34
 
 
 def test_script_y_fuentes(cliente):
@@ -601,7 +596,7 @@ def test_insights_de_un_post(cliente, monkeypatch):
         pedidos.append(media_id)
         return {"reach": 1520, "views": 2100, "likes": 87, "comments": 9, "saved": 14, "shares": 6}
     monkeypatch.setattr(c.instagram, "media_insights", insights, raising=False)
-    r = client.get("/panel/contenido")
+    r = client.get("/panel/contenido?fecha=2099-01-01&ver=lista")
     assert 'href="/panel/contenido/insights/1"' in r.text
     r = client.get("/panel/contenido/insights/1")
     assert "Alcance" in r.text and "1,520" in r.text and "Guardados" in r.text and pedidos == ["1"]

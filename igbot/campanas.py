@@ -1450,81 +1450,11 @@ async def pagina_lista(c: Cuenta, ver: str = "", aviso: str = "", q: dict | None
         + f'<div class="tarjeta">{pestanas}{cuerpo}</div></div></main></div>')
 
 
-# --- el mes, en Contenido › Calendario ---
-
-MESES_LARGOS = ("Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre",
-                "Noviembre", "Diciembre")
-MINIS_POR_DIA = 2
-
+# --- meses ---
 
 def otro_mes(primero: date, n: int) -> date:
     m = primero.month - 1 + n
     return date(primero.year + m // 12, m % 12 + 1, 1)
-
-
-async def mes(c: Cuenta, primero: date) -> str:
-    """El mes con una barra por campaña (se pueden cruzar) y una miniatura de cada post en su día."""
-    camps = await todas_las(c)
-    fin_mes = otro_mes(primero, 1) - timedelta(days=1)
-    lunes = primero - timedelta(days=primero.weekday())
-    domingo = fin_mes + timedelta(days=6 - fin_mes.weekday())
-    with usar(c):
-        hoy = tools.now().date()
-        desde = momento(lunes.isoformat(), "00:00")
-        hasta = momento((domingo + timedelta(days=1)).isoformat(), "00:00")
-        zona = tools.tz()
-    posts = await c.store.posts(("borrador", "programada", "publicando", "publicada", "fallida"),
-                                due_before=hasta - 1, user_id=PANEL, desde=desde)
-    por_dia: dict[str, list[str]] = {}
-    for post in posts:
-        dia = datetime.fromtimestamp(post["publish_at"], zona).date().isoformat()
-        media = await c.store.media(post["media_ids"][0]) if post["media_ids"] else None
-        imagen = f'<img src="{url_imagen(c, media[0])}" alt="">' if media else ""
-        por_dia.setdefault(dia, []).append(f'<a class="mini-mes" href="/panel/contenido/post/{post["id"]}">{imagen}</a>')
-    for camp in camps:  # los de campañas que aún no tienen imagen: un cuadro gris que lleva a la campaña
-        for p in camp.get("posts", []):
-            if not p.get("post_id") and lunes.isoformat() <= p["dia"] <= domingo.isoformat():
-                por_dia.setdefault(p["dia"], []).append(
-                    f'<a class="mini-mes vacia" href="{url_de(camp)}?post={p["k"]}#detalle"'
-                    f' title="{escape(p["titulo"])} · sin imagen"></a>')
-    celdas = [f'<div class="dn-mes">{d}</div>' for d in DIAS]
-    d = lunes
-    while d <= domingo:
-        semana_ = [d + timedelta(days=i) for i in range(7)]
-        carriles = [x for x in camps if any(date.fromisoformat(x["inicio"]) <= s <= informe.fin_de(x) for s in semana_)]
-        carriles.sort(key=lambda x: x["inicio"])
-        for dia in semana_:
-            barras, cuantas = "", 0
-            for x in carriles:
-                ini, fin = date.fromisoformat(x["inicio"]), informe.fin_de(x)
-                if not ini <= dia <= fin:
-                    barras += '<span class="bc vacia"></span>'
-                    continue
-                cuantas += 1
-                clase = "bc " + COLOR[estado(x, hoy)]
-                if dia != ini and dia.weekday() != 0:
-                    clase += " cont"
-                if dia != fin and dia.weekday() != 6:
-                    clase += " sig"
-                nombre = escape(x["nombre"]) if dia == ini or dia.weekday() == 0 else "&nbsp;"
-                barras += f'<a class="{clase}" href="{url_de(x)}" title="{escape(x["nombre"])}">{nombre}</a>'
-            iso = dia.isoformat()
-            minis = por_dia.get(iso, [])
-            mas = f'<span class="mas-mes">+{len(minis) - MINIS_POR_DIA}</span>' if len(minis) > MINIS_POR_DIA else ""
-            clase = "d-mes" + (" otro" if dia.month != primero.month else "") + (" hoy-mes" if dia == hoy else "")
-            celdas.append(f'<div class="{clase}"><b>{dia.day}</b>'
-                          + (f'<span class="traslape">{cuantas} campañas</span>' if cuantas > 1 else "")
-                          + f'{barras}<div class="minis-mes">{"".join(minis[:MINIS_POR_DIA])}{mas}</div></div>')
-        d += timedelta(days=7)
-    antes, despues = otro_mes(primero, -1), otro_mes(primero, 1)
-    return ('<div class="tarjeta" id="mes"><div class="cab-mes"><h2>Tu mes</h2><div class="nav-mes">'
-            f'<a href="/panel/contenido?mes={antes:%Y-%m}#mes" aria-label="Mes anterior">‹</a>'
-            f"<b>{MESES_LARGOS[primero.month - 1]} {primero.year}</b>"
-            f'<a href="/panel/contenido?mes={despues:%Y-%m}#mes" aria-label="Mes siguiente">›</a></div></div>'
-            f'<div class="mes-cam">{"".join(celdas)}</div>'
-            '<div class="leyenda-mes"><span><i class="b-activa"></i>Activa</span><span><i class="b-proxima"></i>Próxima'
-            '</span><span><i class="b-pasada"></i>Pasada</span><span><i class="vacia"></i>Aún sin imagen</span>'
-            "<span>Toca una campaña para abrirla, o un post para editarlo.</span></div></div>")
 
 
 def tarjeta_extra(accion: str, k: str, destino: str) -> str:

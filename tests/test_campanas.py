@@ -663,14 +663,21 @@ def test_varias_campanas(cliente, monkeypatch):
     assert "Ese día no es de la campaña." in client.post(u, headers=ORIGEN, data={"accion": "mover", "k": str(k),
                                                                                   "dia": "2098-12-01"}).text
 
-    # Contenido › Calendario: el mes con la barra de cada campaña, el cruce y un cuadro por post.
+    # Contenido › Calendario: cada post en su día, con el color de su estado y su campaña.
     client.post(u, headers=ORIGEN, data={"accion": "generar", "k": str(k)})
-    r = client.get("/panel/contenido?mes=2099-01")
-    assert "Enero 2099" in r.text and f'href="{u}" title="Invierno &lt;b&gt;">Invierno &lt;b&gt;</a>' in r.text
-    assert "2 campañas" in r.text and 'class="mini-mes vacia"' in r.text and "?mes=2099-02#mes" in r.text
     post_id = campanas.buscar_post(invierno(), k)["post_id"]
-    assert f'class="mini-mes" href="/panel/contenido/post/{post_id}"><img' in r.text
-    assert "b-activa" in r.text and "b-proxima" in r.text
+    r = client.get("/panel/contenido?mes=2099-01")
+    assert "Enero de 2099" in r.text and 'class="cal-mes"' in r.text and "fecha=2099-02-01" in r.text
+    assert f'class="ev e-borrador" href="/panel/contenido/post/{post_id}"' in r.text
+    assert f'href="{u}?post=' in r.text and " · Invierno &lt;b&gt;</small>" in r.text  # las propuestas sin imagen
+    assert "Próximos posts" not in r.text and "Ya publicados" not in r.text  # sin listas debajo
+    r = client.get("/panel/contenido?vista=semana&fecha=2099-01-05")
+    assert "5 al 11 de enero de 2099" in r.text and 'class="cal-horas" style="--dias:7"' in r.text
+    assert " · Invierno &lt;b&gt;</small>" in r.text
+    r = client.get("/panel/contenido?vista=dia&fecha=2099-01-05&ver=lista")
+    assert "Lunes 5 de enero" in r.text and "Borradores" in r.text and "Próximos posts" not in r.text
+    r = client.get("/panel/contenido?fecha=2099-01-05&estado=publicado")
+    assert 'e-borrador" href' not in r.text and 'class="ev e-publicado" href="https://www.instagram.com/p/DESDEAPP/"' in r.text
 
     # En el editor del post se sabe de qué campaña viene.
     p = campanas.buscar_post(invierno(), k)

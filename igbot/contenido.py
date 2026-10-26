@@ -540,35 +540,11 @@ def boton_insights(ig_id: str) -> str:
             if ig_id else "")
 
 
-def fila(c: Cuenta, post: dict, p: dict, token: str, ig_id: str = "") -> str:
-    estado, color = ESTADOS.get(post["status"], (post["status"], ""))
-    titulo = p.get("titulo") or recortar(post["caption"]) or "Sin título"
-    objetivo = OBJETIVOS.get(p.get("objetivo"), ("",))[0]
-    detalle = cuando(post["publish_at"]) if post["publish_at"] else "Sin fecha"
-    if objetivo:
-        detalle += f" · {objetivo}"
-    accion = (f'<a class="boton secundario chico" href="{escape(post["permalink"])}" target="_blank" rel="noopener">Ver</a>'
-              + boton_insights(ig_id) if post["status"] == "publicada" and post["permalink"]
-              else f'<a class="boton secundario chico" href="/panel/contenido/post/{post["id"]}">Editar</a>')
-    imagen = f'<img src="{url_imagen(c, token)}" alt="">' if token else '<span class="pieza" style="width:4.5rem"></span>'
-    return (f'<div class="fila">{imagen}<div class="datos"><b>{escape(titulo)}</b><span>{escape(detalle)}</span></div>'
-            f'<span class="chip {color}">{estado}</span>{accion}</div>')
-
-
-async def filas(c: Cuenta, posts: list[dict]) -> str:
-    out = []
-    for post in posts:
-        media = await c.store.media(post["media_ids"][0]) if post["media_ids"] else None
-        out.append(fila(c, post, await pieza(c.store, post["id"]), media[0] if media else ""))
-    return "".join(out)
-
-
 DE_INSTAGRAM_TTL = 600  # cada página de posts de Instagram se pide cada 10 min como mucho
 POR_HOJA = 10
 # (cuenta, página) -> (hora, posts) y (cuenta, página) -> (hora, cursor para pedir esa página).
 _de_instagram: dict[tuple[str, int], tuple[float, list[dict]]] = {}
 _cursores: dict[tuple[str, int], tuple[float, str]] = {}
-_total_instagram: dict[str, tuple[float, int]] = {}
 
 
 def _vigente(guardado: dict, clave):
@@ -598,113 +574,13 @@ async def hoja_instagram(c: Cuenta, hoja: int) -> list[dict]:
     return posts
 
 
-async def total_instagram(c: Cuenta) -> int:
-    if (n := _vigente(_total_instagram, c.slug)) is not None:
-        return n
-    n = await c.instagram.media_count()
-    _total_instagram[c.slug] = (time.monotonic(), n)
-    return n
-
-
-async def de_instagram(c: Cuenta) -> list[dict]:
-    """Los últimos 10 posts de la cuenta en Instagram ([] si Instagram no contesta)."""
-    try:
-        return await hoja_instagram(c, 1)
-    except Exception as e:  # sin Instagram la página sale igual, solo con los posts del panel
-        log.warning("No se pudieron leer los posts de Instagram de %s: %s", c.slug, e)
-        return []
-
-
-def fila_instagram(m: dict, ts: float) -> str:
-    titulo = recortar((m.get("caption") or "").strip().split("\n")[0]) or "Post de Instagram"
-    foto = m.get("thumbnail_url") or m.get("media_url")
-    imagen = (f'<img src="{escape(foto)}" alt="" referrerpolicy="no-referrer">' if foto
-              else '<span class="pieza" style="width:4.5rem"></span>')
-    ver = (f'<a class="boton secundario chico" href="{escape(m["permalink"])}" target="_blank" rel="noopener">Ver</a>'
-           if m.get("permalink") else "")
-    return (f'<div class="fila">{imagen}<div class="datos"><b>{escape(titulo)}</b>'
-            f'<span>{escape(cuando(ts))} · Desde Instagram</span></div>'
-            f'<span class="chip">Publicado</span>{ver}{boton_insights(m.get("id", ""))}</div>')
-
-
-def enlace_publicados(hoja: int) -> str:
-    return "/panel/contenido" + (f"?p={hoja}" if hoja > 1 else "") + "#publicados"
-
-
-async def publicados_html(c: Cuenta, hoja: int = 1) -> tuple[str, int]:
-    """Una página (10) de lo publicado, con sus números abajo, y cuántos hay en total. Sale de
-    Instagram, así incluye lo subido desde la app; lo que salió del panel lleva su ficha. Si
-    Instagram no contesta, sale lo publicado desde el panel. Solo se carga la página que se ve."""
-    try:
-        total = await total_instagram(c)
-        paginas_ = max(1, -(-total // POR_HOJA))
-        hoja = min(max(1, hoja), paginas_)
-        en_instagram = await hoja_instagram(c, hoja)
-    except Exception as e:
-        log.warning("No se pudieron leer los posts de Instagram de %s: %s", c.slug, e)
-        _, total = await c.store.published_page(PANEL, 0, 0)
-        paginas_ = max(1, -(-total // POR_HOJA))
-        hoja = min(max(1, hoja), paginas_)
-        del_panel, _ = await c.store.published_page(PANEL, POR_HOJA, (hoja - 1) * POR_HOJA)
-        return (await filas(c, del_panel) + panel.paginas(hoja, paginas_, enlace_publicados)), total
-    codigos = [k for m in en_instagram if (k := shortcode(m.get("permalink", "")))]
-    # Lo del panel que sale en esta página, y (en la primera) lo que acaba de salir y que
-    # Instagram todavía no lista porque su página se pidió hace unos minutos.
-    del_panel = await c.store.published_with(PANEL, codigos, time.time() - DE_INSTAGRAM_TTL if hoja == 1 else 1e18)
-    por_codigo = {shortcode(p["permalink"]): p for p in del_panel if p["permalink"]}
-    lista = []
-    for m in en_instagram:
-        try:
-            ts = datetime.strptime(m["timestamp"], "%Y-%m-%dT%H:%M:%S%z").timestamp()
-        except (KeyError, ValueError):
-            continue
-        if post := por_codigo.pop(shortcode(m.get("permalink", "")), None):
-            media = await c.store.media(post["media_ids"][0]) if post["media_ids"] else None
-            lista.append((ts, fila(c, post, await pieza(c.store, post["id"]), media[0] if media else "", m.get("id", ""))))
-        else:
-            lista.append((ts, fila_instagram(m, ts)))
-    for post in (por_codigo.values() if hoja == 1 else ()):
-        media = await c.store.media(post["media_ids"][0]) if post["media_ids"] else None
-        lista.append((post["publish_at"] or 0, fila(c, post, await pieza(c.store, post["id"]), media[0] if media else "")))
-    lista.sort(key=lambda x: x[0], reverse=True)
-    return "".join(html for _, html in lista) + panel.paginas(hoja, paginas_, enlace_publicados), total
-
-
-def plegable(id_: str, titulo: str, n: int, cuerpo: str, clase: str = "") -> str:
-    """Una sección del calendario que se puede cerrar (el navegador recuerda si la cerraste)."""
-    cuenta = f'<span class="resumen">{n}</span>' if n else ""
-    return (f'<details class="tarjeta plegable {clase}" id="{id_}" open><summary><span class="num">{titulo}</span>'
-            f"{cuenta}</summary>{cuerpo}</details>")
-
-
-async def calendario(c: Cuenta, aviso: str = "", hoja: int = 1, mes: date | None = None) -> HTMLResponse:
-    from . import campanas  # campanas importa este módulo
-    with usar(c):
-        mes = mes or tools.now().date().replace(day=1)
-        pendientes = await c.store.posts(("programada", "publicando", "fallida", "borrador"), user_id=PANEL)
-        programados = [p for p in pendientes if p["status"] != "borrador"]
-        borradores = [p for p in pendientes if p["status"] == "borrador"]
-        publicados, n_publicados = await publicados_html(c, hoja)
-    cuerpo = await campanas.mes(c, mes)
-    with usar(c):
-        if not pendientes:
-            cuerpo += ('<div class="tarjeta"><h2>Aún no tienes posts</h2>'
-                       '<p class="ayuda">Arma una campaña: dinos qué quieres lograr y te proponemos varias semanas de posts.</p>'
-                       '<div class="acciones"><a class="boton" href="/panel/contenido/campanas/nueva">Crear mi primera campaña</a>'
-                       '<a class="boton secundario" href="/panel/contenido/marca">Antes, configurar tu marca</a></div></div>')
-        if programados:
-            cuerpo += plegable("proximos", "Próximos posts", len(programados),
-                               '<p class="ayuda">Ya aprobados: salen solos el día y la hora que dicen.</p>'
-                               + await filas(c, programados))
-        if borradores:
-            cuerpo += plegable("borradores", "Borradores", len(borradores),
-                               '<p class="ayuda">No salen hasta que los apruebes.</p>' + await filas(c, borradores))
-        if publicados:
-            cuerpo += plegable("publicados", "Ya publicados", n_publicados,
-                               '<p class="ayuda">Todo lo de tu Instagram, también lo que subiste desde la app.</p>'
-                               + publicados, clase="antiguos")
-        return await pagina(c, "calendario", "Tus publicaciones: lo que viene y lo que ya salió.", cuerpo, aviso,
-                            con_resumen=True)
+async def calendario(c: Cuenta, aviso: str = "", vista: str = "mes", fecha: date | None = None, ver: str = "",
+                     q: str = "", estado: str = "", campana: str = "") -> HTMLResponse:
+    """Solo el calendario: las listas (próximos, borradores, publicados) salen en su vista Lista."""
+    from . import calendario as cal  # calendario importa este módulo
+    cuerpo = await cal.seccion(c, vista, fecha, ver, q, estado, campana)
+    return await pagina(c, "calendario", "Tus publicaciones: lo que viene y lo que ya salió.", cuerpo, aviso,
+                        con_resumen=True)
 
 
 METRICAS = [  # (métrica de Instagram, cómo se le dice al cliente, qué es)
@@ -956,12 +832,16 @@ def preparar_foto(data: bytes) -> bytes:
 async def ver(request: Request):
     if not (c := panel.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
-    p, mes = request.query_params.get("p", ""), request.query_params.get("mes", "")
+    if c.imagenes_mes <= 0:
+        return sin_plan()
+    q = request.query_params
+    fecha = q.get("fecha", "") or (f"{q['mes']}-01" if q.get("mes") else "")  # ?mes=AAAA-MM: los enlaces de antes
     try:
-        primero = date.fromisoformat(f"{mes}-01")
+        dia = date.fromisoformat(fecha)
     except ValueError:
-        primero = None
-    return await calendario(c, hoja=int(p) if p.isdigit() else 1, mes=primero) if c.imagenes_mes > 0 else sin_plan()
+        dia = None
+    return await calendario(c, vista=q.get("vista", "mes"), fecha=dia, ver=q.get("ver", ""), q=q.get("q", "")[:80],
+                            estado=q.get("estado", ""), campana=q.get("campana", "")[:80])
 
 
 @router.get("/nuevo")
