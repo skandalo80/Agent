@@ -103,8 +103,14 @@ def test_el_asistente_de_punta_a_punta(cliente, monkeypatch):
     assert "<producto>Latte de calabaza ($75 MXN)" in prompt and "20 % de descuento" in prompt and "<regla>sí</regla>" in prompt
     assert "Concepto: Idea 2." in prompt and "Mensaje clave: Tostado &lt;b&gt;esta&lt;/b&gt; semana" in prompt
     assert "- El tueste:" in prompt and "ya tiene su brief" in sistema and "| pilar: " in prompt
+    plan_prompt, plan_sistema = llamadas[-2]  # el plan de los 6 posts, juntos, antes de escribirlos
+    assert "director creativo" in plan_sistema and "6. 2099-" in plan_prompt and "Concepto: Idea 2." in plan_prompt
+    assert "| plan: objetivo: Objetivo 1; ángulo: Ángulo 1; titular: Titular 1" in prompt
     camp = leer(client, c)
     assert camp["brief"]["titulo"] == "Idea 2" and all(p["ve"] == "productos" for p in camp["posts"])
+    assert all(p["plan"]["cta"] == "Escríbenos" for p in camp["posts"])
+    r = client.get(f"{campanas.url_de(camp)}?post={camp['posts'][0]['k']}")
+    assert "Plan de este post" in r.text and "<b>Ángulo:</b>" in r.text
     assert camp["nombre"] == "Otoño" and len(camp["posts"]) == 6
     dias = sorted(p["dia"] for p in camp["posts"])
     assert len(set(dias)) == 3 and all(dias.count(d) == 2 for d in dias)
@@ -296,3 +302,10 @@ def test_el_brief_se_guarda_y_se_descarga(cliente, monkeypatch):
     # En el historial (campañas viejas) el brief se queda.
     from igbot import informe
     assert informe.resumen_de(camp)["brief"]["titulo"] == "Idea 3"
+
+
+def test_leer_el_plan_por_numero():
+    plan = brief.leer_plan({"plan": [{"n": 2, "angulo": "B", "visual": "Vaso"}, {"n": 9, "angulo": "fuera"},
+                                     {"n": "x"}, "nada", {"n": 1, "titular": "Sin ángulo ni visual"}]}, 3)
+    assert plan[0] == {} and plan[1]["angulo"] == "B" and plan[1]["cta"] == "" and plan[2] == {}
+    assert brief.plan_texto({"angulo": "<b>A</b>", "cta": "Ven"}) == "ángulo: &lt;b&gt;A&lt;/b&gt;; llamada a la acción: Ven"
