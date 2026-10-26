@@ -952,3 +952,12 @@ def test_reglas_opcionales_plegadas_y_casilla_vacia_las_borra(cliente):
     client.post("/panel/asistente/paso", headers=ORIGEN, data=datos)
     perfil = client.portal.call(panel.perfil, c)
     assert perfil["no_hacer"] == "No hablar de precios." and perfil["pasar_equipo"] == "" and perfil["instrucciones"] == ""
+
+
+def test_menu_de_tu_cuenta_en_tres_grupos(cliente, monkeypatch):
+    client, c, *_ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 5)
+    menu = client.get("/panel/contenido").text.split('class="perfil-menu"')[1].split("</details>")[0]
+    orden = [menu.index(t) for t in ("Conectado como", "Información de empresa", "Tu marca", 'class="sep"',
+                                     "Conexión", "Ver mi Instagram", "Salir")]
+    assert orden == sorted(orden)
