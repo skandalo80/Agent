@@ -27,9 +27,9 @@ def paso(client, n, ir=None, **datos):
 def llenar(client, objetivo="interaccion"):
     """Los siete pasos, con lo mínimo de cada uno."""
     assert paso(client, 1, objetivo=objetivo).headers["location"] == f"{URL}?paso=2"
-    paso(client, 2, mensajes=["producto"], producto="p1", accion="promo", descuento="20", desde="2099-01-05",
+    paso(client, 2, mensajes=["producto"], con_producto="1", producto="p1", accion="promo", descuento="20", desde="2099-01-05",
          hasta="2099-01-18")
-    paso(client, 3)
+    paso(client, 3, enfoques=["consejos", "historias"])
     paso(client, 4, formatos=["texto", "titular"])
     paso(client, 5, visual=["productos"])
     paso(client, 6, apariencia="natural", texto_img="minimo", variedad="coherencia", armado="plantilla")
@@ -57,17 +57,35 @@ def test_el_asistente_de_punta_a_punta(cliente, monkeypatch):
     listo(client, c)
     client.portal.call(c.store.set, "productos", json.dumps([PRODUCTO]))
     r = client.get(URL)
-    assert "Paso 1 de 7" in r.text and 'name="objetivo" value="interaccion"' in r.text
+    assert "Paso 1 de 6" in r.text and 'name="objetivo" value="interaccion"' in r.text
+    assert 'class="wiz-img' not in r.text  # el objetivo va sin miniaturas
     assert 'class="enter-cam" name="ir" value="2"' in r.text  # Enter sigue al paso 2, no salta en el riel
 
     # Adelante no se pasa sin elegir; atrás o a otro paso, sí (y lo que estaba se guarda).
     r = paso(client, 1)
     assert "Elige qué quieres lograr." in r.text
     assert paso(client, 2, ir=1).headers["location"] == f"{URL}?paso=1"
-    r = paso(client, 2, mensajes=["producto"], producto="p1", accion="promo")
+    r = paso(client, 2, mensajes=["producto"], con_producto="1", producto="p1", accion="promo")
     assert "Escribe el porcentaje de descuento" in r.text
     r = client.get(f"{URL}?paso=2")
     assert "Latte de calabaza · $75 MXN" in r.text and 'name="accion" value="promo" checked' in r.text
+    assert 'name="con_producto" value="1" checked' in r.text and 'name="con_texto" value="1">' in r.text
+    # Sin el check, el producto y tu texto no cuentan aunque vengan llenos.
+    paso(client, 2, ir=1, mensajes=["producto"], producto="p1", texto="Otoño")
+    b = json.loads(client.portal.call(c.store.get, "campana_borrador"))
+    assert b["producto"] == "" and b["texto"] == ""
+    paso(client, 2, ir=1, mensajes=["producto"], con_texto="1", texto="Otoño")
+    assert 'name="con_texto" value="1" checked' in client.get(f"{URL}?paso=2").text
+    # Enfoque del contenido: tarjetas con imagen, las que van con el objetivo marcadas; al menos una.
+    paso(client, 1, ir=1, objetivo="interaccion")
+    r = client.get(f"{URL}?paso=3")
+    assert "Paso 3 de 6 · Enfoque del contenido" in r.text and r.text.count('name="enfoques"') == 7
+    assert "tarjetas/campana/enfoque-consejos.webp" in r.text and r.text.count("Va con tu objetivo") == 3
+    assert "Elige al menos un enfoque." in paso(client, 3).text
+    # Qué se ve está fuera: de Formatos se sigue a Estilo y variedad.
+    r = client.get(f"{URL}?paso=4")
+    assert 'name="ir" value="6">Continuar' in r.text and ">Qué se ve<" not in r.text
+    assert "Paso 5 de 6 · Estilo y variedad" in client.get(f"{URL}?paso=5").text
 
     # Cantidad: no caben más de dos por día.
     llenar(client)
@@ -77,7 +95,8 @@ def test_el_asistente_de_punta_a_punta(cliente, monkeypatch):
     llenar(client)
     r = client.get(f"{URL}?paso=8")
     assert "Revisa tu campaña antes de generarla" in r.text and "Latte de calabaza · Promoción con descuento 20 %" in r.text
-    assert r.text.count("Editar</button>") == 8 and "Crear el brief" in r.text
+    assert r.text.count("Editar</button>") == 7 and "Crear el brief" in r.text
+    assert "Consejos e ideas útiles · Historias y situaciones cotidianas" in r.text
     assert 'class="cruce"' in r.text and "Con 6 posts cubrimos" in r.text
 
     # Sin brief no se escriben posts: vuelve al resumen.
@@ -109,6 +128,8 @@ def test_el_asistente_de_punta_a_punta(cliente, monkeypatch):
     camp = leer(client, c)
     assert camp["brief"]["titulo"] == "Idea 2" and all(p["ve"] == "productos" for p in camp["posts"])
     assert all(p["plan"]["cta"] == "Escríbenos" for p in camp["posts"])
+    assert camp["temas"] == ["ensena", "historias"]  # los enfoques que eligió
+    assert {p["tipo"] for p in camp["posts"]} <= {"ensena", "historias"}
     r = client.get(f"{campanas.url_de(camp)}?post={camp['posts'][0]['k']}")
     assert "Plan de este post" in r.text and "<b>Ángulo:</b>" in r.text
     assert camp["nombre"] == "Otoño" and len(camp["posts"]) == 6
@@ -375,7 +396,8 @@ def test_cada_foto_tiene_su_escena_segun_la_variedad():
     assert brief.escenas(fichas, "coherencia", semilla=5) == esc
     creativa = brief.escenas(fichas * 4, "experimental")
     assert any(e.split(", ")[0] in brief.EXPERIMENTALES for e in creativa)
-    assert "Creativa" in brief.variedad_tag({"variedad": "experimental"})
+    assert "Creativo" in brief.variedad_tag({"variedad": "experimental"})
+    assert "Diverso" in brief.variedad_tag({"variedad": "diverso"})
 
 
 def test_la_variedad_llega_al_brief_al_plan_y_a_los_posts(cliente, monkeypatch):
@@ -389,7 +411,9 @@ def test_la_variedad_llega_al_brief_al_plan_y_a_los_posts(cliente, monkeypatch):
     r = llenar(client)
     paso_6 = client.get(f"{URL}?paso=6").text
     assert paso_6.index("Variedad visual") < paso_6.index("Apariencia de las fotos")
-    assert "Consistente" in paso_6 and "Variada" in paso_6 and "Creativa" in paso_6
+    assert all(t in paso_6 for t in ("Consistente", "Equilibrado", "Diverso", "Creativo"))
+    assert "tarjetas/campana/variedad-diverso.webp" in paso_6 and "tarjetas/campana/texto-info.webp" in paso_6
+    assert "Sin texto" in paso_6 and "Una frase principal que destaque el mensaje." in paso_6
     generar(client)
     prompts = [p for p, *_ in llamadas]
     assert sum("<variedad_visual>" in p for p in prompts) >= 3  # brief, plan y posts

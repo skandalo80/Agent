@@ -852,6 +852,7 @@ select,input[type=date],input[type=number]{color:var(--negro);background:var(--c
 .wiz-sub{margin:1.75rem 0 .2rem;font-size:1.05rem}.wiz-sub+.ayuda{margin:0 0 .8rem}
 .wiz-ops{display:grid;grid-template-columns:repeat(auto-fit,minmax(14.5rem,1fr));gap:.85rem}
 .wiz-ops.tres{grid-template-columns:repeat(3,minmax(0,1fr))}
+.wiz-ops.cuatro{grid-template-columns:repeat(4,minmax(0,1fr))}.wiz-img.alta{aspect-ratio:4/5}
 .wiz-op{position:relative;display:flex;flex-direction:column;border:1px solid var(--linea-clara);border-radius:1rem;overflow:hidden;cursor:pointer;background:var(--suave,var(--blanco));margin:0;font-weight:400;transition:border-color .12s,box-shadow .12s}
 .wiz-op input{position:absolute;opacity:0;pointer-events:none}
 .wiz-op:hover{border-color:#6A6678}
@@ -914,7 +915,7 @@ select,input[type=date],input[type=number]{color:var(--negro);background:var(--c
 .plan-post summary{cursor:pointer;font-weight:600;font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;color:var(--gris)}
 .plan-post p{margin:.45rem 0 0;line-height:1.45}.plan-post b{font-weight:600}
 @media(max-width:900px){.conceptos,.brief-cam{grid-template-columns:1fr}}
-@media(max-width:900px){.wiz{grid-template-columns:1fr}.wiz-pasos{position:static}.wiz-ops.tres,.wiz-resumen{grid-template-columns:1fr}.wiz-main{padding:1.4rem}}
+@media(max-width:900px){.wiz{grid-template-columns:1fr}.wiz-pasos{position:static}.wiz-ops.tres,.wiz-resumen{grid-template-columns:1fr}.wiz-ops.cuatro{grid-template-columns:repeat(2,minmax(0,1fr))}.wiz-main{padding:1.4rem}}
 /* Pasos de la marca (igbot/marca.py): el menú de pasos se pliega en el celular; paletas, letras, logo y fotos. */
 .wiz-pasos summary{display:none}
 .wiz-pasos a span small{display:block;font-size:.76rem;font-weight:400;color:var(--gris);margin-top:.05rem}
@@ -1014,6 +1015,9 @@ img.mrc-logo-mini{background:#fff}
 .wiz-pie .boton{padding:.65rem 1.3rem}
 .wiz-bloque .opc{font-weight:400;color:var(--gris)}
 .prod-cam:has(input[name=accion][value=promo]:checked) .wiz-si.promo{display:grid}
+.wiz-abre{display:flex;align-items:center;gap:.65rem;margin:0;cursor:pointer;font-weight:600;font-size:1rem}
+.wiz-abre input{width:1.15rem;height:1.15rem;margin:0;accent-color:var(--acento)}
+.wiz-bloque:has(>.wiz-abre input:checked)>.wiz-si.abre{display:block}
 .ideas-cam:has(input[name=funciona]:checked) .wiz-si.mezcla{display:block}
 .listo-cam{display:inline-flex;width:fit-content;gap:.45rem;align-items:center;padding:.35rem .85rem;border:1px solid rgba(255,255,255,.2);border-radius:2rem;font-size:.82rem;color:#E6E3EC;margin-top:.9rem}
 .listo-cam i{width:.45rem;height:.45rem;border-radius:50%;background:#C6FA2C}

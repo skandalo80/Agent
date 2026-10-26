@@ -97,9 +97,12 @@ def plan_texto(plan: dict) -> str:
 VARIEDAD = {
     "reconocible": "Consistente: las imágenes comparten escenario base, encuadre y tratamiento; cambia el sujeto y el"
                    " mensaje, para que la campaña se vea muy uniforme.",
-    "coherencia": "Variada: se mantienen la paleta y el tratamiento de luz y color; cada post cambia de escenario,"
+    "coherencia": "Equilibrado: se mantienen la paleta y el tratamiento de luz y color; cada post cambia de escenario,"
                   " encuadre, luz y utilería. Ningún escenario ni objeto de utilería se repite en dos posts.",
-    "experimental": "Creativa: solo se mantiene la paleta; cada post explora un escenario, un ángulo y una composición"
+    "diverso": "Diverso: cada post se siente distinto; alterna escenario, encuadre, protagonista y colores (la paleta"
+               " de la marca queda como acento, no en toda la imagen), con contrastes entre un post y el siguiente."
+               " Ningún escenario, protagonista ni objeto de utilería se repite.",
+    "experimental": "Creativo: solo se mantiene la paleta; cada post explora un escenario, un ángulo y una composición"
                     " inesperados (contrastes, espacio negativo, reflejos, objetos fuera de contexto), sin repetir"
                     " ninguno.",
 }

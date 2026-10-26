@@ -259,7 +259,6 @@ def test_lo_que_preguntan_tus_clientes(cliente, monkeypatch):
 
     monkeypatch.setattr(campanas.semana, "temas", temas)
     listo(client, c)
-    assert 'name="preguntan" value="1"' in client.get(f"{BASE}/nueva?paso=3").text
     client.post("/panel/contenido/campanas", headers=ORIGEN, data=datos_campana(clientes="1"))
     prompt = llamadas[-1][0]
     assert "<lo_que_preguntan>" in prompt and "Horario de fin de semana (9 personas)" in prompt
@@ -519,9 +518,6 @@ def test_repetir_lo_que_funciono(cliente, monkeypatch):
     monkeypatch.setattr(c.instagram, "media_insights", media_insights, raising=False)
 
     listo(client, c)
-    r = client.get(f"{BASE}/nueva?paso=3")
-    assert 'name="funciona" value="1"' in r.text and 'name="funciona" value="1" disabled' not in r.text
-    assert "Ganó: " in r.text and 'name="mezcla" value="equilibrado" checked' in r.text
 
     client.post("/panel/contenido/campanas", headers=ORIGEN,
                 data={**datos_campana(semanas="2", publicar="lun-sab", clientes="1"), "modo": "repetir",
