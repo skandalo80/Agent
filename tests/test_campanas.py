@@ -36,6 +36,11 @@ CONCEPTO = {"titulo": "Idea", "resumen": "El latte de temporada sale del tueste 
 def claude_de_campana(llamadas):
     async def fake(prompt, system, mcp=None, allowed=(), max_turns=5, model=None):
         llamadas.append((prompt, system))
+        if "director creativo" in system:  # el plan de cada post, por su número
+            n = len(re.findall(r"^\d+\. ", prompt.split("<posts>")[-1], re.M))
+            return json.dumps({"plan": [{"n": i + 1, "objetivo": f"Objetivo {i + 1}", "angulo": f"Ángulo {i + 1}",
+                                         "titular": f"Titular {i + 1}", "visual": f"Visual {i + 1}", "cta": "Escríbenos",
+                                         "distinto": "Otra escena"} for i in range(n)]})
         if "estratega de contenido" in system:  # el brief: tres ideas de campaña
             return json.dumps({"conceptos": [{**CONCEPTO, "titulo": f"Idea {i + 1}"} for i in range(3)]})
         if "Armas una campaña" in system or "ya tiene su brief" in system:
