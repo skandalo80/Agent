@@ -14,6 +14,13 @@ os.environ.update(IG_VERIFY_TOKEN="vt", IG_APP_SECRET="secreto", IG_ACCESS_TOKEN
 from PIL import Image  # noqa: E402
 from test_contenido import ORIGEN, cliente  # noqa: E402
 
+
+def con_ideas(monkeypatch):
+    """Ideas sugeridas está fuera del asistente por ahora; estas pruebas lo vuelven a abrir."""
+    from igbot import nueva_campana
+    monkeypatch.setattr(nueva_campana, "OCULTOS", set())
+    monkeypatch.setattr(nueva_campana, "VISIBLES", list(range(1, nueva_campana.RESUMEN)))
+
 from igbot import campanas, contenido, imagenes  # noqa: E402
 from igbot.cuenta import usar  # noqa: E402
 
@@ -258,6 +265,7 @@ def test_lo_que_preguntan_tus_clientes(cliente, monkeypatch):
                 "elogios": ["El latte está buenísimo"], "mensajes": 30}
 
     monkeypatch.setattr(campanas.semana, "temas", temas)
+    con_ideas(monkeypatch)
     listo(client, c)
     assert 'name="preguntan" value="1"' in client.get(f"{BASE}/nueva?paso=3").text
     client.post("/panel/contenido/campanas", headers=ORIGEN, data=datos_campana(clientes="1"))
@@ -518,6 +526,7 @@ def test_repetir_lo_que_funciono(cliente, monkeypatch):
 
     monkeypatch.setattr(c.instagram, "media_insights", media_insights, raising=False)
 
+    con_ideas(monkeypatch)
     listo(client, c)
     r = client.get(f"{BASE}/nueva?paso=3")
     assert 'name="funciona" value="1"' in r.text and 'name="funciona" value="1" disabled' not in r.text

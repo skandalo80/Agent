@@ -1014,6 +1014,9 @@ img.mrc-logo-mini{background:#fff}
 .wiz-pie .boton{padding:.65rem 1.3rem}
 .wiz-bloque .opc{font-weight:400;color:var(--gris)}
 .prod-cam:has(input[name=accion][value=promo]:checked) .wiz-si.promo{display:grid}
+.wiz-abre{display:flex;align-items:center;gap:.65rem;margin:0;cursor:pointer;font-weight:600;font-size:1rem}
+.wiz-abre input{width:1.15rem;height:1.15rem;margin:0;accent-color:var(--acento)}
+.wiz-bloque:has(>.wiz-abre input:checked)>.wiz-si.abre{display:block}
 .ideas-cam:has(input[name=funciona]:checked) .wiz-si.mezcla{display:block}
 .listo-cam{display:inline-flex;width:fit-content;gap:.45rem;align-items:center;padding:.35rem .85rem;border:1px solid rgba(255,255,255,.2);border-radius:2rem;font-size:.82rem;color:#E6E3EC;margin-top:.9rem}
 .listo-cam i{width:.45rem;height:.45rem;border-radius:50%;background:#C6FA2C}
