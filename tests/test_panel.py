@@ -136,7 +136,7 @@ def test_cliente_se_conecta_configura_y_enciende(monkeypatch, tmp_path):
 
         # Sin nada guardado, Configura empieza por el primer paso y cada paso pasa la revisión de campos.
         r = client.get("/panel/asistente/configura")
-        assert 'name="paso" value="personalidad"' in r.text and "0 de 5 listos" in r.text
+        assert 'name="paso" value="personalidad"' in r.text and "0 de 4 listos" in r.text
         for paso in ("personalidad", "escribe", "reglas", "equipo", "resumen"):
             campos_con_nombre(client.get(f"/panel/asistente/configura?paso={paso}").text)
         # Lo del negocio ya no se llena aquí (Perfil de empresa); lo de antes en Configura se sigue usando.
@@ -185,7 +185,7 @@ def test_cliente_se_conecta_configura_y_enciende(monkeypatch, tmp_path):
         r = client.get("/panel/asistente/configura?paso=resumen")
         assert "Elegante y premium" in r.text and "Pregunta antes de recomendar" in r.text
         assert 'href="/panel/asistente/configura?paso=reglas">Editar' in r.text and "Encender tu asistente" in r.text
-        assert "3 de 5 listos" in r.text
+        assert "3 de 4 listos" in r.text
         # La principal ve su formulario de siempre; aquí el de antes ya no guarda.
         assert client.post("/panel/guardar", headers=ORIGEN, data={"accion": "guardar"},
                            follow_redirects=False).headers["location"] == "/panel/asistente/configura"
