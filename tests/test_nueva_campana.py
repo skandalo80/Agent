@@ -273,3 +273,26 @@ def test_con_brief_la_imagen_es_el_prompt_de_claude(cliente, monkeypatch):
     prompt = proveedor.llamadas[-1][0]
     assert prompt.startswith(foto["prompt"]) and "Photo style" not in prompt and "Brand context" not in prompt
     assert prompt.count("Do not include any text") == 1
+
+
+def test_el_brief_se_guarda_y_se_descarga(cliente, monkeypatch):
+    client, c, *_ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 4)
+    import app as bot
+    monkeypatch.setattr(bot.agent, "run_claude", claude_de_campana([]))
+    listo(client, c)
+    client.portal.call(c.store.set, "productos", json.dumps([PRODUCTO]))
+    llenar(client)
+    generar(client, concepto="2", b2_insight="Nadie explica de dónde viene su café")
+    camp = leer(client, c)
+    u = campanas.url_de(camp)
+    r = client.get(u)
+    assert "Brief: Idea 3" in r.text and "Nadie explica de dónde viene su café" in r.text
+    assert f'href="{u}/brief">↓ Descargar brief' in r.text
+    r = client.get(f"{u}/brief")
+    assert r.headers["content-type"] == "application/pdf" and r.content.startswith(b"%PDF")
+    assert 'filename="brief-oto' in r.headers["content-disposition"]
+    assert f'href="{u}/brief">Brief</a>' in client.get(BASE).text  # también desde la lista
+    # En el historial (campañas viejas) el brief se queda.
+    from igbot import informe
+    assert informe.resumen_de(camp)["brief"]["titulo"] == "Idea 3"
