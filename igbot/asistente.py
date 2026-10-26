@@ -468,9 +468,9 @@ ESTILO = """
 .as-paso small{display:block;font-size:.78rem;color:var(--gris);line-height:1.35}
 .as-n{width:1.8rem;height:1.8rem;flex:none;border-radius:50%;border:1px solid #cfc4d3;display:grid;place-items:center;font-size:.8rem;color:var(--gris)}
 .as-paso.ok .as-n{background:#e5f6dd;border-color:#9fd28a;color:#2f7a3a}
-.as-paso.on .as-n{background:var(--neon);border-color:var(--neon-sombra);color:var(--ciruela)}
+.as-paso.on .as-n{background:var(--naranja);border-color:var(--naranja-sombra);color:var(--ciruela)}
 .as-barra{height:.3rem;background:#ece5ef;border-radius:9px;margin:1rem 0 .5rem}
-.as-barra i{display:block;height:100%;background:var(--neon);border-radius:9px}
+.as-barra i{display:block;height:100%;background:var(--naranja);border-radius:9px}
 .as-nota{display:block;color:var(--gris);font-size:.8rem;line-height:1.5}
 .as-num{color:var(--oro-texto);font-size:.75rem;letter-spacing:.12em;text-transform:uppercase;font-weight:800;margin:0}
 .as-h{font-size:1.9rem;letter-spacing:-.04em;font-weight:800;margin:.3rem 0 .25rem}
@@ -493,7 +493,7 @@ fieldset.as-caja legend{float:left;width:100%;padding:0;font-weight:600;font-siz
 .as-pers:has(input:focus-visible){outline:2px solid var(--acento-claro);outline-offset:2px}
 .as-img{position:relative;display:block;aspect-ratio:3/2;background:#faf7fb}
 .as-img img,.as-arte{display:block;width:100%;height:100%;object-fit:cover}
-.as-ck{position:absolute;top:.7rem;right:.7rem;width:1.6rem;height:1.6rem;border-radius:50%;background:var(--neon);color:var(--ciruela);box-shadow:0 3px 0 var(--neon-sombra);font-weight:800;font-size:.85rem;display:none;place-items:center}
+.as-ck{position:absolute;top:.7rem;right:.7rem;width:1.6rem;height:1.6rem;border-radius:50%;background:var(--naranja);color:var(--ciruela);box-shadow:0 3px 0 var(--naranja-sombra);font-weight:800;font-size:.85rem;display:none;place-items:center}
 .as-pers:has(input:checked) .as-ck{display:grid}
 .as-in{display:block;padding:1rem 1.1rem 1.15rem}
 .as-nom{display:block;font-size:1.05rem;margin-bottom:.5rem}
@@ -522,7 +522,7 @@ form:has(#emojis-nunca:checked) .v-emoji{display:none}form:has(#emojis-seguido:c
 .as-fila small{display:block;font-size:.85rem;color:var(--gris)}
 .as-sw{-webkit-appearance:none;appearance:none;flex:none;width:2.9rem;height:1.75rem;border-radius:999px;background:#ddd3e2;box-shadow:inset 2px 2px 4px #c9bccf;position:relative;cursor:pointer;margin:0;transition:background .15s}
 .as-sw::after{content:"";position:absolute;left:.2rem;top:.2rem;width:1.35rem;height:1.35rem;border-radius:50%;background:var(--blanco);box-shadow:0 2px 4px rgba(54,32,62,.2);transition:left .15s}
-.as-sw:checked{background:var(--morado);box-shadow:none}.as-sw:checked::after{left:1.35rem;background:var(--neon)}
+.as-sw:checked{background:var(--morado);box-shadow:none}.as-sw:checked::after{left:1.35rem}
 .as-sw:disabled{background:#9fd28a;cursor:default}
 .as-sw:focus-visible{outline:2px solid var(--acento-claro);outline-offset:2px}
 .as-mas{margin-top:1.25rem;border-top:1px solid var(--linea-clara);padding-top:1rem}

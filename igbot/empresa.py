@@ -494,12 +494,12 @@ main.emp{color:var(--negro);padding-bottom:4rem}
 .paso .n{flex:none;width:1.9rem;height:1.9rem;border-radius:50%;border:1px solid #cfc4d3;display:grid;place-items:center;font-size:.8rem;font-weight:600}
 .paso b{display:block;font-weight:500;font-size:.98rem;line-height:1.25}
 .paso small{display:block;font-size:.78rem;color:var(--gris);line-height:1.3}
-.paso.on{background:var(--hundido);box-shadow:var(--sombra-hundida);color:var(--morado)}.paso.on .n{background:var(--neon);border-color:var(--neon-sombra);color:var(--ciruela)}
+.paso.on{background:var(--hundido);box-shadow:var(--sombra-hundida);color:var(--morado)}.paso.on .n{background:var(--naranja);border-color:var(--naranja-sombra);color:var(--ciruela)}
 .paso.ok .n{background:#ece5ef;border-color:#ece5ef;color:#2f7a3a}
 .riel .avance{border-top:1px solid #ece5ef;margin-top:1rem;padding:1rem .5rem 0;font-size:.8rem;color:var(--gris)}
 .riel .avance span{float:right}
 .barra-av{height:4px;background:#ece5ef;border-radius:9px;margin:.5rem 0 .8rem;overflow:hidden}
-.barra-av i{display:block;height:100%;background:var(--neon);border-radius:9px}
+.barra-av i{display:block;height:100%;background:var(--naranja);border-radius:9px}
 .cab-paso .antetitulo{margin-bottom:.4rem}
 .cab-paso h2{font-size:2rem;letter-spacing:-.04em;margin:0 0 .4rem;line-height:1.15}
 .cab-paso p{color:#716a75;margin:0 0 1.5rem;max-width:44rem}
