@@ -32,7 +32,7 @@ def llenar(client, objetivo="interaccion"):
     paso(client, 3, enfoques=["consejos", "historias"])
     paso(client, 4, formatos=["texto", "titular"])
     paso(client, 5, visual=["productos"])
-    paso(client, 6, apariencia="natural", texto_img="minimo", variedad="coherencia", armado="plantilla")
+    paso(client, 6, texto_img="minimo", variedad="coherencia", armado="plantilla")
     return paso(client, 7, nombre="Otoño", inicio=LUNES.isoformat(), semanas="1", n_posts="6",
                 dias=["0", "2", "4"], horarios=["manana"])
 
@@ -70,6 +70,8 @@ def test_el_asistente_de_punta_a_punta(cliente, monkeypatch):
     r = client.get(f"{URL}?paso=2")
     assert "Latte de calabaza · $75 MXN" in r.text and 'name="accion" value="promo" checked' in r.text
     assert 'name="con_producto" value="1" checked' in r.text and 'name="con_texto" value="1">' in r.text
+    assert r.text.index('name="con_texto"') < r.text.index('name="con_producto"')  # primero tus palabras
+    assert "Cómo lo usamos" not in client.get(f"{URL}?paso=1").text + client.get(f"{URL}?paso=3").text
     # Sin el check, el producto y tu texto no cuentan aunque vengan llenos.
     paso(client, 2, ir=1, mensajes=["producto"], producto="p1", texto="Otoño")
     b = json.loads(client.portal.call(c.store.get, "campana_borrador"))
@@ -410,7 +412,7 @@ def test_la_variedad_llega_al_brief_al_plan_y_a_los_posts(cliente, monkeypatch):
     client.portal.call(c.store.set, "productos", json.dumps([PRODUCTO]))
     r = llenar(client)
     paso_6 = client.get(f"{URL}?paso=6").text
-    assert paso_6.index("Variedad visual") < paso_6.index("Apariencia de las fotos")
+    assert "Variedad visual" in paso_6 and "Apariencia de las fotos" not in paso_6
     assert all(t in paso_6 for t in ("Consistente", "Equilibrado", "Diverso", "Creativo"))
     assert "tarjetas/campana/variedad-diverso.webp" in paso_6 and "tarjetas/campana/texto-info.webp" in paso_6
     assert "Sin texto" in paso_6 and "Una frase principal que destaque el mensaje." in paso_6
