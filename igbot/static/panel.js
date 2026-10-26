@@ -293,3 +293,8 @@ document.querySelectorAll("form[data-marca]").forEach((form) => {
     if (antes) antes.value = t.value;
   });
 });
+
+// Calendario: los filtros se aplican al cambiarlos (sin JS, con el botón Filtrar).
+document.querySelectorAll(".cal-filtros select").forEach((s) => {
+  s.addEventListener("change", () => s.form.submit());
+});
