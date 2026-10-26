@@ -226,6 +226,18 @@ class Instagram:
             log.exception("Publicado (%s), pero no se pudo obtener el link", media["id"])
             return ""
 
+    async def publish_story(self, image_url: str) -> str:
+        """Publica una historia (una foto 9:16) y devuelve su link, si Instagram lo da. Mismo permiso que los
+        posts; las historias no llevan texto publicado (caption) y duran 24 horas."""
+        container = await self._graph("POST", "me/media", image_url=image_url, media_type="STORIES")
+        await self._wait_ready(container["id"])
+        media = await self._graph("POST", "me/media_publish", creation_id=container["id"])
+        try:
+            return await self.permalink(media["id"])
+        except Exception:
+            log.warning("Historia publicada (%s), sin link", media["id"])
+            return ""
+
     async def _wait_ready(self, container_id: str, tries: int = 20, every: float = 3) -> None:
         for _ in range(tries):
             status = (await self._graph("GET", container_id, fields="status_code")).get("status_code")

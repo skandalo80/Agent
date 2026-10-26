@@ -179,7 +179,8 @@ async def conceptos(c: Cuenta, camp: dict, otras: list[dict]) -> list[dict]:
     semanas = int(camp.get("semanas") or 1)
     prompt = (f"<empresa>\n{await empresa.texto_para_prompt(c)}\n</empresa>\n\n"
               f"<marca_visual>\n{visual_marca(await marca_de(c))}\n</marca_visual>\n\n"
-              f"<campaña>{escape(camp.get('nombre', ''))}: {camp.get('n_posts') or ''} posts en {semanas}"
+              f"<campaña>{escape(camp.get('nombre', ''))}: {camp.get('n_posts') or ''} posts"
+              + (f" y {camp['n_historias']} historias" if camp.get("n_historias") else "") + f" en {semanas}"
               f" semana{'s' if semanas > 1 else ''}</campaña>\n"
               + (f"<tema>{escape(camp['tema'])}</tema>\n" if camp.get("tema") else "")
               + campanas.parametros(camp) + "\n" + variedad_tag(camp)

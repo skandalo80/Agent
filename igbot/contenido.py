@@ -439,7 +439,8 @@ async def generar(c: Cuenta, objetivo: str = "", tema: str = "", fotos: list[str
             if referencias:
                 idea += f"\n{ESTILO_REFERENCIA}"
         hecha = await imagenes.crear_pieza(c.store, PANEL, idea, p["plantilla"], texto_imagen(p, await panel.usuario(c)),
-                                           referencias, permitir_extra=extra, marca=kit(marca))
+                                           referencias, permitir_extra=extra, marca=kit(marca),
+                                           historia=p.get("medio") == "historia")
         if post_id is None:
             post_id = await c.store.add_post(PANEL, [hecha["media_id"]], caption, sugerida())
         else:
@@ -663,7 +664,8 @@ async def de_campana(c: Cuenta, p: dict, post_id: int) -> list[str]:
         return []
     for camp in await campanas.todas_las(c):
         if x := next((x for x in camp.get("posts", []) if x.get("post_id") == post_id), None):
-            return [campanas.tema_de(x["tipo"])[0], campanas.FORMATOS[campanas.formato_de(x)][0]]
+            return [campanas.MEDIOS[campanas.medio_de(x)][0], campanas.tema_de(x["tipo"])[0],
+                    campanas.FORMATOS[campanas.formato_de(x)][0]]
     return []
 
 

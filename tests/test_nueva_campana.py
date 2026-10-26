@@ -434,3 +434,96 @@ def test_la_variedad_llega_al_brief_al_plan_y_a_los_posts(cliente, monkeypatch):
     assert fotos and all(p.get("escena") for p in fotos)
     assert all(not p.get("escena") for p in camp["posts"] if p["formato"] == "texto")
     assert any("| escena: " in p for p in prompts)
+
+
+def test_historias_de_punta_a_punta(cliente, monkeypatch):
+    """Número de historias en Cantidad y fechas: Claude las escribe sin caption, salen en 9:16, se distinguen en
+    el calendario y se publican como historia."""
+    from pathlib import Path
+
+    from igbot import admin
+
+    client, c, *_ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 20)
+    import app as bot
+    base = claude_de_campana([])
+
+    async def con_medio(prompt, system, **kw):
+        respuesta = await base(prompt, system, **kw)
+        if "<posts>" in prompt and '"posts"' in respuesta:  # cada post dice su medio, como pide el sistema
+            datos = json.loads(respuesta)
+            lineas = [x for x in prompt.split("<posts>")[-1].splitlines() if x.startswith("- ")]
+            for x, linea in zip(datos["posts"], lineas):
+                x["medio"] = "historia" if "medio: historia" in linea else "post"
+            respuesta = json.dumps(datos)
+        return respuesta
+
+    monkeypatch.setattr(bot.agent, "run_claude", con_medio)
+    listo(client, c)
+    client.portal.call(c.store.set, "productos", json.dumps([PRODUCTO]))
+    llenar(client)
+    r = client.get(f"{URL}?paso=7")
+    assert 'name="n_historias"' in r.text and "Número de historias" in r.text
+    r = paso(client, 7, nombre="Otoño", inicio=LUNES.isoformat(), semanas="1", n_posts="6", n_historias="10",
+             dias=["0", "2", "4"], horarios=["manana"])
+    assert "caben hasta 9 historias" in r.text  # tres por día
+    paso(client, 7, nombre="Otoño", inicio=LUNES.isoformat(), semanas="1", n_posts="6", n_historias="3",
+         dias=["0", "2", "4"], horarios=["manana"])
+    assert "6 posts y 3 historias" in client.get(f"{URL}?paso=8").text
+    generar(client)
+
+    camp = leer(client, c)
+    historias = [p for p in camp["posts"] if campanas.es_historia(p)]
+    assert camp["n_historias"] == 3 and len(historias) == 3 and len(camp["posts"]) == 9
+    assert all(p["caption"] == "" and not p.get("regla") for p in historias)  # sin texto publicado ni regla
+    assert all(p.get("regla") for p in camp["posts"] if not campanas.es_historia(p))  # busca interacción
+    u = campanas.url_de(camp)
+    r = client.get(u)
+    assert r.text.count('class="medio-cam m-historia">Historia</span>') == 3 and "6 posts y 3 historias" in r.text
+
+    # La ventana de una historia: sin el texto que se publica ni la regla de comentarios.
+    h = next(p for p in historias if p["formato"] == "titular") if any(
+        p["formato"] == "titular" for p in historias) else historias[0]
+    r = client.get(f"{u}?post={h['k']}")
+    assert "Es una historia" in r.text and "Texto que se publica" not in r.text and 'name="regla_activa"' not in r.text
+
+    # Su imagen sale en 9:16 y el post queda como historia.
+    client.post(u, headers=ORIGEN, data={"accion": "generar", "k": str(h["k"])})
+    post_id = campanas.buscar_post(leer(client, c), h["k"])["post_id"]
+    post = client.portal.call(c.store.post, post_id)
+    assert post["tipo"] == "historia" and post["caption"] == ""
+    token = client.portal.call(c.store.media, post["media_ids"][0])[0]
+    assert Image.open(Path(c.media_dir) / f"{token}.jpg").size == (1080, 1920)
+
+    # En Contenido › Calendario dice que es historia, con su miniatura.
+    r = client.get(f"/panel/contenido?vista=semana&fecha={LUNES.isoformat()}")
+    assert '<span class="m-historia">Historia</span>' in r.text and f'href="/panel/contenido/post/{post_id}"' in r.text
+
+    # Al publicarse va como historia (media_type=STORIES), no como post.
+    class IG:
+        def __init__(self):
+            self.historias, self.posts = [], []
+
+        async def publish_story(self, url):
+            self.historias.append(url)
+            return ""
+
+        async def publish(self, urls, caption):
+            self.posts.append(urls)
+            return "https://www.instagram.com/p/X/"
+
+    ig = IG()
+
+    async def publicar():
+        from igbot.cuenta import usar
+        with usar(c):
+            return await admin.publish_post(c.store, ig, await c.store.post(post_id))
+
+    monkeypatch.setattr(admin, "save_photo", lambda *a: _nada())
+    assert client.portal.call(publicar) == ("", "")
+    assert len(ig.historias) == 1 and ig.posts == []
+    assert client.portal.call(c.store.post, post_id)["status"] == "publicada"
+
+
+async def _nada():
+    return None

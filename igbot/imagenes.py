@@ -32,6 +32,9 @@ log = logging.getLogger("igbot.imagenes")
 
 FONTS = Path(__file__).resolve().parent.parent / "fonts"
 ANCHO, ALTO = 1080, 1350  # 4:5, lo más alto que acepta el feed de Instagram
+ALTO_HISTORIA = 1920  # 9:16, la pantalla completa de una historia
+# En una historia Instagram tapa abajo la caja de responder: el texto termina antes.
+ABAJO_HISTORIA = 340
 MARGEN = 84
 ACENTO = "#C2410C"
 
@@ -162,9 +165,16 @@ PLANTILLA_INICIAL = "editorial"
 
 # OpenAI entrega 2:3 (1024x1536) y aquí se recorta a 4:5: se pierde un poco arriba y abajo.
 RECORTE = "It will be cropped to 4:5, so keep every important element away from the top and bottom edges."
+# Para una historia se recorta a 9:16: se pierde un poco a los lados.
+RECORTE_HISTORIA = ("It is a full-screen Instagram story and will be cropped to 9:16, so keep every important element"
+                    " away from the left and right edges, and keep the top 15% and bottom 20% calm.")
+ESPACIO_HISTORIA = "Leave the lower third calm and uncluttered for a short headline."
 
 
-def prompt_final(idea: str, plantilla: str) -> str:
+def prompt_final(idea: str, plantilla: str, historia: bool = False) -> str:
+    if historia:
+        return (f"{idea.strip()}\n\nVertical full-screen Instagram story image. {RECORTE_HISTORIA} {ESPACIO_HISTORIA} "
+                "Do not include any text, letters, numbers, logos or watermarks.")
     return (f"{idea.strip()}\n\nVertical Instagram image. {RECORTE} {ESPACIO[plantilla]} "
             "Do not include any text, letters, numbers, logos or watermarks.")
 
@@ -174,7 +184,7 @@ def prompt_final(idea: str, plantilla: str) -> str:
 LIBRE = "libre"
 
 
-def prompt_libre(idea: str, texto: "Texto", marca: "Marca | None" = None) -> str:
+def prompt_libre(idea: str, texto: "Texto", marca: "Marca | None" = None, historia: bool = False) -> str:
     m = marca or Marca()
     lineas = [f'- Headline (largest): "{texto.titulo}"']
     if texto.subtitulo:
@@ -183,9 +193,12 @@ def prompt_libre(idea: str, texto: "Texto", marca: "Marca | None" = None) -> str
         lineas.append(f'- Price or detail, in the accent color: "{texto.precio}"')
     if texto.firma:
         lineas.append(f'- Small signature at the bottom: "{texto.firma}"')
+    que = "full-screen Instagram story" if historia else "vertical Instagram post"
+    recorte = (f"{RECORTE_HISTORIA} Keep all text inside the central area." if historia
+               else f"{RECORTE} Keep all text inside the central 4:5 area.")
     return (
-        "Design a finished, professional vertical Instagram post (a graphic design, not just a photo).\n"
-        f"{RECORTE} Keep all text inside the central 4:5 area.\n\n"
+        f"Design a finished, professional {que} (a graphic design, not just a photo).\n"
+        f"{recorte}\n\n"
         f"Visual: {idea.strip()}\n\n"
         "Write exactly this text in the design, in Spanish, spelled exactly as given (keep every accent and"
         " punctuation mark), and no other words:\n" + "\n".join(lineas) + "\n\n"
@@ -280,10 +293,11 @@ def _cubrir(img: Image.Image, ancho: int, alto: int) -> Image.Image:
 
 def _degradado(img: Image.Image, desde: float, opacidad: int) -> None:
     """Oscurece la parte de abajo (de `desde` a 1) para que el texto blanco se lea."""
-    capa = Image.new("L", (1, ALTO))
-    inicio = int(ALTO * desde)
-    for y in range(ALTO):
-        capa.putpixel((0, y), 0 if y < inicio else int(opacidad * ((y - inicio) / (ALTO - inicio)) ** 0.8))
+    alto = img.size[1]
+    capa = Image.new("L", (1, alto))
+    inicio = int(alto * desde)
+    for y in range(alto):
+        capa.putpixel((0, y), 0 if y < inicio else int(opacidad * ((y - inicio) / (alto - inicio)) ** 0.8))
     negro = Image.new("RGB", img.size, (0, 0, 0))
     img.paste(negro, (0, 0), capa.resize(img.size))
 
@@ -331,12 +345,20 @@ def _claro(color: tuple[int, int, int]) -> bool:
     return 0.299 * r + 0.587 * g + 0.114 * b > 150
 
 
+def es_historia(img: Image.Image) -> bool:
+    """Una imagen de historia (9:16): mucho más alta que ancha."""
+    return img.size[1] > img.size[0] * 1.6
+
+
 def rotular(imagen: bytes, plantilla: str, texto: Texto, marca: Marca | None = None) -> bytes:
-    """La pieza final en JPG 1080x1350: la imagen con el texto de la plantilla."""
+    """La pieza final en JPG 1080x1350: la imagen con el texto de la plantilla. Si la imagen es de historia
+    (9:16), sale en 1080x1920 con el texto abajo, fuera de lo que tapa Instagram (rotular_historia)."""
     if plantilla not in PLANTILLAS:
         raise ValueError(f"Plantilla desconocida: {plantilla}")
     m = marca or Marca()
     base = ImageOps.exif_transpose(Image.open(io.BytesIO(imagen)))
+    if es_historia(base):
+        return rotular_historia(base, texto, m)
     principal, acento, fondo = _rgb(m.principal), _rgb(m.acento), _rgb(m.fondo)
     ancho_texto = ANCHO - 2 * MARGEN
 
@@ -383,6 +405,24 @@ def rotular(imagen: bytes, plantilla: str, texto: Texto, marca: Marca | None = N
                 color, tam_titulo=72)
         _firma(d, texto, m, secundario, y=ALTO - 48)
 
+    out = io.BytesIO()
+    img.save(out, "JPEG", quality=90, optimize=True)
+    return out.getvalue()
+
+
+def rotular_historia(base: Image.Image, texto: Texto, m: Marca) -> bytes:
+    """Historia 1080x1920: la foto a pantalla completa, un degradado abajo y el título encima de la zona de
+    responder (la misma para todas las plantillas: en una historia solo cabe una manera de leerla)."""
+    img = _cubrir(base, ANCHO, ALTO_HISTORIA)
+    ancho_texto = ANCHO - 2 * MARGEN
+    y = ALTO_HISTORIA - ABAJO_HISTORIA - 40 - _alto_textos(ancho_texto, texto, m)
+    _degradado(img, min(0.6, max(0.3, (y - 260) / ALTO_HISTORIA)), 225)
+    d = ImageDraw.Draw(img)
+    acento = _rgb(m.acento)
+    claro = 0.299 * acento[0] + 0.587 * acento[1] + 0.114 * acento[2] > 90
+    _textos(d, MARGEN, y, ancho_texto, texto, m, (255, 255, 255), (225, 225, 228), acento,
+            color_precio=acento if claro else None)
+    _firma(d, texto, m, (200, 200, 205), y=ALTO_HISTORIA - ABAJO_HISTORIA + 30)
     out = io.BytesIO()
     img.save(out, "JPEG", quality=90, optimize=True)
     return out.getvalue()
@@ -437,25 +477,27 @@ def _archivos(token: str) -> tuple[Path, Path]:
     return carpeta / f"{token}.jpg", carpeta / f"{token}.base.jpg"
 
 
-def _jpg(data: bytes) -> bytes:
+def _jpg(data: bytes, historia: bool = False) -> bytes:
     out = io.BytesIO()
-    _cubrir(Image.open(io.BytesIO(data)), ANCHO, ALTO).save(out, "JPEG", quality=92)
+    _cubrir(Image.open(io.BytesIO(data)), ANCHO, ALTO_HISTORIA if historia else ALTO).save(out, "JPEG", quality=92)
     return out.getvalue()
 
 
 async def crear_pieza(store: Store, user_id: str, idea: str, plantilla: str, texto: Texto,
-                      fotos: list[bytes] = (), permitir_extra: bool = False, marca: Marca | None = None) -> dict:
-    """Genera la imagen, la rotula y la deja en la tabla media (lista para publicar)."""
+                      fotos: list[bytes] = (), permitir_extra: bool = False, marca: Marca | None = None,
+                      historia: bool = False) -> dict:
+    """Genera la imagen, la rotula y la deja en la tabla media (lista para publicar). Con `historia`, en 9:16."""
     if plantilla not in PLANTILLAS and plantilla != LIBRE:
         raise ErrorImagen(f"Plantilla desconocida: {plantilla}")
     tipo = await reservar(store, permitir_extra)
     try:
         # La espera al generador va aparte: mientras tanto, las vistas previas siguen rotulando.
         async with _generando:
-            prompt = prompt_libre(idea, texto, marca) if plantilla == LIBRE else prompt_final(idea, plantilla)
+            prompt = (prompt_libre(idea, texto, marca, historia) if plantilla == LIBRE
+                      else prompt_final(idea, plantilla, historia))
             crudo = await proveedor.generar(prompt, list(fotos))
         async with _turno:
-            base = await asyncio.to_thread(_jpg, crudo)
+            base = await asyncio.to_thread(_jpg, crudo, historia)
             # En diseño libre el texto ya viene en el diseño, y una foto sin título va tal cual: no se rotula.
             final = (base if plantilla == LIBRE or not texto.titulo
                      else await asyncio.to_thread(rotular, base, plantilla, texto, marca))
@@ -481,11 +523,11 @@ async def _guardar(store: Store, user_id: str, final: bytes, base: bytes | None,
 
 
 async def crear_subida(store: Store, user_id: str, data: bytes, plantilla: str, texto: Texto,
-                       marca: Marca | None = None) -> dict:
-    """Una foto que subió el dueño para su post: se recorta a 4:5 y, si lleva título, se rotula como las
-    generadas. No usa el cupo de imágenes."""
+                       marca: Marca | None = None, historia: bool = False) -> dict:
+    """Una foto que subió el dueño para su post: se recorta a 4:5 (9:16 si es historia) y, si lleva título, se
+    rotula como las generadas. No usa el cupo de imágenes."""
     async with _turno:
-        base = await asyncio.to_thread(_jpg, data)
+        base = await asyncio.to_thread(_jpg, data, historia)
         final = (base if plantilla == LIBRE or not texto.titulo or plantilla not in PLANTILLAS
                  else await asyncio.to_thread(rotular, base, plantilla, texto, marca))
     hecha = await _guardar(store, user_id, final, base, "panel:subida")
@@ -493,11 +535,16 @@ async def crear_subida(store: Store, user_id: str, data: bytes, plantilla: str, 
     return {**hecha, "tipo": "local"}
 
 
-async def crear_local(store: Store, user_id: str, como: str, *args) -> dict:
+async def crear_local(store: Store, user_id: str, como: str, *args, historia: bool = False) -> dict:
     """Una pieza hecha aquí, sin generador (solo_texto o collage): no usa el cupo de imágenes."""
     hacer = {"texto": solo_texto, "collage": collage}[como]
     async with _turno:
-        final = await asyncio.to_thread(hacer, *args)
+        if historia and como == "collage":
+            final = await asyncio.to_thread(collage, *args, alto=ALTO_HISTORIA)
+        else:
+            final = await asyncio.to_thread(hacer, *args)
+            if historia:  # el solo texto, centrado sobre su mismo fondo
+                final = await asyncio.to_thread(a_historia, final)
     hecha = await _guardar(store, user_id, final, None, f"panel:{como}")
     log.info("Pieza %s (%s, sin cupo) para %s", hecha["media_id"], como, user_id)
     return {**hecha, "tipo": "local"}
@@ -528,22 +575,33 @@ def solo_texto(texto: Texto, marca: Marca | None = None, etiqueta: str = "") -> 
     return out.getvalue()
 
 
-def collage(fotos: list[bytes]) -> bytes:
+def a_historia(pieza: bytes) -> bytes:
+    """Un solo texto de 4:5 en 9:16: centrado sobre su mismo fondo (el color de la esquina)."""
+    img = Image.open(io.BytesIO(pieza)).convert("RGB")
+    fondo = img.getpixel((2, 2))
+    lienzo = Image.new("RGB", (ANCHO, ALTO_HISTORIA), fondo)
+    lienzo.paste(img, (0, (ALTO_HISTORIA - img.size[1]) // 2))
+    out = io.BytesIO()
+    lienzo.save(out, "JPEG", quality=90, optimize=True)
+    return out.getvalue()
+
+
+def collage(fotos: list[bytes], alto: int = ALTO) -> bytes:
     """De 2 a 4 fotos en una cuadrícula con separación blanca: 2 una sobre otra, 3 una grande arriba y dos
-    abajo, 4 en cuadrícula de 2x2."""
+    abajo, 4 en cuadrícula de 2x2. `alto`: ALTO_HISTORIA para una historia."""
     if not 2 <= len(fotos) <= 4:
         raise ErrorImagen("El collage necesita de 2 a 4 fotos.")
     imgs = [ImageOps.exif_transpose(Image.open(io.BytesIO(f))) for f in fotos]
-    hueco, mitad_x, mitad_y = 10, (ANCHO - 10) // 2, (ALTO - 10) // 2
+    hueco, mitad_x, mitad_y = 10, (ANCHO - 10) // 2, (alto - 10) // 2
     if len(imgs) == 2:
-        cajas = [(0, 0, ANCHO, mitad_y), (0, mitad_y + hueco, ANCHO, ALTO - mitad_y - hueco)]
+        cajas = [(0, 0, ANCHO, mitad_y), (0, mitad_y + hueco, ANCHO, alto - mitad_y - hueco)]
     elif len(imgs) == 3:
-        cajas = [(0, 0, ANCHO, mitad_y), (0, mitad_y + hueco, mitad_x, ALTO - mitad_y - hueco),
-                 (mitad_x + hueco, mitad_y + hueco, ANCHO - mitad_x - hueco, ALTO - mitad_y - hueco)]
+        cajas = [(0, 0, ANCHO, mitad_y), (0, mitad_y + hueco, mitad_x, alto - mitad_y - hueco),
+                 (mitad_x + hueco, mitad_y + hueco, ANCHO - mitad_x - hueco, alto - mitad_y - hueco)]
     else:
-        cajas = [(x, y, w, h) for y, h in ((0, mitad_y), (mitad_y + hueco, ALTO - mitad_y - hueco))
+        cajas = [(x, y, w, h) for y, h in ((0, mitad_y), (mitad_y + hueco, alto - mitad_y - hueco))
                  for x, w in ((0, mitad_x), (mitad_x + hueco, ANCHO - mitad_x - hueco))]
-    img = Image.new("RGB", (ANCHO, ALTO), (255, 255, 255))
+    img = Image.new("RGB", (ANCHO, alto), (255, 255, 255))
     for foto, (x, y, w, h) in zip(imgs, cajas):
         img.paste(_cubrir(foto, w, h), (x, y))
     out = io.BytesIO()

@@ -166,6 +166,7 @@ ARMADO = {"plantilla": "Con tu plantilla", "libre": "Diseño libre"}
 HORARIOS = {**{k: f"{v[0]} · {v[1]}" for k, v in campanas.HORARIOS.items()}, "ia": "Que la IA decida"}
 DIAS = ("Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom")
 MAX_POSTS = 30
+MAX_HISTORIAS = 30
 
 
 # --- el borrador ---
@@ -177,7 +178,7 @@ def inicial(marca: dict) -> dict:
             "mezcla": campanas.MEZCLA_INICIAL, "formatos": ["foto", "titular"],
             "visual": ["productos", "personas", "propias"], "textos_img": ["titular"],
             "variedad": "coherencia", "armado": modo_de(marca), "nombre": "", "inicio": lunes.isoformat(),
-            "semanas": 2, "n_posts": 8, "dias": [0, 1, 2, 3, 4], "horarios": ["manana", "noche"], "hechos": []}
+            "semanas": 2, "n_posts": 8, "n_historias": 0, "dias": [0, 1, 2, 3, 4], "horarios": ["manana", "noche"], "hechos": []}
 
 
 async def leer(c: Cuenta) -> dict:
@@ -193,7 +194,8 @@ def de_campana(camp: dict) -> dict:
     """Para "Editar estrategia": el borrador con lo que eligió para esa campaña (si se armó con el asistente)."""
     b = dict(camp.get("asistente") or {})
     b.update(nombre=camp.get("nombre", ""), inicio=camp["inicio"], semanas=camp.get("semanas", 2),
-             n_posts=camp.get("n_posts") or len(camp.get("posts", [])) or 8, cid=camp["id"],
+             n_posts=camp.get("n_posts") or len(camp.get("posts", [])) or 8,
+             n_historias=camp.get("n_historias") or 0, cid=camp["id"],
              hechos=list(range(1, RESUMEN)))
     if camp.get("brief") and not b.get("brief"):  # campañas armadas antes de guardar las tres ideas
         b["brief"] = {"conceptos": [camp["brief"]], "elegido": 0}
@@ -283,7 +285,8 @@ async def a_campana(c: Cuenta, b: dict) -> dict:
     inicio = date.fromisoformat(b["inicio"])
     return {"nombre": b["nombre"].strip() or f"{obj['titulo']} · {campanas.fecha_larga(b['inicio'])}"[:campanas.MAX_NOMBRE],
             "inicio": inicio.isoformat(), "semanas": b["semanas"], "publicar": "lun-sab",
-            "dias_semana": sorted(b["dias"]), "n_posts": b["n_posts"], "tema": b["texto"],
+            "dias_semana": sorted(b["dias"]), "n_posts": b["n_posts"], "n_historias": b.get("n_historias", 0),
+            "tema": b["texto"],
             "modo": "explorar", "mezcla": b["mezcla"], "temas": temas, "formatos": formatos, "horarios": horarios,
             "clientes": False,  # Ideas sugeridas (lo que preguntan, repetir lo que funcionó) está fuera por ahora
             "objetivo": f"{obj['titulo']}: {obj.get('descripcion', '')}".strip(": "),
@@ -356,6 +359,8 @@ def del_form(f, paso: int, b: dict, objetivos: list[dict], mensajes: list[dict],
         b["horarios"] = _lista(f, "horarios", HORARIOS)
         n = int(g("n_posts")) if g("n_posts").isdigit() else 0
         b["n_posts"] = max(1, min(n, MAX_POSTS)) if n else b["n_posts"]
+        h = g("n_historias")
+        b["n_historias"] = min(int(h), MAX_HISTORIAS) if h.isdigit() else 0
         if not b["dias"]:
             return "Elige al menos un día para publicar."
         if not b["horarios"]:
@@ -364,6 +369,9 @@ def del_form(f, paso: int, b: dict, objetivos: list[dict], mensajes: list[dict],
         if b["n_posts"] > dias * campanas.MAX_POSTS_DIA:
             return (f"En {b['semanas']} semana{'s' if b['semanas'] > 1 else ''} con esos días caben hasta"
                     f" {dias * campanas.MAX_POSTS_DIA} posts (dos por día). Agrega días o semanas, o pide menos.")
+        if b["n_historias"] > dias * campanas.MAX_HISTORIAS_DIA:
+            return (f"En {b['semanas']} semana{'s' if b['semanas'] > 1 else ''} con esos días caben hasta"
+                    f" {dias * campanas.MAX_HISTORIAS_DIA} historias (tres por día). Agrega días o semanas, o pide menos.")
         return ""
     return ""
 
@@ -545,16 +553,20 @@ def paso_7(b: dict) -> str:
                       "</option>" for n in campanas.SEMANAS)
     return (cab(7, "¿Cuánto y cuándo?", "Puedes empezar con pocos posts y estirar la campaña después desde el"
                 " calendario.")
-            + '<div class="wiz-campos">'
+            + '<div class="wiz-campos cinco">'
             f'<div><label for="w-nombre">Nombre de la campaña</label><input type="text" id="w-nombre" name="nombre"'
             f' maxlength="{campanas.MAX_NOMBRE}" value="{escape(b["nombre"])}" placeholder="Ej. Otoño en tu negocio"></div>'
             f'<div><label for="w-inicio">Empieza</label><input type="date" id="w-inicio" name="inicio"'
             f' value="{b["inicio"]}"></div>'
             f'<div><label for="w-semanas">Duración</label><select id="w-semanas" name="semanas">{semanas}</select></div>'
             f'<div><label for="w-n">Número de posts</label><input type="number" id="w-n" name="n_posts" min="1"'
-            f' max="{MAX_POSTS}" value="{b["n_posts"]}"></div></div>'
-            '<h3 class="wiz-sub">Días en que publicas</h3><p class="ayuda">Los posts se reparten en estos días. Si son'
-            ' más posts que días, algunos días llevan dos.</p><div class="wiz-chips">'
+            f' max="{MAX_POSTS}" value="{b["n_posts"]}"></div>'
+            f'<div><label for="w-h">Número de historias</label><input type="number" id="w-h" name="n_historias" min="0"'
+            f' max="{MAX_HISTORIAS}" value="{b.get("n_historias", 0)}"></div></div>'
+            '<p class="ayuda" style="margin-top:.7rem">Las historias son verticales (9:16), se ven 24 horas y no llevan texto publicado: lo'
+            " que se lee va en la imagen. Pon 0 si no quieres historias.</p>"
+            '<h3 class="wiz-sub">Días en que publicas</h3><p class="ayuda">Los posts y las historias se reparten en'
+            ' estos días. Si son más posts que días, algunos días llevan dos.</p><div class="wiz-chips">'
             + "".join(chip("dias", i, d, i in b["dias"], "checkbox") for i, d in enumerate(DIAS)) + "</div>"
             '<h3 class="wiz-sub">Horario</h3><p class="ayuda">Elige uno o varios para comparar.</p><div class="wiz-chips">'
             + "".join(chip("horarios", k, v, k in b["horarios"], "checkbox") for k, v in HORARIOS.items()) + "</div>"
@@ -580,14 +592,16 @@ async def resumen(c: Cuenta, b: dict, objetivos: list[dict], mensajes: list[dict
     formatos = [k for k in b["formatos"] if k in campanas.FORMATOS]
     if "ia" in b["formatos"] or not formatos:
         formatos = [k for k in campanas.FORMATOS if k != "collage"]
-    imagenes_ = round(b["n_posts"] * sum(campanas.FORMATOS[k][1] for k in formatos) / len(formatos))
+    historias = b.get("n_historias", 0)
+    imagenes_ = round((b["n_posts"] + historias) * sum(campanas.FORMATOS[k][1] for k in formatos) / len(formatos))
+    cantidad = f"{b['n_posts']} posts" + (f" y {campanas.cuantos(historias, 'historia')}" if historias else "")
     bloques = [
         ("Objetivo", obj, 1, False), ("Mensaje", msgs + (f" · «{b['texto']}»" if b["texto"] else ""), 2, False),
         ("Producto", producto, 2, True), ("Enfoque del contenido", enfoques, 3, False),
         ("Formatos", " · ".join(FORMATOS[k][0] for k in b["formatos"] if k in FORMATOS)
          + (f" ({', '.join(TEXTO[k][0].lower() for k in textos(b))})" if "titular" in b["formatos"] else ""), 4, False),
         ("Estilo y variedad", VARIEDAD[b["variedad"]][0], 6, False),
-        ("Cantidad y fechas", f"{escape(b['nombre']) or 'Sin nombre'} · {b['n_posts']} posts ·"
+        ("Cantidad y fechas", f"{escape(b['nombre']) or 'Sin nombre'} · {cantidad} ·"
          f" {campanas.de_a(ini, fin)} · {dias} · {horas}", 7, True)]
     tarjetas = "".join(
         f'<div class="wiz-res{" ancho" if ancho else ""}"><h4>{t}</h4><p>{v if t == "Cantidad y fechas" else escape(v)}</p>'
@@ -603,7 +617,7 @@ async def resumen(c: Cuenta, b: dict, objetivos: list[dict], mensajes: list[dict
             + (" Los posts que ya tienen imagen se quedan en su día." if editar else "")
             + '</p><div class="wiz-barra"><i style="width:100%"></i></div></div>'
             f'<div class="wiz-resumen">{tarjetas}</div>{await cruce(c, b)}'
-            f'<div class="wiz-total"><div><b>{b["n_posts"]} posts</b><span>en {b["semanas"]} semana'
+            f'<div class="wiz-total"><div><b>{cantidad}</b><span>en {b["semanas"]} semana'
             f'{"s" if b["semanas"] > 1 else ""}</span></div><div><b>{len(b["formatos"])} formato'
             f'{"s" if len(b["formatos"]) != 1 else ""}</b><span>repartidos parejo</span></div>'
             f'<div><b>~{imagenes_} imágenes</b><span>de tu cupo, solo al generarlas</span></div>'

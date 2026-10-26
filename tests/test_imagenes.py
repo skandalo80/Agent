@@ -206,3 +206,17 @@ def test_errores_de_gemini_con_mensaje_para_el_cliente(monkeypatch, status, cuer
     gemini, _ = gemini_que_responde(monkeypatch, status, cuerpo)
     with pytest.raises(imagenes.ErrorImagen, match=mensaje):
         asyncio.run(gemini.generar("idea"))
+
+
+def test_las_historias_salen_en_9_16():
+    base = imagenes._jpg(foto(900, 1100), historia=True)
+    assert Image.open(io.BytesIO(base)).size == (1080, 1920)
+    # Rotular una base de historia (Generar, el editor o su vista previa) la deja en 9:16, con cualquier plantilla.
+    for plantilla in imagenes.PLANTILLAS:
+        assert Image.open(io.BytesIO(imagenes.rotular(base, plantilla, TEXTO))).size == (1080, 1920)
+    texto = imagenes.a_historia(imagenes.solo_texto(TEXTO, imagenes.Marca(fondo="#112233")))
+    img = Image.open(io.BytesIO(texto))
+    assert img.size == (1080, 1920) and img.getpixel((5, 5)) == img.getpixel((5, 1910))  # el mismo fondo
+    assert Image.open(io.BytesIO(imagenes.collage([foto(), foto()], alto=imagenes.ALTO_HISTORIA))).size == (1080, 1920)
+    assert "9:16" in imagenes.prompt_final("Una taza", "editorial", historia=True)
+    assert "story" in imagenes.prompt_libre("Una taza", TEXTO, historia=True)
