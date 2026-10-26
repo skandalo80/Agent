@@ -147,7 +147,6 @@ VISUAL = {
     "propias": ("Tus propias fotos", "Usamos tus fotos de Tu marca y del producto como referencia.", "#4a2312"),
 }
 TEXTO = {  # clave: (título, descripción, color)
-    "nada": ("Sin texto", "La imagen comunica la idea por sí sola.", "#26262a"),
     "minimo": ("Texto mínimo", "Una frase muy breve o unas pocas palabras.", "#3a2f25"),
     "titular": ("Un titular", "Una frase principal que destaque el mensaje.", "#33302a"),
     "info": ("Más información", "Algunos datos clave, como precio, horario o pasos, fáciles de leer.", "#1f3029"),
@@ -176,7 +175,7 @@ def inicial(marca: dict) -> dict:
     return {"objetivo": "", "mensajes": [], "producto": "", "accion": "conocer", "descuento": "", "desde": "",
             "hasta": "", "condicion": "", "texto": "", "con_producto": False, "con_texto": False, "preguntan": True, "funciona": False,
             "mezcla": campanas.MEZCLA_INICIAL, "formatos": ["foto", "titular"],
-            "visual": ["productos", "personas", "propias"], "texto_img": "minimo",
+            "visual": ["productos", "personas", "propias"], "textos_img": ["titular"],
             "variedad": "coherencia", "armado": modo_de(marca), "nombre": "", "inicio": lunes.isoformat(),
             "semanas": 2, "n_posts": 8, "dias": [0, 1, 2, 3, 4], "horarios": ["manana", "noche"], "hechos": []}
 
@@ -277,7 +276,9 @@ async def a_campana(c: Cuenta, b: dict) -> dict:
                 producto += f" ({b['condicion']})"
         producto += "."
     visual = ", ".join(VISUAL[k][0] for k in b["visual"] if k in VISUAL)
-    estilo = (f"Texto dentro de la imagen: {TEXTO[b['texto_img']][0].lower()}. Variedad visual: {VARIEDAD[b['variedad']][0]}"
+    titular = (f"Texto en las fotos con titular (se alternan): {', '.join(TEXTO[k][0].lower() for k in textos(b))}. "
+               if "titular" in b["formatos"] else "")
+    estilo = (f"{titular}Variedad visual: {VARIEDAD[b['variedad']][0]}"
               f" ({VARIEDAD[b['variedad']][1]})")
     inicio = date.fromisoformat(b["inicio"])
     return {"nombre": b["nombre"].strip() or f"{obj['titulo']} · {campanas.fecha_larga(b['inicio'])}"[:campanas.MAX_NOMBRE],
@@ -337,14 +338,15 @@ def del_form(f, paso: int, b: dict, objetivos: list[dict], mensajes: list[dict],
         return "" if b["enfoques"] else "Elige al menos un enfoque."
     if paso == 4:
         b["formatos"] = _lista(f, "formatos", FORMATOS)
+        b["textos_img"] = _lista(f, "textos_img", TEXTO)
+        if "titular" in b["formatos"] and not b["textos_img"]:
+            return "Elige cuánto texto llevan las fotos con titular."
         return "" if b["formatos"] else "Elige al menos un formato."
     if paso == 5:
         b["visual"] = _lista(f, "visual", VISUAL)
         return "" if b["visual"] else "Elige al menos una cosa que se vea."
     if paso == 6:
-        b["texto_img"] = g("texto_img") if g("texto_img") in TEXTO else b["texto_img"]
         b["variedad"] = g("variedad") if g("variedad") in VARIEDAD else b["variedad"]
-        b["armado"] = g("armado") if g("armado") in ARMADO else b["armado"]
         return ""
     if paso == 7:
         b["nombre"] = g("nombre")[:campanas.MAX_NOMBRE]
@@ -386,6 +388,11 @@ def op(nombre: str, valor: str, titulo: str, desc: str, tipo: str = "radio", mar
             f'{" disabled" if apagada else ""}>{imagen}'
             f'<span class="cuerpo"><b>{escape(titulo)}</b><small>{escape(desc)}</small>'
             f'{f"<em>{em}</em>" if em else ""}</span></label>')
+
+
+def textos(b: dict) -> list[str]:
+    """Cuánto texto llevan las fotos con titular (borradores de antes: una sola opción)."""
+    return [k for k in b.get("textos_img") or [b.get("texto_img", "titular")] if k in TEXTO] or ["titular"]
 
 
 def abre(nombre: str, titulo: str, marcada) -> str:
@@ -502,7 +509,13 @@ def paso_4(b: dict, fotos: int) -> str:
                   img("formato", k, color, t, alta=True), em, apagada=k == "collage" and sin_collage)
     return (cab(4, "¿Qué formatos te gustan?",
                 "Elige uno o varios. Se reparten parejo para que veas cuál le funciona mejor a tu audiencia.")
-            + f'<div class="wiz-ops cuatro">{ops}</div>'
+            + f'<div class="formatos-cam"><div class="wiz-ops cuatro">{ops}</div>'
+            '<div class="wiz-si titular"><h3 class="wiz-sub">Texto dentro de la imagen</h3><p class="ayuda">Para'
+            ' Foto con titular: elige una, dos o las tres. No es el pie de foto: es lo que va escrito sobre la'
+            ' imagen.</p>'
+            '<div class="wiz-ops tres">'
+            + "".join(op("textos_img", k, t, d, "checkbox", k in textos(b), img("texto", k, color, t, alta=True))
+                      for k, (t, d, color) in TEXTO.items()) + "</div></div></div>"
             + nota("Carrusel y reel", "llegarán después. Las historias de Instagram también están en camino.") + pie(4))
 
 
@@ -524,14 +537,7 @@ def paso_6(b: dict) -> str:
                 "Solo cambia esta campaña. Tus colores, tu tipografía y tu logo siguen siendo los de Tu marca.")
             + '<h3 class="wiz-sub">Variedad visual</h3><p class="ayuda">Qué tan distintas se ven las fotos entre'
             ' sí: el lugar, el encuadre y la luz.</p>'
-            f'<div class="wiz-ops cuatro">{variedad}</div>'
-            '<h3 class="wiz-sub">Texto dentro de la imagen</h3><p class="ayuda">No es el pie de foto: es lo que va'
-            ' escrito sobre la imagen.</p><div class="wiz-ops cuatro">'
-            + "".join(op("texto_img", k, t, d, marcada=b["texto_img"] == k, imagen=img("texto", k, color, t, alta=True))
-                      for k, (t, d, color) in TEXTO.items()) + "</div>"
-            '<h3 class="wiz-sub">Cómo se arman tus posts</h3><p class="ayuda">Viene de Tu marca; puedes cambiarlo solo'
-            ' para esta campaña.</p><div class="wiz-chips">'
-            + "".join(chip("armado", k, v, b["armado"] == k) for k, v in ARMADO.items()) + "</div>" + pie(6))
+            f'<div class="wiz-ops cuatro">{variedad}</div>' + pie(6))
 
 
 def paso_7(b: dict) -> str:
@@ -578,9 +584,9 @@ async def resumen(c: Cuenta, b: dict, objetivos: list[dict], mensajes: list[dict
     bloques = [
         ("Objetivo", obj, 1, False), ("Mensaje", msgs + (f" · «{b['texto']}»" if b["texto"] else ""), 2, False),
         ("Producto", producto, 2, True), ("Enfoque del contenido", enfoques, 3, False),
-        ("Formatos", " · ".join(FORMATOS[k][0] for k in b["formatos"] if k in FORMATOS), 4, False),
-        ("Estilo y variedad", f"{TEXTO[b['texto_img']][0]} ·"
-         f" {VARIEDAD[b['variedad']][0]} · {ARMADO[b['armado']]}", 6, False),
+        ("Formatos", " · ".join(FORMATOS[k][0] for k in b["formatos"] if k in FORMATOS)
+         + (f" ({', '.join(TEXTO[k][0].lower() for k in textos(b))})" if "titular" in b["formatos"] else ""), 4, False),
+        ("Estilo y variedad", VARIEDAD[b["variedad"]][0], 6, False),
         ("Cantidad y fechas", f"{escape(b['nombre']) or 'Sin nombre'} · {b['n_posts']} posts ·"
          f" {campanas.de_a(ini, fin)} · {dias} · {horas}", 7, True)]
     tarjetas = "".join(

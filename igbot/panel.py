@@ -1015,6 +1015,7 @@ img.mrc-logo-mini{background:#fff}
 .wiz-pie .boton{padding:.65rem 1.3rem}
 .wiz-bloque .opc{font-weight:400;color:var(--gris)}
 .prod-cam:has(input[name=accion][value=promo]:checked) .wiz-si.promo{display:grid}
+.formatos-cam:has(input[name=formatos][value=titular]:checked) .wiz-si.titular{display:block}
 .wiz-abre{display:flex;align-items:center;gap:.65rem;margin:0;cursor:pointer;font-weight:600;font-size:1rem}
 .wiz-abre input{width:1.15rem;height:1.15rem;margin:0;accent-color:var(--acento)}
 .wiz-bloque:has(>.wiz-abre input:checked)>.wiz-si.abre{display:block}

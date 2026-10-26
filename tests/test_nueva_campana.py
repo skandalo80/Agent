@@ -30,9 +30,9 @@ def llenar(client, objetivo="interaccion"):
     paso(client, 2, mensajes=["producto"], con_producto="1", producto="p1", accion="promo", descuento="20", desde="2099-01-05",
          hasta="2099-01-18")
     paso(client, 3, enfoques=["consejos", "historias"])
-    paso(client, 4, formatos=["texto", "titular"])
+    paso(client, 4, formatos=["texto", "titular"], textos_img=["minimo", "titular"])
     paso(client, 5, visual=["productos"])
-    paso(client, 6, texto_img="minimo", variedad="coherencia", armado="plantilla")
+    paso(client, 6, variedad="coherencia")
     return paso(client, 7, nombre="Otoño", inicio=LUNES.isoformat(), semanas="1", n_posts="6",
                 dias=["0", "2", "4"], horarios=["manana"])
 
@@ -414,8 +414,17 @@ def test_la_variedad_llega_al_brief_al_plan_y_a_los_posts(cliente, monkeypatch):
     paso_6 = client.get(f"{URL}?paso=6").text
     assert "Variedad visual" in paso_6 and "Apariencia de las fotos" not in paso_6
     assert all(t in paso_6 for t in ("Consistente", "Equilibrado", "Diverso", "Creativo"))
-    assert "tarjetas/campana/variedad-diverso.webp" in paso_6 and "tarjetas/campana/texto-info.webp" in paso_6
-    assert "Sin texto" in paso_6 and "Una frase principal que destaque el mensaje." in paso_6
+    assert "tarjetas/campana/variedad-diverso.webp" in paso_6
+    assert "Texto dentro de la imagen" not in paso_6 and "Cómo se arman" not in paso_6
+    # Texto dentro de la imagen vive en Formatos, para Foto con titular: una, dos o las tres.
+    paso_4 = client.get(f"{URL}?paso=4").text
+    assert 'class="wiz-si titular"' in paso_4 and "tarjetas/campana/texto-info.webp" in paso_4
+    assert 'name="textos_img" value="minimo" checked' in paso_4 and "Sin texto" not in paso_4
+    assert "Elige cuánto texto" in paso(client, 4, ir=6, formatos=["titular"]).text
+    paso(client, 4, ir=4, formatos=["foto"])  # sin titular no hace falta
+    assert "Elige cuánto texto" not in client.get(f"{URL}?paso=4").text
+    paso(client, 4, ir=4, formatos=["texto", "titular"], textos_img=["minimo", "info"])
+    assert "Diseño de texto · Foto con titular (texto mínimo, más información)" in client.get(f"{URL}?paso=8").text
     generar(client)
     prompts = [p for p, *_ in llamadas]
     assert sum("<variedad_visual>" in p for p in prompts) >= 3  # brief, plan y posts
