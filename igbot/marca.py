@@ -26,10 +26,11 @@ from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
 from . import imagenes, panel
-from .contenido import MAX_FOTOS, archivo, estilos_de, guardar_fotos, marca_de, sin_plan, url_imagen
+from .contenido import MAX_FOTOS, archivo, estilos_de, guardar_fotos, marca_de, sin_plan, url_imagen, uso_color
 from .cuenta import Cuenta
-from .estilos import (COLORES, ESTILOS, LETRAS, LOGO_INICIAL, LOGO_PRESENCIA, MAX_ESTILOS, PALETA_INICIAL, PALETAS,
-                      RECOMENDADOS, RECOMENDADOS_INICIAL, RECURSOS, ROLES, TARJETA_ESTILO, USO_COLOR, USO_INICIAL)
+from .estilos import (COLORES, COMBINACION_INICIAL, COMBINACIONES, ESTILOS, LETRAS, LOGO_INICIAL, LOGO_PRESENCIA,
+                      MAX_ESTILOS, MUESTRA_TEXTO, MUESTRA_TITULAR, PALETA_INICIAL, PALETAS, RECOMENDADOS,
+                      RECOMENDADOS_INICIAL, RECURSOS, ROLES, TARJETA_ESTILO, USO_COLOR, USO_INICIAL, USO_TARJETA)
 
 log = logging.getLogger("igbot.marca")
 
@@ -42,8 +43,8 @@ PASOS = [  # (clave, nombre, de qué trata, título, bajada)
      " La IA los utilizará como referencia al crear tus publicaciones."),
     ("colores", "Colores", "Tu paleta y cuánto color usar", "¿Qué colores son los de tu marca?",
      "Parte de una paleta sugerida o pon tus colores exactos. Después dinos cuánto color quieres en tus publicaciones."),
-    ("tipografia", "Tipografía", "La letra de tus títulos", "¿Qué letra va con tu marca?",
-     "Es la letra de los títulos en tus imágenes. Cada tarjeta muestra la letra real, tal como saldrá."),
+    ("tipografia", "Tipografía", "La letra de tus títulos y textos", "Una tipografía que encaje con tu marca.",
+     "Según los estilos visuales que elegiste, hemos encontrado una combinación que encaja con tu identidad."),
     ("logotipo", "Logotipo", "Tu logo y cuánto se ve", "¿Cómo aparece tu logo?",
      "Sube tu logo y elige cuánto quieres que se vea. Lo usamos tal cual: nunca lo redibujamos."),
     ("recursos", "Recursos visuales", "Qué mostrar y tus fotos", "¿Qué quieres mostrar en tus publicaciones?",
@@ -89,11 +90,22 @@ def paleta_de(colores: dict[str, str]) -> str:
 
 
 def uso_de(marca: dict) -> str:
-    return marca.get("uso_color") if marca.get("uso_color") in USO_COLOR else USO_INICIAL
+    return uso_color(marca) or USO_INICIAL
 
 
 def letra_de(marca: dict) -> str:
     return marca.get("fuente") if marca.get("fuente") in LETRAS else "Inter"
+
+
+def combinacion(marca: dict) -> tuple[str, str, str]:
+    """La tipografía recomendada (titulares, textos, por qué) según su estilo principal."""
+    estilos = estilos_de(marca)
+    return COMBINACIONES.get(estilos[0], COMBINACION_INICIAL) if estilos else COMBINACION_INICIAL
+
+
+def letra_texto(marca: dict) -> str:
+    """La letra de los textos: la elegida o, en una marca de antes, la de la combinación recomendada."""
+    return marca["fuente_texto"] if marca.get("fuente_texto") in LETRAS else combinacion(marca)[1]
 
 
 def logo_de(marca: dict) -> str:
@@ -216,7 +228,8 @@ def paso_colores(marca: dict) -> str:
     usos = "".join(
         f'<label class="wiz-op"><input type="radio" name="uso_color" value="{k}"{" checked" if k == uso_de(marca) else ""}>'
         + ('<em class="mrc-reco">Recomendado</em>' if k == USO_INICIAL else "")
-        + f'{mini_post(k)}<span class="cuerpo"><b>{nombre}</b><small>{desc}</small></span></label>'
+        + f'{mini_post(k)}<span class="cuerpo"><b>{nombre}</b><i class="mrc-lema">{USO_TARJETA[k][0]}</i>'
+        f'<small>{desc}</small><span class="mrc-sensa">{USO_TARJETA[k][1]}</span></span></label>'
         for k, (nombre, desc, _) in USO_COLOR.items())
     return (f'<input type="hidden" name="paleta_antes" value="{actual}">'
             '<h3 class="wiz-sub">Elige una paleta</h3>'
@@ -226,31 +239,41 @@ def paso_colores(marca: dict) -> str:
             '<p class="ayuda">Toca un color para cambiarlo o pega su código. Si tienes manual de marca, aquí van sus'
             " colores.</p>"
             f'<div class="mrc-colores">{exactos}</div>'
-            '<h3 class="wiz-sub">¿Cuánto color quieres en tus posts?</h3>'
-            '<p class="ayuda">Así se reparte tu paleta en cada imagen. Las muestras usan tus colores.</p>'
+            '<h3 class="wiz-sub">¿Cuánto quieres que destaquen los colores de tu marca?</h3>'
+            '<p class="ayuda">La misma paleta puede producir diseños muy diferentes. Elige cómo quieres que se utilicen'
+            " tus colores en las publicaciones. Las muestras usan tus colores.</p>"
             f'<div class="wiz-ops">{usos}</div>'
-            '<p class="wiz-nota"><b>Regla de oro:</b> el acento se usa poco para que destaque. Si dudas,'
-            " «Equilibrado» funciona para casi cualquier negocio.</p>")
+            '<p class="wiz-nota"><b>Protagonista no es lo mismo que Alto contraste:</b> puedes usar mucho tu color de'
+            " forma suave, o poco pero con un contraste muy fuerte. Si dudas, «Equilibrado» funciona para casi cualquier"
+            " negocio.</p>")
 
 
-def muestra_letra(fuente: str, chica: bool = False) -> str:
-    peso, _, _, ante, titulo = LETRAS[fuente]
-    return (f'<span class="mrc-letra{" chica" if chica else ""}"><span class="k">{ante}</span>'
-            f'<span class="h" style="font-family:\'{fuente}\';font-weight:{peso}">{titulo}</span></span>')
+def vista_par(titulo: str, texto: str, chica: bool = False) -> str:
+    """El mismo titular y texto de muestra para todas: así se comparan solo las letras."""
+    return (f'<span class="mrc-letra mrc-par{" chica" if chica else ""}">'
+            f'<span class="h" style="font-family:\'{titulo}\';font-weight:{LETRAS[titulo][0]}">{MUESTRA_TITULAR}</span>'
+            f'<span class="p" style="font-family:\'{texto}\';font-weight:400">{MUESTRA_TEXTO}</span></span>')
 
 
 def paso_tipografia(marca: dict) -> str:
-    actual = letra_de(marca)
+    titulo, texto, porque = combinacion(marca)
+    actual = letra_de(marca) if marca.get("fuente") in LETRAS else ""
+    otra = bool(actual) and (actual, letra_texto(marca)) != (titulo, texto)
     tarjetas = "".join(
-        f'<label class="wiz-op"><input type="radio" name="fuente" value="{f}"{" checked" if f == actual else ""}>'
-        f'{muestra_letra(f)}<span class="cuerpo"><b>{nombre}</b><small>{desc}</small>'
-        f'<small class="mrc-fuente">{f}</small></span></label>'
+        f'<label class="wiz-op"><input type="radio" name="fuente" value="{f}"{" checked" if f == actual and otra else ""}>'
+        f'{vista_par(f, texto)}<span class="cuerpo"><b>{nombre}</b><small>{desc}</small>'
+        f'<small class="mrc-fuente">{f} + {texto}</small></span></label>'
         for f, (_, nombre, desc, _, _) in LETRAS.items())
-    return ('<h3 class="wiz-sub">Elige una letra para tus títulos</h3>'
-            '<p class="ayuda">No necesitas saber nombres de fuentes: elige la que se sienta como tu marca.</p>'
-            f'<div class="wiz-ops">{tarjetas}</div>'
-            '<p class="wiz-nota"><b>Lo que ves es lo que sale:</b> estas tarjetas usan la letra real. En los textos'
-            " largos usamos una letra sencilla que combine.</p>")
+    usando = '<span class="mrc-usando">✓ Es la que usas</span>' if actual and not otra else ""
+    return ('<div class="mrc-combi"><p class="ante">Recomendada para ti</p>'
+            f'<h3>{titulo} + {texto}</h3><p class="ayuda">{porque}</p>'
+            f'{vista_par(titulo, texto)}'
+            f'<p class="mrc-combi-pie"><button class="boton" name="usar" value="1">✓ Usar esta combinación</button>{usando}</p>'
+            "</div>"
+            f'<details class="mrc-otras"{" open" if otra else ""}><summary>Ver otras tipografías</summary>'
+            '<p class="ayuda">La letra que elijas va en los titulares; los textos secundarios siguen con '
+            f"{texto}. Todas muestran el mismo ejemplo para que compares.</p>"
+            f'<div class="wiz-ops">{tarjetas}</div></details>')
 
 
 def paso_logotipo(c: Cuenta, marca: dict) -> str:
@@ -344,7 +367,7 @@ def resumen(c: Cuenta, marca: dict) -> str:
         '<div class="wiz-resumen">'
         + caja(1, "Estilo visual", "Tus estilos, en orden de preferencia.", estilos)
         + caja(2, "Colores", escape(nombre_colores), franja)
-        + caja(3, "Tipografía", f"{LETRAS[fuente][1]} · {fuente}", muestra_letra(fuente, chica=True))
+        + caja(3, "Tipografía", f"{fuente} + {letra_texto(marca)}", vista_par(fuente, letra_texto(marca), chica=True))
         + caja(4, "Logotipo", "Cómo aparece tu marca.", logo_html)
         + caja(5, "Recursos visuales", "Lo que mostramos en tus publicaciones.",
                f'<div class="mrc-chips">{chips}</div>', ancho=True)
@@ -404,8 +427,10 @@ def guardar_paso(f, antes: dict, paso: str) -> tuple[dict, str]:
                 datos[k] = color_elegido(f, k, colores.get(k, ""))
         datos["uso_color"] = f.get("uso_color") if f.get("uso_color") in USO_COLOR else uso_de(antes)
     elif paso == "tipografia":
-        fuente = f.get("fuente") if f.get("fuente") in LETRAS else letra_de(antes)
-        datos["fuente"], datos["peso"] = fuente, LETRAS[fuente][0]
+        titulo, texto, _ = combinacion(antes)
+        # «Usar esta combinación», o seguir sin elegir otra: la recomendada.
+        fuente = f.get("fuente") if f.get("fuente") in LETRAS and not f.get("usar") else titulo
+        datos["fuente"], datos["peso"], datos["fuente_texto"] = fuente, LETRAS[fuente][0], texto
     elif paso == "logotipo":
         datos["logo_presencia"] = f.get("logo_presencia") if f.get("logo_presencia") in LOGO_PRESENCIA else logo_de(antes)
     elif paso == "recursos":

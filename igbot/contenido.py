@@ -47,7 +47,7 @@ from PIL import Image, ImageOps
 from . import config, imagenes, panel, posicionamiento, tools
 from .admin import PANEL, parse_when
 from .comentarios import Rule, shortcode
-from .estilos import ESTILO_INICIAL, ESTILOS, MAX_ESTILOS, RECURSOS, USO_COLOR, VIEJOS_ESTILOS
+from .estilos import ESTILO_INICIAL, ESTILOS, MAX_ESTILOS, RECURSOS, USO_COLOR, VIEJOS_ESTILOS, VIEJOS_USOS
 from .cuenta import Cuenta, usar
 from .store import Store
 
@@ -150,13 +150,22 @@ def contexto_marca(datos: dict) -> str:
                                               ("fondo", "background")) if imagenes.HEX.match(str(datos.get(k, "")))]
     if colores:
         lineas.append("- Colors (use them subtly in props, backgrounds or light): " + ", ".join(colores))
-        if datos.get("uso_color") in USO_COLOR:
-            lineas.append(f"- How much color: {USO_COLOR[datos['uso_color']][2]}")
+        if uso := uso_color(datos):
+            lineas.append(f"- How much color: {USO_COLOR[uso][2]}")
+    if datos.get("fuente"):
+        lineas.append(f"- Typography (only if the image itself carries text): headlines in {datos['fuente']}"
+                      + (f", secondary text in {datos['fuente_texto']}" if datos.get("fuente_texto") else ""))
     recursos = [RECURSOS[k][4] for k in datos.get("recursos", []) if k in RECURSOS]
     if recursos:
         lineas.append("- What the brand likes to show (only what fits this post): " + "; ".join(recursos))
     return ("\n\nBrand context, as the owner describes it (in Spanish); the image should feel like this brand."
             " Do not write the brand name in the image:\n" + "\n".join(lineas)) if lineas else ""
+
+
+def uso_color(datos: dict) -> str:
+    """Cuánto destacan los colores ("" si no lo eligió); el "oscuro" de antes es Alto contraste."""
+    uso = datos.get("uso_color")
+    return uso if uso in USO_COLOR else VIEJOS_USOS.get(uso, "") if isinstance(uso, str) else ""
 
 
 def estilo_nuevo(clave) -> str:
@@ -346,8 +355,8 @@ def visual_marca(datos: dict, modo: str = "") -> str:
                if imagenes.HEX.match(str(datos.get(k, "")))]
     if colores:
         lineas.append("Colores de la marca (para utilería, fondos o luz, con sutileza): " + ", ".join(colores))
-        if datos.get("uso_color") in USO_COLOR:
-            lineas.append(f"Cuánto color: {USO_COLOR[datos['uso_color']][0]}. {USO_COLOR[datos['uso_color']][1]}")
+        if uso := uso_color(datos):
+            lineas.append(f"Cuánto destacan sus colores: {USO_COLOR[uso][0]}. {USO_COLOR[uso][1]}")
     recursos = [RECURSOS[k][0] for k in datos.get("recursos", []) if k in RECURSOS]
     if recursos:
         lineas.append("Lo que la marca suele mostrar (solo lo que encaje con este post): " + ", ".join(recursos))
