@@ -680,6 +680,37 @@ def test_varias_campanas(cliente, monkeypatch):
     r = client.get("/panel/contenido?fecha=2099-01-05&estado=publicado")
     assert 'e-borrador" href' not in r.text and 'class="ev e-publicado con-img" href="https://www.instagram.com/p/DESDEAPP/"' in r.text
 
+    # Arrastrar en el calendario: el post con imagen pasa a otro día con su misma hora, y en Semana/Día a otra hora.
+    assert f'draggable="true" data-mover="p:{post_id}"' in client.get("/panel/contenido?mes=2099-01").text
+    assert 'DESDEAPP/" target="_blank" rel="noopener" draggable' not in r.text  # lo publicado no se arrastra
+    antes = campanas.buscar_post(invierno(), k)
+    mover = "/panel/contenido/mover"
+    r = client.post(mover, headers=ORIGEN, follow_redirects=False,
+                    data={"ref": f"p:{post_id}", "dia": "2099-01-20", "suave": "1"})
+    assert r.status_code == 204
+    p = campanas.buscar_post(invierno(), k)
+    assert p["dia"] == "2099-01-20" and p["hora"] == antes["hora"]
+    post = client.portal.call(c.store.post, post_id)
+    assert post["publish_at"] == cuando_sale(client, c, "2099-01-20", antes["hora"])
+    r = client.post(mover, headers=ORIGEN, follow_redirects=False,
+                    data={"ref": f"p:{post_id}", "dia": "2099-01-21", "h": "8", "suave": "1"})
+    assert r.status_code == 204 and campanas.buscar_post(invierno(), k)["hora"] == "08" + antes["hora"][2:]
+    # Una propuesta sin imagen se mueve en su campaña.
+    otra = next(x for x in invierno()["posts"] if not x.get("post_id"))
+    r = client.post(mover, headers=ORIGEN, follow_redirects=False,
+                    data={"ref": f"c:{invierno()['id']}:{otra['k']}", "dia": "2099-01-22", "h": "20", "suave": "1"})
+    assert r.status_code == 204 and campanas.buscar_post(invierno(), otra["k"])["dia"] == "2099-01-22"
+    # A un día que ya pasó no: vuelve al calendario y dice por qué (con un código, no con el texto).
+    r = client.post(mover, headers=ORIGEN, follow_redirects=False,
+                    data={"ref": f"p:{post_id}", "dia": "2020-01-01", "suave": "1", "volver": "/panel/contenido?vista=semana#cal"})
+    assert r.headers["location"] == "/panel/contenido?vista=semana&error=pasado#cal"
+    assert "Elige un día y una hora que no hayan pasado." in client.get(r.headers["location"]).text
+    r = client.post(mover, headers=ORIGEN, follow_redirects=False,
+                    data={"ref": "p:999", "dia": "2099-01-20", "volver": "https://otro.sitio/"})
+    assert r.headers["location"] == "/panel/contenido?error=no#cal"  # nunca a otro sitio
+    assert client.post(mover, data={"ref": f"p:{post_id}", "dia": "2099-01-25"}).status_code == 403  # sin Origin
+    client.post(mover, headers=ORIGEN, data={"ref": f"p:{post_id}", "dia": "2099-01-05", "h": antes["hora"][:2]})
+
     # En el editor del post se sabe de qué campaña viene.
     p = campanas.buscar_post(invierno(), k)
     assert f"{campanas.tema_de(p['tipo'])[0]} · {campanas.FORMATOS[p['formato']][0]}</p>" in client.get(

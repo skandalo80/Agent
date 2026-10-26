@@ -42,6 +42,7 @@ class Item:
     externo: bool = False  # abre Instagram
     ig_id: str = ""
     tipo: str = "post"  # o "historia" (campanas.MEDIOS)
+    mover: str = ""  # para arrastrarlo: "p:<id del post>" o "c:<id de la campaña>:<k>"; vacío si ya no se mueve
 
 
 def rango(vista: str, fecha: date) -> tuple[date, date]:
@@ -118,19 +119,22 @@ async def items_de(c: Cuenta, ini: date, fin: date, con_sin_fecha: bool = False)
         media = await c.store.media(post["media_ids"][0]) if post["media_ids"] else None
         camp, de_la_campana = de_camp.get(post["id"], (None, {}))
         publicado = post["status"] == "publicada" and post["permalink"]
-        items.append(Item(
+        items.append(item := Item(
             datetime.fromtimestamp(post["publish_at"], zona) if post["publish_at"] else None,
             # El título de la campaña también en foto sola, collage e historias, que no lo llevan en la imagen.
             de_la_campana.get("titulo") or p.get("titulo") or contenido.recortar(post["caption"], 50) or "Sin título",
             camp["nombre"] if camp else "Post suelto", DE_POST[post["status"]],
             post["permalink"] if publicado else f"{BASE}/post/{post['id']}",
             contenido.url_imagen(c, media[0]) if media else "", externo=bool(publicado), tipo=post.get("tipo") or "post"))
+        if post["status"] in contenido.EDITABLES and post["publish_at"]:
+            item.mover = f"p:{post['id']}"
     for camp in camps:  # propuestas sin imagen: borradores que llevan a su campaña
         for p in camp.get("posts", []):
             if not p.get("post_id") and ini.isoformat() <= p["dia"] <= fin.isoformat():
                 items.append(Item(datetime.fromisoformat(f"{p['dia']}T{p['hora']}").replace(tzinfo=zona),
                                   p.get("titulo") or "Sin título", camp["nombre"], "borrador",
-                                  f"{campanas.url_de(camp)}?post={p['k']}#detalle", tipo=campanas.medio_de(p)))
+                                  f"{campanas.url_de(camp)}?post={p['k']}#detalle", tipo=campanas.medio_de(p),
+                                  mover=f"c:{camp['id']}:{p['k']}"))
     del_panel = {shortcode(post["permalink"]) for post in posts if post["permalink"]}
     with usar(c):
         items += await de_instagram(c, desde, hasta, del_panel)
@@ -164,8 +168,10 @@ def tarjeta(x: Item) -> str:
     nombre, clase = ESTADOS[x.estado]
     hora = f"{x.cuando:%H:%M}" if x.cuando else "Sin fecha"
     destino = ' target="_blank" rel="noopener"' if x.externo else ""
-    mini = (f'<img src="{escape(x.imagen)}" alt="" loading="lazy" referrerpolicy="no-referrer">' if x.imagen else "")
-    return (f'<a class="ev {clase}{" con-img" if mini else ""}" href="{escape(x.href)}"{destino}'
+    mini = (f'<img src="{escape(x.imagen)}" alt="" loading="lazy" draggable="false" referrerpolicy="no-referrer">'
+            if x.imagen else "")
+    arrastre = f' draggable="true" data-mover="{escape(x.mover)}"' if x.mover else ""
+    return (f'<a class="ev {clase}{" con-img" if mini else ""}" href="{escape(x.href)}"{destino}{arrastre}'
             f' title="{escape(x.titulo)} · {escape(x.sub)} · {nombre}">{mini}'
             f'<b>{escape(x.titulo)}</b><small>{hora} · <span class="m-{x.tipo}">{medio(x)}</span></small></a>')
 
@@ -183,7 +189,7 @@ def vista_mes(items: list[Item], fecha: date, hoy: date, est: dict) -> str:
         mas = (f'<a class="ev-mas" href="{enlace(est, vista="dia", fecha=d.isoformat())}">'
                f'+{len(del_dia) - POR_CELDA} más</a>' if len(del_dia) > POR_CELDA else "")
         clase = "cal-d" + (" otro" if d.month != fecha.month else "") + (" es-hoy" if d == hoy else "")
-        celdas.append(f'<div class="{clase}"><a class="cal-n" href="{enlace(est, vista="dia", fecha=d.isoformat())}"'
+        celdas.append(f'<div class="{clase}" data-dia="{d}"><a class="cal-n" href="{enlace(est, vista="dia", fecha=d.isoformat())}"'
                       f' aria-label="{d.day} de {MESES[d.month - 1]}">{d.day}</a>'
                       + "".join(tarjeta(x) for x in del_dia[:POR_CELDA]) + mas + "</div>")
         d += timedelta(days=1)
@@ -203,7 +209,8 @@ def vista_horas(items: list[Item], dias: list[date], hoy: date, est: dict) -> st
         filas += f'<div class="cal-h">{h:02d}:00</div>'
         for d in dias:
             aqui = [x for x in con_hora if x.cuando.date() == d and x.cuando.hour == h]
-            filas += f'<div class="cal-c{" es-hoy" if d == hoy else ""}">{"".join(tarjeta(x) for x in aqui)}</div>'
+            filas += (f'<div class="cal-c{" es-hoy" if d == hoy else ""}" data-dia="{d}" data-h="{h}">'
+                      f'{"".join(tarjeta(x) for x in aqui)}</div>')
     return (f'<div class="cal-scroll"><div class="cal-horas" style="--dias:{len(dias)}">'
             f"{cab}{filas}</div></div>")
 
@@ -284,7 +291,7 @@ async def seccion(c: Cuenta, vista: str, fecha: date | None, ver: str, q: str, e
                     for k, v in (("cal", "Calendario"), ("lista", "Lista")))
     leyenda = "".join(f'<span><i class="{ESTADOS[k][1]}"></i>{ESTADOS[k][0]}</span>'
                       for k in ("borrador", "programado", "publicado"))
-    return ('<div class="tarjeta cal" id="cal"><div class="cal-cab">'
+    return (f'<div class="tarjeta cal" id="cal" data-volver="{escape(enlace(est))}"><div class="cal-cab">'
             f'<h2>{titulo_rango(vista, fecha)}</h2><div class="cal-nav">'
             f'<a href="{enlace(est, fecha=mover(vista, fecha, -1).isoformat())}" aria-label="Anterior">‹</a>'
             f'<a href="{enlace(est, fecha=mover(vista, fecha, 1).isoformat())}" aria-label="Siguiente">›</a>'
@@ -293,4 +300,66 @@ async def seccion(c: Cuenta, vista: str, fecha: date | None, ver: str, q: str, e
             + filtros(est, nombres, len([x for x in items if x.cuando or ver == "lista"]))
             + cuerpo
             + f'<div class="cal-leyenda"><span class="t">Estados:</span>{leyenda}'
-            '<span class="t">Toca un post para abrirlo, o un día para verlo completo.</span></div></div>')
+            '<span class="t">Toca un post para abrirlo, o arrástralo a otro día u hora.</span></div></div>')
+
+
+# --- arrastrar un post a otro día u hora ---
+
+ERRORES = {  # ?error= al volver: un código y no el texto, para que nadie arme un aviso con su propio mensaje
+    "publicado": "Ese post ya se publicó: ya no se puede mover.",
+    "pasado": "Elige un día y una hora que no hayan pasado.",
+    "lleno": "Ese día ya tiene todos los posts que caben de esa campaña.",
+    "largo": f"Una campaña puede durar hasta {campanas.MAX_DIAS // 7} semanas.",
+    "no": "No encontramos ese post. Vuelve a intentarlo.",
+}
+
+
+async def mover_item(c: Cuenta, ref: str, dia: str, h: str) -> str:
+    """Lo que manda el arrastre: el post pasa a ese día y, en Semana y Día, a esa hora (con sus mismos minutos).
+    Si es de una campaña, se mueve en la campaña (que se estira si el día queda fuera). '' o un código de ERRORES."""
+    try:
+        nuevo_dia = date.fromisoformat(dia)
+        hora = int(h) if h else None
+    except ValueError:
+        return "no"
+    if hora is not None and not 0 <= hora <= 23:
+        return "no"
+    partes = ref.split(":")
+    camp = p = post = None
+    if partes[0] == "p" and len(partes) == 2 and partes[1].isdigit():
+        post = await c.store.post(int(partes[1]))
+        if not post or post["user_id"] != PANEL:
+            return "no"
+        camp, p = next(((x, y) for x in await campanas.todas_las(c) for y in x.get("posts", [])
+                        if y.get("post_id") == post["id"]), (None, None))
+    elif partes[0] == "c" and len(partes) == 3:
+        camp = next((x for x in await campanas.todas_las(c) if str(x["id"]) == partes[1]), None)
+        p = campanas.buscar_post(camp, partes[2]) if camp else None
+        if not p:
+            return "no"
+        post = await campanas.estado_post(c, p)
+    else:
+        return "no"
+    if post and post["status"] not in contenido.EDITABLES:
+        return "publicado"
+    with usar(c):
+        zona = tools.tz()
+        antes = (datetime.fromisoformat(f"{p['dia']}T{p['hora']}") if p
+                 else datetime.fromtimestamp(post["publish_at"], zona).replace(tzinfo=None))
+        nueva = datetime.combine(nuevo_dia, antes.time()).replace(hour=antes.hour if hora is None else hora)
+        if nueva.replace(tzinfo=zona) <= tools.now():
+            return "pasado"
+        if not p:
+            await c.store.update_post(post["id"], publish_at=nueva.replace(tzinfo=zona).timestamp())
+            return ""
+        ahi = [x for x in camp["posts"] if x["dia"] == dia and x is not p and campanas.medio_de(x) == campanas.medio_de(p)]
+        tope = campanas.MAX_HISTORIAS_DIA if campanas.es_historia(p) else campanas.MAX_POSTS_DIA
+        if p["dia"] != dia and len(ahi) >= tope:
+            return "lleno"
+        if campanas.estirar(camp, dia):
+            return "largo"
+        p["dia"], p["hora"] = dia, f"{nueva:%H:%M}"
+        await campanas.sincronizar(c, p)
+        camp["posts"].sort(key=lambda x: (x["dia"], x["hora"]))
+        await campanas.guardar(c, camp)
+    return ""
