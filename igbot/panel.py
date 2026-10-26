@@ -922,7 +922,8 @@ select,input[type=date],input[type=number]{color:var(--negro);background:var(--c
 .mrc-tip b{display:block;color:var(--negro);margin-bottom:.15rem}
 .mrc .wiz-op .cuerpo em{margin-right:.15rem}
 .mrc .wiz-op .wiz-orden[hidden]{display:none}
-.mrc-estilos .wiz-img{aspect-ratio:1/1;background-position:center 40%}
+.mrc .wiz-ops .wiz-img{aspect-ratio:1/1;background-position:center 40%}
+.mrc .mrc-logos .wiz-img{aspect-ratio:2/3;background-position:center}
 .mrc-roles{list-style:none;margin:.2rem 0 1rem;padding:0;display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.85rem;color:var(--texto2,#B9B5C5)}
 .mrc-roles b{color:var(--negro);font-weight:600}
 .mrc .mrc-rol{display:inline-block;margin:.2rem 0 .1rem;font-size:.72rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--acento-claro)}
@@ -949,7 +950,7 @@ select,input[type=date],input[type=number]{color:var(--negro);background:var(--c
 .mrc-post.sutil .mp{background:var(--m-fondo)}.mrc-post.sutil .foto{background:#d8d2c8}.mrc-post.sutil .t{color:var(--m-principal)}.mrc-post.sutil .l{background:var(--m-acento)}
 .mrc-post.equilibrado .mp{background:var(--m-fondo)}.mrc-post.equilibrado .foto{background:var(--m-secundario)}.mrc-post.equilibrado .t{color:var(--m-principal)}.mrc-post.equilibrado .l{background:var(--m-acento)}
 .mrc-post.protagonista .mp{background:var(--m-secundario)}.mrc-post.protagonista .foto{background:var(--m-acento)}.mrc-post.protagonista .t{color:var(--m-fondo)}.mrc-post.protagonista .l{background:var(--m-principal)}
-.mrc-post.contraste .mp{background:#111}.mrc-post.contraste .foto{background:#3a3a3f}.mrc-post.contraste .t{color:var(--m-acento)}.mrc-post.contraste .l{background:var(--m-acento)}
+.mrc-post.natural .mp{background:#f4efe6}.mrc-post.natural .foto{background:#b9a58a}.mrc-post.natural .t{color:#3a332b}.mrc-post.natural .l{background:#d8cbb6}
 .mrc-reco{position:absolute;top:.6rem;left:.6rem;z-index:1;font-style:normal;font-size:.7rem;font-weight:600;background:var(--acento);color:var(--tinta);border-radius:1rem;padding:.2rem .6rem}
 .mrc-letra{aspect-ratio:16/10;padding:1rem 1.15rem;display:flex;flex-direction:column;justify-content:center;background:#f6f4ef;color:#302D3A}
 .mrc-letra .k{font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;color:#B9B5C5;margin-bottom:.45rem}
@@ -1373,7 +1374,7 @@ PASOS_EMPRESA = ["Tu empresa: nombre, a qué se dedica y dónde atiendes", "Tus 
                  "Las preguntas que más te hacen"]
 PASOS_ASISTENTE = ["Elige su personalidad", "Cómo escribe",
                    "Sus reglas y cuándo entra tu equipo", "Revisa y enciéndelo"]
-PASOS_MARCA = ["Cómo se arman tus posts", "Colores y tipografía", "El estilo de tus fotos", "Fotos de tu negocio"]
+PASOS_MARCA = ["Tu estilo visual", "Tus colores", "Tu tipografía", "Tu logotipo"]
 
 
 def camino(etiqueta: str, titulo: str, desc: str, pasos: list[str], tiempo: str, boton: str, href: str,

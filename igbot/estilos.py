@@ -1,11 +1,11 @@
-"""Las opciones de Tu marca: estilos visuales, paletas, cuánto color, letras, logo y recursos visuales.
+"""Las opciones de Tu marca: estilos visuales, paletas, cuánto color, letras y logo.
 
 Cada opción tiene lo que ve el cliente en el panel (nombre, descripción, etiquetas) y, si cambia la
 imagen, cómo se le pide al generador (en inglés). Lo usan Tu marca (igbot/marca.py) y los prompts de
 imagen (contenido.estilo_foto y contenido.contexto_marca).
 
-Las tarjetas de Estilo visual y Recursos visuales llevan una imagen en
-igbot/static/tarjetas/marca/<clave>.webp (o .png/.jpg); mientras no exista, se pinta su color de respaldo.
+Las tarjetas llevan una imagen en igbot/static/tarjetas/marca/: <estilo>.webp, color-<uso>.webp y
+logo-<presencia>.webp (o .png/.jpg); mientras no exista, se pinta su color o su muestra de respaldo.
 """
 
 ESTILOS = {
@@ -136,36 +136,35 @@ PALETA_INICIAL = "carbon"
 USO_COLOR = {
     # clave: (nombre, cómo se ve, cómo se le pide al generador)
     "sutil": ("Sutil",
-              "Predominan los fondos neutros, las fotografías y los tonos suaves. Los colores de tu marca aparecen en"
-              " pequeños detalles.",
-              "Keep the design mostly neutral (neutral backgrounds, photography, soft tones); brand colors only in"
-              " small details."),
+              "Predominan los colores propios del entorno, los materiales y los elementos fotografiados. Los colores"
+              " de marca aparecen en pequeños detalles o acentos.",
+              "The scene's own colors (environment, materials, photographed objects) dominate; brand colors appear"
+              " only in small details or accents."),
     "equilibrado": ("Equilibrado",
-                    "Los colores de tu marca aparecen en titulares, bloques y detalles, combinados con fondos claros,"
-                    " fotografías u otros tonos de apoyo.",
-                    "Use the brand colors in a balanced way: in headlines, blocks and details, combined with light"
-                    " backgrounds, photography and supporting tones. Noticeable, never overwhelming."),
+                    "Los colores corporativos tienen una presencia reconocible, pero se integran con el entorno y los"
+                    " elementos de la imagen sin dominarla por completo.",
+                    "Brand colors have a recognizable presence but blend with the environment and the natural colors"
+                    " of the scene, without fully dominating the image."),
     "protagonista": ("Protagonista",
-                     "Los fondos, titulares y bloques usan los colores de tu marca con más frecuencia. Tus"
-                     " publicaciones se reconocen al recorrer el feed.",
-                     "Make the brand colors the protagonists: backgrounds, headlines and blocks in the brand colors,"
-                     " so the post is instantly recognizable in the feed, with harmonious, not harsh, contrast."),
-    "contraste": ("Alto contraste",
-                  "Se combinan colores intensos y contrastes marcados para destacar titulares y mensajes importantes.",
-                  "High contrast: intense brand colors against strongly contrasting areas so the headline and key"
-                  " message pop; punchy and attention-grabbing, even if the colored areas are small."),
+                     "Tienen una presencia destacada en los productos, el fondo, los elementos gráficos o la"
+                     " composición. El entorno puede ser natural o artificial; lo importante es que la identidad"
+                     " visual resulte evidente.",
+                     "Brand colors define the image: a strong presence in the products, the background, the graphic"
+                     " elements or the composition, so the visual identity is obvious (natural or artificial setting)."),
+    "natural": ("Natural / Sin protagonismo de marca",
+                "Se utilizan principalmente los colores reales del producto, el entorno y los materiales. Los colores"
+                " de marca pueden aparecer muy poco o no aparecer.",
+                "Prioritize the scene and its own real colors (product, environment, materials); brand colors may"
+                " appear very little or not at all. Do not force the brand palette."),
 }
-# Lo que solo ve el panel: la frase corta y para quién es.
+# Lo que solo ve el panel: la frase corta.
 USO_TARJETA = {
-    "sutil": ("Tu marca está presente sin dominar la imagen.",
-              "Ideal para marcas elegantes, fotografía, moda, decoración o negocios que quieren una imagen discreta."),
-    "equilibrado": ("Tus colores se reconocen sin saturar el diseño.", "Ideal para la mayoría de las marcas."),
-    "protagonista": ("Tus colores son una parte central del diseño.",
-                     "Ideal para marcas con colores distintivos que quieren reforzar su identidad visual."),
-    "contraste": ("Diseños llamativos que captan la atención.",
-                  "Ideal para promociones, anuncios, lanzamientos y campañas comerciales."),
+    "sutil": "Los colores de marca acompañan, pero no dominan.",
+    "equilibrado": "Los colores de marca conviven con los colores naturales.",
+    "protagonista": "Los colores de marca definen la imagen.",
+    "natural": "La imagen prioriza la escena y sus colores propios.",
 }
-VIEJOS_USOS = {"oscuro": "contraste"}  # "Oscuro" de la versión anterior
+VIEJOS_USOS = {"oscuro": "natural", "contraste": "natural"}  # opciones de versiones anteriores
 USO_INICIAL = "equilibrado"
 
 LETRAS = {
@@ -226,40 +225,17 @@ MUESTRA_TITULAR = "Tu negocio, más cerca de tus clientes."
 MUESTRA_TEXTO = "Descubre cómo podemos ayudarte con una experiencia pensada para ti."
 
 LOGO_PRESENCIA = {
-    # clave: (nombre, descripción)
-    "discreta": ("Firma discreta", "Pequeño en una esquina. El contenido es el protagonista."),
-    "visible": ("Firma visible", "Se reconoce a la primera sin competir con la imagen."),
-    "clave": ("Solo cuando suma", "En promociones, lanzamientos y anuncios; no en todo."),
-    "siempre": ("Siempre presente", "En todas tus publicaciones, para reforzar el recuerdo."),
+    # clave: (nombre, frase corta, para qué sirve)
+    "sin": ("Sin logotipo", "Contenido limpio y natural, sin añadir el logotipo de forma visible.",
+            "Ideal para publicaciones espontáneas, consejos, contenido educativo, frases o imágenes donde el producto"
+            " debe ser el protagonista."),
+    "discreta": ("Firma discreta", "Logotipo pequeño en una esquina, sin robar protagonismo.",
+                 "Para mantener una presencia de marca sutil."),
+    "visible": ("Firma visible", "El logotipo se reconoce fácilmente y forma parte del diseño.",
+                "Para publicaciones comerciales y contenido pensado para reforzar el reconocimiento de marca."),
+    "clave": ("Solo cuando aporta valor", "El logotipo aparece cuando tiene sentido para el contenido.",
+              "Por ejemplo, en promociones, lanzamientos, anuncios o productos con su propia identidad visual."),
+    "siempre": ("Siempre presente", "Todas las publicaciones incluyen el logotipo en una posición reconocible.",
+                "Para negocios que priorizan el reconocimiento constante de marca."),
 }
 LOGO_INICIAL = "discreta"
-
-RECURSOS = {
-    # clave: (nombre, descripción, etiquetas, color de respaldo, cómo se le pide al generador)
-    "personas": ("Personas reales", "Clientes, equipo y manos trabajando, con gestos naturales y sin poses de catálogo.",
-                 ("Retratos", "Emoción"), "#8c7258", "real people (customers, team, hands at work) with natural gestures,"
-                 " never stock-photo poses"),
-    "productos": ("Tus productos", "Tu producto como protagonista: primeros planos, materiales, empaques y acabados.",
-                  ("Producto", "Detalle"), "#7a7266", "the products as protagonists: close-ups, materials, packaging"
-                  " and finishes"),
-    "espacio": ("Tu espacio", "Tu local, oficina o estudio: la luz, la decoración y el ambiente de tu lugar.",
-                ("Interiores", "Ambiente"), "#5f6b66", "the business's own space: its premises, light and atmosphere"),
-    "proceso": ("Detrás de cámaras", "Preparación, procesos y herramientas. Muestra el oficio y da transparencia.",
-                ("Proceso", "Oficio"), "#7d6c4f", "behind the scenes: preparation, processes and tools"),
-    "uso": ("En la vida real", "Tu producto o servicio en el día a día de tus clientes.",
-            ("Estilo de vida", "Contexto"), "#7a6680", "the product or service in customers' everyday life"),
-    "antes": ("Antes y después", "Cambios y resultados comparados. Solo resultados reales, sin promesas exageradas.",
-              ("Resultado", "Prueba"), "#5b7566", "before-and-after comparisons, realistic and never exaggerated"),
-    "opiniones": ("Opiniones de clientes", "Reseñas y frases reales de tus clientes con un diseño claro. Nunca inventadas.",
-                  ("Confianza", "Reseñas"), "#8a7656", "genuinely happy customers (no invented reviews, stars or text)"),
-    "datos": ("Datos e infografías", "Cifras, pasos y comparativas para explicar algo de un vistazo.",
-              ("Educativo", "Claridad"), "#4f6a85", "clean visual explanations: simple diagrams and step-by-step visuals"),
-    "ideas": ("Ideas en imagen", "Metáforas y conceptos visuales para lo que no se puede fotografiar.",
-              ("Concepto", "Metáfora"), "#4b5a80", "conceptual images and visual metaphors"),
-    "comida": ("Comida y bebida", "Platillos, ingredientes y preparación con aspecto apetitoso.",
-               ("Gastronomía", "Sabor"), "#9a6447", "appetizing food and drinks, ingredients and preparation"),
-    "texturas": ("Texturas y fondos", "Papel, madera, piedra o degradados que dan profundidad sin distraer.",
-                 ("Fondos", "Materiales"), "#7c7464", "textures and backgrounds such as paper, wood, stone or gradients"),
-    "personaje": ("Personaje de marca", "Una mascota o personaje recurrente que da continuidad a tu comunicación.",
-                  ("Personaje", "Recurrente"), "#9a6a68", "the brand's recurring character or mascot"),
-}

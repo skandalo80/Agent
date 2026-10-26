@@ -1,14 +1,13 @@
-"""Tu marca: cómo se ven las publicaciones, en cinco pasos cortos y un resumen. Vive en el menú de
+"""Tu marca: cómo se ven las publicaciones, en cuatro pasos cortos y un resumen. Vive en el menú de
 perfil (abajo en el menú lateral), junto a Perfil de empresa.
 
-console.skandar.online/panel/contenido/marca?paso=N (1 a 5, o "resumen"):
+console.skandar.online/panel/contenido/marca?paso=N (1 a 4, o "resumen"):
 
 1. Estilo visual: hasta 3 de 9 estilos en orden (principal, secundario y de apoyo), o «recomiéndame uno»
    según el giro de Perfil de empresa.
 2. Colores: una paleta sugerida o los cuatro colores exactos, y cuánto color usar.
 3. Tipografía: la letra de los títulos (las tarjetas usan la letra real).
 4. Logotipo: el logo y cuánto se ve.
-5. Recursos visuales: qué mostrar y las fotos reales del negocio.
 
 Cada paso es un formulario que guarda en kv "marca" y lleva al siguiente (sin JavaScript; panel.js
 solo numera los estilos en el orden en que se tocan y llena los colores al elegir una paleta). Sin
@@ -16,7 +15,8 @@ solo numera los estilos en el orden en que se tocan y llena los colores al elegi
 
 Las opciones y sus textos están en igbot/estilos.py. Lo que se elegía antes aquí y ya no se muestra
 (nombre, frase y carácter, que pasan a Perfil de empresa; plantilla, modo y "Describe tu estilo",
-que pasan a Crear campaña) se conserva tal cual en kv "marca".
+que pasan a Crear campaña; recursos visuales y fotos del negocio, porque qué se ve se elige en cada
+campaña) se conserva tal cual en kv "marca".
 """
 import json
 import logging
@@ -26,11 +26,11 @@ from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
 from . import imagenes, panel
-from .contenido import MAX_FOTOS, archivo, estilos_de, guardar_fotos, marca_de, sin_plan, url_imagen, uso_color
+from .contenido import archivo, estilos_de, guardar_fotos, marca_de, sin_plan, url_imagen, uso_color
 from .cuenta import Cuenta
 from .estilos import (COLORES, COMBINACION_INICIAL, COMBINACIONES, ESTILOS, LETRAS, LOGO_INICIAL, LOGO_PRESENCIA,
                       MAX_ESTILOS, MUESTRA_TEXTO, MUESTRA_TITULAR, PALETA_INICIAL, PALETAS, RECOMENDADOS,
-                      RECOMENDADOS_INICIAL, RECURSOS, ROLES, TARJETA_ESTILO, USO_COLOR, USO_INICIAL, USO_TARJETA)
+                      RECOMENDADOS_INICIAL, ROLES, TARJETA_ESTILO, USO_COLOR, USO_INICIAL, USO_TARJETA)
 
 log = logging.getLogger("igbot.marca")
 
@@ -47,8 +47,6 @@ PASOS = [  # (clave, nombre, de qué trata, título, bajada)
      "Según los estilos visuales que elegiste, hemos encontrado una combinación que encaja con tu identidad."),
     ("logotipo", "Logotipo", "Tu logo y cuánto se ve", "¿Cómo aparece tu logo?",
      "Sube tu logo y elige cuánto quieres que se vea. Lo usamos tal cual: nunca lo redibujamos."),
-    ("recursos", "Recursos visuales", "Qué mostrar y tus fotos", "¿Qué quieres mostrar en tus publicaciones?",
-     "Elige todo lo que aplique a tu negocio y sube fotos reales. Así las imágenes muestran lo que de verdad vendes."),
 ]
 CLAVES = [p[0] for p in PASOS]
 RESUMEN = "resumen"
@@ -67,8 +65,6 @@ def hechos(marca: dict) -> set[str]:
         pasos.add("tipografia")
     if marca.get("logo"):
         pasos.add("logotipo")
-    if marca.get("recursos") or marca.get("fotos"):
-        pasos.add("recursos")
     return pasos
 
 
@@ -112,10 +108,6 @@ def logo_de(marca: dict) -> str:
     return marca.get("logo_presencia") if marca.get("logo_presencia") in LOGO_PRESENCIA else LOGO_INICIAL
 
 
-def recursos_de(marca: dict) -> list[str]:
-    return [k for k in marca.get("recursos", []) if k in RECURSOS]
-
-
 def color_elegido(f, k: str, antes: str) -> str:
     """El código escrito o el del selector: el que cambió (sin JavaScript no se mantienen iguales)."""
     validos = []
@@ -141,6 +133,12 @@ def imagen_tarjeta(clave: str, fondo: str) -> str:
         if (panel.STATIC / "tarjetas" / "marca" / f"{clave}.{ext}").is_file():
             return f'<span class="wiz-img" style="--fondo:{fondo} url(/panel/static/tarjetas/marca/{clave}.{ext})"></span>'
     return f'<span class="wiz-img" style="--fondo:{fondo}"></span>'
+
+
+def foto_o(clave: str, respaldo: str) -> str:
+    """La imagen de la tarjeta si ya existe; si no, el dibujo de respaldo (la muestra con tus colores o tu logo)."""
+    return imagen_tarjeta(clave, "#2a2a2d") if any(
+        (panel.STATIC / "tarjetas" / "marca" / f"{clave}.{ext}").is_file() for ext in ("webp", "png", "jpg")) else respaldo
 
 
 def etiquetas(lista_: tuple[str, ...]) -> str:
@@ -228,13 +226,13 @@ def paso_colores(marca: dict) -> str:
     usos = "".join(
         f'<label class="wiz-op"><input type="radio" name="uso_color" value="{k}"{" checked" if k == uso_de(marca) else ""}>'
         + ('<em class="mrc-reco">Recomendado</em>' if k == USO_INICIAL else "")
-        + f'{mini_post(k)}<span class="cuerpo"><b>{nombre}</b><i class="mrc-lema">{USO_TARJETA[k][0]}</i>'
-        f'<small>{desc}</small><span class="mrc-sensa">{USO_TARJETA[k][1]}</span></span></label>'
+        + f'{foto_o(f"color-{k}", mini_post(k))}<span class="cuerpo"><b>{nombre}</b>'
+        f'<i class="mrc-lema">{USO_TARJETA[k]}</i><small>{desc}</small></span></label>'
         for k, (nombre, desc, _) in USO_COLOR.items())
     return (f'<input type="hidden" name="paleta_antes" value="{actual}">'
-            '<h3 class="wiz-sub">Elige una paleta</h3>'
+            '<details class="mrc-otras"><summary>Elige una paleta</summary>'
             '<p class="ayuda">Cada paleta trae cuatro colores que combinan bien. Puedes ajustar cualquiera abajo.</p>'
-            f'<div class="wiz-ops">{paletas}</div>'
+            f'<div class="wiz-ops">{paletas}</div></details>'
             '<h3 class="wiz-sub">O usa tus colores exactos</h3>'
             '<p class="ayuda">Toca un color para cambiarlo o pega su código. Si tienes manual de marca, aquí van sus'
             " colores.</p>"
@@ -243,9 +241,8 @@ def paso_colores(marca: dict) -> str:
             '<p class="ayuda">La misma paleta puede producir diseños muy diferentes. Elige cómo quieres que se utilicen'
             " tus colores en las publicaciones. Las muestras usan tus colores.</p>"
             f'<div class="wiz-ops">{usos}</div>'
-            '<p class="wiz-nota"><b>Protagonista no es lo mismo que Alto contraste:</b> puedes usar mucho tu color de'
-            " forma suave, o poco pero con un contraste muy fuerte. Si dudas, «Equilibrado» funciona para casi cualquier"
-            " negocio.</p>")
+            '<p class="wiz-nota"><b>Si dudas,</b> «Equilibrado» funciona para casi cualquier negocio. Elige «Natural»'
+            " si prefieres que se vean los colores reales de tus productos y tu lugar.</p>")
 
 
 def vista_par(titulo: str, texto: str, chica: bool = False) -> str:
@@ -264,13 +261,14 @@ def paso_tipografia(marca: dict) -> str:
         f'{vista_par(f, texto)}<span class="cuerpo"><b>{nombre}</b><small>{desc}</small>'
         f'<small class="mrc-fuente">{f} + {texto}</small></span></label>'
         for f, (_, nombre, desc, _, _) in LETRAS.items())
-    usando = '<span class="mrc-usando">✓ Es la que usas</span>' if actual and not otra else ""
+    usando = ('<span class="mrc-usando">✓ Es la que usas</span>' if actual and not otra else
+              f'<span class="mrc-usando">Ahora usas {actual} + {letra_texto(marca)}</span>' if otra else "")
     return ('<div class="mrc-combi"><p class="ante">Recomendada para ti</p>'
             f'<h3>{titulo} + {texto}</h3><p class="ayuda">{porque}</p>'
             f'{vista_par(titulo, texto)}'
             f'<p class="mrc-combi-pie"><button class="boton" name="usar" value="1">✓ Usar esta combinación</button>{usando}</p>'
             "</div>"
-            f'<details class="mrc-otras"{" open" if otra else ""}><summary>Ver otras tipografías</summary>'
+            f'<details class="mrc-otras"><summary>Ver otras tipografías</summary>'
             '<p class="ayuda">La letra que elijas va en los titulares; los textos secundarios siguen con '
             f"{texto}. Todas muestran el mismo ejemplo para que compares.</p>"
             f'<div class="wiz-ops">{tarjetas}</div></details>')
@@ -283,10 +281,11 @@ def paso_logotipo(c: Cuenta, marca: dict) -> str:
     actual = logo_de(marca)
     tarjetas = "".join(
         f'<label class="wiz-op"><input type="radio" name="logo_presencia" value="{k}"{" checked" if k == actual else ""}>'
-        f'<span class="mrc-lienzo {k}">'
-        + ('<span class="cinta">Lanzamiento</span>' if k == "clave" else "")
-        + f'{sello}</span><span class="cuerpo"><b>{nombre}</b><small>{desc}</small></span></label>'
-        for k, (nombre, desc) in LOGO_PRESENCIA.items())
+        + foto_o(f"logo-{k}", f'<span class="mrc-lienzo {k}">'
+                 + ('<span class="cinta">Lanzamiento</span>' if k == "clave" else "")
+                 + ("" if k == "sin" else sello) + "</span>")
+        + f'<span class="cuerpo"><b>{nombre}</b><i class="mrc-lema">{lema}</i><small>{desc}</small></span></label>'
+        for k, (nombre, lema, desc) in LOGO_PRESENCIA.items())
     subido = (f'<div class="mrc-logo"><img src="{url}" alt="Tu logo"><span><b>Este es tu logo</b>'
               '<small>Para cambiarlo, elige otro archivo abajo.</small></span>'
               '<button class="boton secundario chico" name="accion" value="quitar_logo" formnovalidate>Quitar</button></div>'
@@ -298,35 +297,7 @@ def paso_logotipo(c: Cuenta, marca: dict) -> str:
             '<input type="file" name="logo" accept="image/jpeg,image/png,image/webp"></label>'
             '<h3 class="wiz-sub">¿Cuánto quieres que se vea?</h3>'
             '<p class="ayuda">Elige su presencia en tus publicaciones.</p>'
-            f'<div class="wiz-ops">{tarjetas}</div>')
-
-
-def paso_recursos(c: Cuenta, marca: dict) -> str:
-    elegidos = recursos_de(marca)
-    tarjetas = "".join(
-        f'<label class="wiz-op"><input type="checkbox" name="recursos" value="{k}"{" checked" if k in elegidos else ""}>'
-        f'{imagen_tarjeta(k, fondo)}<span class="cuerpo"><b>{nombre}</b><small>{desc}</small>{etiquetas(tags)}</span></label>'
-        for k, (nombre, desc, tags, fondo, _) in RECURSOS.items())
-    fotos = "".join(
-        f'<figure><img src="{url_imagen(c, t)}" alt="Foto {i + 1}">'
-        f'<button class="quitar" name="accion" value="quitar_{i}" formnovalidate>Quitar</button></figure>'
-        for i, t in enumerate(marca.get("fotos", [])) if archivo(c, t).is_file())
-    sube = len(marca.get("fotos", [])) < MAX_FOTOS
-    return ('<h3 class="wiz-sub">Elige lo que aplica a tu negocio</h3>'
-            '<p class="ayuda">Puedes marcar varias. Entre más precisa tu selección, mejor orientamos cada imagen.</p>'
-            f'<div class="wiz-ops">{tarjetas}</div>'
-            '<h3 class="wiz-sub" id="fotos">Fotos reales de tu negocio</h3>'
-            f'<p class="ayuda">Tu local, tu equipo o tus productos, hasta {MAX_FOTOS}. Las usamos como base para que en'
-            " tus posts salga lo real.</p>"
-            + (f'<div class="fotos">{fotos}</div>' if fotos else "")
-            + ('<label class="mrc-subir"><span class="ico">+</span><span class="t"><b>Sube tus mejores fotos</b>'
-               '<small>JPG o PNG, hasta 10 MB cada una.</small></span>'
-               '<input type="file" name="fotos" accept="image/jpeg,image/png,image/webp" multiple></label>'
-               '<div class="acciones"><button class="boton secundario" name="accion" value="subir" formnovalidate>'
-               "Subir fotos</button></div>" if sube else "")
-            + f'<label class="check"><input type="checkbox" name="fotos_estilo" value="1"'
-            f'{" checked" if marca.get("fotos_estilo", True) else ""}> Copiar su estilo (luz, colores y fondos) en todos'
-            " mis posts</label>")
+            f'<div class="wiz-ops mrc-logos">{tarjetas}</div>')
 
 
 def resumen(c: Cuenta, marca: dict) -> str:
@@ -352,14 +323,9 @@ def resumen(c: Cuenta, marca: dict) -> str:
     fuente = letra_de(marca)
     logo = marca.get("logo", "")
     url = url_imagen(c, logo) if logo and archivo(c, logo).is_file() else ""
-    nombre_logo, desc_logo = LOGO_PRESENCIA[logo_de(marca)]
+    nombre_logo, desc_logo, _ = LOGO_PRESENCIA[logo_de(marca)]
     logo_html = (f'<div class="mrc-fila">{f"<img class=mrc-logo-mini src={url} alt=>" if url else "<span class=mrc-logo-mini>Sin logo</span>"}'
                  f"<span><b>{nombre_logo}</b><small>{desc_logo}</small></span></div>")
-    n_fotos = sum(1 for t in marca.get("fotos", []) if archivo(c, t).is_file())
-    chips = "".join(f"<span>{RECURSOS[k][0]}</span>" for k in recursos_de(marca))
-    if n_fotos:
-        chips += f"<span>{n_fotos} foto{'s' if n_fotos != 1 else ''} tuya{'s' if n_fotos != 1 else ''}"
-        chips += " · estilo copiado</span>" if marca.get("fotos_estilo", True) else "</span>"
     return (
         '<div class="wiz-cab"><p class="ante">Resumen</p><h2>Así se verá tu contenido</h2>'
         '<p class="baj">Esta es tu identidad visual. La usamos cada vez que creamos contenido para ti. Toca Editar para'
@@ -369,10 +335,8 @@ def resumen(c: Cuenta, marca: dict) -> str:
         + caja(2, "Colores", escape(nombre_colores), franja)
         + caja(3, "Tipografía", f"{fuente} + {letra_texto(marca)}", vista_par(fuente, letra_texto(marca), chica=True))
         + caja(4, "Logotipo", "Cómo aparece tu marca.", logo_html)
-        + caja(5, "Recursos visuales", "Lo que mostramos en tus publicaciones.",
-               f'<div class="mrc-chips">{chips}</div>', ancho=True)
         + '</div><div class="wiz-pie"><span>Tu marca se aplica sola en cada campaña. El objetivo, los formatos y la'
-        " variedad visual se eligen al crear cada campaña.</span>"
+        " variedad visual y lo que se ve se eligen al crear cada campaña.</span>"
         '<a class="boton" href="/panel/contenido/campanas/nueva">Crear una campaña →</a></div>')
 
 
@@ -385,8 +349,7 @@ async def pagina_marca(c: Cuenta, paso: str, marca: dict | None = None, aviso: s
         i = int(paso) if paso.isdigit() and 1 <= int(paso) <= len(PASOS) else 1
         actual = CLAVES[i - 1]
         hacer = {"estilo": lambda: paso_estilo(marca), "colores": lambda: paso_colores(marca),
-                 "tipografia": lambda: paso_tipografia(marca), "logotipo": lambda: paso_logotipo(c, marca),
-                 "recursos": lambda: paso_recursos(c, marca)}[actual]
+                 "tipografia": lambda: paso_tipografia(marca), "logotipo": lambda: paso_logotipo(c, marca)}[actual]
         colores = colores_de(marca)
         estilo = ";".join(f"--m-{k}:{colores[k]}" for k, *_ in COLORES)
         contenido = (f'<form method="post" action="{BASE}" enctype="multipart/form-data" data-marca style="{estilo}">'
@@ -433,9 +396,6 @@ def guardar_paso(f, antes: dict, paso: str) -> tuple[dict, str]:
         datos["fuente"], datos["peso"], datos["fuente_texto"] = fuente, LETRAS[fuente][0], texto
     elif paso == "logotipo":
         datos["logo_presencia"] = f.get("logo_presencia") if f.get("logo_presencia") in LOGO_PRESENCIA else logo_de(antes)
-    elif paso == "recursos":
-        datos["recursos"] = [k for k in RECURSOS if k in f.getlist("recursos")]
-        datos["fotos_estilo"] = f.get("fotos_estilo") == "1"
     datos["pasos"] = [k for k in CLAVES if k in set(antes.get("pasos", [])) | {paso}]
     return datos, ""
 
@@ -479,16 +439,10 @@ async def guardar_marca(request: Request):
     if aviso:
         return await pagina_marca(c, str(i), aviso=aviso)
 
-    # Archivos: el logo (paso 4) y las fotos del negocio (paso 5).
+    # El logo (paso 4).
     if accion == "quitar_logo" and datos.get("logo"):
         archivo(c, datos.pop("logo")).unlink(missing_ok=True)
         aviso = "Listo: quitamos tu logo."
-    if accion.startswith("quitar_") and accion[7:].isdigit():
-        fotos = list(datos.get("fotos", []))
-        if int(accion[7:]) < len(fotos):
-            archivo(c, fotos.pop(int(accion[7:]))).unlink(missing_ok=True)
-            datos["fotos"] = fotos
-        aviso = "Listo: quitamos esa foto."
     logo = f.get("logo")
     if getattr(logo, "filename", ""):
         tokens, _ = await guardar_fotos(c, [logo], 1)
@@ -498,19 +452,9 @@ async def guardar_marca(request: Request):
             datos["logo"] = tokens[0]
         else:
             aviso = "No se pudo leer el logo (usa JPG o PNG de hasta 10 MB)."
-    nuevas = [s for s in f.getlist("fotos") if getattr(s, "filename", "")]
-    if nuevas:
-        fotos = list(datos.get("fotos", []))
-        tokens, fallidas = await guardar_fotos(c, nuevas, MAX_FOTOS - len(fotos))
-        datos["fotos"] = fotos + tokens
-        aviso = f"Listo: {len(tokens)} foto{'s' if len(tokens) != 1 else ''} nueva{'s' if len(tokens) != 1 else ''}."
-        if fallidas:
-            aviso += f" {fallidas} no se pudieron leer (usa JPG o PNG de hasta 10 MB)."
-    elif accion == "subir":
-        aviso = "Elige primero las fotos."
 
     await c.store.set("marca", json.dumps(datos, ensure_ascii=False))
     log.info("@%s guardó Tu marca: %s", await panel.usuario(c), paso)
-    if accion != "guardar" or aviso:  # subió o quitó algo: se queda en el paso para verlo
+    if accion != "guardar" or aviso:  # subió o quitó el logo: se queda en el paso para verlo
         return await pagina_marca(c, str(i), datos, aviso)
     return RedirectResponse(f"{BASE}?paso={i + 1 if i < len(PASOS) else RESUMEN}", status_code=303)

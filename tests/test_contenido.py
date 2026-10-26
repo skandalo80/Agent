@@ -55,6 +55,12 @@ def png() -> bytes:
     return out.getvalue()
 
 
+class Subida:
+    """Una foto subida (como las de un formulario), para guardarla sin pasar por una página."""
+    async def read(self, n):
+        return png()
+
+
 def crear(client, c, objetivo="marca", **kw) -> int:
     """Un post como lo arma Campañas (Crear post ya no existe): Claude escribe y se genera la imagen."""
     return client.portal.call(partial(contenido.generar, c, objetivo, **kw))
@@ -118,7 +124,7 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
 
     # Tu marca, paso a paso: sin marca abre el paso 1; cada paso guarda y lleva al siguiente.
     r = client.get("/panel/contenido/marca")
-    assert "Paso 1 de 5" in r.text and '<main class="oscuro-pag">' in r.text and r.text.count('name="estilos"') == 9
+    assert "Paso 1 de 4" in r.text and '<main class="oscuro-pag">' in r.text and r.text.count('name="estilos"') == 9
     assert "¿Cómo quieres que se vean los diseños de tu marca?" in r.text and "Tu cuenta · Tu marca" in r.text
     assert "Sensación: rebelde, directo, impactante." in r.text and "1.º · Estilo principal:" in r.text
     # Tu marca vive en el menú de perfil (abajo), no en el submenú de Contenido.
@@ -133,11 +139,11 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     r = client.get(f"{MARCA}?paso=1")
     assert "1.º · Estilo principal</span>" in r.text and "3.º · Estilo de apoyo</span>" in r.text
     # Colores: la paleta recién elegida (sin JavaScript) llena los cuatro; después manda el color que cambió.
-    client.post(MARCA, headers=ORIGEN, data={"paso": "2", "paleta": "azul", "paleta_antes": "", "uso_color": "contraste"})
+    client.post(MARCA, headers=ORIGEN, data={"paso": "2", "paleta": "azul", "paleta_antes": "", "uso_color": "natural"})
     guardada = client.portal.call(contenido.marca_de, c)
-    assert (guardada["principal"], guardada["secundario"], guardada["uso_color"]) == ("#16324F", "#3B82C4", "contraste")
+    assert (guardada["principal"], guardada["secundario"], guardada["uso_color"]) == ("#16324F", "#3B82C4", "natural")
     client.post(MARCA, headers=ORIGEN, data={
-        "paso": "2", "paleta": "azul", "paleta_antes": "azul", "uso_color": "contraste",
+        "paso": "2", "paleta": "azul", "paleta_antes": "azul", "uso_color": "natural",
         "principal": "#16324f", "principal_hex": "1f3a5f", "secundario": "#3b82c4", "secundario_hex": "nada",
         "acento": "#123456", "acento_hex": "#9ED8CF", "fondo": "#f5f8fb", "fondo_hex": "#F5F8FB"})
     guardada = client.portal.call(contenido.marca_de, c)
@@ -147,8 +153,11 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     assert 'value="azul" data-colores="#16324F,#3B82C4,#9ED8CF,#F5F8FB">' in r.text  # ya no es la paleta: sin marcar
     # Tipografía: cada letra trae su grosor.
     r = client.get(f"{MARCA}?paso=2")
-    assert "¿Cuánto quieres que destaquen los colores de tu marca?" in r.text and "Alto contraste" in r.text
-    assert "Ideal para la mayoría de las marcas." in r.text and 'value="contraste" checked' in r.text
+    assert "¿Cuánto quieres que destaquen los colores de tu marca?" in r.text and "Natural / Sin protagonismo" in r.text
+    assert "Los colores de marca conviven con los colores naturales." in r.text and 'value="natural" checked' in r.text
+    # Las paletas vienen plegadas; cada opción de color lleva su imagen.
+    assert '<details class="mrc-otras"><summary>Elige una paleta</summary>' in r.text
+    assert "url(/panel/static/tarjetas/marca/color-natural.webp)" in r.text
     # Tipografía: la combinación recomendada según el estilo principal (Editorial: Playfair Display + Inter).
     r = client.get(f"{MARCA}?paso=3")
     assert "Recomendada para ti" in r.text and "<h3>Playfair Display + Inter</h3>" in r.text
@@ -161,30 +170,31 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     client.post(MARCA, headers=ORIGEN, data={"paso": "3", "fuente": "Oswald"})
     guardada = client.portal.call(contenido.marca_de, c)
     assert (guardada["fuente"], guardada["peso"], guardada["fuente_texto"]) == ("Oswald", 700, "Inter")
-    assert "<details class=\"mrc-otras\" open>" in client.get(f"{MARCA}?paso=3").text
+    r = client.get(f"{MARCA}?paso=3")  # «Ver otras tipografías» sigue plegado y arriba dice cuál usa
+    assert "<details class=\"mrc-otras\" open>" not in r.text and "Ahora usas Oswald + Inter" in r.text
     client.post(MARCA, headers=ORIGEN, data={"paso": "3", "fuente": "Playfair Display"})
     guardada = client.portal.call(contenido.marca_de, c)
     assert (guardada["fuente"], guardada["peso"]) == ("Playfair Display", 600)
-    # Logotipo (opcional) y recursos visuales con una foto del producto.
+    # Logotipo (opcional): es el último paso y lleva al resumen.
+    r = client.get(f"{MARCA}?paso=4")
+    assert r.text.count('name="logo_presencia"') == 5 and "Sin logotipo" in r.text and "Paso 4 de 4" in r.text
+    assert "url(/panel/static/tarjetas/marca/logo-sin.webp)" in r.text and "Recursos visuales" not in r.text
     r = client.post(MARCA, headers=ORIGEN, data={"paso": "4", "logo_presencia": "visible"}, follow_redirects=False,
                     files={"logo": ("logo.png", png(), "image/png")})
-    assert r.headers["location"] == f"{MARCA}?paso=5"
-    r = client.post(MARCA, headers=ORIGEN, data={"paso": "5", "recursos": "productos", "fotos_estilo": "1", "accion": "subir"},
-                    files={"fotos": ("cartera.png", png(), "image/png")})
-    assert "1 foto nueva" in r.text and "Paso 5 de 5" in r.text
-    r = client.post(MARCA, headers=ORIGEN, follow_redirects=False,
-                    data={"paso": "5", "recursos": ["productos", "personas", "nada"], "fotos_estilo": "1"})
     assert r.headers["location"] == f"{MARCA}?paso=resumen"
     guardada = client.portal.call(contenido.marca_de, c)
-    assert guardada["recursos"] == ["personas", "productos"] and guardada["logo_presencia"] == "visible"
-    assert guardada["pasos"] == ["estilo", "colores", "tipografia", "logotipo", "recursos"] and len(guardada["fotos"]) == 1
+    assert guardada["logo_presencia"] == "visible" and guardada["pasos"] == ["estilo", "colores", "tipografia", "logotipo"]
     # Ya configurada, Tu marca abre en el resumen, con Editar en cada parte.
     r = client.get("/panel/contenido/marca")
-    assert "Así se verá tu contenido" in r.text and r.text.count(">Editar</a>") == 5 and "Completar" not in r.text
-    assert "Colores propios · Alto contraste" in r.text and "Playfair Display + Inter" in r.text
-    assert "Firma visible" in r.text and "1 foto tuya · estilo copiado" in r.text
+    assert "Así se verá tu contenido" in r.text and r.text.count(">Editar</a>") == 4 and "Completar" not in r.text
+    assert "Colores propios · Natural / Sin protagonismo de marca" in r.text and "Playfair Display + Inter" in r.text
+    assert "Firma visible" in r.text and "Recursos visuales" not in r.text
     assert client.get("/panel/static/fuentes/CormorantGaramond-Bold.ttf").status_code == 200
-    token_foto = guardada["fotos"][0]
+    # Las fotos del negocio que ya tenía (Tu marca ya no las pide) se conservan y se siguen usando.
+    tokens, _ = client.portal.call(contenido.guardar_fotos, c, [Subida()], 1)
+    guardada = {**guardada, "fotos": tokens}
+    client.portal.call(c.store.set, "marca", json.dumps(guardada))
+    token_foto = tokens[0]
     assert client.get(f"/media/cafe_lunar/{token_foto}.jpg").status_code == 200
     # La plantilla de inicio ya no se elige en Tu marca (pasa a Crear campaña): se conserva la guardada.
     client.portal.call(c.store.set, "marca", json.dumps({**guardada, "plantilla": "banda"}))
@@ -199,7 +209,7 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     idea, fotos = proveedor.llamadas[0]
     assert "leather handbag" in idea and "High-end editorial magazine" in idea and "Do not include any text" in idea
     assert "A lighter secondary influence: Brutalist" in idea and "secondary #3B82C4" in idea
-    assert "How much color: High contrast" in idea and "headlines in Playfair Display, secondary text in Inter" in idea and "the products as protagonists" in idea
+    assert "How much color: Prioritize the scene" in idea and "headlines in Playfair Display, secondary text in Inter" in idea
     assert len(fotos) == 1
     post = client.portal.call(c.store.post, 1)
     assert post["status"] == "borrador" and post["user_id"] == admin.PANEL and "Comenta PRECIO" in post["caption"]
@@ -517,10 +527,9 @@ def test_lo_que_mas_preguntan(con_mensajes):
 def test_diseno_libre_con_el_estilo_de_sus_fotos(cliente, monkeypatch):
     client, c, llamadas, proveedor = cliente
     monkeypatch.setattr(c, "imagenes_mes", 5)
-    client.post(MARCA, headers=ORIGEN, data={"paso": "5", "fotos_estilo": "1", "accion": "subir"},
-                files={"fotos": ("post.png", png(), "image/png")})
-    guardada = client.portal.call(contenido.marca_de, c)
-    assert guardada["fotos_estilo"] is True and len(guardada["fotos"]) == 1
+    # Fotos del negocio guardadas antes en Tu marca (ya no se piden ahí, pero se conservan y guían el estilo).
+    tokens, _ = client.portal.call(contenido.guardar_fotos, c, [Subida()], 1)
+    guardada = {"fotos": tokens, "fotos_estilo": True}
     # El modo y "Describe tu estilo" se guardaban en Tu marca; ahora pasan a Crear campaña y se conservan.
     client.portal.call(c.store.set, "marca", json.dumps({
         **guardada, "principal": "#111111", "acento": "#E8590C", "fondo": "#000000", "fuente": "Inter", "peso": 700,
@@ -575,8 +584,9 @@ def test_tu_marca_menu_de_pasos_y_marca_de_antes(cliente, monkeypatch):
     monkeypatch.setattr(c, "imagenes_mes", 5)
     r = client.get(f"{MARCA}?paso=3")
     # El menú de pasos: cada uno es un enlace; el actual marcado y el resumen al final.
-    assert all(f'href="{MARCA}?paso={i}"' in r.text for i in (1, 2, 3, 4, 5, "resumen"))
-    assert f'href="{MARCA}?paso=3" class="actual"' in r.text and "Paso 3 de 5" in r.text
+    assert all(f'href="{MARCA}?paso={i}"' in r.text for i in (1, 2, 3, 4, "resumen"))
+    assert f'href="{MARCA}?paso=5"' not in r.text
+    assert f'href="{MARCA}?paso=3" class="actual"' in r.text and "Paso 3 de 4" in r.text
     assert r.text.count('name="fuente"') == 12 and "font-family:'Oswald';font-weight:700" in r.text
     assert f'href="{MARCA}?paso=2">← Anterior' in r.text
     # Las tarjetas usan su imagen de static/tarjetas/marca (los 9 estilos la tienen); sin imagen, su color.
@@ -593,17 +603,17 @@ def test_tu_marca_menu_de_pasos_y_marca_de_antes(cliente, monkeypatch):
     assert client.portal.call(panel.marca_lista, c)
     r = client.get(MARCA)
     assert "Así se verá tu contenido" in r.text and "<b>Editorial</b><small>Estilo principal" in r.text
-    assert r.text.count(">Completar</a>") == 2
+    assert r.text.count(">Completar</a>") == 1
     assert 'name="estilos" value="editorial" checked' in client.get(f"{MARCA}?paso=1").text
     # Sin colores no está lista: abre en el primer paso que falta.
     # Los estilos de la versión anterior pasan a los nuevos (urbano y geométrico: brutalista y bento grid).
     client.portal.call(c.store.set, "marca", json.dumps({"estilos": ["urbano", "geometrico", "minimal"]}))
     assert 'name="orden" value="brutalista,bento,minimalista"' in client.get(f"{MARCA}?paso=1").text
     assert not client.portal.call(panel.marca_lista, c)
-    assert "Paso 2 de 5" in client.get(MARCA).text
+    assert "Paso 2 de 4" in client.get(MARCA).text
 
-    # «Oscuro» de la versión anterior es ahora Alto contraste.
-    assert contenido.uso_color({"uso_color": "oscuro"}) == "contraste" and contenido.uso_color({}) == ""
+    # «Oscuro» y «Alto contraste» de versiones anteriores son ahora Natural.
+    assert contenido.uso_color({"uso_color": "oscuro"}) == "natural" and contenido.uso_color({"uso_color": "contraste"}) == "natural" and contenido.uso_color({}) == ""
     # «No estoy seguro, recomiéndame uno»: marca tres según el giro de Perfil de empresa, sin guardar.
     r = client.post(MARCA, headers=ORIGEN, data={"paso": "1", "accion": "recomendar"})
     assert "Te recomendamos Minimalista, Editorial y Bento Grid (llena el giro" in r.text
@@ -860,7 +870,7 @@ def test_identidad_de_marca_y_logo(cliente, monkeypatch):
     logo = client.portal.call(contenido.marca_de, c)["logo"]
     assert contenido.archivo(c, logo).is_file()
     r = client.get(f"{MARCA}?paso=4")
-    assert 'alt="Tu logo"' in r.text and f'<img class="lg" src="/media/{c.media_slug}/{logo}.jpg?v=' in r.text
+    assert 'alt="Tu logo"' in r.text and f'src="/media/{c.media_slug}/{logo}.jpg?v=' in r.text
     assert 'name="logo_presencia" value="siempre" checked' in r.text
     # También sale en el círculo de tu cuenta, abajo en el menú lateral, en todas las páginas.
     assert f'<img class="lat-avatar" src="/media/{c.media_slug}/{logo}.jpg?v=' in client.get("/panel/asistente").text
