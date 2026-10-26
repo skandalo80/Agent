@@ -472,7 +472,7 @@ ESTILO = """
 .as-barra{height:.3rem;background:#ece5ef;border-radius:9px;margin:1rem 0 .5rem}
 .as-barra i{display:block;height:100%;background:var(--neon);border-radius:9px}
 .as-nota{display:block;color:var(--gris);font-size:.8rem;line-height:1.5}
-.as-num{color:#8a6a92;font-size:.75rem;letter-spacing:.12em;text-transform:uppercase;font-weight:800;margin:0}
+.as-num{color:var(--oro-texto);font-size:.75rem;letter-spacing:.12em;text-transform:uppercase;font-weight:800;margin:0}
 .as-h{font-size:1.9rem;letter-spacing:-.04em;font-weight:800;margin:.3rem 0 .25rem}
 .as-baj{color:var(--gris);margin:0 0 1.4rem}
 .as-caja{background:var(--clay);border:1px solid var(--linea-clara);border-radius:1.25rem;padding:1.4rem 1.5rem;margin:0 0 1rem;min-width:0}

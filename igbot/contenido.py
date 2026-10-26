@@ -498,7 +498,7 @@ async def pagina(c: Cuenta, actual: str, bajada: str, cuerpo: str, aviso: str = 
                  con_resumen: bool = False, oscuro: bool = False) -> HTMLResponse:
     """Las secciones de Contenido van en el menú lateral. Los números del mes (con_resumen) solo salen
     en Calendario, el inicio de Contenido; las demás páginas llevan el encabezado delgado."""
-    crear = '<a class="boton secundario ajuste" href="/panel/contenido/campanas/nueva">+ Nueva campaña</a>'
+    crear = '<a class="boton ajuste" href="/panel/contenido/campanas/nueva">+ Nueva campaña</a>'
     return panel.pagina(
         panel.cabecera(salir=True, menu="contenido", cuenta=c, sub=actual, perfil=await panel.usuario(c), foto=await panel.foto_perfil(c))
         + f'<section class="oscuro portada compacta{"" if con_resumen else " delgada"}"><div class="contenedor">'
