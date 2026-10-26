@@ -146,13 +146,6 @@ VISUAL = {
     "graficos": ("Ilustraciones y gráficos", "Íconos y diagramas para explicar ideas.", "#2d2640"),
     "propias": ("Tus propias fotos", "Usamos tus fotos de Tu marca y del producto como referencia.", "#4a2312"),
 }
-APARIENCIA = {
-    "natural": ("Natural y espontánea", "Como tomada con el celular, con luz natural.", "#3a2f25"),
-    "profesional": ("Profesional y cuidada", "Luz pareja, composición ordenada, acabado pulido.", "#1f3029"),
-    "creativa": ("Creativa y llamativa", "Colores y composiciones con más energía.", "#4a2312"),
-    "premium": ("Premium", "Detalles elegantes y luz de estudio.", "#26262a"),
-    "ia": ("Que la IA decida", "Se adapta a la idea de cada post.", "#2d2640"),
-}
 TEXTO = {  # clave: (título, descripción, color)
     "nada": ("Sin texto", "La imagen comunica la idea por sí sola.", "#26262a"),
     "minimo": ("Texto mínimo", "Una frase muy breve o unas pocas palabras.", "#3a2f25"),
@@ -183,7 +176,7 @@ def inicial(marca: dict) -> dict:
     return {"objetivo": "", "mensajes": [], "producto": "", "accion": "conocer", "descuento": "", "desde": "",
             "hasta": "", "condicion": "", "texto": "", "con_producto": False, "con_texto": False, "preguntan": True, "funciona": False,
             "mezcla": campanas.MEZCLA_INICIAL, "formatos": ["foto", "titular"],
-            "visual": ["productos", "personas", "propias"], "apariencia": "natural", "texto_img": "minimo",
+            "visual": ["productos", "personas", "propias"], "texto_img": "minimo",
             "variedad": "coherencia", "armado": modo_de(marca), "nombre": "", "inicio": lunes.isoformat(),
             "semanas": 2, "n_posts": 8, "dias": [0, 1, 2, 3, 4], "horarios": ["manana", "noche"], "hechos": []}
 
@@ -284,8 +277,7 @@ async def a_campana(c: Cuenta, b: dict) -> dict:
                 producto += f" ({b['condicion']})"
         producto += "."
     visual = ", ".join(VISUAL[k][0] for k in b["visual"] if k in VISUAL)
-    estilo = (f"Apariencia: {APARIENCIA[b['apariencia']][0]} ({APARIENCIA[b['apariencia']][1]}). Texto dentro de la"
-              f" imagen: {TEXTO[b['texto_img']][0].lower()}. Variedad visual: {VARIEDAD[b['variedad']][0]}"
+    estilo = (f"Texto dentro de la imagen: {TEXTO[b['texto_img']][0].lower()}. Variedad visual: {VARIEDAD[b['variedad']][0]}"
               f" ({VARIEDAD[b['variedad']][1]})")
     inicio = date.fromisoformat(b["inicio"])
     return {"nombre": b["nombre"].strip() or f"{obj['titulo']} · {campanas.fecha_larga(b['inicio'])}"[:campanas.MAX_NOMBRE],
@@ -350,7 +342,6 @@ def del_form(f, paso: int, b: dict, objetivos: list[dict], mensajes: list[dict],
         b["visual"] = _lista(f, "visual", VISUAL)
         return "" if b["visual"] else "Elige al menos una cosa que se vea."
     if paso == 6:
-        b["apariencia"] = g("apariencia") if g("apariencia") in APARIENCIA else b["apariencia"]
         b["texto_img"] = g("texto_img") if g("texto_img") in TEXTO else b["texto_img"]
         b["variedad"] = g("variedad") if g("variedad") in VARIEDAD else b["variedad"]
         b["armado"] = g("armado") if g("armado") in ARMADO else b["armado"]
@@ -382,7 +373,7 @@ def faltan(b: dict) -> list[int]:
 # --- páginas ---
 
 def img(seccion: str, clave: str, color: str, texto: str = "", alta: bool = False) -> str:
-    """alta: 4:5 como un post (los formatos se ven completos); si no, 16:10."""
+    """alta: la imagen completa, vertical (2:3); si no, 16:10."""
     archivo = f"{seccion}-{clave}.webp"
     fondo = f"{color} url(/panel/static/tarjetas/campana/{archivo})" if (TARJETAS / archivo).is_file() else color
     return f'<span class="wiz-img{" alta" if alta else ""}" style="--fondo:{fondo}">{"" if (TARJETAS / archivo).is_file() else escape(texto)}</span>'
@@ -450,9 +441,7 @@ def paso_1(b: dict, objetivos: list[dict]) -> str:
                 "Elige el resultado que buscas. Las opciones salen de tu perfil de empresa, así que hablan de tu"
                 " negocio.")
             + f'<div class="wiz-ops">{ops}</div>'
-            + nota("Cómo lo usamos:", "el objetivo decide qué tipo de posts salen. Con más interacción, por ejemplo,"
-                   " hay más preguntas y «Esto o aquello», y cada post trae lista su regla de «Comenta y te"
-                   " respondemos».") + pie(1))
+            + pie(1))
 
 
 def paso_2(b: dict, mensajes: list[dict], prods: list[dict], objetivos: list[dict]) -> str:
@@ -483,11 +472,12 @@ def paso_2(b: dict, mensajes: list[dict], prods: list[dict], objetivos: list[dic
     return (cab(2, "¿Qué quieres comunicar?",
                 (f"Ideas pensadas para «{escape(obj)}». " if obj else "")
                 + f"Es el tema de la campaña: lo que la gente se va a llevar en la cabeza. Elige hasta {MAX_MENSAJES}.")
-            + f'<div class="wiz-ops">{ops}</div>' + producto
+            + f'<div class="wiz-ops">{ops}</div>'
             + '<div class="wiz-bloque">' + abre("con_texto", "Cuéntalo en tus palabras", b.get("con_texto") or b["texto"])
             + '<p class="ayuda">Un dato, una fecha o una idea que no debe faltar.</p>'
             f'<textarea name="texto" rows="2" maxlength="{MAX_TEXTO}" aria-label="Tu idea" placeholder="Ej. Temporada'
-            f' de otoño: queremos más visitas entre semana.">{escape(b["texto"])}</textarea></div></div>' + pie(2))
+            f' de otoño: queremos más visitas entre semana.">{escape(b["texto"])}</textarea></div></div>' + producto
+            + pie(2))
 
 
 def paso_3(b: dict, objetivos: list[dict]) -> str:
@@ -499,8 +489,7 @@ def paso_3(b: dict, objetivos: list[dict]) -> str:
     return (cab(3, "¿De qué van a tratar tus posts?",
                 f"Elige uno o varios (hasta {MAX_ENFOQUES}). Los posts de la campaña se reparten entre ellos.")
             + f'<div class="wiz-ops tres">{ops}</div>'
-            + nota("Cómo lo usamos:", "cada post toma uno de estos enfoques, con lo que sabemos de tu negocio y lo que"
-                   " elegiste en Mensaje.") + pie(3))
+            + pie(3))
 
 def paso_4(b: dict, fotos: int) -> str:
     sin_collage = fotos < campanas.MIN_FOTOS_COLLAGE
@@ -528,18 +517,14 @@ def paso_5(b: dict) -> str:
 
 
 def paso_6(b: dict) -> str:
-    apariencia = "".join(op("apariencia", k, t, d, marcada=b["apariencia"] == k, imagen=img("apariencia", k, color, t))
-                         for k, (t, d, color) in APARIENCIA.items())
-    variedad = "".join(op("variedad", k, t, d, marcada=b["variedad"] == k, imagen=img("variedad", k, color, t),
+    variedad = "".join(op("variedad", k, t, d, marcada=b["variedad"] == k, imagen=img("variedad", k, color, t, alta=True),
                           em="Recomendado" if k == "coherencia" else "")
                        for k, (t, d, color) in VARIEDAD.items())
     return (cab(6, "¿Cómo quieres que se vea esta campaña?",
                 "Solo cambia esta campaña. Tus colores, tu tipografía y tu logo siguen siendo los de Tu marca.")
             + '<h3 class="wiz-sub">Variedad visual</h3><p class="ayuda">Qué tan distintas se ven las fotos entre'
             ' sí: el lugar, el encuadre y la luz.</p>'
-            f'<div class="wiz-ops dos">{variedad}</div>'
-            '<h3 class="wiz-sub">Apariencia de las fotos</h3><p class="ayuda">Elige una.</p>'
-            f'<div class="wiz-ops">{apariencia}</div>'
+            f'<div class="wiz-ops cuatro">{variedad}</div>'
             '<h3 class="wiz-sub">Texto dentro de la imagen</h3><p class="ayuda">No es el pie de foto: es lo que va'
             ' escrito sobre la imagen.</p><div class="wiz-ops cuatro">'
             + "".join(op("texto_img", k, t, d, marcada=b["texto_img"] == k, imagen=img("texto", k, color, t, alta=True))
@@ -594,7 +579,7 @@ async def resumen(c: Cuenta, b: dict, objetivos: list[dict], mensajes: list[dict
         ("Objetivo", obj, 1, False), ("Mensaje", msgs + (f" · «{b['texto']}»" if b["texto"] else ""), 2, False),
         ("Producto", producto, 2, True), ("Enfoque del contenido", enfoques, 3, False),
         ("Formatos", " · ".join(FORMATOS[k][0] for k in b["formatos"] if k in FORMATOS), 4, False),
-        ("Estilo y variedad", f"{APARIENCIA[b['apariencia']][0]} · {TEXTO[b['texto_img']][0]} ·"
+        ("Estilo y variedad", f"{TEXTO[b['texto_img']][0]} ·"
          f" {VARIEDAD[b['variedad']][0]} · {ARMADO[b['armado']]}", 6, False),
         ("Cantidad y fechas", f"{escape(b['nombre']) or 'Sin nombre'} · {b['n_posts']} posts ·"
          f" {campanas.de_a(ini, fin)} · {dias} · {horas}", 7, True)]
