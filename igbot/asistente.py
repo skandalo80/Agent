@@ -10,12 +10,12 @@ Cada paso guarda solo lo suyo en kv "perfil" y vuelve a escribir el prompt (pane
 Lo que el dueño escribe a mano pasa por panel.revisar_instrucciones; elegir de una lista no.
 Las reglas base (prompts/base.md) siguen al final de todo prompt, como antes.
 Sin JavaScript: radios y casillas con CSS (:has) y un POST por paso.
-La cuenta principal sigue con su formulario de siempre (edita el prompt completo).
+La cuenta principal se configura igual; su prompt va aparte del repo (Cuenta.prompt_destino) y
+con "Volver a las del servidor" (POST /panel/guardar) regresa a prompts/system.md.
 """
 import json
 import logging
 from html import escape
-from pathlib import Path
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -286,6 +286,19 @@ def _equipo(c: Cuenta, perfil: dict) -> str:
             + _pie("equipo", "Siguiente: pruébalo"))
 
 
+def _servidor(c: Cuenta) -> str:
+    """La principal: si usa lo de este panel o las instrucciones del vendedor del repo (prompts/system.md)."""
+    if c.slug:
+        return ""
+    if c.prompt_editado().is_file():
+        return ('<form method="post" action="/panel/guardar" class="as-caja as-srv"><span>Tu asistente usa lo que'
+                " configuraste aquí, no las instrucciones del servidor (prompts/system.md).</span>"
+                '<button class="boton secundario" name="accion" value="restaurar">Volver a las del servidor'
+                "</button></form>")
+    return ('<p class="as-caja as-srv">Ahora usa las instrucciones del servidor (prompts/system.md). En cuanto'
+            " guardes un paso, usa lo que configures aquí.</p>")
+
+
 async def _resumen(c: Cuenta, perfil: dict) -> str:
     from .resultados import dias_de_horario
     e = estilo(perfil)
@@ -337,7 +350,8 @@ async def _resumen(c: Cuenta, perfil: dict) -> str:
                 (c.aviso_correo and c.owner_email) else "Sin avisos"])
             + caja("Lo que sabe de tu negocio", "empresa", negocio)
             + "</div>"
-            '<p class="as-nota">Además siempre sigue las reglas base de la plataforma: no inventa precios, no comparte'
+            + _servidor(c)
+            + '<p class="as-nota">Además siempre sigue las reglas base de la plataforma: no inventa precios, no comparte'
             " datos de otras personas y respeta los límites de Instagram.</p>"
             f'<div class="as-pie"><a class="boton secundario" href="{_href("probar")}">Probar otra vez</a>{boton}</div>')
 
@@ -388,8 +402,6 @@ async def pagina(c: Cuenta, paso: str = "", aviso: str = "", nota: str = "", per
 async def ver(request: Request):
     if not (c := panel.cuenta_de_sesion(request)):
         return panel.entrar()
-    if not c.slug:  # la principal: su formulario de siempre
-        return await panel.panel_de(c, vista="configura")
     q = request.query_params
     return await pagina(c, q.get("paso", ""), aviso="Guardado." if q.get("ok") == "1" else "")
 
@@ -398,8 +410,8 @@ async def ver(request: Request):
 async def guardar(request: Request):
     panel.de_aqui(request)
     c = panel.cuenta_de_sesion(request)
-    if not c or not c.slug:
-        return RedirectResponse("/panel/asistente/configura" if c else "/panel", status_code=303)
+    if not c:
+        return RedirectResponse("/panel", status_code=303)
     f = await panel.form(request)
     paso = f.get("paso", "")
     if paso not in ORDEN or paso == "probar":
@@ -435,8 +447,8 @@ async def guardar(request: Request):
         from . import ajustes
         await ajustes.guardar_del_form(c, await request.form())
     await c.store.set("perfil", json.dumps(datos, ensure_ascii=False))
-    Path(c.prompt_path).parent.mkdir(parents=True, exist_ok=True)
-    Path(c.prompt_path).write_text(prompt, encoding="utf-8")
+    c.prompt_destino().parent.mkdir(parents=True, exist_ok=True)
+    c.prompt_destino().write_text(prompt, encoding="utf-8")
     await c.store.set("asistente_listo", "1")
     log.info("@%s guardó %s de su asistente desde el panel", nombre, paso)
     siguiente = ORDEN[ORDEN.index(paso) + 1]
@@ -530,6 +542,7 @@ form:has(#emojis-nunca:checked) .v-emoji{display:none}form:has(#emojis-seguido:c
 .as-res+.as-nota,.as-resumen+.as-nota{margin-top:1rem}
 .as-pie{display:flex;justify-content:space-between;align-items:center;gap:1rem;margin-top:1.5rem;flex-wrap:wrap}
 .as-pie form{margin:0}
+.as-srv{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-top:1rem;color:#d1d1d6;font-size:.9rem}
 @media(max-width:900px){.asis{grid-template-columns:1fr}.as-pasos{position:static;display:flex;gap:.4rem;overflow-x:auto;padding:.75rem}
 .as-t,.as-barra,.as-pasos .as-nota,.as-paso small,.as-paso:not(.on) b{display:none}.as-paso{flex:none;padding:.35rem}.as-paso.on{padding-right:.8rem}.as-paso b{font-size:.82rem;white-space:nowrap}}
 @media(max-width:560px){.as-img{aspect-ratio:2/1}.as-h{font-size:1.55rem}.as-caja{padding:1.1rem}.as-seg{display:flex}.as-seg label{flex:1;text-align:center;padding:.5rem .6rem}}

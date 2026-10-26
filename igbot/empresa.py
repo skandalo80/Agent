@@ -296,12 +296,10 @@ def huella(e: dict, prods: list[dict]) -> str:
 
 async def aplicar(c: Cuenta) -> None:
     """El asistente usa el perfil desde ya; las opciones de campaña se rehacen si cambió."""
-    if c.slug:  # la principal usa el prompt del vendedor, que no sale del panel
-        texto = await texto_de(c)
-        prompt = panel.generar(await panel.usuario(c), await panel.perfil(c), texto)
-        from pathlib import Path
-        Path(c.prompt_path).parent.mkdir(parents=True, exist_ok=True)
-        Path(c.prompt_path).write_text(prompt, encoding="utf-8")
+    texto = await texto_de(c)  # también la principal (prompt_destino: aparte del repo)
+    prompt = panel.generar(await panel.usuario(c), await panel.perfil(c), texto)
+    c.prompt_destino().parent.mkdir(parents=True, exist_ok=True)
+    c.prompt_destino().write_text(prompt, encoding="utf-8")
     if (await de(c)).get("terminado"):
         programar_opciones(c)
         posicionamiento.programar(c, await panel.perfil(c))  # sale del perfil; no se rehace si no cambió

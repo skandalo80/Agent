@@ -201,7 +201,7 @@ def test_cliente_se_conecta_configura_y_enciende(monkeypatch, tmp_path):
         assert r.status_code == 303 and client.portal.call(panel.activo, c)
 
 
-def test_la_cuenta_principal_edita_sus_instrucciones_aparte(monkeypatch, tmp_path):
+def test_la_cuenta_principal_se_configura_igual_y_guarda_aparte(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     Path("prompts").mkdir()
     Path("prompts/system.md").write_text("PROMPT DEL VENDEDOR")
@@ -219,35 +219,23 @@ def test_la_cuenta_principal_edita_sus_instrucciones_aparte(monkeypatch, tmp_pat
         # Volver a conectarse deja el token nuevo (con los permisos de ahora) en su base.
         assert client.portal.call(bot.principal.store.get, "ig_token") == "largo"
 
+        # Se configura por pasos, igual que las demás cuentas.
         configura = client.get("/panel/asistente/configura").text
-        assert "Cuenta principal" in configura and "Generar instrucciones" in configura
+        assert 'name="paso" value="personalidad"' in configura and "Generar instrucciones" not in configura
         campos_con_nombre(configura)
-        assert "PROMPT DEL VENDEDOR" in configura
         r = client.get("/panel/asistente")
         assert "Gasto de hoy" in r.text and "Mensajes este mes" not in r.text
         assert "Límite de gasto" in client.get("/panel/conexion").text
         assert '<div class="inbox" id="chats">' in r.text
-        # Generar no pisa unas instrucciones escritas a mano sin preguntar.
-        r = client.post("/panel/guardar", headers=ORIGEN,
-                        data={"negocio": "Agentes IA", "accion": "generar", "prompt": "PROMPT DEL VENDEDOR"})
-        assert "Ya tienes instrucciones escritas a mano" in r.text and "PROMPT DEL VENDEDOR" in r.text
-        assert "Sí, reemplazarlas" in r.text and client.portal.call(panel.perfil, bot.principal) == {}
-        r = client.post("/panel/guardar", headers=ORIGEN,
-                        data={"negocio": "Agentes IA", "accion": "generar_si", "prompt": "PROMPT DEL VENDEDOR"})
-        assert "revísalas y pulsa Guardar" in r.text and "EL NEGOCIO\nAgentes IA" in r.text
-        assert not bot.principal.prompt_editado().exists()  # sigue sin guardar nada
-        # Guardar el formulario con las instrucciones del servidor tal cual no las congela.
-        r = client.post("/panel/guardar", headers=ORIGEN,
-                        data={"negocio": "Agentes IA", "accion": "guardar", "prompt": "PROMPT DEL VENDEDOR\r\n"})
-        assert not bot.principal.prompt_editado().exists() and "Volver a las del servidor" not in r.text
-        assert client.portal.call(panel.perfil, bot.principal)["negocio"] == "Agentes IA"
+        r = client.get("/panel/asistente/configura?paso=resumen")
+        assert "Ahora usa las instrucciones del servidor" in r.text and "Volver a las del servidor" not in r.text
         # Lo que guarda va aparte (fuera de git) y manda sobre el del repo hasta que lo restaure.
-        r = client.post("/panel/guardar", headers=ORIGEN, data={"accion": "guardar", "prompt": "PROMPT DE LA DEMO"})
+        client.post("/panel/asistente/paso", headers=ORIGEN, data={"paso": "personalidad", "personalidad": "premium"})
         assert Path("prompts/system.md").read_text() == "PROMPT DEL VENDEDOR"
-        assert "Volver a las del servidor" in r.text and "PROMPT DE LA DEMO" in r.text
-        assert bot.principal.ruta_prompt().read_text() == "PROMPT DE LA DEMO\n"
+        assert "Elegante y premium" in bot.principal.ruta_prompt().read_text()
+        assert "Volver a las del servidor" in client.get("/panel/asistente/configura?paso=resumen").text
         r = client.post("/panel/guardar", headers=ORIGEN, data={"accion": "restaurar"})
-        assert "vuelve a usar las instrucciones del servidor" in r.text and "PROMPT DEL VENDEDOR" in r.text
+        assert "vuelve a usar las instrucciones del servidor" in r.text and "Ahora usa las instrucciones" in r.text
         assert bot.principal.ruta_prompt() == Path("prompts/system.md")
 
 

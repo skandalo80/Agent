@@ -72,12 +72,6 @@ def prompt_horario(c: Cuenta) -> str:
 
 # --- tarjetas del panel ---
 
-def tarjeta(c: Cuenta) -> str:
-    # Va dentro del formulario de la cuenta principal: su Guardar de abajo guarda también esto.
-    return ('<details class="tarjeta plegable seccion" id="ajustes" open><summary><span class="titulo-sec">'
-            f'<h2>Horario y avisos</h2></span></summary>{campos(c)}</details>')
-
-
 def campos(c: Cuenta) -> str:
     """Pausa, horario de atención de una persona y avisos (también el paso Tu equipo de asistente.py)."""
     pausas = "".join(
@@ -206,7 +200,5 @@ async def guardar(request: Request):
         return RedirectResponse("/panel", status_code=303)
     await guardar_del_form(c, await request.form())
     aviso = "Guardado: tu asistente ya trabaja con estos ajustes."
-    if c.slug:  # los clientes los tienen en el paso Tu equipo
-        from . import asistente
-        return await asistente.pagina(c, "equipo", aviso=aviso)
-    return await panel.panel_de(c, aviso, abrir=True)
+    from . import asistente  # van en el paso Tu equipo
+    return await asistente.pagina(c, "equipo", aviso=aviso)
