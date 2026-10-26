@@ -952,6 +952,7 @@ select,input[type=date],input[type=number]{color:var(--negro);background:var(--c
 .mrc-post.protagonista .mp{background:var(--m-secundario)}.mrc-post.protagonista .foto{background:var(--m-acento)}.mrc-post.protagonista .t{color:var(--m-fondo)}.mrc-post.protagonista .l{background:var(--m-principal)}
 .mrc-post.natural .mp{background:#f4efe6}.mrc-post.natural .foto{background:#b9a58a}.mrc-post.natural .t{color:#3a332b}.mrc-post.natural .l{background:#d8cbb6}
 .mrc-reco{position:absolute;top:.6rem;left:.6rem;z-index:1;font-style:normal;font-size:.7rem;font-weight:600;background:var(--acento);color:var(--tinta);border-radius:1rem;padding:.2rem .6rem}
+.wiz-op:has(.wiz-orden:not([hidden])) .mrc-reco{left:2.5rem}
 .mrc-letra{aspect-ratio:16/10;padding:1rem 1.15rem;display:flex;flex-direction:column;justify-content:center;background:#f6f4ef;color:#302D3A}
 .mrc-letra .k{font-size:.62rem;letter-spacing:.14em;text-transform:uppercase;color:#B9B5C5;margin-bottom:.45rem}
 .mrc-letra .h{font-size:1.55rem;line-height:1.08}

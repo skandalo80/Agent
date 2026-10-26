@@ -158,6 +158,19 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     # Las paletas vienen plegadas; cada opción de color lleva su imagen.
     assert '<details class="mrc-otras"><summary>Elige una paleta</summary>' in r.text
     assert "url(/panel/static/tarjetas/marca/color-natural.webp)" in r.text
+    # Cuánto destacan los colores: se pueden elegir varios, en el orden en que los toca.
+    client.post(MARCA, headers=ORIGEN, data={
+        "paso": "2", "paleta_antes": "", "uso_color": ["sutil", "natural"], "orden_uso": "natural,sutil",
+        "principal": "#1F3A5F", "secundario": "#3B82C4", "acento": "#123456", "fondo": "#F5F8FB"})
+    guardada = client.portal.call(contenido.marca_de, c)
+    assert (guardada["usos_color"], guardada["uso_color"]) == (["natural", "sutil"], "natural")
+    r = client.get(f"{MARCA}?paso=2")
+    assert 'name="orden_uso" value="natural,sutil"' in r.text and 'value="sutil" checked' in r.text
+    assert 'data-orden="orden_uso" data-campo="uso_color"' in r.text and '<em class="wiz-orden">2</em>' in r.text
+    assert "How much color (the owner accepts several" in contenido.contexto_marca(guardada)
+    client.post(MARCA, headers=ORIGEN, data={
+        "paso": "2", "paleta_antes": "", "uso_color": "natural",
+        "principal": "#1F3A5F", "secundario": "#3B82C4", "acento": "#123456", "fondo": "#F5F8FB"})
     # Tipografía: la combinación recomendada según el estilo principal (Editorial: Playfair Display + Inter).
     r = client.get(f"{MARCA}?paso=3")
     assert "Recomendada para ti" in r.text and "<h3>Playfair Display + Inter</h3>" in r.text
@@ -183,7 +196,7 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
                     files={"logo": ("logo.png", png(), "image/png")})
     assert r.headers["location"] == f"{MARCA}?paso=resumen"
     guardada = client.portal.call(contenido.marca_de, c)
-    assert guardada["logo_presencia"] == "visible" and guardada["pasos"] == ["estilo", "colores", "tipografia", "logotipo"]
+    assert guardada["logos_presencia"] == ["visible"] and guardada["pasos"] == ["estilo", "colores", "tipografia", "logotipo"]
     # Ya configurada, Tu marca abre en el resumen, con Editar en cada parte.
     r = client.get("/panel/contenido/marca")
     assert "Así se verá tu contenido" in r.text and r.text.count(">Editar</a>") == 4 and "Completar" not in r.text
@@ -865,13 +878,14 @@ def test_identidad_de_marca_y_logo(cliente, monkeypatch):
     # Logo: se sube en el paso 4, sale en sus tarjetas y se puede quitar.
     png_ = io.BytesIO()
     Image.new("RGB", (64, 64), "#123456").save(png_, "PNG")
-    client.post(MARCA, headers=ORIGEN, data={"paso": "4", "logo_presencia": "siempre"},
+    client.post(MARCA, headers=ORIGEN, data={"paso": "4", "logo_presencia": ["discreta", "siempre"], "orden_logo": "siempre"},
                 files={"logo": ("logo.png", png_.getvalue(), "image/png")})
     logo = client.portal.call(contenido.marca_de, c)["logo"]
     assert contenido.archivo(c, logo).is_file()
     r = client.get(f"{MARCA}?paso=4")
     assert 'alt="Tu logo"' in r.text and f'src="/media/{c.media_slug}/{logo}.jpg?v=' in r.text
-    assert 'name="logo_presencia" value="siempre" checked' in r.text
+    assert 'name="logo_presencia" value="siempre" checked' in r.text and 'name="orden_logo" value="siempre,discreta"' in r.text
+    assert "Siempre presente + Firma discreta" in client.get(f"{MARCA}?paso=resumen").text
     # También sale en el círculo de tu cuenta, abajo en el menú lateral, en todas las páginas.
     assert f'<img class="lat-avatar" src="/media/{c.media_slug}/{logo}.jpg?v=' in client.get("/panel/asistente").text
     r = client.post(MARCA, headers=ORIGEN, data={"paso": "4", "accion": "quitar_logo"})

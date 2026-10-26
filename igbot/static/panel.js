@@ -240,9 +240,11 @@ document.querySelectorAll("form[data-vivo]").forEach((form) => {
 // elegir una paleta llena los cuatro colores, el código y el selector de cada color van iguales y las
 // muestras de "¿Cuánto color?" usan los colores de la página. Sin esto, se guarda igual (en el orden de la página).
 document.querySelectorAll("form[data-marca]").forEach((form) => {
-  const ops = form.querySelector(".mrc-estilos");
-  const orden = form.querySelector('input[name="orden"]');
-  if (ops && orden) {
+  // Tarjetas que se eligen en orden (estilos, uso del color, logo): el número dice cuál va primero.
+  form.querySelectorAll("[data-orden]").forEach((ops) => {
+    const orden = form.querySelector('input[name="' + ops.dataset.orden + '"]');
+    if (!orden) return;
+    const campo = ops.dataset.campo;
     const max = +ops.dataset.max || 3;
     const roles = (ops.dataset.roles || "").split(",");
     let elegidos = orden.value ? orden.value.split(",") : [];
@@ -252,8 +254,10 @@ document.querySelectorAll("form[data-marca]").forEach((form) => {
         const caja = op.querySelector("input");
         const n = elegidos.indexOf(caja.value) + 1;
         const em = op.querySelector(".wiz-orden");
-        em.hidden = !n;
-        em.textContent = n || "";
+        if (em) {
+          em.hidden = !n;
+          em.textContent = n || "";
+        }
         const rol = op.querySelector(".mrc-rol");
         if (rol) {
           rol.hidden = !n;
@@ -264,7 +268,7 @@ document.querySelectorAll("form[data-marca]").forEach((form) => {
     };
     ops.addEventListener("change", (e) => {
       const caja = e.target;
-      if (caja.name !== "estilos") return;
+      if (caja.name !== campo) return;
       elegidos = elegidos.filter((k) => k !== caja.value);
       if (caja.checked) {
         if (elegidos.length >= max) caja.checked = false;
@@ -272,7 +276,7 @@ document.querySelectorAll("form[data-marca]").forEach((form) => {
       }
       pintar();
     });
-  }
+  });
   const poner = (campo, valor) => {
     const color = form.querySelector('input[type=color][name="' + campo + '"]');
     const hex = form.querySelector('[data-hex="' + campo + '"]');

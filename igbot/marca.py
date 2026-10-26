@@ -26,7 +26,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
 from . import imagenes, panel
-from .contenido import archivo, estilos_de, guardar_fotos, marca_de, sin_plan, url_imagen, uso_color
+from .contenido import archivo, estilos_de, guardar_fotos, marca_de, sin_plan, url_imagen, usos_color
 from .cuenta import Cuenta
 from .estilos import (COLORES, COMBINACION_INICIAL, COMBINACIONES, ESTILOS, LETRAS, LOGO_INICIAL, LOGO_PRESENCIA,
                       MAX_ESTILOS, MUESTRA_TEXTO, MUESTRA_TITULAR, PALETA_INICIAL, PALETAS, RECOMENDADOS,
@@ -85,8 +85,8 @@ def paleta_de(colores: dict[str, str]) -> str:
     return next((k for k, (_, _, cs) in PALETAS.items() if cs == valores), "")
 
 
-def uso_de(marca: dict) -> str:
-    return uso_color(marca) or USO_INICIAL
+def usos_de(marca: dict) -> list[str]:
+    return usos_color(marca) or [USO_INICIAL]
 
 
 def letra_de(marca: dict) -> str:
@@ -104,8 +104,12 @@ def letra_texto(marca: dict) -> str:
     return marca["fuente_texto"] if marca.get("fuente_texto") in LETRAS else combinacion(marca)[1]
 
 
-def logo_de(marca: dict) -> str:
-    return marca.get("logo_presencia") if marca.get("logo_presencia") in LOGO_PRESENCIA else LOGO_INICIAL
+def logos_de(marca: dict) -> list[str]:
+    """Cómo aparece el logo, en orden (se pueden elegir varios); una marca de antes tenía uno solo."""
+    elegidos = [k for k in marca.get("logos_presencia", []) if k in LOGO_PRESENCIA]
+    if not elegidos and marca.get("logo_presencia") in LOGO_PRESENCIA:
+        elegidos = [marca["logo_presencia"]]
+    return elegidos or [LOGO_INICIAL]
 
 
 def color_elegido(f, k: str, antes: str) -> str:
@@ -118,11 +122,20 @@ def color_elegido(f, k: str, antes: str) -> str:
     return next((v for v in validos if v != antes), validos[0] if validos else antes)
 
 
+def en_orden(f, campo: str, orden: str, validos, maximo: int) -> list[str]:
+    """Los marcados, en el orden en que los tocó (panel.js lo deja en `orden`); sin él, en el de la página."""
+    marcados = [k for k in f.getlist(campo) if k in validos]
+    tocados = [k for k in str(f.get(orden, "")).split(",") if k in marcados]
+    return list(dict.fromkeys(tocados + marcados))[:maximo]
+
+
 def estilos_del_form(f) -> list[str]:
-    """Los marcados, en el orden en que los tocó (panel.js lo deja en "orden"); sin él, en el de la página."""
-    marcados = [k for k in f.getlist("estilos") if k in ESTILOS]
-    orden = [k for k in str(f.get("orden", "")).split(",") if k in marcados]
-    return list(dict.fromkeys(orden + marcados))[:MAX_ESTILOS]
+    return en_orden(f, "estilos", "orden", ESTILOS, MAX_ESTILOS)
+
+
+def marca_orden(n: int) -> str:
+    """El número de orden de una tarjeta elegida (panel.js lo cambia al tocar)."""
+    return f'<em class="wiz-orden"{"" if n else " hidden"}>{n or ""}</em>'
 
 
 # --- piezas de la página ---
@@ -193,7 +206,8 @@ def paso_estilo(marca: dict) -> str:
     return (f'<input type="hidden" name="orden" value="{",".join(elegidos)}">'
             f'<h3 class="wiz-sub">Elige hasta {MAX_ESTILOS} estilos, en orden</h3>'
             f'<ul class="mrc-roles">{roles}</ul>'
-            f'<div class="wiz-ops mrc-estilos" data-max="{MAX_ESTILOS}" data-roles="{",".join(ROLES)}">{tarjetas}</div>'
+            f'<div class="wiz-ops mrc-estilos" data-orden="orden" data-campo="estilos" data-max="{MAX_ESTILOS}"'
+            f' data-roles="{",".join(ROLES)}">{tarjetas}</div>'
             '<p class="wiz-nota"><b>Cómo funciona:</b> toca los estilos en el orden que prefieras. Toca uno elegido para'
             " quitarlo.</p>")
 
@@ -223,8 +237,10 @@ def paso_colores(marca: dict) -> str:
         f'<input type="text" class="mrc-hex" name="{k}_hex" data-hex="{k}" value="{colores[k]}" maxlength="7"'
         f' spellcheck="false" autocomplete="off" aria-label="Código del color {nombre.lower()}"></span></div>'
         for k, nombre, uso in COLORES)
+    elegidos = usos_de(marca)
     usos = "".join(
-        f'<label class="wiz-op"><input type="radio" name="uso_color" value="{k}"{" checked" if k == uso_de(marca) else ""}>'
+        f'<label class="wiz-op"><input type="checkbox" name="uso_color" value="{k}"{" checked" if k in elegidos else ""}>'
+        + marca_orden(elegidos.index(k) + 1 if k in elegidos else 0)
         + ('<em class="mrc-reco">Recomendado</em>' if k == USO_INICIAL else "")
         + f'{foto_o(f"color-{k}", mini_post(k))}<span class="cuerpo"><b>{nombre}</b>'
         f'<i class="mrc-lema">{USO_TARJETA[k]}</i><small>{desc}</small></span></label>'
@@ -240,8 +256,10 @@ def paso_colores(marca: dict) -> str:
             '<h3 class="wiz-sub">¿Cuánto quieres que destaquen los colores de tu marca?</h3>'
             '<p class="ayuda">La misma paleta puede producir diseños muy diferentes. Elige cómo quieres que se utilicen'
             " tus colores en las publicaciones. Las muestras usan tus colores.</p>"
-            f'<div class="wiz-ops">{usos}</div>'
-            '<p class="wiz-nota"><b>Si dudas,</b> «Equilibrado» funciona para casi cualquier negocio. Elige «Natural»'
+            f'<input type="hidden" name="orden_uso" value="{",".join(elegidos)}">'
+            f'<div class="wiz-ops" data-orden="orden_uso" data-campo="uso_color" data-max="{len(USO_COLOR)}">{usos}</div>'
+            '<p class="wiz-nota"><b>Puedes elegir varios,</b> en orden de preferencia: el primero es el que más usamos.'
+            ' <b>Si dudas,</b> «Equilibrado» funciona para casi cualquier negocio. Elige «Natural»'
             " si prefieres que se vean los colores reales de tus productos y tu lugar.</p>")
 
 
@@ -278,9 +296,10 @@ def paso_logotipo(c: Cuenta, marca: dict) -> str:
     logo = marca.get("logo", "")
     url = url_imagen(c, logo) if logo and archivo(c, logo).is_file() else ""
     sello = (f'<img class="lg" src="{url}" alt="">' if url else '<span class="lg">TU LOGO</span>')
-    actual = logo_de(marca)
+    elegidos = logos_de(marca)
     tarjetas = "".join(
-        f'<label class="wiz-op"><input type="radio" name="logo_presencia" value="{k}"{" checked" if k == actual else ""}>'
+        f'<label class="wiz-op"><input type="checkbox" name="logo_presencia" value="{k}"{" checked" if k in elegidos else ""}>'
+        + marca_orden(elegidos.index(k) + 1 if k in elegidos else 0)
         + foto_o(f"logo-{k}", f'<span class="mrc-lienzo {k}">'
                  + ('<span class="cinta">Lanzamiento</span>' if k == "clave" else "")
                  + ("" if k == "sin" else sello) + "</span>")
@@ -296,8 +315,11 @@ def paso_logotipo(c: Cuenta, marca: dict) -> str:
             '<small>Lo conservamos tal cual: no lo redibujamos ni le cambiamos el color.</small></span>'
             '<input type="file" name="logo" accept="image/jpeg,image/png,image/webp"></label>'
             '<h3 class="wiz-sub">¿Cuánto quieres que se vea?</h3>'
-            '<p class="ayuda">Elige su presencia en tus publicaciones.</p>'
-            f'<div class="wiz-ops mrc-logos">{tarjetas}</div>')
+            '<p class="ayuda">Elige su presencia en tus publicaciones. Puedes elegir varias, en orden de preferencia:'
+            " la primera es la que más usamos.</p>"
+            f'<input type="hidden" name="orden_logo" value="{",".join(elegidos)}">'
+            f'<div class="wiz-ops mrc-logos" data-orden="orden_logo" data-campo="logo_presencia"'
+            f' data-max="{len(LOGO_PRESENCIA)}">{tarjetas}</div>')
 
 
 def resumen(c: Cuenta, marca: dict) -> str:
@@ -319,11 +341,13 @@ def resumen(c: Cuenta, marca: dict) -> str:
     franja = ('<span class="mrc-paleta grande">' + "".join(f'<i style="background:{colores[k]}"></i>' for k, *_ in COLORES)
               + '</span><span class="mrc-codigos">'
               + "".join(f"<span><b>{n}</b>{colores[k]}</span>" for k, n, _ in COLORES) + "</span>")
-    nombre_colores = f"{PALETAS[paleta][0] if paleta else 'Colores propios'} · {USO_COLOR[uso_de(marca)][0]}"
+    nombre_colores = f"{PALETAS[paleta][0] if paleta else 'Colores propios'} · {" + ".join(USO_COLOR[u][0] for u in usos_de(marca))}"
     fuente = letra_de(marca)
     logo = marca.get("logo", "")
     url = url_imagen(c, logo) if logo and archivo(c, logo).is_file() else ""
-    nombre_logo, desc_logo, _ = LOGO_PRESENCIA[logo_de(marca)]
+    logos = logos_de(marca)
+    nombre_logo = " + ".join(LOGO_PRESENCIA[k][0] for k in logos)
+    desc_logo = LOGO_PRESENCIA[logos[0]][1] if len(logos) == 1 else "Varía según la publicación; la primera es la que más usamos."
     logo_html = (f'<div class="mrc-fila">{f"<img class=mrc-logo-mini src={url} alt=>" if url else "<span class=mrc-logo-mini>Sin logo</span>"}'
                  f"<span><b>{nombre_logo}</b><small>{desc_logo}</small></span></div>")
     return (
@@ -388,14 +412,16 @@ def guardar_paso(f, antes: dict, paso: str) -> tuple[dict, str]:
         else:
             for k, *_ in COLORES:
                 datos[k] = color_elegido(f, k, colores.get(k, ""))
-        datos["uso_color"] = f.get("uso_color") if f.get("uso_color") in USO_COLOR else uso_de(antes)
+        usos = en_orden(f, "uso_color", "orden_uso", USO_COLOR, len(USO_COLOR)) or usos_de(antes)
+        datos["usos_color"], datos["uso_color"] = usos, usos[0]  # uso_color: el principal, para lo de antes
     elif paso == "tipografia":
         titulo, texto, _ = combinacion(antes)
         # «Usar esta combinación», o seguir sin elegir otra: la recomendada.
         fuente = f.get("fuente") if f.get("fuente") in LETRAS and not f.get("usar") else titulo
         datos["fuente"], datos["peso"], datos["fuente_texto"] = fuente, LETRAS[fuente][0], texto
     elif paso == "logotipo":
-        datos["logo_presencia"] = f.get("logo_presencia") if f.get("logo_presencia") in LOGO_PRESENCIA else logo_de(antes)
+        logos = en_orden(f, "logo_presencia", "orden_logo", LOGO_PRESENCIA, len(LOGO_PRESENCIA)) or logos_de(antes)
+        datos["logos_presencia"], datos["logo_presencia"] = logos, logos[0]
     datos["pasos"] = [k for k in CLAVES if k in set(antes.get("pasos", [])) | {paso}]
     return datos, ""
 

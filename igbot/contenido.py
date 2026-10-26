@@ -150,8 +150,10 @@ def contexto_marca(datos: dict) -> str:
                                               ("fondo", "background")) if imagenes.HEX.match(str(datos.get(k, "")))]
     if colores:
         lineas.append("- Colors (use them subtly in props, backgrounds or light): " + ", ".join(colores))
-        if uso := uso_color(datos):
-            lineas.append(f"- How much color: {USO_COLOR[uso][2]}")
+        if usos := usos_color(datos):
+            lineas.append(f"- How much color: {USO_COLOR[usos[0]][2]}" if len(usos) == 1 else
+                          "- How much color (the owner accepts several; pick the one that best fits this post, the"
+                          " first is preferred): " + " | ".join(USO_COLOR[u][2] for u in usos))
     if datos.get("fuente"):
         lineas.append(f"- Typography (only if the image itself carries text): headlines in {datos['fuente']}"
                       + (f", secondary text in {datos['fuente_texto']}" if datos.get("fuente_texto") else ""))
@@ -160,9 +162,15 @@ def contexto_marca(datos: dict) -> str:
 
 
 def uso_color(datos: dict) -> str:
-    """Cuánto destacan los colores ("" si no lo eligió); el "oscuro" de antes es Alto contraste."""
+    """Cuánto destacan los colores ("" si no lo eligió); los de versiones anteriores pasan a Natural."""
     uso = datos.get("uso_color")
     return uso if uso in USO_COLOR else VIEJOS_USOS.get(uso, "") if isinstance(uso, str) else ""
+
+
+def usos_color(datos: dict) -> list[str]:
+    """Los que eligió, en orden (se pueden elegir varios); una marca de antes tenía uno solo ("uso_color")."""
+    usos = [u if u in USO_COLOR else VIEJOS_USOS.get(u, "") for u in datos.get("usos_color", []) if isinstance(u, str)]
+    return list(dict.fromkeys(u for u in usos if u)) or ([uso_color(datos)] if uso_color(datos) else [])
 
 
 def estilo_nuevo(clave) -> str:
@@ -352,8 +360,10 @@ def visual_marca(datos: dict, modo: str = "") -> str:
                if imagenes.HEX.match(str(datos.get(k, "")))]
     if colores:
         lineas.append("Colores de la marca (para utilería, fondos o luz, con sutileza): " + ", ".join(colores))
-        if uso := uso_color(datos):
-            lineas.append(f"Cuánto destacan sus colores: {USO_COLOR[uso][0]}. {USO_COLOR[uso][1]}")
+        if usos := usos_color(datos):
+            lineas.append("Cuánto destacan sus colores" + (" (acepta varios; usa el que mejor vaya con cada post, el"
+                                                           " primero es el preferido)" if len(usos) > 1 else "")
+                          + ": " + " / ".join(f"{USO_COLOR[u][0]}. {USO_COLOR[u][1]}" for u in usos))
     if datos.get("caracter"):
         lineas.append("Carácter: " + ", ".join(datos["caracter"]))
     return escape("\n".join(lineas))
