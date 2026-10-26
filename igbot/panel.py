@@ -294,8 +294,9 @@ header .contenedor{display:flex;justify-content:space-between;align-items:center
 .salir:hover{color:var(--claro)}
 /* Menú lateral: fijo a la izquierda; plegado (html.menu-plegado) se queda en solo íconos;
    en el celular se esconde y lo abre la hamburguesa. Abajo, el menú de perfil. */
-body:has(>.lateral){padding-left:17rem}
-.lateral{position:fixed;inset:0 auto 0 0;width:17rem;background:var(--grafito);color:var(--claro);border-right:1px solid var(--linea-oscura);display:flex;flex-direction:column;padding:1rem .85rem;z-index:30}
+/* Como tarjeta flotante: separado del borde, con esquinas redondeadas. */
+body:has(>.lateral){padding-left:19rem}
+.lateral{position:fixed;inset:1rem auto 1rem 1rem;width:17rem;background:var(--grafito);color:var(--claro);border:1px solid var(--linea-oscura);border-radius:1.4rem;display:flex;flex-direction:column;padding:1rem .85rem;z-index:30}
 /* Solo anima al plegarlo con el botón (menu-anima), no al cargar cada página. */
 html.menu-anima .lateral{transition:width .18s ease}html.menu-anima body:has(>.lateral){transition:padding-left .18s ease}
 .lat-cabeza{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:0 .35rem .9rem;border-bottom:1px solid #4A2E55;margin-bottom:.9rem}
@@ -314,7 +315,7 @@ html.menu-anima .lateral{transition:width .18s ease}html.menu-anima body:has(>.l
 .lat-sub a{color:#C9B8D1;text-decoration:none;font-size:.97rem;padding:.5rem .7rem;border-radius:.6rem;white-space:nowrap}
 .lat-sub a:hover,.lat-sub a.on{color:var(--claro);background:#44294F}
 .lat-pie{border-top:1px solid #4A2E55;padding-top:.75rem;margin:0}
-html.menu-plegado body:has(>.lateral){padding-left:5.25rem}
+html.menu-plegado body:has(>.lateral){padding-left:7.25rem}
 html.menu-plegado .lateral{width:5.25rem}
 html.menu-plegado .lateral .txt,html.menu-plegado .lat-sub{display:none}
 html.menu-plegado .lat-cabeza{flex-direction:column}
@@ -334,7 +335,7 @@ header.movil{display:none}
 @media(max-width:900px){body:has(>.lateral),html.menu-plegado body:has(>.lateral){padding-left:0}
 header.movil{display:flex;align-items:center;gap:.9rem;height:3.25rem;padding:0 1.25rem;background:var(--grafito);color:var(--claro);border-bottom:1px solid var(--linea-oscura)}
 .hamburguesa{display:flex;flex-direction:column;gap:4px;padding:.4rem}.hamburguesa span{width:20px;height:2px;background:var(--claro);border-radius:2px}
-.lateral,html.menu-plegado .lateral{width:17rem;transform:translateX(-100%);transition:transform .2s ease}
+.lateral,html.menu-plegado .lateral{width:17rem;inset:.75rem auto .75rem .75rem;transform:translateX(calc(-100% - 1rem));transition:transform .2s ease}
 html.menu-plegado .lateral .txt{display:inline}html.menu-plegado .lat-sub{display:flex}html.menu-plegado .lat-cabeza{flex-direction:row}
 html.menu-plegado .perfil-menu{left:0;right:0;bottom:calc(100% + .4rem);width:auto}
 .lateral:target,html.menu-abierto .lateral{transform:none}
