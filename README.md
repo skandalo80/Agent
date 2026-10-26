@@ -349,15 +349,19 @@ La página del negocio está en `web/` (HTML estático, sin build): `index.html`
 
 ```bash
 sudo mkdir -p /var/www/skandar.online
-sudo cp ~/ig-bot/web/* /var/www/skandar.online/
+sudo cp -r ~/ig-bot/web/* /var/www/skandar.online/
 cat ~/ig-bot/deploy/Caddyfile-web | sudo tee -a /etc/caddy/Caddyfile
 sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 sudo systemctl reload caddy
 ```
 
-Para actualizarla después: `git pull` y repetir el `cp`. No hace falta recargar Caddy.
+Para actualizarla después: `git pull` y repetir el `cp -r` (lleva `-r` por la carpeta `blog/`). No hace falta recargar Caddy.
 
-La página incluye `404.html`, `robots.txt`, `sitemap.xml`, `og.png` (la vista previa al compartir el link por Instagram o WhatsApp) y `sitio.js`. No hay scripts ni estilos dentro del HTML porque la CSP de Caddy solo permite archivos del propio dominio; si agregas uno, ponlo en un archivo aparte. Si cambias la página, actualiza la fecha en `sitemap.xml`.
+La página incluye `404.html`, `robots.txt`, `sitemap.xml`, `og.png` (la vista previa al compartir el link por Instagram o WhatsApp) y `sitio.js`. No hay scripts ni estilos dentro del HTML porque la CSP de Caddy solo permite archivos del propio dominio; si agregas uno, ponlo en un archivo aparte. Si cambias la página, actualiza la fecha de `/` en `scripts/generar_blog.py` (función `sitemap`) y vuelve a generar.
+
+### Blog
+
+Los artículos se escriben en `blog/<slug>.md` (cabecera `titulo`, `descripcion`, `categoria`, `portada`, `fecha`, `lectura`, `cta` y, si lo editas después, `modificado`; luego `---` y el texto con `## subtítulos`, listas `- `, `> recuadro`, `**negritas**` y `[enlaces](/ruta)`). `python3 scripts/generar_blog.py` escribe `web/blog/` y `web/sitemap.xml` (con los artículos). Sube los archivos generados junto con el `.md`.
 
 ### Cabeceras de seguridad
 

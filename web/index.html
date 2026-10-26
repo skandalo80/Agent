@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Agentes IA by Skandar</title>
+<title>Asistente virtual con IA para Instagram · Agentes IA by Skandar</title>
 <link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" href="/favicon-32.png" sizes="32x32">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -14,7 +14,7 @@
 <meta property="og:locale" content="es_MX">
 <meta property="og:site_name" content="Agentes IA by Skandar">
 <meta property="og:url" content="https://skandar.online/">
-<meta property="og:title" content="Agentes IA by Skandar">
+<meta property="og:title" content="Asistente virtual con IA para Instagram · Agentes IA by Skandar">
 <meta property="og:description" content="Tus mensajes y tu contenido, en una sola plataforma con inteligencia artificial.">
 <meta property="og:image" content="https://skandar.online/og.png">
 <meta property="og:image:width" content="1200">
@@ -24,19 +24,136 @@
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
-  "@type": "Organization",
-  "name": "Agentes IA by Skandar",
-  "url": "https://skandar.online/",
-  "logo": "https://skandar.online/apple-touch-icon.png",
-  "description": "Plataforma de inteligencia artificial para Instagram: asistente virtual y Community Manager.",
-  "areaServed": "MX",
-  "sameAs": ["https://www.instagram.com/skandar.online/"]
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://skandar.online/#organizacion",
+      "name": "Agentes IA by Skandar",
+      "url": "https://skandar.online/",
+      "logo": "https://skandar.online/apple-touch-icon.png",
+      "email": "hola@skandar.online",
+      "description": "Plataforma de inteligencia artificial para Instagram: asistente virtual y Community Manager.",
+      "areaServed": "MX",
+      "sameAs": [
+        "https://www.instagram.com/skandar.online/"
+      ]
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://skandar.online/#sitio",
+      "name": "Agentes IA by Skandar",
+      "url": "https://skandar.online/",
+      "inLanguage": "es-MX",
+      "publisher": {
+        "@id": "https://skandar.online/#organizacion"
+      }
+    },
+    {
+      "@type": "Service",
+      "name": "Asistente virtual",
+      "serviceType": "Inteligencia artificial para Instagram",
+      "description": "Contesta los mensajes directos de Instagram de tu negocio las 24 horas, con tu información, tus precios y tus preguntas frecuentes.",
+      "provider": {
+        "@id": "https://skandar.online/#organizacion"
+      },
+      "areaServed": "MX",
+      "offers": {
+        "@type": "Offer",
+        "price": "29",
+        "priceCurrency": "USD",
+        "url": "https://skandar.online/#planes",
+        "priceSpecification": {
+          "@type": "UnitPriceSpecification",
+          "price": "29",
+          "priceCurrency": "USD",
+          "unitText": "mes",
+          "valueAddedTaxIncluded": false
+        }
+      }
+    },
+    {
+      "@type": "Service",
+      "name": "Community Manager",
+      "serviceType": "Inteligencia artificial para Instagram",
+      "description": "Crea campañas, imágenes y textos para tu Instagram a partir de tus métricas, tus mensajes directos y tus comentarios, y los publica por ti.",
+      "provider": {
+        "@id": "https://skandar.online/#organizacion"
+      },
+      "areaServed": "MX",
+      "offers": {
+        "@type": "Offer",
+        "price": "79",
+        "priceCurrency": "USD",
+        "url": "https://skandar.online/#planes",
+        "priceSpecification": {
+          "@type": "UnitPriceSpecification",
+          "price": "79",
+          "priceCurrency": "USD",
+          "unitText": "mes",
+          "valueAddedTaxIncluded": false
+        }
+      }
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "¿Necesito instalar algo?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. Conectas tu Instagram en unos minutos y todo lo demás lo haces desde tu panel, en el navegador."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "¿Qué tipo de cuenta necesito?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Una cuenta profesional de Instagram, de Empresa o de Creador. Puedes cambiarla desde la configuración de Instagram."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "¿Qué pasa si un cliente quiere hablar con una persona?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Tu asistente se pausa en esa conversación y te avisa. También se pausa cuando tú contestas a mano, para no interrumpirte."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "¿Puedo definir el tono y el estilo de mi marca?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Sí. Eliges la personalidad y las reglas de tu asistente, y para el contenido defines tus colores, tu tipografía, tu logotipo y tus fotos."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "¿Cómo se conectan los mensajes con el contenido?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "La plataforma revisa tus métricas, lo que te preguntan por DM y lo que comenta tu comunidad, y con eso te propone qué publicar. Tú apruebas cada post antes de que salga."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "¿Puedo cancelar cuando quiera?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Sí. Se paga mes a mes, sin plazo forzoso y sin costo de instalación."
+          }
+        }
+      ]
+    }
+  ]
 }
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
-<link rel="stylesheet" href="/estilos.css?v=2026-10-26">
+<link rel="stylesheet" href="/estilos.css?v=2026-10-26b">
 </head>
 <body>
 <header>
@@ -47,6 +164,7 @@
       <a href="#como-funciona">Cómo funciona</a>
       <a href="#planes">Planes</a>
       <a href="#preguntas">Preguntas</a>
+      <a href="/blog/">Blog</a>
     </nav>
     <div class="nav-acciones">
       <a class="entrar" href="https://console.skandar.online/panel">Entrar</a>
@@ -255,6 +373,7 @@
     <a class="marca" href="/"><span class="sello">S</span>Agentes IA by Skandar</a>
     <span>© 2026 Agentes IA by Skandar · México</span>
     <div class="pie-enlaces">
+      <a href="/blog/">Blog</a>
       <a href="/privacidad">Aviso de privacidad</a>
       <a href="mailto:hola@skandar.online">Contacto</a>
       <a href="https://console.skandar.online/panel">Entrar</a>
