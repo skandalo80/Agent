@@ -155,10 +155,15 @@ APARIENCIA = {
 }
 TEXTO = {"nada": "Nada", "minimo": "Mínimo", "titular": "Un titular", "info": "Con más información"}
 VARIEDAD = {
-    "reconocible": ("Consistente", "Publicaciones con una apariencia similar. Ideal para una marca muy uniforme.",
-                    "#33302a"),
-    "coherencia": ("Variada", "Cambian el lugar, el encuadre y la luz de cada foto, sin perder tu estilo.", "#3a2f25"),
-    "experimental": ("Creativa", "Más contraste, ideas inesperadas y experimentación visual.", "#4a2312"),
+    "reconocible": ("Consistente", "Mantén una identidad visual uniforme. Las publicaciones comparten colores,"
+                    " iluminación y estilo fotográfico para que tu perfil se vea ordenado y reconocible.", "#33302a"),
+    "coherencia": ("Equilibrado", "Combina diferentes escenas y composiciones sin perder armonía. Ideal para mostrar"
+                   " tus productos, personas y espacios manteniendo una imagen de marca coherente.", "#3a2f25"),
+    "diverso": ("Diverso", "Haz que cada publicación se sienta diferente. Alterna escenarios, encuadres, colores y"
+                " protagonistas para crear un perfil dinámico y lleno de contrastes.", "#1f3029"),
+    "experimental": ("Creativo", "Explora ideas inesperadas y composiciones originales. Dale libertad a la IA para"
+                     " proponer imágenes llamativas, experimentar con conceptos y sorprender a tu audiencia.",
+                     "#4a2312"),
 }
 ARMADO = {"plantilla": "Con tu plantilla", "libre": "Diseño libre"}
 HORARIOS = {**{k: f"{v[0]} · {v[1]}" for k, v in campanas.HORARIOS.items()}, "ia": "Que la IA decida"}
@@ -527,7 +532,7 @@ def paso_6(b: dict) -> str:
                 "Solo cambia esta campaña. Tus colores, tu tipografía y tu logo siguen siendo los de Tu marca.")
             + '<h3 class="wiz-sub">Variedad visual</h3><p class="ayuda">Qué tan distintas se ven las fotos entre'
             ' sí: el lugar, el encuadre y la luz.</p>'
-            f'<div class="wiz-ops tres">{variedad}</div>'
+            f'<div class="wiz-ops dos">{variedad}</div>'
             '<h3 class="wiz-sub">Apariencia de las fotos</h3><p class="ayuda">Elige una.</p>'
             f'<div class="wiz-ops">{apariencia}</div>'
             '<h3 class="wiz-sub">Texto dentro de la imagen</h3><p class="ayuda">No es el pie de foto: es lo que va'

@@ -396,7 +396,8 @@ def test_cada_foto_tiene_su_escena_segun_la_variedad():
     assert brief.escenas(fichas, "coherencia", semilla=5) == esc
     creativa = brief.escenas(fichas * 4, "experimental")
     assert any(e.split(", ")[0] in brief.EXPERIMENTALES for e in creativa)
-    assert "Creativa" in brief.variedad_tag({"variedad": "experimental"})
+    assert "Creativo" in brief.variedad_tag({"variedad": "experimental"})
+    assert "Diverso" in brief.variedad_tag({"variedad": "diverso"})
 
 
 def test_la_variedad_llega_al_brief_al_plan_y_a_los_posts(cliente, monkeypatch):
@@ -410,7 +411,8 @@ def test_la_variedad_llega_al_brief_al_plan_y_a_los_posts(cliente, monkeypatch):
     r = llenar(client)
     paso_6 = client.get(f"{URL}?paso=6").text
     assert paso_6.index("Variedad visual") < paso_6.index("Apariencia de las fotos")
-    assert "Consistente" in paso_6 and "Variada" in paso_6 and "Creativa" in paso_6
+    assert all(t in paso_6 for t in ("Consistente", "Equilibrado", "Diverso", "Creativo"))
+    assert "tarjetas/campana/variedad-diverso.webp" in paso_6
     generar(client)
     prompts = [p for p, *_ in llamadas]
     assert sum("<variedad_visual>" in p for p in prompts) >= 3  # brief, plan y posts
