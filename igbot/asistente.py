@@ -549,4 +549,10 @@ form:has(#emojis-nunca:checked) .v-emoji{display:none}form:has(#emojis-seguido:c
 .as-main .opcion:has(input:checked){background:rgba(198,250,44,.07);border-color:var(--neon);box-shadow:inset 0 0 0 1px var(--neon)}
 .as-main .chips label:has(input:checked),.as-seg label:has(input:checked){background:var(--neon);border-color:var(--neon);color:var(--tinta)}
 .as-sw:checked{background:var(--neon)}
+.as-paso.ok .as-n{background:var(--acento);border-color:var(--acento);color:var(--tinta)}
+.as-pers:has(input:checked){border-color:var(--acento)}
+.as-ck{background:var(--acento);color:var(--tinta)}
+.as-main .opcion:has(input:checked){background:rgba(243,154,54,.10);border-color:var(--acento);box-shadow:inset 0 0 0 1px var(--acento)}
+.as-main .chips label:has(input:checked),.as-seg label:has(input:checked){background:var(--acento);border-color:var(--acento);color:var(--tinta)}
+.as-sw:checked{background:var(--acento)}
 """
