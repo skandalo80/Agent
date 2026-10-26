@@ -559,7 +559,7 @@ form:has(#emojis-nunca:checked) .v-emoji{display:none}form:has(#emojis-seguido:c
 .as-sw:focus-visible{outline:2px solid var(--acento-claro);outline-offset:2px}
 .as-mas{margin-top:1.25rem;border-top:1px solid var(--linea-oscura);padding-top:1rem}
 .as-mas summary{cursor:pointer;color:var(--gris);font-size:.92rem}
-.as-resumen{display:grid;grid-template-columns:repeat(auto-fill,minmax(18rem,1fr));gap:1rem}
+.as-resumen{display:grid;grid-template-columns:repeat(auto-fit,minmax(18rem,1fr));gap:1rem}
 .as-res{margin:0}.as-res ul{margin:.4rem 0 0;padding-left:1.1rem;color:#E6E3EC;font-size:.9rem;line-height:1.7}
 .as-top{display:flex;justify-content:space-between;align-items:center;gap:1rem}
 .as-ed{font-size:.82rem;color:var(--acento-claro);border:1px solid rgba(243,154,54,.45);border-radius:999px;padding:.25rem .8rem;text-decoration:none}
@@ -584,4 +584,13 @@ form:has(#emojis-nunca:checked) .v-emoji{display:none}form:has(#emojis-seguido:c
 .as-main .opcion:has(input:checked){background:rgba(243,154,54,.10);border-color:var(--acento);box-shadow:inset 0 0 0 1px var(--acento)}
 .as-main .chips label:has(input:checked),.as-seg label:has(input:checked){background:var(--acento);border-color:var(--acento);color:var(--tinta)}
 .as-sw:checked{background:var(--acento)}
+/* Pasos arriba en horizontal; la barra de avance corre por debajo de los pasos. */
+.asis{grid-template-columns:minmax(0,1fr);gap:1.25rem}
+.as-pasos{position:relative;display:flex;gap:.35rem;align-items:stretch;overflow-x:auto;scrollbar-width:none;padding:.6rem .7rem 1.05rem}
+.as-t,.as-pasos .as-nota{display:none}
+.as-barra{position:absolute;left:1.3rem;right:1.3rem;bottom:.45rem;margin:0;height:.3rem!important}
+.as-paso{flex:1 1 0;min-width:0;line-height:1.2}
+.as-paso>span:last-child{min-width:0}
+.as-paso small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:900px){.as-paso{flex:none}}
 """
