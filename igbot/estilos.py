@@ -134,16 +134,38 @@ PALETAS = {
 }
 PALETA_INICIAL = "carbon"
 USO_COLOR = {
-    # clave: (nombre, descripción, cómo se le pide al generador)
-    "sutil": ("Sutil", "Fondos neutros y tu color solo en detalles. Elegante y fácil de leer.",
-              "Keep the scene mostly neutral; brand colors only in small details."),
-    "equilibrado": ("Equilibrado", "Tu color en títulos y bloques, sobre fondos claros. Reconocible sin cansar.",
-                    "Use the brand colors in a balanced way over light backgrounds: noticeable, never overwhelming."),
-    "protagonista": ("Protagonista", "Fondos con tu color y contraste fuerte. Destaca en el feed.",
-                     "Make the brand colors the protagonists: colored backgrounds and bold contrast."),
-    "oscuro": ("Oscuro", "Fondos oscuros con tu color como brillo. Sofisticado y nocturno.",
-               "Dark, low-key scene with the brand colors as highlights and glows."),
+    # clave: (nombre, cómo se ve, cómo se le pide al generador)
+    "sutil": ("Sutil",
+              "Predominan los fondos neutros, las fotografías y los tonos suaves. Los colores de tu marca aparecen en"
+              " pequeños detalles.",
+              "Keep the design mostly neutral (neutral backgrounds, photography, soft tones); brand colors only in"
+              " small details."),
+    "equilibrado": ("Equilibrado",
+                    "Los colores de tu marca aparecen en titulares, bloques y detalles, combinados con fondos claros,"
+                    " fotografías u otros tonos de apoyo.",
+                    "Use the brand colors in a balanced way: in headlines, blocks and details, combined with light"
+                    " backgrounds, photography and supporting tones. Noticeable, never overwhelming."),
+    "protagonista": ("Protagonista",
+                     "Los fondos, titulares y bloques usan los colores de tu marca con más frecuencia. Tus"
+                     " publicaciones se reconocen al recorrer el feed.",
+                     "Make the brand colors the protagonists: backgrounds, headlines and blocks in the brand colors,"
+                     " so the post is instantly recognizable in the feed, with harmonious, not harsh, contrast."),
+    "contraste": ("Alto contraste",
+                  "Se combinan colores intensos y contrastes marcados para destacar titulares y mensajes importantes.",
+                  "High contrast: intense brand colors against strongly contrasting areas so the headline and key"
+                  " message pop; punchy and attention-grabbing, even if the colored areas are small."),
 }
+# Lo que solo ve el panel: la frase corta y para quién es.
+USO_TARJETA = {
+    "sutil": ("Tu marca está presente sin dominar la imagen.",
+              "Ideal para marcas elegantes, fotografía, moda, decoración o negocios que quieren una imagen discreta."),
+    "equilibrado": ("Tus colores se reconocen sin saturar el diseño.", "Ideal para la mayoría de las marcas."),
+    "protagonista": ("Tus colores son una parte central del diseño.",
+                     "Ideal para marcas con colores distintivos que quieren reforzar su identidad visual."),
+    "contraste": ("Diseños llamativos que captan la atención.",
+                  "Ideal para promociones, anuncios, lanzamientos y campañas comerciales."),
+}
+VIEJOS_USOS = {"oscuro": "contraste"}  # "Oscuro" de la versión anterior
 USO_INICIAL = "equilibrado"
 
 LETRAS = {
@@ -176,6 +198,32 @@ LETRAS = {
     "DM Sans": (600, "Contemporánea y versátil", "Moderna con un toque suave. Se adapta a tonos formales e informales.",
                 "Comunidad", "Ideas que conectan."),
 }
+
+# Tipografía recomendada según el estilo principal: (titulares, textos, por qué encaja).
+COMBINACIONES = {
+    "brutalista": ("Oswald", "Inter", "Una combinación contundente y directa: titulares que se imponen y textos claros"
+                   " que se leen sin esfuerzo."),
+    "minimalista": ("Raleway", "Work Sans", "Una combinación ligera y ordenada que deja respirar tus diseños y da"
+                    " protagonismo al contenido."),
+    "neofuturista": ("Space Grotesk", "Inter", "Una combinación precisa y tecnológica que refuerza la sensación de"
+                     " innovación sin perder legibilidad."),
+    "cristalino": ("DM Sans", "Inter", "Una combinación moderna y suave que acompaña las transparencias y los reflejos"
+                   " sin recargar el diseño."),
+    "maximalista": ("Poppins", "DM Sans", "Una combinación con energía y carácter que aguanta colores intensos y"
+                    " composiciones atrevidas."),
+    "claymorfismo": ("Nunito", "Inter", "Una combinación cercana, moderna y legible que acompaña tus diseños sin quitar"
+                     " protagonismo al contenido."),
+    "editorial": ("Playfair Display", "Inter", "Una combinación elegante de revista: titulares con carácter y textos"
+                  " limpios que transmiten autoridad."),
+    "bento": ("Montserrat", "Inter", "Una combinación firme y muy legible que ordena cifras, titulares y mensajes en"
+              " cada bloque."),
+    "espacial": ("Space Grotesk", "DM Sans", "Una combinación actual y sofisticada que acompaña la profundidad y las"
+                 " capas de tus diseños."),
+}
+COMBINACION_INICIAL = ("Montserrat", "Inter", "Una combinación clara, moderna y segura que funciona para casi cualquier"
+                       " negocio.")
+MUESTRA_TITULAR = "Tu negocio, más cerca de tus clientes."
+MUESTRA_TEXTO = "Descubre cómo podemos ayudarte con una experiencia pensada para ti."
 
 LOGO_PRESENCIA = {
     # clave: (nombre, descripción)

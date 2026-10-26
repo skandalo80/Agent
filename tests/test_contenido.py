@@ -133,11 +133,11 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     r = client.get(f"{MARCA}?paso=1")
     assert "1.º · Estilo principal</span>" in r.text and "3.º · Estilo de apoyo</span>" in r.text
     # Colores: la paleta recién elegida (sin JavaScript) llena los cuatro; después manda el color que cambió.
-    client.post(MARCA, headers=ORIGEN, data={"paso": "2", "paleta": "azul", "paleta_antes": "", "uso_color": "oscuro"})
+    client.post(MARCA, headers=ORIGEN, data={"paso": "2", "paleta": "azul", "paleta_antes": "", "uso_color": "contraste"})
     guardada = client.portal.call(contenido.marca_de, c)
-    assert (guardada["principal"], guardada["secundario"], guardada["uso_color"]) == ("#16324F", "#3B82C4", "oscuro")
+    assert (guardada["principal"], guardada["secundario"], guardada["uso_color"]) == ("#16324F", "#3B82C4", "contraste")
     client.post(MARCA, headers=ORIGEN, data={
-        "paso": "2", "paleta": "azul", "paleta_antes": "azul", "uso_color": "oscuro",
+        "paso": "2", "paleta": "azul", "paleta_antes": "azul", "uso_color": "contraste",
         "principal": "#16324f", "principal_hex": "1f3a5f", "secundario": "#3b82c4", "secundario_hex": "nada",
         "acento": "#123456", "acento_hex": "#9ED8CF", "fondo": "#f5f8fb", "fondo_hex": "#F5F8FB"})
     guardada = client.portal.call(contenido.marca_de, c)
@@ -146,6 +146,22 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     assert 'name="paleta" value="azul" data-colores' in r.text and "--m-principal:#1F3A5F" in r.text
     assert 'value="azul" data-colores="#16324F,#3B82C4,#9ED8CF,#F5F8FB">' in r.text  # ya no es la paleta: sin marcar
     # Tipografía: cada letra trae su grosor.
+    r = client.get(f"{MARCA}?paso=2")
+    assert "¿Cuánto quieres que destaquen los colores de tu marca?" in r.text and "Alto contraste" in r.text
+    assert "Ideal para la mayoría de las marcas." in r.text and 'value="contraste" checked' in r.text
+    # Tipografía: la combinación recomendada según el estilo principal (Editorial: Playfair Display + Inter).
+    r = client.get(f"{MARCA}?paso=3")
+    assert "Recomendada para ti" in r.text and "<h3>Playfair Display + Inter</h3>" in r.text
+    assert r.text.count("Tu negocio, más cerca de tus clientes.") == 13 and "<details class=\"mrc-otras\">" in r.text
+    client.post(MARCA, headers=ORIGEN, data={"paso": "3", "usar": "1", "fuente": "Oswald"})
+    guardada = client.portal.call(contenido.marca_de, c)
+    assert (guardada["fuente"], guardada["fuente_texto"]) == ("Playfair Display", "Inter")
+    assert "✓ Es la que usas" in client.get(f"{MARCA}?paso=3").text
+    # Otra letra de la lista: va en los titulares; los textos siguen con la de la combinación.
+    client.post(MARCA, headers=ORIGEN, data={"paso": "3", "fuente": "Oswald"})
+    guardada = client.portal.call(contenido.marca_de, c)
+    assert (guardada["fuente"], guardada["peso"], guardada["fuente_texto"]) == ("Oswald", 700, "Inter")
+    assert "<details class=\"mrc-otras\" open>" in client.get(f"{MARCA}?paso=3").text
     client.post(MARCA, headers=ORIGEN, data={"paso": "3", "fuente": "Playfair Display"})
     guardada = client.portal.call(contenido.marca_de, c)
     assert (guardada["fuente"], guardada["peso"]) == ("Playfair Display", 600)
@@ -165,7 +181,7 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     # Ya configurada, Tu marca abre en el resumen, con Editar en cada parte.
     r = client.get("/panel/contenido/marca")
     assert "Así se verá tu contenido" in r.text and r.text.count(">Editar</a>") == 5 and "Completar" not in r.text
-    assert "Colores propios · Oscuro" in r.text and "Elegante y editorial · Playfair Display" in r.text
+    assert "Colores propios · Alto contraste" in r.text and "Playfair Display + Inter" in r.text
     assert "Firma visible" in r.text and "1 foto tuya · estilo copiado" in r.text
     assert client.get("/panel/static/fuentes/CormorantGaramond-Bold.ttf").status_code == 200
     token_foto = guardada["fotos"][0]
@@ -183,7 +199,7 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     idea, fotos = proveedor.llamadas[0]
     assert "leather handbag" in idea and "High-end editorial magazine" in idea and "Do not include any text" in idea
     assert "A lighter secondary influence: Brutalist" in idea and "secondary #3B82C4" in idea
-    assert "How much color: Dark, low-key" in idea and "the products as protagonists" in idea
+    assert "How much color: High contrast" in idea and "headlines in Playfair Display, secondary text in Inter" in idea and "the products as protagonists" in idea
     assert len(fotos) == 1
     post = client.portal.call(c.store.post, 1)
     assert post["status"] == "borrador" and post["user_id"] == admin.PANEL and "Comenta PRECIO" in post["caption"]
@@ -594,6 +610,8 @@ def test_tu_marca_menu_de_pasos_y_marca_de_antes(cliente, monkeypatch):
     assert not client.portal.call(panel.marca_lista, c)
     assert "Paso 2 de 5" in client.get(MARCA).text
 
+    # «Oscuro» de la versión anterior es ahora Alto contraste.
+    assert contenido.uso_color({"uso_color": "oscuro"}) == "contraste" and contenido.uso_color({}) == ""
     # «No estoy seguro, recomiéndame uno»: marca tres según el giro de Perfil de empresa, sin guardar.
     r = client.post(MARCA, headers=ORIGEN, data={"paso": "1", "accion": "recomendar"})
     assert "Te recomendamos Minimalista, Editorial y Bento Grid (llena el giro" in r.text
