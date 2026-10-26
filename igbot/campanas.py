@@ -28,6 +28,7 @@ Lo que escribe el cliente son datos, no instrucciones: va entre etiquetas.
 """
 import json
 import logging
+import os
 import random
 import re
 import time
@@ -122,7 +123,10 @@ MAX_NOMBRE, MAX_TEMA, MAX_TITULO, MAX_IDEA = 60, 600, 80, 1600
 MAX_CAMPANAS = 24  # las de más pasan al historial (informe.archivar)
 MAX_DIAS = 84  # lo más larga que puede quedar una campaña al editarla o estirarla
 TANDA = 6  # posts por llamada a Claude cuando la campaña tiene brief
-IA_POR_DIA = 10  # propuestas y "otra idea" al día por cuenta: no gastan imagen, pero sí Claude
+# Propuestas, briefs y "otra idea" al día por cuenta: no gastan imagen, pero sí Claude. CAMPANA_IA_POR_DIA en el
+# .env; 0 = sin límite (así está mientras se prueba; antes eran 10).
+IA_POR_DIA = int(os.environ.get("CAMPANA_IA_POR_DIA", "0") or 0)
+SIN_LIMITE = 999
 BLOQUEADOS = ("publicando", "publicada")  # posts que ya no se mueven
 
 REGLAS = """- Usa solo datos de la información del negocio o del tema. No inventes precios, promociones, horarios ni testimonios.
@@ -395,6 +399,8 @@ def universo(fotos: int, gano: dict) -> dict:
 async def ia_restantes(c: Cuenta) -> int:
     with usar(c):
         clave = f"campana_ia:{tools.now():%Y-%m-%d}"
+    if IA_POR_DIA <= 0:
+        return SIN_LIMITE
     return max(0, IA_POR_DIA - int(await c.store.get(clave) or 0))
 
 

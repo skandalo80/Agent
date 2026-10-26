@@ -309,3 +309,13 @@ def test_leer_el_plan_por_numero():
                                      {"n": "x"}, "nada", {"n": 1, "titular": "Sin ángulo ni visual"}]}, 3)
     assert plan[0] == {} and plan[1]["angulo"] == "B" and plan[1]["cta"] == "" and plan[2] == {}
     assert brief.plan_texto({"angulo": "<b>A</b>", "cta": "Ven"}) == "ángulo: &lt;b&gt;A&lt;/b&gt;; llamada a la acción: Ven"
+
+
+def test_limite_de_propuestas_al_dia(cliente, monkeypatch):
+    client, c, *_ = cliente
+    monkeypatch.setattr(campanas, "IA_POR_DIA", 0)  # sin límite (CAMPANA_IA_POR_DIA=0)
+    for _ in range(3):
+        client.portal.call(campanas.usar_ia, c)
+    assert client.portal.call(campanas.ia_restantes, c) == campanas.SIN_LIMITE
+    monkeypatch.setattr(campanas, "IA_POR_DIA", 2)
+    assert client.portal.call(campanas.ia_restantes, c) == 0
