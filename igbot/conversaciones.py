@@ -44,7 +44,7 @@ CSS = """
 .inbox .cuantos{font-size:.75rem;color:var(--gris);padding:.5rem 1rem 0;margin:0}
 .conv{display:flex;gap:.75rem;padding:.85rem 1rem;text-decoration:none;color:inherit;border-bottom:1px solid var(--linea-clara);position:relative}
 .conv:hover{background:rgba(255,255,255,.04)}.conv.on{background:var(--claro)}
-.inbox .avatar{flex:none;width:2.6rem;height:2.6rem;border-radius:50%;background:#5A3A68;color:var(--negro);display:grid;place-items:center;font-weight:600;font-size:.95rem}
+.inbox .avatar{flex:none;width:2.6rem;height:2.6rem;border-radius:50%;background:#4A4756;color:var(--negro);display:grid;place-items:center;font-weight:600;font-size:.95rem}
 .conv .txt{min-width:0;flex:1}
 .conv .arriba{display:flex;justify-content:space-between;gap:.5rem;font-size:.9rem}
 .conv .arriba b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -62,9 +62,9 @@ CSS = """
 .quien-contesta{display:flex;align-items:center;border:1px solid var(--linea-clara);border-radius:999px;padding:.2rem;background:var(--claro);margin:0}
 .quien-contesta button{font:inherit;font-size:.85rem;font-weight:600;border:0;background:transparent;padding:.4rem .9rem;border-radius:999px;cursor:pointer;color:var(--gris)}
 .quien-contesta button[aria-pressed=true]{background:var(--acento);color:var(--tinta);cursor:default}
-.hilo .alerta{margin:1rem 1.5rem 0;padding:.75rem 1rem;border-radius:1rem;background:rgba(210,148,65,.12);border:1px solid rgba(210,148,65,.35);color:#E6DCEB;font-size:.9rem}
+.hilo .alerta{margin:1rem 1.5rem 0;padding:.75rem 1rem;border-radius:1rem;background:rgba(243,154,54,.12);border:1px solid rgba(243,154,54,.35);color:#E6E3EC;font-size:.9rem}
 .hilo .alerta b,.hilo .alerta strong{color:var(--naranja-t)}
-.hilo .alerta.tuyo{background:var(--claro);border-color:var(--linea-clara);color:#E6DCEB}
+.hilo .alerta.tuyo{background:var(--claro);border-color:var(--linea-clara);color:#E6E3EC}
 .hilo .alerta form{display:inline;margin:0}
 .hilo .alerta button{font:inherit;font-weight:600;background:none;border:0;padding:0;color:inherit;text-decoration:underline;cursor:pointer}
 /* column-reverse: el chat abre ya abajo, en lo más nuevo, sin JS. */
@@ -73,7 +73,7 @@ CSS = """
 .mensajes .dia{text-align:center;font-size:.75rem;color:var(--gris);margin:.5rem 0 1rem}
 .mensajes .anteriores{text-align:center;font-size:.85rem;margin-bottom:1rem}
 .mensajes .burbuja.de-cliente{background:var(--claro);border:1px solid var(--linea-clara);border-bottom-left-radius:.35rem}
-.mensajes .burbuja.de-bot{background:#5A3A68;color:var(--negro);margin-left:auto;border-bottom-right-radius:.35rem}
+.mensajes .burbuja.de-bot{background:#4A4756;color:var(--negro);margin-left:auto;border-bottom-right-radius:.35rem}
 .mensajes .burbuja.de-ti{background:var(--acento);color:var(--tinta);margin-left:auto;border-bottom-right-radius:.35rem}
 .mensajes .hora-msg{font-size:.7rem;color:var(--gris);margin:-.3rem 0 .8rem;text-align:right}
 .mensajes .hora-msg.izq{text-align:left}
