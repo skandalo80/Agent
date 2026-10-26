@@ -1,8 +1,10 @@
-"""Tu marca: cómo se ven las publicaciones, en cinco pasos cortos y un resumen.
+"""Tu marca: cómo se ven las publicaciones, en cinco pasos cortos y un resumen. Vive en el menú de
+perfil (abajo en el menú lateral), junto a Perfil de empresa.
 
 console.skandar.online/panel/contenido/marca?paso=N (1 a 5, o "resumen"):
 
-1. Estilo visual: hasta 3 estilos en orden de preferencia (el primero manda en la imagen).
+1. Estilo visual: hasta 3 de 9 estilos en orden (principal, secundario y de apoyo), o «recomiéndame uno»
+   según el giro de Perfil de empresa.
 2. Colores: una paleta sugerida o los cuatro colores exactos, y cuánto color usar.
 3. Tipografía: la letra de los títulos (las tarjetas usan la letra real).
 4. Logotipo: el logo y cuánto se ve.
@@ -24,10 +26,10 @@ from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
 from . import imagenes, panel
-from .contenido import (MAX_FOTOS, archivo, estilos_de, guardar_fotos, marca_de, pagina, sin_plan, url_imagen)
+from .contenido import MAX_FOTOS, archivo, estilos_de, guardar_fotos, marca_de, sin_plan, url_imagen
 from .cuenta import Cuenta
 from .estilos import (COLORES, ESTILOS, LETRAS, LOGO_INICIAL, LOGO_PRESENCIA, MAX_ESTILOS, PALETA_INICIAL, PALETAS,
-                      RECURSOS, TARJETA_ESTILO, USO_COLOR, USO_INICIAL)
+                      RECOMENDADOS, RECOMENDADOS_INICIAL, RECURSOS, ROLES, TARJETA_ESTILO, USO_COLOR, USO_INICIAL)
 
 log = logging.getLogger("igbot.marca")
 
@@ -35,8 +37,9 @@ router = APIRouter(prefix="/panel/contenido")
 BASE = "/panel/contenido/marca"
 
 PASOS = [  # (clave, nombre, de qué trata, título, bajada)
-    ("estilo", "Estilo visual", "La sensación de tus imágenes", "¿Qué estilo visual representa a tu marca?",
-     "Elige hasta tres estilos, en orden de preferencia. El primero es el que más se notará en tus imágenes."),
+    ("estilo", "Estilo visual", "Cómo se ven tus diseños", "¿Cómo quieres que se vean los diseños de tu marca?",
+     "Elige hasta 3 estilos. Te mostraremos cómo se ven para que puedas elegir los que mejor encajan con tu negocio."
+     " La IA los utilizará como referencia al crear tus publicaciones."),
     ("colores", "Colores", "Tu paleta y cuánto color usar", "¿Qué colores son los de tu marca?",
      "Parte de una paleta sugerida o pon tus colores exactos. Después dinos cuánto color quieres en tus publicaciones."),
     ("tipografia", "Tipografía", "La letra de tus títulos", "¿Qué letra va con tu marca?",
@@ -163,18 +166,30 @@ def paso_estilo(marca: dict) -> str:
     elegidos = estilos_de(marca)
     tarjetas = ""
     for k, (nombre, desc, _) in ESTILOS.items():
-        tags, fondo = TARJETA_ESTILO[k]
+        lema, sensacion, fondo = TARJETA_ESTILO[k]
         n = elegidos.index(k) + 1 if k in elegidos else 0
         tarjetas += (f'<label class="wiz-op"><input type="checkbox" name="estilos" value="{k}"{" checked" if n else ""}>'
                      f'<em class="wiz-orden"{"" if n else " hidden"}>{n or ""}</em>{imagen_tarjeta(k, fondo)}'
-                     f'<span class="cuerpo"><b>{nombre}</b><small>{desc}</small>{etiquetas(tags)}</span></label>')
+                     f'<span class="cuerpo"><b>{nombre}</b><span class="mrc-rol"{"" if n else " hidden"}>'
+                     f'{f"{n}.º · {ROLES[n - 1]}" if n else ""}</span><i class="mrc-lema">{lema}</i>'
+                     f'<small>{desc}</small><span class="mrc-sensa">Sensación: {", ".join(sensacion).lower()}.</span>'
+                     "</span></label>")
+    tarjetas += ('<button class="wiz-op mrc-recomienda" name="accion" value="recomendar" formnovalidate>'
+                 '<span class="ico">?</span><span class="cuerpo"><b>No estoy seguro, recomiéndame uno</b>'
+                 "<small>Te sugerimos tres estilos según el giro de tu Perfil de empresa. Luego puedes cambiarlos.</small>"
+                 "</span></button>")
+    roles = "".join(f"<li><b>{i}.º · {r}:</b> {d}</li>" for i, (r, d) in enumerate(zip(ROLES, (
+        "el que más debe notarse.", "complementa al principal.", "aporta variedad sin perder coherencia.")), 1))
     return (f'<input type="hidden" name="orden" value="{",".join(elegidos)}">'
-            f'<h3 class="wiz-sub">Elige hasta {MAX_ESTILOS} estilos</h3>'
-            '<p class="ayuda">Cada tarjeta resume luz, composición, textura y sensación. El número es tu orden de'
-            " preferencia.</p>"
-            f'<div class="wiz-ops mrc-estilos" data-max="{MAX_ESTILOS}">{tarjetas}</div>'
-            '<p class="wiz-nota"><b>Cómo funciona:</b> el primer estilo marca la pauta de tus imágenes; el segundo y'
-            " el tercero aportan matices. Toca un estilo elegido para quitarlo.</p>")
+            f'<h3 class="wiz-sub">Elige hasta {MAX_ESTILOS} estilos, en orden</h3>'
+            f'<ul class="mrc-roles">{roles}</ul>'
+            f'<div class="wiz-ops mrc-estilos" data-max="{MAX_ESTILOS}" data-roles="{",".join(ROLES)}">{tarjetas}</div>'
+            '<p class="wiz-nota"><b>Cómo funciona:</b> toca los estilos en el orden que prefieras. Toca uno elegido para'
+            " quitarlo.</p>")
+
+
+def recomendados(giro: str) -> list[str]:
+    return list(RECOMENDADOS.get(giro, RECOMENDADOS_INICIAL))[:MAX_ESTILOS]
 
 
 def mini_post(uso: str) -> str:
@@ -302,8 +317,8 @@ def resumen(c: Cuenta, marca: dict) -> str:
                 f'<p>{desc}</p><a href="{BASE}?paso={i}">{boton}</a>{pendiente or cuerpo}</div>')
 
     estilos = "".join(
-        f'<div class="mrc-fila"><span class="num">{n}</span>{imagen_tarjeta(k, TARJETA_ESTILO[k][1])}'
-        f"<span><b>{ESTILOS[k][0]}</b><small>{ESTILOS[k][1]}</small></span></div>"
+        f'<div class="mrc-fila"><span class="num">{n}</span>{imagen_tarjeta(k, TARJETA_ESTILO[k][2])}'
+        f"<span><b>{ESTILOS[k][0]}</b><small>{ROLES[n - 1]} · {TARJETA_ESTILO[k][0]}</small></span></div>"
         for n, k in enumerate(estilos_de(marca), 1))
     colores = colores_de(marca)
     paleta = paleta_de(colores)
@@ -358,7 +373,14 @@ async def pagina_marca(c: Cuenta, paso: str, marca: dict | None = None, aviso: s
                      + cabeza(i) + hacer()
                      + pie(i, "Ver resumen →" if i == len(PASOS) else "Guardar y continuar →") + "</form>")
     cuerpo = f'<div class="wiz mrc">{menu_pasos(actual, hechos_)}<div class="wiz-main">{contenido}</div></div>'
-    return await pagina(c, "marca", cuerpo, aviso, oscuro=True)
+    # Tu marca es de la cuenta (menú de perfil, abajo), no una sección de Contenido.
+    return panel.pagina(
+        panel.cabecera(salir=True, menu="cuenta", cuenta=c, sub="marca", perfil=await panel.usuario(c),
+                       foto=await panel.foto_perfil(c))
+        + panel.encabezado("Tu cuenta · Tu marca")
+        + '<main class="oscuro-pag"><div class="contenedor">'
+        + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
+        + await panel.pendiente(c, "marca") + cuerpo + "</div></main>")
 
 
 # --- guardar ---
@@ -418,6 +440,16 @@ async def guardar_marca(request: Request):
     i = int(f.get("paso")) if str(f.get("paso", "")).isdigit() and 1 <= int(f.get("paso")) <= len(PASOS) else 1
     paso, accion = CLAVES[i - 1], str(f.get("accion", "guardar"))
     antes = await marca_de(c)
+    if paso == "estilo" and accion == "recomendar":  # se marcan, sin guardar: los revisa y sigue
+        from . import empresa  # import tardío: empresa importa contenido
+        e = await empresa.de(c)
+        giro = e.get("giro", "")
+        elegidos = recomendados(giro)
+        nombres = ", ".join(ESTILOS[k][0] for k in elegidos[:-1]) + f" y {ESTILOS[elegidos[-1]][0]}"
+        por = (f"para un negocio de {giro.lower()}" if giro in RECOMENDADOS else
+               "(llena el giro en tu Perfil de empresa para una recomendación a tu medida)")
+        return await pagina_marca(c, "1", {**antes, "estilos": elegidos},
+                                  f"Te recomendamos {nombres} {por}. Cámbialos si quieres y pulsa Guardar y continuar.")
     datos, aviso = guardar_paso(f, antes, paso)
     if aviso:
         return await pagina_marca(c, str(i), aviso=aviso)

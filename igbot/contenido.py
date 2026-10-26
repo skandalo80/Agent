@@ -159,25 +159,27 @@ def contexto_marca(datos: dict) -> str:
             " Do not write the brand name in the image:\n" + "\n".join(lineas)) if lineas else ""
 
 
+def estilo_nuevo(clave) -> str:
+    """La clave de un estilo de hoy; una de antes pasa a la más parecida ("" si no es ninguna)."""
+    return clave if clave in ESTILOS else VIEJOS_ESTILOS.get(clave, "") if isinstance(clave, str) else ""
+
+
 def estilos_de(datos: dict) -> list[str]:
-    """Los estilos de Tu marca, en orden de preferencia. Una marca guardada antes tenía uno solo ("estilo")."""
-    elegidos = [k for k in datos.get("estilos", []) if k in ESTILOS][:MAX_ESTILOS]
-    if not elegidos and VIEJOS_ESTILOS.get(datos.get("estilo")):
-        elegidos = [VIEJOS_ESTILOS[datos["estilo"]]]
-    return elegidos
+    """Los estilos de Tu marca, en orden de preferencia. Una marca guardada antes tenía uno solo ("estilo")
+    u otros estilos: pasan a los de hoy."""
+    elegidos = [estilo_nuevo(k) for k in datos.get("estilos", [])] or [estilo_nuevo(datos.get("estilo"))]
+    return list(dict.fromkeys(k for k in elegidos if k))[:MAX_ESTILOS]
 
 
 def estilo_de(datos: dict) -> str:
     """El estilo que manda: el elegido solo para un post (Crear post > Con otra plantilla) o el primero de Tu marca."""
-    if datos.get("estilo") in ESTILOS:
-        return datos["estilo"]
-    return (estilos_de(datos) or [ESTILO_INICIAL])[0]
+    return estilo_nuevo(datos.get("estilo")) or (estilos_de(datos) or [ESTILO_INICIAL])[0]
 
 
 def estilo_foto(datos: dict) -> str:
     """El estilo de la foto para el generador: el primero manda y los demás aportan matices."""
-    if datos.get("estilo") in ESTILOS:
-        return ESTILOS[datos["estilo"]][2]
+    if propio := estilo_nuevo(datos.get("estilo")):
+        return ESTILOS[propio][2]
     elegidos = estilos_de(datos) or [ESTILO_INICIAL]
     return ESTILOS[elegidos[0]][2] + "".join(
         f"\nA lighter secondary influence: {ESTILOS[k][2]}" for k in elegidos[1:])
@@ -332,10 +334,11 @@ def visual_marca(datos: dict, modo: str = "") -> str:
     modo = modo or modo_de(datos)
     propio = notas_estilo(datos, modo)
     if propio:
-        lineas = [f"Estilo de fotos: {propio}"]
+        lineas = [f"Estilo visual: {propio}"]
     else:
-        elegidos = [estilo_de(datos)] if datos.get("estilo") in ESTILOS else estilos_de(datos) or [ESTILO_INICIAL]
-        lineas = [f"Estilo de fotos (el ambiente, no objetos que deban salir siempre): {ESTILOS[elegidos[0]][0]}."
+        elegidos = [estilo_nuevo(datos.get("estilo"))] if estilo_nuevo(datos.get("estilo")) else (
+            estilos_de(datos) or [ESTILO_INICIAL])
+        lineas = [f"Estilo visual (cómo se diseña la imagen, no objetos que deban salir siempre): {ESTILOS[elegidos[0]][0]}."
                   f" {ESTILOS[elegidos[0]][1]}"]
         lineas += [f"Con un toque, más ligero, de: {ESTILOS[k][0]}. {ESTILOS[k][1]}" for k in elegidos[1:]]
     colores = [f"{n} {datos[k]}" for k, n in (("principal", "principal"), ("secundario", "secundario"),

@@ -118,13 +118,20 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
 
     # Tu marca, paso a paso: sin marca abre el paso 1; cada paso guarda y lleva al siguiente.
     r = client.get("/panel/contenido/marca")
-    assert "Paso 1 de 5" in r.text and '<main class="oscuro-pag">' in r.text and r.text.count('name="estilos"') == 15
+    assert "Paso 1 de 5" in r.text and '<main class="oscuro-pag">' in r.text and r.text.count('name="estilos"') == 9
+    assert "¿Cómo quieres que se vean los diseños de tu marca?" in r.text and "Tu cuenta · Tu marca" in r.text
+    assert "Sensación: rebelde, directo, impactante." in r.text and "1.º · Estilo principal:" in r.text
+    # Tu marca vive en el menú de perfil (abajo), no en el submenú de Contenido.
+    assert '<a href="/panel/contenido/marca" class="on">Tu marca</a>' in r.text
+    assert 'Calendario</a></div>' in r.text and r.text.count('href="/panel/contenido/marca"') == 1
     r = client.post(MARCA, headers=ORIGEN, data={"paso": "1"})
     assert "Elige al menos un estilo" in r.text and client.portal.call(contenido.marca_de, c) == {}
     r = client.post(MARCA, headers=ORIGEN, follow_redirects=False,
-                    data={"paso": "1", "estilos": ["natural", "lujo", "fresco", "urbano"], "orden": "lujo,natural"})
+                    data={"paso": "1", "estilos": ["brutalista", "editorial", "bento", "espacial"], "orden": "editorial,brutalista"})
     assert r.status_code == 303 and r.headers["location"] == f"{MARCA}?paso=2"
-    assert client.portal.call(contenido.marca_de, c)["estilos"] == ["lujo", "natural", "fresco"]  # en el orden tocado
+    assert client.portal.call(contenido.marca_de, c)["estilos"] == ["editorial", "brutalista", "bento"]  # en el orden tocado
+    r = client.get(f"{MARCA}?paso=1")
+    assert "1.º · Estilo principal</span>" in r.text and "3.º · Estilo de apoyo</span>" in r.text
     # Colores: la paleta recién elegida (sin JavaScript) llena los cuatro; después manda el color que cambió.
     client.post(MARCA, headers=ORIGEN, data={"paso": "2", "paleta": "azul", "paleta_antes": "", "uso_color": "oscuro"})
     guardada = client.portal.call(contenido.marca_de, c)
@@ -174,8 +181,8 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     assert "Vendemos carteras." in prompt and "La cartera Atelier" in prompt and "precio" in prompt
     assert "JSON" in system and model == "claude-sonnet-5-5"
     idea, fotos = proveedor.llamadas[0]
-    assert "leather handbag" in idea and "Luxurious and refined" in idea and "Do not include any text" in idea
-    assert "A lighter secondary influence: Candid" in idea and "secondary #3B82C4" in idea
+    assert "leather handbag" in idea and "High-end editorial magazine" in idea and "Do not include any text" in idea
+    assert "A lighter secondary influence: Brutalist" in idea and "secondary #3B82C4" in idea
     assert "How much color: Dark, low-key" in idea and "the products as protagonists" in idea
     assert len(fotos) == 1
     post = client.portal.call(c.store.post, 1)
@@ -505,7 +512,7 @@ def test_diseno_libre_con_el_estilo_de_sus_fotos(cliente, monkeypatch):
         "estilo_propio": "Fondos oscuros, minimalista, el celular como protagonista."}))
 
     crear(client, c)
-    assert "<estilo_de_la_marca>Estilo de fotos: Fondos oscuros" in llamadas[-1][0] and "acento #E8590C" in llamadas[-1][0]
+    assert "<estilo_de_la_marca>Estilo visual: Fondos oscuros" in llamadas[-1][0] and "acento #E8590C" in llamadas[-1][0]
     prompt, fotos = proveedor.llamadas[-1]
     assert 'Headline (largest): "Cartera Atelier"' in prompt and "#E8590C" in prompt
     assert "celular como protagonista" in prompt and "brand's own photos" in prompt and len(fotos) == 1
@@ -533,18 +540,18 @@ def test_diseno_libre_con_el_estilo_de_sus_fotos(cliente, monkeypatch):
 def test_el_estilo_depende_del_modo_del_post(cliente, monkeypatch):
     client, c, llamadas, proveedor = cliente
     monkeypatch.setattr(c, "imagenes_mes", 5)
-    # Una marca guardada con el formulario de antes: su estilo "limpio" ahora es "Minimalista y premium".
+    # Una marca guardada con el formulario de antes: su estilo "limpio" ahora es "Minimalista".
     client.portal.call(c.store.set, "marca", json.dumps({
         "principal": "#111111", "acento": "#E8590C", "fondo": "#000000", "fuente": "Inter", "peso": 700,
         "estilo": "limpio", "estilo_propio": "Fondos oscuros y detalles en naranja."}))
     # Con plantilla mandan los estilos de la lista; en libre, su descripción.
     crear(client, c, modo="plantilla")
     assert "Minimalist premium" in proveedor.llamadas[-1][0] and "naranja" not in proveedor.llamadas[-1][0]
-    assert "objetos que deban salir siempre): Minimalista y premium" in llamadas[-1][0] and "naranja" not in llamadas[-1][0]
+    assert "objetos que deban salir siempre): Minimalista." in llamadas[-1][0] and "naranja" not in llamadas[-1][0]
 
     crear(client, c, modo="libre")
     assert "naranja" in proveedor.llamadas[-1][0] and "Minimalist premium" not in proveedor.llamadas[-1][0]
-    assert "Estilo de fotos: Fondos oscuros y detalles en naranja." in llamadas[-1][0]
+    assert "Estilo visual: Fondos oscuros y detalles en naranja." in llamadas[-1][0]
 
 
 def test_tu_marca_menu_de_pasos_y_marca_de_antes(cliente, monkeypatch):
@@ -558,18 +565,18 @@ def test_tu_marca_menu_de_pasos_y_marca_de_antes(cliente, monkeypatch):
     assert f'href="{MARCA}?paso=2">← Anterior' in r.text
     # Las tarjetas sin imagen pintan su color; con imagen en static/tarjetas/marca, la usan.
     r = client.get(f"{MARCA}?paso=1")
-    assert 'style="--fondo:#3a3128"' in r.text
+    assert 'style="--fondo:#5a4e44"' in r.text
     carpeta = panel.STATIC / "tarjetas" / "marca"
     nueva = not carpeta.exists()
     carpeta.mkdir(parents=True, exist_ok=True)
     try:
-        (carpeta / "lujo.webp").write_bytes(b"RIFF")
-        assert "--fondo:#3a3128 url(/panel/static/tarjetas/marca/lujo.webp)" in client.get(f"{MARCA}?paso=1").text
-        assert client.get("/panel/static/tarjetas/marca/lujo.webp").status_code == 200
+        (carpeta / "editorial.webp").write_bytes(b"RIFF")
+        assert "--fondo:#5a4e44 url(/panel/static/tarjetas/marca/editorial.webp)" in client.get(f"{MARCA}?paso=1").text
+        assert client.get("/panel/static/tarjetas/marca/editorial.webp").status_code == 200
         assert client.get("/panel/static/tarjetas/otra/lujo.webp").status_code == 404
         assert client.get("/panel/static/tarjetas/marca/..%2Fpanel.js").status_code == 404
     finally:
-        (carpeta / "lujo.webp").unlink()
+        (carpeta / "editorial.webp").unlink()
         if nueva:
             carpeta.rmdir()
     # Una marca guardada con el formulario de antes cuenta como lista y abre en el resumen; lo que falta dice Completar.
@@ -577,12 +584,24 @@ def test_tu_marca_menu_de_pasos_y_marca_de_antes(cliente, monkeypatch):
                                                          "fuente": "Lora", "peso": 700, "estilo": "premium"}))
     assert client.portal.call(panel.marca_lista, c)
     r = client.get(MARCA)
-    assert "Así se verá tu contenido" in r.text and "Lujo y sofisticación" in r.text and r.text.count(">Completar</a>") == 2
-    assert 'name="estilos" value="lujo" checked' in client.get(f"{MARCA}?paso=1").text
+    assert "Así se verá tu contenido" in r.text and "<b>Editorial</b><small>Estilo principal" in r.text
+    assert r.text.count(">Completar</a>") == 2
+    assert 'name="estilos" value="editorial" checked' in client.get(f"{MARCA}?paso=1").text
     # Sin colores no está lista: abre en el primer paso que falta.
-    client.portal.call(c.store.set, "marca", json.dumps({"estilos": ["urbano"]}))
+    # Los estilos de la versión anterior pasan a los nuevos (urbano y geométrico: brutalista y bento grid).
+    client.portal.call(c.store.set, "marca", json.dumps({"estilos": ["urbano", "geometrico", "minimal"]}))
+    assert 'name="orden" value="brutalista,bento,minimalista"' in client.get(f"{MARCA}?paso=1").text
     assert not client.portal.call(panel.marca_lista, c)
     assert "Paso 2 de 5" in client.get(MARCA).text
+
+    # «No estoy seguro, recomiéndame uno»: marca tres según el giro de Perfil de empresa, sin guardar.
+    r = client.post(MARCA, headers=ORIGEN, data={"paso": "1", "accion": "recomendar"})
+    assert "Te recomendamos Minimalista, Editorial y Bento Grid (llena el giro" in r.text
+    client.portal.call(c.store.set, "empresa", json.dumps({"giro": "Tecnología y software"}))
+    r = client.post(MARCA, headers=ORIGEN, data={"paso": "1", "accion": "recomendar"})
+    assert "Te recomendamos Neofuturista, Cristalino y Bento Grid para un negocio de tecnología y software" in r.text
+    assert 'name="orden" value="neofuturista,cristalino,bento"' in r.text
+    assert client.portal.call(contenido.marca_de, c)["estilos"] == ["urbano", "geometrico", "minimal"]
 
 
 def test_insights_de_un_post(cliente, monkeypatch):
@@ -696,7 +715,7 @@ def test_bienvenida_con_contenido_y_lo_que_falta(cliente, monkeypatch):
     assert "Te falta configurar <b>Tu marca</b>" in client.get("/panel/asistente").text
     assert "Te falta configurar <b>Tu marca</b>" in client.get("/panel/contenido").text
     assert "Te falta configurar" not in client.get("/panel/contenido/marca").text  # ya está ahí
-    client.post(MARCA, headers=ORIGEN, data={"paso": "1", "estilos": "minimal"})
+    client.post(MARCA, headers=ORIGEN, data={"paso": "1", "estilos": "minimalista"})
     assert "Te falta configurar <b>Tu marca</b>" in client.get("/panel/asistente").text  # faltan los colores
     client.post(MARCA, headers=ORIGEN, data={"paso": "2", "paleta": "mono"})
     assert "Te falta configurar" not in client.get("/panel/asistente").text
@@ -733,7 +752,7 @@ def test_crear_post_con_ajustes_solo_para_ese_post(cliente, monkeypatch):
                               "principal": "#111111", "fondo": "#000000"})
     p = client.portal.call(contenido.pieza, c.store, 1)
     assert p["plantilla"] == "banda" and p["marca"]["acento"] == "#2255AA" and p["marca"]["fuente"] == "Lora"
-    assert "Luxurious and refined" in proveedor.llamadas[-1][0]  # el estilo de este post
+    assert "High-end editorial magazine" in proveedor.llamadas[-1][0]  # el estilo de este post (lujo de antes)
     marca = client.portal.call(contenido.marca_de, c)
     assert marca["acento"] == "#E8590C" and marca["plantilla"] == "editorial"
     assert client.portal.call(contenido.marca_post, c, p)["acento"] == "#2255AA"
@@ -817,9 +836,9 @@ def test_identidad_de_marca_y_logo(cliente, monkeypatch):
     # Nombre, frase y carácter ya no se piden en Tu marca (pasan a Perfil de empresa), pero lo guardado se conserva.
     client.portal.call(c.store.set, "marca", json.dumps({"nombre": "Café Lunar", "frase": "Café de especialidad.",
                                                          "caracter": ["Cercana", "Premium", "Natural"]}))
-    r = client.post(MARCA, headers=ORIGEN, data={"paso": "1", "estilos": "calido"})
+    r = client.post(MARCA, headers=ORIGEN, data={"paso": "1", "estilos": "claymorfismo"})
     marca = client.portal.call(contenido.marca_de, c)
-    assert marca["nombre"] == "Café Lunar" and marca["estilos"] == ["calido"]
+    assert marca["nombre"] == "Café Lunar" and marca["estilos"] == ["claymorfismo"]
     assert 'name="nombre"' not in client.get(f"{MARCA}?paso=1").text
     negocio = client.portal.call(contenido.negocio_de, c)
     assert "Nombre de la marca: Café Lunar" in negocio and "Carácter: Cercana, Premium, Natural" in negocio

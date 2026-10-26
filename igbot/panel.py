@@ -922,6 +922,14 @@ select,input[type=date],input[type=number]{color:var(--negro);background:var(--c
 .mrc-tip b{display:block;color:var(--negro);margin-bottom:.15rem}
 .mrc .wiz-op .cuerpo em{margin-right:.15rem}
 .mrc .wiz-op .wiz-orden[hidden]{display:none}
+.mrc-roles{list-style:none;margin:.2rem 0 1rem;padding:0;display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-size:.85rem;color:var(--texto2,#B9B5C5)}
+.mrc-roles b{color:var(--negro);font-weight:600}
+.mrc .mrc-rol{display:inline-block;margin:.2rem 0 .1rem;font-size:.72rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--acento-claro)}
+.mrc .mrc-rol[hidden]{display:none}
+.mrc .mrc-lema{display:block;font-style:normal;font-weight:600;font-size:.86rem;margin:.15rem 0 .3rem}
+.mrc .mrc-sensa{display:block;margin-top:.45rem;font-size:.78rem;color:var(--gris)}
+.mrc-recomienda{font:inherit;text-align:left;cursor:pointer;color:inherit;border-style:dashed}
+.mrc-recomienda .ico{display:grid;place-items:center;height:7rem;font-size:2.4rem;font-weight:700;color:var(--acento-claro)}
 .mrc-paleta{display:grid;grid-template-columns:repeat(4,1fr);height:4.2rem}.mrc-paleta i{display:block}
 .mrc-paleta.grande{height:4.5rem;border-radius:.8rem;overflow:hidden;margin-top:.8rem}
 .mrc-codigos{display:grid;grid-template-columns:repeat(4,1fr);gap:.4rem;font:.75rem ui-monospace,Menlo,monospace;color:var(--gris);margin-top:.45rem}
@@ -1130,8 +1138,7 @@ SUBMENU = {
     "asistente": [("chats", "Conversaciones", "/panel/asistente"),
                   ("configura", "Configura tu asistente", "/panel/asistente/configura"),
                   ("probar", "Probar tu asistente", "/panel/probar#ultimo")],
-    "contenido": [("campanas", "Campañas", "/panel/contenido/campanas"), ("calendario", "Calendario", "/panel/contenido"),
-                  ("marca", "Tu marca", "/panel/contenido/marca")],
+    "contenido": [("campanas", "Campañas", "/panel/contenido/campanas"), ("calendario", "Calendario", "/panel/contenido")],
 }
 
 
@@ -1185,7 +1192,7 @@ def menu_perfil(perfil: str, cuenta: Cuenta | None, foto: str = "", sub: str = "
     if not perfil:
         return salir.format(' class="lat-pie"', "lat-item", f'{ICONOS["salir"]}<span class="txt">Salir</span>')
     usuario_ = escape(perfil)
-    marca = ('<a href="/panel/contenido/marca">Tu marca</a>'
+    marca = (f'<a href="/panel/contenido/marca"{ACTIVA if sub == "marca" else ""}>Tu marca</a>'
              if cuenta is not None and cuenta.imagenes_mes > 0 else "")
     # El logo de Tu marca si ya subió uno; si no, la inicial.
     avatar = (f'<img class="lat-avatar" src="{escape(foto)}" alt="">' if foto else
@@ -1198,8 +1205,8 @@ def menu_perfil(perfil: str, cuenta: Cuenta | None, foto: str = "", sub: str = "
             f'<div class="perfil-menu"><div class="quien">Conectado como @{usuario_}</div>'
             f'<a href="https://www.instagram.com/{usuario_}/" target="_blank" rel="noopener">Ver mi Instagram</a>'
             f'<a href="/panel/empresa"{ACTIVA if sub == "empresa" else ""}>Perfil de empresa</a>'
-            f'<a href="/panel/conexion"{ACTIVA if sub == "conexion" else ""}>Conexión{luz}</a>'
             f'{marca}'
+            f'<a href="/panel/conexion"{ACTIVA if sub == "conexion" else ""}>Conexión{luz}</a>'
             + salir.format("", "", "Salir") + "</div></details></div>")
 
 
