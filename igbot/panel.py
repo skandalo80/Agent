@@ -327,7 +327,8 @@ html.menu-plegado .plegar svg{transform:rotate(180deg)}
 .perfil-menu{position:absolute;left:0;right:0;bottom:calc(100% + .4rem);background:#3A3746;border:1px solid #45424F;border-radius:.9rem;padding:.35rem;box-shadow:0 12px 40px rgba(0,0,0,.5);display:flex;flex-direction:column}
 .perfil-menu a,.perfil-menu button{display:block;text-align:left;color:var(--claro);text-decoration:none;font:inherit;font-size:.9rem;padding:.55rem .75rem;border-radius:.6rem;background:none;border:0;cursor:pointer;width:100%}
 .perfil-menu a:hover,.perfil-menu button:hover{background:#45424F}
-.perfil-menu form{margin:0;border-top:1px solid var(--linea-oscura);margin-top:.3rem;padding-top:.3rem}
+.perfil-menu form{margin:0}
+.perfil-menu .sep{border-top:1px solid var(--linea-oscura);margin:.3rem 0}
 .perfil-menu .quien{padding:.45rem .75rem .55rem;font-size:.8rem;color:var(--gris);border-bottom:1px solid var(--linea-oscura);margin-bottom:.3rem}
 html.menu-plegado .perfil-menu{left:calc(100% + .9rem);right:auto;bottom:0;width:14rem}
 header.movil{display:none}
@@ -1260,11 +1261,12 @@ def menu_perfil(perfil: str, cuenta: Cuenta | None, foto: str = "", sub: str = "
     return ('<div class="lat-pie"><details class="perfil">'
             f'<summary class="lat-item" title="@{usuario_}">{avatar}'
             f'<span class="txt">@{usuario_}<small>Tu cuenta</small></span></summary>'
+            # Tres grupos: quién eres; tu empresa y tu marca; la cuenta (conexión, Instagram y salir).
             f'<div class="perfil-menu"><div class="quien">Conectado como @{usuario_}</div>'
-            f'<a href="https://www.instagram.com/{usuario_}/" target="_blank" rel="noopener">Ver mi Instagram</a>'
-            f'<a href="/panel/empresa"{ACTIVA if sub == "empresa" else ""}>Perfil de empresa</a>'
-            f'{marca}'
+            f'<a href="/panel/empresa"{ACTIVA if sub == "empresa" else ""}>Información de empresa</a>'
+            f'{marca}<div class="sep"></div>'
             f'<a href="/panel/conexion"{ACTIVA if sub == "conexion" else ""}>Conexión{luz}</a>'
+            f'<a href="https://www.instagram.com/{usuario_}/" target="_blank" rel="noopener">Ver mi Instagram</a>'
             + salir.format("", "", "Salir") + "</div></details></div>")
 
 

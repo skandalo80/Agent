@@ -931,7 +931,8 @@ def test_personalidad_sin_imagenes_y_con_toque_personal(cliente):
     client, c, *_ = cliente
     r = client.get("/panel/asistente/configura?paso=personalidad")
     assert "<img" not in r.text.split('class="as-tarjetas"')[1].split("</fieldset>")[0]
-    assert "Comprensivo · Tranquilo · Atento" in r.text and "Uso ideal:" in r.text and 'name="toque"' in r.text
+    assert "Comprensivo" not in r.text and "Ideal para:" in r.text and 'name="toque"' in r.text
+    assert 'name="toque_on" value="1">' in r.text  # plegado mientras no escriba nada
     r = client.post("/panel/asistente/paso", headers=ORIGEN, follow_redirects=False,
                     data={"paso": "personalidad", "personalidad": "empatico", "toque": "Que explique <todo> con calma."})
     assert r.status_code == 303
@@ -939,3 +940,24 @@ def test_personalidad_sin_imagenes_y_con_toque_personal(cliente):
     assert perfil["toque"] == "Que explique <todo> con calma." and perfil["personalidad"] == "empatico"
     prompt = Path(c.prompt_path).read_text()
     assert "<como_quiere_que_hables>\nQue explique &lt;todo&gt; con calma.\n</como_quiere_que_hables>" in prompt
+
+
+def test_reglas_opcionales_plegadas_y_casilla_vacia_las_borra(cliente):
+    client, c, *_ = cliente
+    r = client.get("/panel/asistente/configura?paso=reglas")
+    assert 'name="no_hacer_on" value="1">' in r.text and 'name="pasar_equipo_on"' in r.text
+    assert 'name="instrucciones_on" value="1" checked>' in r.text  # ya trae "Vendemos carteras."
+    datos = {"paso": "reglas", "opcionales": "1", "no_hacer": "No hablar de precios.", "no_hacer_on": "1",
+             "pasar_equipo": "Esto no se guarda", "instrucciones": "Vendemos carteras."}
+    client.post("/panel/asistente/paso", headers=ORIGEN, data=datos)
+    perfil = client.portal.call(panel.perfil, c)
+    assert perfil["no_hacer"] == "No hablar de precios." and perfil["pasar_equipo"] == "" and perfil["instrucciones"] == ""
+
+
+def test_menu_de_tu_cuenta_en_tres_grupos(cliente, monkeypatch):
+    client, c, *_ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 5)
+    menu = client.get("/panel/contenido").text.split('class="perfil-menu"')[1].split("</details>")[0]
+    orden = [menu.index(t) for t in ("Conectado como", "Información de empresa", "Tu marca", 'class="sep"',
+                                     "Conexión", "Ver mi Instagram", "Salir")]
+    assert orden == sorted(orden)

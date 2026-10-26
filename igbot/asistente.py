@@ -26,54 +26,51 @@ from .cuenta import Cuenta
 log = logging.getLogger("igbot.asistente")
 router = APIRouter(prefix="/panel")
 
-# clave: (nombre, rasgos, para quién es, uso ideal, pregunta y respuesta de ejemplo, cómo habla (va al prompt),
+# clave: (nombre, cómo atiende, ideal para, pregunta y respuesta de ejemplo, cómo habla (va al prompt),
 #         (trato, largo, emojis) con que empieza)
 PERSONALIDADES = {
-    "cercano": ("Cercano y amable", ("Cálido", "Natural", "Conversacional"),
-                ("Ideal para negocios que quieren atender a sus clientes con confianza y cercanía, como si hablaran"
-                 " con alguien de su propio equipo."),
+    "cercano": ("Cercano y amable",
+                "Atiende con calidez y confianza, como si tus clientes hablaran con alguien de tu propio equipo.",
                 "Tiendas, restaurantes, belleza y servicios cotidianos.",
                 ("¿Tienen envío a Monterrey?", ("¡Sí! Te ayudo a revisar las opciones de envío a Monterrey."
                  " ¿Qué producto te interesa?")),
                 "Cercano y amable: cálido, natural y conversacional, como alguien del equipo que atiende con gusto.",
                 ("tu", "equilibrada", "aveces")),
-    "profesional": ("Profesional y confiable", ("Claro", "Preciso", "Respetuoso"),
-                    ("Ideal para negocios que buscan transmitir seriedad, resolver dudas con claridad y generar"
-                     " confianza en cada conversación."),
+    "profesional": ("Profesional y confiable",
+                    "Transmite seriedad, resuelve dudas con claridad y genera confianza en cada conversación.",
                     "Consultorios, despachos, inmobiliarias y servicios profesionales.",
                     ("¿Qué necesito para una cita?", ("Con gusto te orientamos. ¿Qué tipo de cita necesitas? Así te"
                      " comparto los requisitos correspondientes.")),
                     "Profesional y confiable: claro, preciso y respetuoso. Transmites seguridad y vas al punto.",
                     ("tu", "equilibrada", "nunca")),
-    "divertido": ("Divertido y desenfadado", ("Espontáneo", "Creativo", "Expresivo"),
-                  ("Ideal para marcas que quieren conversar de forma relajada, mostrar su personalidad y hacer que"
-                   " cada interacción sea más amena."),
+    "divertido": ("Divertido y desenfadado",
+                  ("Conversa de forma relajada, muestra la personalidad de tu marca y hace cada conversación más"
+                   " amena."),
                   "Moda, gastronomía, entretenimiento y marcas juveniles.",
                   ("¿Todavía tienen los tenis?", "¡Vamos a encontrar tu par! ¿Qué modelo y talla buscas?"),
                   ("Divertido y desenfadado: espontáneo, creativo y expresivo, con humor suave cuando cabe y sin"
                    " bromas que puedan ofender."),
                   ("tu", "breve", "seguido")),
-    "empatico": ("Empático y paciente", ("Comprensivo", "Tranquilo", "Atento"),
-                 ("Ideal para negocios que necesitan escuchar, resolver inquietudes con paciencia y acompañar al"
-                  " cliente, especialmente cuando surge un problema."),
+    "empatico": ("Empático y paciente",
+                 ("Escucha, resuelve inquietudes con paciencia y acompaña al cliente, sobre todo cuando surge un"
+                  " problema."),
                  "Salud, bienestar, clínicas y atención posventa.",
                  ("Mi pedido llegó dañado.", ("Lamento mucho que haya llegado así. Vamos a revisar qué pasó y cómo"
                   " podemos ayudarte. ¿Me compartes una foto?")),
                  ("Empático y paciente: escuchas, reconoces cómo se siente la persona y la acompañas con calma,"
                   " paso a paso."),
                  ("tu", "equilibrada", "nunca")),
-    "energico": ("Enérgico y motivador", ("Dinámico", "Positivo", "Motivador"),
-                 ("Ideal para marcas que quieren transmitir entusiasmo, impulsar a sus clientes a dar el siguiente"
-                  " paso y mantener conversaciones llenas de energía."),
+    "energico": ("Enérgico y motivador",
+                 ("Contagia entusiasmo, impulsa a tus clientes a dar el siguiente paso y mantiene la conversación"
+                  " con energía."),
                  "Gimnasios, coaches, deportes y cursos.",
                  ("Nunca he tomado una clase.", ("¡Todos empezamos alguna vez! Te ayudo a encontrar una clase para"
                   " principiantes. ¿Qué te gustaría aprender?")),
                  ("Enérgico y motivador: dinámico y positivo. Animas a dar el siguiente paso sin presionar ni"
                   " prometer de más."),
                  ("tu", "breve", "aveces")),
-    "premium": ("Elegante y premium", ("Refinado", "Discreto", "Exclusivo"),
-                ("Ideal para marcas que cuidan cada detalle y buscan transmitir calidad, atención personalizada y"
-                 " una experiencia distinguida."),
+    "premium": ("Elegante y premium",
+                "Cuida cada detalle y transmite calidad, atención personalizada y una experiencia distinguida.",
                 "Joyería, hoteles, arquitectura y marcas de lujo.",
                 ("¿Hacen piezas a la medida?", ("Sí, podemos orientarte sobre las opciones de diseño personalizado."
                  " ¿Qué pieza tienes en mente?")),
@@ -126,7 +123,7 @@ def estilo(perfil: dict) -> dict:
     """Personalidad, trato, largo y emojis, con lo de antes (tono) y los de la personalidad de respaldo."""
     if perfil.get("personalidad") in PERSONALIDADES:
         k = perfil["personalidad"]
-        trato, largo, emojis = PERSONALIDADES[k][6]
+        trato, largo, emojis = PERSONALIDADES[k][5]
     else:
         k, trato, largo, emojis = TONO_VIEJO.get(perfil.get("tono"), TONO_VIEJO["amigable"])
     return {"personalidad": k,
@@ -143,7 +140,7 @@ def reglas_de(perfil: dict) -> dict[str, bool]:
 def tono_prompt(perfil: dict) -> list[str]:
     """Las líneas de TONO y CÓMO ATIENDES del prompt (panel.generar las pone después de la presentación)."""
     e = estilo(perfil)
-    out = ["TONO", PERSONALIDADES[e["personalidad"]][5],
+    out = ["TONO", PERSONALIDADES[e["personalidad"]][4],
            f"- {TRATOS[e['trato']][1]}", f"- {LARGOS[e['largo']][1]}", f"- {EMOJIS[e['emojis']][1]}"]
     if toque := perfil.get("toque", "").strip():
         out += ["Además, el dueño describe así cómo quiere que hables:",
@@ -221,15 +218,23 @@ def _radios(nombre: str, opciones: dict, actual: str, pregunta: str, ayuda: str)
 
 
 def _tarjeta(k: str, elegida: bool) -> str:
-    nombre, rasgos, para, uso, (pregunta, respuesta), *_ = PERSONALIDADES[k]
+    nombre, como, uso, (pregunta, respuesta), *_ = PERSONALIDADES[k]
     return (f'<label class="as-pers"><input type="radio" name="personalidad" value="{k}"{" checked" if elegida else ""}>'
             f'<span class="as-ck" aria-hidden="true">✓</span>'
-            f'<span class="as-in"><b class="as-nom">{nombre}</b><span class="as-rasgos">{" · ".join(rasgos)}</span>'
-            f'<span class="as-para">{para}</span>'
-            f'<span class="as-uso"><b>Uso ideal:</b> {uso}</span>'
+            f'<span class="as-in"><b class="as-nom">{nombre}</b><span class="as-para">{como}</span>'
+            f'<span class="as-uso"><b>Ideal para:</b> {uso}</span>'
             f'<span class="as-lbl">Ejemplo</span>'
             f'<span class="as-dlg"><span class="u">Cliente: {pregunta}</span>'
             f'<span class="a">Asistente: {respuesta}</span></span></span></label>')
+
+
+def _opcional(nombre: str, titulo: str, ayuda: str, ejemplo: str, valor: str, maximo: int) -> str:
+    """Un campo opcional plegado: la casilla lo abre (CSS :has); sin marcar, al guardar se vacía."""
+    return (f'<div class="as-opt"><label class="as-optc"><input type="checkbox" name="{nombre}_on" value="1"'
+            f'{" checked" if valor else ""}><span><b>{titulo}</b> <span class="as-opc">(Opcional)</span></span></label>'
+            f'<div class="as-optb">' + (f'<p class="ayuda">{ayuda}</p>' if ayuda else "")
+            + f'<textarea name="{nombre}" rows="3" maxlength="{maximo}" aria-label="{titulo}" placeholder="{ejemplo}">'
+            f"{escape(valor)}</textarea></div></div>")
 
 
 def _personalidad(perfil: dict) -> str:
@@ -239,13 +244,12 @@ def _personalidad(perfil: dict) -> str:
                     " con tus clientes.")
             + '<fieldset class="as-tarjetas"><legend class="oculto">Personalidad</legend>'
             + "".join(_tarjeta(k, k == actual) for k in PERSONALIDADES) + "</fieldset>"
-            + '<div class="as-caja as-toque"><label for="toque">¿Quieres darle un toque más personal?'
-            ' <span class="as-opc">(Opcional)</span></label>'
-            '<p class="ayuda">Describe brevemente cómo te gustaría que hablara tu asistente. Puedes mencionar algo que'
-            " deba hacer o evitar.</p>"
-            f'<textarea id="toque" name="toque" rows="3" maxlength="{MAX_TOQUE}" placeholder="Ejemplo: Que explique'
-            ' todo con paciencia, recomiende productos sin presionar y hable como alguien de nuestro equipo.">'
-            f'{escape(perfil.get("toque", ""))}</textarea></div>'
+            + '<div class="as-caja as-toque"><input type="hidden" name="opcionales" value="1">'
+            + _opcional("toque", "¿Quieres darle un toque más personal?",
+                        "Describe brevemente cómo te gustaría que hablara tu asistente. Puedes mencionar algo que deba"
+                        " hacer o evitar.",
+                        "Ejemplo: Que explique todo con paciencia, recomiende productos sin presionar y hable como"
+                        " alguien de nuestro equipo.", perfil.get("toque", ""), MAX_TOQUE) + "</div>"
             + _pie("personalidad"))
 
 
@@ -280,21 +284,18 @@ def _reglas(perfil: dict) -> str:
         for k, titulo, ayuda, *_ in REGLAS)
     extra = perfil.get("instrucciones", "")
     return (_cabeza("reglas", "Reglas y límites", "Qué puede hacer por su cuenta y qué no.")
-            + f'<div class="as-caja">{filas}'
-            '<label for="no_hacer">¿Qué no debe decir o hacer?</label>'
-            f'<textarea id="no_hacer" name="no_hacer" rows="3" maxlength="{MAX_TEXTO}"'
-            ' placeholder="Ej. No prometer fechas de entrega exactas, no hablar de la competencia.">'
-            f'{escape(perfil.get("no_hacer", ""))}</textarea>'
-            '<label for="pasar_equipo">¿Cuándo debe pasar la conversación a tu equipo?</label>'
-            f'<textarea id="pasar_equipo" name="pasar_equipo" rows="3" maxlength="{MAX_TEXTO}"'
-            ' placeholder="Ej. Si piden más de 10 piezas o una cotización especial.">'
-            f'{escape(perfil.get("pasar_equipo", ""))}</textarea>'
-            # Las instrucciones libres de antes no se pierden: aquí siguen, plegadas.
-            f'<details class="as-mas"{" open" if extra else ""}><summary>Algo más que deba saber (opcional)</summary>'
-            '<label for="instrucciones">Otras indicaciones</label>'
-            '<p class="ayuda">Ej.: saluda por su nombre y siempre invita a visitar la tienda.</p>'
-            f'<textarea id="instrucciones" name="instrucciones" rows="4" maxlength="{panel.MAX_INSTRUCCIONES}">'
-            f"{escape(extra)}</textarea></details></div>" + _pie("reglas"))
+            + f'<div class="as-caja">{filas}</div>'
+            '<div class="as-caja as-toque"><input type="hidden" name="opcionales" value="1">'
+            + _opcional("no_hacer", "¿Qué no debe decir o hacer?", "",
+                        "Ej. No prometer fechas de entrega exactas, no hablar de la competencia.",
+                        perfil.get("no_hacer", ""), MAX_TEXTO)
+            + _opcional("pasar_equipo", "¿Cuándo debe pasar la conversación a tu equipo?", "",
+                        "Ej. Si piden más de 10 piezas o una cotización especial.",
+                        perfil.get("pasar_equipo", ""), MAX_TEXTO)
+            # Las instrucciones libres de antes no se pierden: aquí siguen.
+            + _opcional("instrucciones", "Algo más que deba saber", "",
+                        "Ej. Saluda por su nombre y siempre invita a visitar la tienda.", extra, panel.MAX_INSTRUCCIONES)
+            + "</div>" + _pie("reglas"))
 
 
 def _equipo(c: Cuenta, perfil: dict) -> str:
@@ -425,6 +426,13 @@ async def ver(request: Request):
     return await pagina(c, q.get("paso", ""), aviso="Guardado." if q.get("ok") == "1" else "")
 
 
+def _texto(f: dict, campo: str, maximo: int) -> str:
+    """Lo escrito en un campo opcional; si su casilla quedó sin marcar, nada."""
+    if f.get("opcionales") == "1" and f.get(f"{campo}_on") != "1":
+        return ""
+    return f.get(campo, "").strip()[:maximo]
+
+
 @router.post("/asistente/paso")
 async def guardar(request: Request):
     panel.de_aqui(request)
@@ -442,10 +450,10 @@ async def guardar(request: Request):
         if k not in PERSONALIDADES:
             return await pagina(c, paso, nota="Elige una personalidad para seguir.")
         if k != antes.get("personalidad"):  # otra personalidad: empieza con su forma de escribir
-            trato, largo, emojis = PERSONALIDADES[k][6]
+            trato, largo, emojis = PERSONALIDADES[k][5]
             datos.update(personalidad=k, trato=trato, largo=largo, emojis=emojis)
         datos["personalidad"] = k
-        datos["toque"] = f.get("toque", "").strip()[:MAX_TOQUE]
+        datos["toque"] = _texto(f, "toque", MAX_TOQUE)
     elif paso == "escribe":
         datos.update({k: v for k, v in estilo(antes).items() if k not in datos or k == "personalidad"})
         for campo, opciones in (("trato", TRATOS), ("largo", LARGOS), ("emojis", EMOJIS)):
@@ -453,9 +461,9 @@ async def guardar(request: Request):
                 datos[campo] = f[campo]
     elif paso == "reglas":
         datos["reglas"] = {k: f.get(f"r_{k}") == "1" for k, *_ in REGLAS}
-        datos["no_hacer"] = f.get("no_hacer", "").strip()[:MAX_TEXTO]
-        datos["pasar_equipo"] = f.get("pasar_equipo", "").strip()[:MAX_TEXTO]
-        datos["instrucciones"] = f.get("instrucciones", "").strip()[:panel.MAX_INSTRUCCIONES]
+        datos["no_hacer"] = _texto(f, "no_hacer", MAX_TEXTO)
+        datos["pasar_equipo"] = _texto(f, "pasar_equipo", MAX_TEXTO)
+        datos["instrucciones"] = _texto(f, "instrucciones", panel.MAX_INSTRUCCIONES)
     elif paso == "equipo":
         datos[panel.HUMANO[0]] = f.get(panel.HUMANO[0], "").strip()[:panel.MAX_CAMPO]
     datos["pasos"] = sorted(set(datos.get("pasos") or []) | {paso})
@@ -526,10 +534,14 @@ fieldset.as-caja legend{float:left;width:100%;padding:0;font-weight:600;font-siz
 .as-pers:has(input:checked) .as-ck{display:grid}
 .as-in{display:block;padding:1.15rem 1.2rem 1.25rem}
 .as-nom{display:block;font-size:1.05rem;margin-bottom:.35rem;padding-right:2rem}
-.as-rasgos{display:block;font-size:.8rem;font-weight:600;color:var(--acento-claro);margin-bottom:.6rem}
 .as-para{display:block;font-size:.86rem;color:#E6E3EC;line-height:1.5;margin-bottom:.6rem}
 .as-toque{margin-top:1.25rem}
 .as-opc{font-weight:400;color:var(--gris)}
+.as-opt+.as-opt{margin-top:.9rem;padding-top:.9rem;border-top:1px solid var(--linea-oscura)}
+.as-optc{display:flex;gap:.7rem;align-items:center;margin:0;cursor:pointer;font-weight:400}
+.as-optc input{width:1.15rem;height:1.15rem;flex:none;margin:0;accent-color:var(--acento)}
+.as-optb{display:none;margin-top:.7rem}
+.as-opt:has(.as-optc input:checked) .as-optb{display:block}
 .as-lbl{display:block;margin-bottom:.35rem;font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--gris)}
 .as-uso{display:block;font-size:.86rem;color:#E6E3EC;line-height:1.45;margin-bottom:.75rem}
 .as-uso b{font-weight:600}
@@ -557,8 +569,6 @@ form:has(#emojis-nunca:checked) .v-emoji{display:none}form:has(#emojis-seguido:c
 .as-sw:checked{background:var(--acento-claro)}.as-sw:checked::after{left:1.35rem}
 .as-sw:disabled{background:rgba(198,250,44,.4);cursor:default}
 .as-sw:focus-visible{outline:2px solid var(--acento-claro);outline-offset:2px}
-.as-mas{margin-top:1.25rem;border-top:1px solid var(--linea-oscura);padding-top:1rem}
-.as-mas summary{cursor:pointer;color:var(--gris);font-size:.92rem}
 .as-resumen{display:grid;grid-template-columns:repeat(auto-fit,minmax(18rem,1fr));gap:1rem}
 .as-res{margin:0}.as-res ul{margin:.4rem 0 0;padding-left:1.1rem;color:#E6E3EC;font-size:.9rem;line-height:1.7}
 .as-top{display:flex;justify-content:space-between;align-items:center;gap:1rem}
