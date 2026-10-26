@@ -1,6 +1,6 @@
 """Tu asistente > Configura, para los clientes: pasos cortos en vez de un formulario largo.
 
-1 Personalidad (6 tarjetas), 2 Cómo escribe (trato, largo y emojis), 3 Reglas y límites
+1 Personalidad (6 tarjetas y un toque personal opcional), 2 Cómo escribe (trato, largo y emojis), 3 Reglas y límites
 (interruptores y dos cajas), 4 Tu equipo (qué decir si piden una persona, y de ajustes.py la
 pausa, el horario en que atiende una persona y los avisos) y un resumen con Editar, desde donde
 se prueba (/panel/probar) y se enciende. Lo que sabe del negocio (datos, catálogo, preguntas y políticas) viene del
@@ -26,47 +26,62 @@ from .cuenta import Cuenta
 log = logging.getLogger("igbot.asistente")
 router = APIRouter(prefix="/panel")
 
-# clave: (nombre, rasgos, uso ideal, pregunta y respuesta de ejemplo, cómo habla (va al prompt),
-#         (trato, largo, emojis) con que empieza, colores de la tarjeta mientras no tenga ilustración)
+# clave: (nombre, rasgos, para quién es, uso ideal, pregunta y respuesta de ejemplo, cómo habla (va al prompt),
+#         (trato, largo, emojis) con que empieza)
 PERSONALIDADES = {
-    "cercano": ("Cercano y amable", ("Cálido", "De tú", "Conversacional"),
-                "Tiendas, restaurantes, belleza y servicios del día a día.",
-                ("¿Tienen envío a Monterrey?", ("Claro, enviamos a todo México. A Monterrey llega en 2 o 3 días."
-                 " ¿Te ayudo a elegir algo? 🙂")),
-                "Cercano y amable: cálido y conversacional, como alguien del equipo que atiende con gusto.",
-                ("tu", "equilibrada", "aveces"), ("#7c2d12", "#f97316")),
-    "profesional": ("Profesional y confiable", ("Claro", "Preciso", "Sobrio"),
-                    "Consultorios, despachos, inmobiliarias y empresas que venden a empresas.",
-                    ("¿Qué necesito para una cita?", ("Con gusto te ayudo. Solo necesitamos tu nombre y un horario."
-                     " ¿Qué día te acomoda?")),
-                    "Profesional y confiable: claro, preciso y sobrio. Transmites seguridad y vas al punto.",
-                    ("tu", "equilibrada", "nunca"), ("#1e3a5f", "#3b82f6")),
-    "divertido": ("Divertido y desenfadado", ("Ligero", "Creativo", "Emojis"),
-                  "Moda, marcas juveniles, comida y entretenimiento.",
-                  ("¿Tardan mucho los tenis?", "Nada, salen volando en 24 h 🚀 ¿Ya tienes tu talla?"),
-                  ("Divertido y desenfadado: ligero y creativo, con humor suave cuando cabe y sin bromas que"
-                  " puedan ofender."),
-                  ("tu", "breve", "seguido"), ("#713f12", "#facc15")),
-    "empatico": ("Empático y paciente", ("Escucha", "Calma", "Respetuoso"),
-                 "Salud, bienestar, clínicas y atención después de la venta.",
-                 ("Mi pedido llegó dañado.", ("Lamento mucho lo que pasó. Vamos a resolverlo: ¿me compartes una foto"
-                  " del producto?")),
+    "cercano": ("Cercano y amable", ("Cálido", "Natural", "Conversacional"),
+                ("Ideal para negocios que quieren atender a sus clientes con confianza y cercanía, como si hablaran"
+                 " con alguien de su propio equipo."),
+                "Tiendas, restaurantes, belleza y servicios cotidianos.",
+                ("¿Tienen envío a Monterrey?", ("¡Sí! Te ayudo a revisar las opciones de envío a Monterrey."
+                 " ¿Qué producto te interesa?")),
+                "Cercano y amable: cálido, natural y conversacional, como alguien del equipo que atiende con gusto.",
+                ("tu", "equilibrada", "aveces")),
+    "profesional": ("Profesional y confiable", ("Claro", "Preciso", "Respetuoso"),
+                    ("Ideal para negocios que buscan transmitir seriedad, resolver dudas con claridad y generar"
+                     " confianza en cada conversación."),
+                    "Consultorios, despachos, inmobiliarias y servicios profesionales.",
+                    ("¿Qué necesito para una cita?", ("Con gusto te orientamos. ¿Qué tipo de cita necesitas? Así te"
+                     " comparto los requisitos correspondientes.")),
+                    "Profesional y confiable: claro, preciso y respetuoso. Transmites seguridad y vas al punto.",
+                    ("tu", "equilibrada", "nunca")),
+    "divertido": ("Divertido y desenfadado", ("Espontáneo", "Creativo", "Expresivo"),
+                  ("Ideal para marcas que quieren conversar de forma relajada, mostrar su personalidad y hacer que"
+                   " cada interacción sea más amena."),
+                  "Moda, gastronomía, entretenimiento y marcas juveniles.",
+                  ("¿Todavía tienen los tenis?", "¡Vamos a encontrar tu par! ¿Qué modelo y talla buscas?"),
+                  ("Divertido y desenfadado: espontáneo, creativo y expresivo, con humor suave cuando cabe y sin"
+                   " bromas que puedan ofender."),
+                  ("tu", "breve", "seguido")),
+    "empatico": ("Empático y paciente", ("Comprensivo", "Tranquilo", "Atento"),
+                 ("Ideal para negocios que necesitan escuchar, resolver inquietudes con paciencia y acompañar al"
+                  " cliente, especialmente cuando surge un problema."),
+                 "Salud, bienestar, clínicas y atención posventa.",
+                 ("Mi pedido llegó dañado.", ("Lamento mucho que haya llegado así. Vamos a revisar qué pasó y cómo"
+                  " podemos ayudarte. ¿Me compartes una foto?")),
                  ("Empático y paciente: escuchas, reconoces cómo se siente la persona y la acompañas con calma,"
-                 " paso a paso."),
-                 ("tu", "equilibrada", "nunca"), ("#831843", "#f472b6")),
-    "energico": ("Enérgico y motivador", ("Dinámico", "Positivo", "A la acción"),
+                  " paso a paso."),
+                 ("tu", "equilibrada", "nunca")),
+    "energico": ("Enérgico y motivador", ("Dinámico", "Positivo", "Motivador"),
+                 ("Ideal para marcas que quieren transmitir entusiasmo, impulsar a sus clientes a dar el siguiente"
+                  " paso y mantener conversaciones llenas de energía."),
                  "Gimnasios, coaches, deportes y cursos.",
-                 ("¿Tienen clase para principiantes?", ("Sí, y es ideal para arrancar. Hay lugar el lunes a las 7:00."
-                  " ¿Te aparto uno? 💪")),
+                 ("Nunca he tomado una clase.", ("¡Todos empezamos alguna vez! Te ayudo a encontrar una clase para"
+                  " principiantes. ¿Qué te gustaría aprender?")),
                  ("Enérgico y motivador: dinámico y positivo. Animas a dar el siguiente paso sin presionar ni"
-                 " prometer de más."),
-                 ("tu", "breve", "aveces"), ("#14532d", "#22c55e")),
-    "premium": ("Elegante y premium", ("Sobrio", "Cuidado", "Exclusivo"),
-                "Joyería, hoteles, arquitectura, tecnología y marcas de lujo.",
-                ("¿Hacen piezas a la medida?", "Sí. Cada pieza se diseña contigo. ¿Te comparto cómo es el proceso?"),
-                "Elegante y premium: sobrio y cuidado en cada palabra, con un trato atento y exclusivo, sin exagerar.",
-                ("usted", "equilibrada", "nunca"), ("#27272a", "#a1a1aa")),
+                  " prometer de más."),
+                 ("tu", "breve", "aveces")),
+    "premium": ("Elegante y premium", ("Refinado", "Discreto", "Exclusivo"),
+                ("Ideal para marcas que cuidan cada detalle y buscan transmitir calidad, atención personalizada y"
+                 " una experiencia distinguida."),
+                "Joyería, hoteles, arquitectura y marcas de lujo.",
+                ("¿Hacen piezas a la medida?", ("Sí, podemos orientarte sobre las opciones de diseño personalizado."
+                 " ¿Qué pieza tienes en mente?")),
+                ("Elegante y premium: refinado y discreto, cuidado en cada palabra, con un trato atento y exclusivo,"
+                 " sin exagerar."),
+                ("usted", "equilibrada", "nunca")),
 }
+MAX_TOQUE = 500  # "¿Quieres darle un toque más personal?" en Personalidad
 TRATOS = {"tu": ("De tú", "Tuteas a las personas."),
           "usted": ("De usted", "Hablas de usted a las personas.")}
 LARGOS = {"breve": ("Muy breves", "Contestas en una o dos frases."),
@@ -111,7 +126,7 @@ def estilo(perfil: dict) -> dict:
     """Personalidad, trato, largo y emojis, con lo de antes (tono) y los de la personalidad de respaldo."""
     if perfil.get("personalidad") in PERSONALIDADES:
         k = perfil["personalidad"]
-        trato, largo, emojis = PERSONALIDADES[k][5]
+        trato, largo, emojis = PERSONALIDADES[k][6]
     else:
         k, trato, largo, emojis = TONO_VIEJO.get(perfil.get("tono"), TONO_VIEJO["amigable"])
     return {"personalidad": k,
@@ -128,8 +143,11 @@ def reglas_de(perfil: dict) -> dict[str, bool]:
 def tono_prompt(perfil: dict) -> list[str]:
     """Las líneas de TONO y CÓMO ATIENDES del prompt (panel.generar las pone después de la presentación)."""
     e = estilo(perfil)
-    out = ["TONO", PERSONALIDADES[e["personalidad"]][4],
+    out = ["TONO", PERSONALIDADES[e["personalidad"]][5],
            f"- {TRATOS[e['trato']][1]}", f"- {LARGOS[e['largo']][1]}", f"- {EMOJIS[e['emojis']][1]}"]
+    if toque := perfil.get("toque", "").strip():
+        out += ["Además, el dueño describe así cómo quiere que hables:",
+                f"<como_quiere_que_hables>\n{escape(toque)}\n</como_quiere_que_hables>"]
     activas = reglas_de(perfil)
     reglas = [si if activas[k] else no for k, _, _, _, si, no in REGLAS if (si if activas[k] else no)]
     if reglas:
@@ -203,15 +221,13 @@ def _radios(nombre: str, opciones: dict, actual: str, pregunta: str, ayuda: str)
 
 
 def _tarjeta(k: str, elegida: bool) -> str:
-    nombre, rasgos, uso, (pregunta, respuesta), _, _, (c1, c2) = PERSONALIDADES[k]
-    img = panel.STATIC / "personalidad" / f"{k}.png"
-    arte = (f'<img src="/panel/static/personalidad/{k}.png?v={int(img.stat().st_mtime)}" alt="">' if img.is_file()
-            else f'<span class="as-arte" style="background:linear-gradient(135deg,{c1},{c2})"></span>')
-    chips = "".join(f"<span>{r}</span>" for r in rasgos)
+    nombre, rasgos, para, uso, (pregunta, respuesta), *_ = PERSONALIDADES[k]
     return (f'<label class="as-pers"><input type="radio" name="personalidad" value="{k}"{" checked" if elegida else ""}>'
-            f'<span class="as-img">{arte}<span class="as-ck" aria-hidden="true">✓</span></span>'
-            f'<span class="as-in"><b class="as-nom">{nombre}</b><span class="as-rasgos">{chips}</span>'
-            f'<span class="as-lbl">Uso ideal</span><span class="as-uso">{uso}</span>'
+            f'<span class="as-ck" aria-hidden="true">✓</span>'
+            f'<span class="as-in"><b class="as-nom">{nombre}</b><span class="as-rasgos">{" · ".join(rasgos)}</span>'
+            f'<span class="as-para">{para}</span>'
+            f'<span class="as-uso"><b>Uso ideal:</b> {uso}</span>'
+            f'<span class="as-lbl">Ejemplo</span>'
             f'<span class="as-dlg"><span class="u">Cliente: {pregunta}</span>'
             f'<span class="a">Asistente: {respuesta}</span></span></span></label>')
 
@@ -219,9 +235,18 @@ def _tarjeta(k: str, elegida: bool) -> str:
 def _personalidad(perfil: dict) -> str:
     actual = perfil.get("personalidad") if perfil.get("personalidad") in PERSONALIDADES else ""
     return (_cabeza("personalidad", "Elige su personalidad",
-                    "Elige la que más se parezca a tu marca. En el siguiente paso ajustas los detalles.")
+                    "Elige el estilo que mejor represente a tu marca. Así definiremos cómo se comunica tu asistente"
+                    " con tus clientes.")
             + '<fieldset class="as-tarjetas"><legend class="oculto">Personalidad</legend>'
-            + "".join(_tarjeta(k, k == actual) for k in PERSONALIDADES) + "</fieldset>" + _pie("personalidad"))
+            + "".join(_tarjeta(k, k == actual) for k in PERSONALIDADES) + "</fieldset>"
+            + '<div class="as-caja as-toque"><label for="toque">¿Quieres darle un toque más personal?'
+            ' <span class="as-opc">(Opcional)</span></label>'
+            '<p class="ayuda">Describe brevemente cómo te gustaría que hablara tu asistente. Puedes mencionar algo que'
+            " deba hacer o evitar.</p>"
+            f'<textarea id="toque" name="toque" rows="3" maxlength="{MAX_TOQUE}" placeholder="Ejemplo: Que explique'
+            ' todo con paciencia, recomiende productos sin presionar y hable como alguien de nuestro equipo.">'
+            f'{escape(perfil.get("toque", ""))}</textarea></div>'
+            + _pie("personalidad"))
 
 
 def _escribe(perfil: dict) -> str:
@@ -333,7 +358,8 @@ async def _resumen(c: Cuenta, perfil: dict) -> str:
             + caja("Personalidad", "personalidad", [
                 PERSONALIDADES[e["personalidad"]][0],
                 (f"{TRATOS[e['trato']][0]}, respuestas {LARGOS[e['largo']][0].lower()},"
-                f" emojis: {EMOJIS[e['emojis']][0].lower()}")], )
+                f" emojis: {EMOJIS[e['emojis']][0].lower()}"),
+                f"Tu toque: {perfil['toque'][:80]}" if perfil.get("toque") else ""])
             + caja("Reglas y límites", "reglas",
                    ["Nunca inventa datos"] + [t for k, t, *_ in REGLAS if activas[k]]
                    + [f"No debe: {perfil['no_hacer'][:80]}" if perfil.get("no_hacer") else ""])
@@ -416,8 +442,10 @@ async def guardar(request: Request):
         if k not in PERSONALIDADES:
             return await pagina(c, paso, nota="Elige una personalidad para seguir.")
         if k != antes.get("personalidad"):  # otra personalidad: empieza con su forma de escribir
-            trato, largo, emojis = PERSONALIDADES[k][5]
+            trato, largo, emojis = PERSONALIDADES[k][6]
             datos.update(personalidad=k, trato=trato, largo=largo, emojis=emojis)
+        datos["personalidad"] = k
+        datos["toque"] = f.get("toque", "").strip()[:MAX_TOQUE]
     elif paso == "escribe":
         datos.update({k: v for k, v in estilo(antes).items() if k not in datos or k == "personalidad"})
         for campo, opciones in (("trato", TRATOS), ("largo", LARGOS), ("emojis", EMOJIS)):
@@ -433,7 +461,7 @@ async def guardar(request: Request):
     datos["pasos"] = sorted(set(datos.get("pasos") or []) | {paso})
     nombre = await panel.usuario(c)
     prompt = panel.generar(nombre, datos, await panel.negocio_de_empresa(c))
-    if paso in ESCRITOS and (motivo := await panel.revisar_instrucciones(c, prompt)):
+    if (paso in ESCRITOS or (paso == "personalidad" and datos["toque"])) and (motivo := await panel.revisar_instrucciones(c, prompt)):
         log.warning("@%s: no se guardó %s: %s", nombre, paso, motivo)
         return await pagina(c, paso, nota=f"No se guardó: {motivo} Corrígelo y vuelve a intentar.", perfil=datos)
     if paso == "equipo":
@@ -494,16 +522,17 @@ fieldset.as-caja legend{float:left;width:100%;padding:0;font-weight:600;font-siz
 .as-pers input{position:absolute;opacity:0;pointer-events:none}
 .as-pers:has(input:checked){border-color:var(--acento-claro);box-shadow:0 0 0 3px rgba(243,154,54,.18)}
 .as-pers:has(input:focus-visible){outline:2px solid var(--acento-claro);outline-offset:2px}
-.as-img{position:relative;display:block;aspect-ratio:3/2;background:#25232F}
-.as-img img,.as-arte{display:block;width:100%;height:100%;object-fit:cover}
-.as-ck{position:absolute;top:.7rem;right:.7rem;width:1.6rem;height:1.6rem;border-radius:50%;background:var(--acento-claro);color:var(--tinta);font-weight:700;font-size:.85rem;display:none;place-items:center}
+.as-ck{position:absolute;top:.9rem;right:.9rem;width:1.6rem;height:1.6rem;border-radius:50%;background:var(--acento-claro);color:var(--tinta);font-weight:700;font-size:.85rem;display:none;place-items:center}
 .as-pers:has(input:checked) .as-ck{display:grid}
-.as-in{display:block;padding:1rem 1.1rem 1.15rem}
-.as-nom{display:block;font-size:1.05rem;margin-bottom:.5rem}
-.as-rasgos{display:flex;flex-wrap:wrap;gap:.35rem;margin-bottom:.6rem}
-.as-rasgos span{font-size:.74rem;border:1px solid #45424F;border-radius:999px;padding:.15rem .6rem;color:#E6E3EC}
-.as-lbl{display:block;font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--gris)}
-.as-uso{display:block;font-size:.86rem;color:#E6E3EC;line-height:1.45;margin-bottom:.6rem}
+.as-in{display:block;padding:1.15rem 1.2rem 1.25rem}
+.as-nom{display:block;font-size:1.05rem;margin-bottom:.35rem;padding-right:2rem}
+.as-rasgos{display:block;font-size:.8rem;font-weight:600;color:var(--acento-claro);margin-bottom:.6rem}
+.as-para{display:block;font-size:.86rem;color:#E6E3EC;line-height:1.5;margin-bottom:.6rem}
+.as-toque{margin-top:1.25rem}
+.as-opc{font-weight:400;color:var(--gris)}
+.as-lbl{display:block;margin-bottom:.35rem;font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--gris)}
+.as-uso{display:block;font-size:.86rem;color:#E6E3EC;line-height:1.45;margin-bottom:.75rem}
+.as-uso b{font-weight:600}
 .as-dlg,.as-muestra{display:block;background:#25232F;border:1px solid var(--linea-oscura);border-radius:.8rem;padding:.65rem .8rem;font-size:.85rem;line-height:1.45}
 .as-dlg .u,.as-muestra .u{display:block;color:var(--gris)}
 .as-dlg .a,.as-muestra .a{display:block;color:var(--claro);margin-top:.3rem}
@@ -540,7 +569,7 @@ form:has(#emojis-nunca:checked) .v-emoji{display:none}form:has(#emojis-seguido:c
 .as-srv{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-top:1rem;color:#d1d1d6;font-size:.9rem}
 @media(max-width:900px){.asis{grid-template-columns:1fr}.as-pasos{position:static;display:flex;gap:.4rem;overflow-x:auto;padding:.75rem}
 .as-t,.as-barra,.as-pasos .as-nota,.as-paso small,.as-paso:not(.on) b{display:none}.as-paso{flex:none;padding:.35rem}.as-paso.on{padding-right:.8rem}.as-paso b{font-size:.82rem;white-space:nowrap}}
-@media(max-width:560px){.as-cont{padding:1.4rem 1.1rem}.as-img{aspect-ratio:2/1}.as-h{font-size:1.55rem}.as-caja{padding:1.1rem}.as-seg{display:flex}.as-seg label{flex:1;text-align:center;padding:.5rem .6rem}}
+@media(max-width:560px){.as-cont{padding:1.4rem 1.1rem}.as-h{font-size:1.55rem}.as-caja{padding:1.1rem}.as-seg{display:flex}.as-seg label{flex:1;text-align:center;padding:.5rem .6rem}}
 .as-n{color:var(--acento);border-color:rgba(243,154,54,.45)}
 .as-paso.on .as-n{visibility:hidden}
 .as-barra i{background:var(--neon)}

@@ -925,3 +925,17 @@ def test_posicionamiento_sale_de_configura_y_llega_a_los_posts(cliente, monkeypa
     assert len(llamadas) == 1
     # Ya no vive en Tu marca.
     assert "lo que te hace distinto" not in client.get("/panel/contenido/marca").text
+
+
+def test_personalidad_sin_imagenes_y_con_toque_personal(cliente):
+    client, c, *_ = cliente
+    r = client.get("/panel/asistente/configura?paso=personalidad")
+    assert "<img" not in r.text.split('class="as-tarjetas"')[1].split("</fieldset>")[0]
+    assert "Comprensivo · Tranquilo · Atento" in r.text and "Uso ideal:" in r.text and 'name="toque"' in r.text
+    r = client.post("/panel/asistente/paso", headers=ORIGEN, follow_redirects=False,
+                    data={"paso": "personalidad", "personalidad": "empatico", "toque": "Que explique <todo> con calma."})
+    assert r.status_code == 303
+    perfil = client.portal.call(panel.perfil, c)
+    assert perfil["toque"] == "Que explique <todo> con calma." and perfil["personalidad"] == "empatico"
+    prompt = Path(c.prompt_path).read_text()
+    assert "<como_quiere_que_hables>\nQue explique &lt;todo&gt; con calma.\n</como_quiere_que_hables>" in prompt
