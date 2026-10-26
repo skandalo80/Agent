@@ -1041,6 +1041,20 @@ input[type=text],input[type=search],textarea,select,.inbox input[type=search],.e
 .wiz-barra i,.barra i,.as-barra i,.barra-av i{border-radius:999px;box-shadow:inset 1px 1px 2px rgba(255,255,255,.4)}
 .as-sw{box-shadow:inset 2px 2px 4px rgba(0,0,0,.35)}.as-sw::after{box-shadow:2px 3px 5px rgba(0,0,0,.35)}
 
+/* Fondo blanco: la página va en blanco y la franja, el menú y las tarjetas siguen en morado.
+   Lo que queda suelto sobre el blanco (títulos, notas) va en tinta oscura. */
+body,body:has(.asis),body:has(main.emp),body:has(.oscuro-pag){background:#fff;color-scheme:light}
+main:not(.emp):not(.as-main),.oscuro-pag{--negro:#211b25;--gris:#716a75;--texto2:#716a75;color:#211b25;color-scheme:light}
+.as-main,main.emp{background:#fff;--claro:#211b25;--gris:#716a75;color:#211b25}
+.tarjeta,.kpi,.wiz-main,.wiz-pasos,.camp,.inbox,.chat,.modal-cam,.cajon-cam,.explorar,.camino,.grupo>summary,.propuesta,.bloq-cam>div,.gano,.aviso,.estado,.barra-cam,.wiz-op,.obj-cam .obj,.mz,.fmt-op,.opcion,.filtros-cam{--negro:#FFFFFF;--gris:#C9B8D1;--texto2:#C9B8D1;color:#fff;color-scheme:dark}
+.as-pasos,.as-caja,.as-pers,.as-main .aviso,.riel,.caja-o,.emp .aviso{--claro:#FFFFFF;--gris:#C9B8D1;color:#fff;color-scheme:dark}
+.oscuro.portada{background:linear-gradient(145deg,#52305e,#482953 55%,#3c2444);color:#fff;--claro:#FFFFFF;--gris:#C9B8D1}
+body:has(>.lateral) .oscuro.portada{margin:1rem 1rem 0 0;border-radius:2rem;box-shadow:10px 14px 28px rgba(54,32,62,.25)}
+@media(max-width:900px){body:has(>.lateral) .oscuro.portada{margin:.75rem .75rem 0}}
+header,header.movil{background:#482953;color:#fff}
+main .boton.secundario{color:#482953;border-color:#cfc4d3!important;background:#fff!important;box-shadow:0 4px 0 rgba(54,32,62,.12)}
+.tarjeta .boton.secundario,.kpi .boton.secundario,.wiz-main .boton.secundario,.wiz-pasos .boton.secundario,.camp .boton.secundario,.inbox .boton.secundario,.chat .boton.secundario,.modal-cam .boton.secundario,.cajon-cam .boton.secundario,.explorar .boton.secundario,.camino .boton.secundario,.grupo>summary .boton.secundario,.propuesta .boton.secundario,.bloq-cam>div .boton.secundario,.gano .boton.secundario,.aviso .boton.secundario,.estado .boton.secundario,.barra-cam .boton.secundario,.wiz-op .boton.secundario,.obj-cam .obj .boton.secundario,.mz .boton.secundario,.fmt-op .boton.secundario,.opcion .boton.secundario,.filtros-cam .boton.secundario,.oscuro .boton.secundario{color:#fff;background:#3E2547!important}
+.vacio,.nota,.ayuda{color:var(--gris)}
 """
 
 
