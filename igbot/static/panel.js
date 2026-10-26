@@ -235,7 +235,8 @@ document.querySelectorAll("form[data-vivo]").forEach((form) => {
   });
 });
 
-// Tu marca: los estilos se numeran en el orden en que los tocas (hasta 3; "orden" lo lleva al servidor),
+// Tu marca: los estilos se numeran en el orden en que los tocas (hasta 3, con su papel: principal, secundario
+// y de apoyo; "orden" lo lleva al servidor),
 // elegir una paleta llena los cuatro colores, el código y el selector de cada color van iguales y las
 // muestras de "¿Cuánto color?" usan los colores de la página. Sin esto, se guarda igual (en el orden de la página).
 document.querySelectorAll("form[data-marca]").forEach((form) => {
@@ -243,15 +244,21 @@ document.querySelectorAll("form[data-marca]").forEach((form) => {
   const orden = form.querySelector('input[name="orden"]');
   if (ops && orden) {
     const max = +ops.dataset.max || 3;
+    const roles = (ops.dataset.roles || "").split(",");
     let elegidos = orden.value ? orden.value.split(",") : [];
     const pintar = () => {
       orden.value = elegidos.join(",");
-      ops.querySelectorAll(".wiz-op").forEach((op) => {
+      ops.querySelectorAll("label.wiz-op").forEach((op) => {
         const caja = op.querySelector("input");
         const n = elegidos.indexOf(caja.value) + 1;
         const em = op.querySelector(".wiz-orden");
         em.hidden = !n;
         em.textContent = n || "";
+        const rol = op.querySelector(".mrc-rol");
+        if (rol) {
+          rol.hidden = !n;
+          rol.textContent = n ? n + ".º · " + (roles[n - 1] || "") : "";
+        }
         op.classList.toggle("apagada", !n && elegidos.length >= max);
       });
     };
