@@ -335,7 +335,8 @@ def visual_marca(datos: dict, modo: str = "") -> str:
         lineas = [f"Estilo de fotos: {propio}"]
     else:
         elegidos = [estilo_de(datos)] if datos.get("estilo") in ESTILOS else estilos_de(datos) or [ESTILO_INICIAL]
-        lineas = [f"Estilo de fotos: {ESTILOS[elegidos[0]][0]}. {ESTILOS[elegidos[0]][1]}"]
+        lineas = [f"Estilo de fotos (el ambiente, no objetos que deban salir siempre): {ESTILOS[elegidos[0]][0]}."
+                  f" {ESTILOS[elegidos[0]][1]}"]
         lineas += [f"Con un toque, más ligero, de: {ESTILOS[k][0]}. {ESTILOS[k][1]}" for k in elegidos[1:]]
     colores = [f"{n} {datos[k]}" for k, n in (("principal", "principal"), ("secundario", "secundario"),
                                               ("acento", "acento"), ("fondo", "fondo"))

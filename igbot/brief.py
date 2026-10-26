@@ -38,11 +38,12 @@ Cada concepto:
 - "mensaje_clave": lo único que la gente debe recordar, en una frase, con un dato concreto de la empresa.
 - "pilares": de 3 a {max_pilares} ángulos en el orden en que los cuenta el "arco" (el primero abre la campaña y el último la cierra), cada uno {{"nombre": "2 a 4 palabras", "detalle": "una frase con un dato real de la empresa"}}.
 - "arco": cómo avanza la campaña semana a semana (por ejemplo, la primera presenta y la última empuja la acción del objetivo).
-- "direccion_visual": una sola guía para todas las imágenes, en 3 o 4 frases: escenarios, utilería, luz, paleta (con los colores de la marca), encuadres y qué se repite para que se reconozca. Junta <marca_visual> con el estilo de la campaña; si chocan, manda el de la campaña.
+- "direccion_visual": la guía de las imágenes en 3 o 4 frases, en dos partes: "Se mantiene:" lo que comparten todas (paleta con los colores de la marca, tratamiento de luz y color, tono) y "Cambia:" cómo varían de un post a otro según <variedad_visual> (escenarios, encuadres, luz, utilería). No fijes un escenario, un mueble ni un objeto que salga en todas. Junta <marca_visual> con el estilo de la campaña; si chocan, manda el de la campaña.
 - "no_decir": límites (lo que no se promete ni se menciona).
 
 Reglas:
 - Todo sale de <empresa>, <marca_visual> y la campaña. Usa solo datos que estén ahí: no inventes precios, promociones, horarios, cifras ni testimonios.
+- <marca_visual> es el ambiente de la marca (luz, colores, sensación), no objetos que deban salir siempre: si menciona materiales como madera o lino, son una referencia de textura, no utilería fija.
 - Cada concepto sirve al <objetivo> y al <mensaje>; si hay <producto>, gira alrededor de él.
 - Nada genérico: si un concepto le serviría igual a otro negocio del mismo ramo, cámbialo.
 - Si hay <ideas_anteriores>, ningún concepto repite su idea ni su ángulo.
@@ -61,12 +62,13 @@ Para cada post:
 - "objetivo": qué debe lograr ese post en quien lo ve, en una frase (ej. "que el que trabaja cerca se reconozca en la prisa de las 4").
 - "angulo": desde dónde lo cuentas, en una frase: la idea concreta, con su dato.
 - "titular": la frase principal, máximo 8 palabras, propia de esta empresa (en "Esto o aquello", la pregunta "¿A o B?").
-- "visual": el concepto de la imagen en 1 o 2 frases: qué se ve, dónde y el encuadre, siguiendo la dirección visual del brief y lo que se ve de su ficha. En "Solo texto", de qué trata la frase en pantalla.
+- "visual": el concepto de la imagen en 1 o 2 frases: qué se ve, dónde y el encuadre, siguiendo la dirección visual del brief, lo que se ve de su ficha y su "escena" (ese encuadre y esa luz). El lugar y la utilería los eliges tú, distintos en cada post. En "Solo texto", de qué trata la frase en pantalla.
 - "cta": la acción que pide, acorde al objetivo de la campaña y al tema (comentar, escribir por DM, visitar, guardar, comprar).
 - "distinto": en qué se diferencia de los demás posts de la campaña (escena, gancho o estructura), en una frase.
 
 Reglas:
 - Ningún par de posts repite escena, gancho, titular ni estructura. Si dos fichas se parecen, búscales ángulos opuestos.
+- La variedad de las imágenes la manda <variedad_visual>. <marca_visual> es el ambiente (luz, color, sensación), no objetos fijos: no repitas el mismo mueble, superficie u objeto en varios posts.
 - Las primeras semanas presentan y las últimas empujan la acción, como dice el brief.
 - Usa solo datos de <empresa>, del brief o de la campaña. No inventes precios, promociones, cifras ni testimonios. Respeta "Lo que no se dice".
 - Español de México, tuteando, con el carácter de la marca.
@@ -89,6 +91,45 @@ def leer_plan(respuesta: dict, n: int) -> list[dict]:
 def plan_texto(plan: dict) -> str:
     """El plan de un post para su línea en el prompt de los posts (escapado)."""
     return "; ".join(f"{t.lower()}: {escape(plan[k])}" for k, t, _ in PLAN if plan.get(k))
+
+
+# Variedad visual de la campaña (asistente, paso Estilo y variedad): lo que se le dice a Claude.
+VARIEDAD = {
+    "reconocible": "Consistente: las imágenes comparten escenario base, encuadre y tratamiento; cambia el sujeto y el"
+                   " mensaje, para que la campaña se vea muy uniforme.",
+    "coherencia": "Variada: se mantienen la paleta y el tratamiento de luz y color; cada post cambia de escenario,"
+                  " encuadre, luz y utilería. Ningún escenario ni objeto de utilería se repite en dos posts.",
+    "experimental": "Creativa: solo se mantiene la paleta; cada post explora un escenario, un ángulo y una composición"
+                    " inesperados (contrastes, espacio negativo, reflejos, objetos fuera de contexto), sin repetir"
+                    " ninguno.",
+}
+# La escena de cada post (encuadre × luz), cruzada como lo que se ve × formato: no se repite hasta usarlas todas.
+ENCUADRES = ["plano de detalle muy cercano", "vista cenital, desde arriba", "plano medio con una persona en acción",
+             "plano abierto del lugar o del entorno", "retrato ambiental de una persona",
+             "a la altura de los ojos, con fondo limpio y mucho aire alrededor", "ángulo bajo, desde abajo",
+             "a través de un primer plano desenfocado (una ventana, una planta, un objeto)"]
+EXPERIMENTALES = ["composición asimétrica con mucho espacio negativo", "reflejo o silueta",
+                  "el objeto fuera de su contexto habitual", "encuadre muy cerrado e inesperado"]
+LUCES = ["luz natural suave de mañana", "luz clara y pareja de mediodía", "luz cálida de tarde",
+         "luz de estudio suave sobre un fondo de color", "luz ambiental de noche", "día nublado, luz difusa"]
+SIN_ESCENA = ("texto", "collage")  # formatos sin foto generada
+
+
+def variedad_tag(camp: dict) -> str:
+    return f"<variedad_visual>{VARIEDAD.get(camp.get('variedad'), VARIEDAD['coherencia'])}</variedad_visual>\n"
+
+
+def escenas(fichas: list[dict], variedad: str, semilla: int = 0) -> list[str]:
+    """La escena (encuadre y luz) de cada post con foto. En Consistente no hay: la da la dirección visual."""
+    if variedad == "reconocible":
+        return [""] * len(fichas)
+    con_foto = [i for i, f in enumerate(fichas) if f["formato"] not in SIN_ESCENA and f.get("ve") != "graficos"]
+    encuadres = ENCUADRES + (EXPERIMENTALES if variedad == "experimental" else [])
+    pares = cruzar(len(con_foto), encuadres, LUCES, semilla + 1)
+    salida = [""] * len(fichas)
+    for i, (encuadre, luz) in zip(con_foto, pares):
+        salida[i] = f"{encuadre}, {luz}"
+    return salida
 
 
 def _json(texto: str) -> dict:
@@ -138,7 +179,7 @@ async def conceptos(c: Cuenta, camp: dict, otras: list[dict]) -> list[dict]:
               f"<campaña>{escape(camp.get('nombre', ''))}: {camp.get('n_posts') or ''} posts en {semanas}"
               f" semana{'s' if semanas > 1 else ''}</campaña>\n"
               + (f"<tema>{escape(camp['tema'])}</tema>\n" if camp.get("tema") else "")
-              + campanas.parametros(camp) + "\n"
+              + campanas.parametros(camp) + "\n" + variedad_tag(camp)
               + (await campanas.de_tus_clientes(c) if camp.get("clientes") else "")
               + (f"<ideas_anteriores>\n{ya}\n</ideas_anteriores>" if ya else ""))
     sistema = SISTEMA.format(n=N_CONCEPTOS, max_pilares=MAX_PILARES)

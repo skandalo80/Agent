@@ -116,10 +116,10 @@ APARIENCIA = {
 }
 TEXTO = {"nada": "Nada", "minimo": "Mínimo", "titular": "Un titular", "info": "Con más información"}
 VARIEDAD = {
-    "reconocible": ("Siempre reconocible", "Diseños muy parecidos: cambia el mensaje, no la estructura.", "#33302a"),
-    "coherencia": ("Variedad con coherencia", "Alterna fotos, consejos y promociones sin perder tu identidad.",
-                   "#3a2f25"),
-    "experimental": ("Creativo y experimental", "Más libertad en encuadres, fondos y composición.", "#4a2312"),
+    "reconocible": ("Consistente", "Publicaciones con una apariencia similar. Ideal para una marca muy uniforme.",
+                    "#33302a"),
+    "coherencia": ("Variada", "Cambian el lugar, el encuadre y la luz de cada foto, sin perder tu estilo.", "#3a2f25"),
+    "experimental": ("Creativa", "Más contraste, ideas inesperadas y experimentación visual.", "#4a2312"),
 }
 ARMADO = {"plantilla": "Con tu plantilla", "libre": "Diseño libre"}
 HORARIOS = {**{k: f"{v[0]} · {v[1]}" for k, v in campanas.HORARIOS.items()}, "ia": "Que la IA decida"}
@@ -247,6 +247,7 @@ async def a_campana(c: Cuenta, b: dict) -> dict:
             "producto": producto, "producto_id": prod["id"] if prod else "", "visual": visual, "estilo": estilo,
             "fotos_propias": "propias" in b["visual"], "modo_img": b["armado"], "regla": base == "interaccion",
             "ves": [[k, f"{VISUAL[k][0]}: {VISUAL[k][1]}"] for k in b["visual"] if k in VISUAL and k != "propias"],
+            "variedad": b["variedad"],
             "semilla": b.get("semilla") or 0,
             "asistente": {k: v for k, v in b.items() if k not in ("cid", "hechos")}}
 
@@ -499,13 +500,14 @@ def paso_6(b: dict) -> str:
                        for k, (t, d, color) in VARIEDAD.items())
     return (cab(6, "¿Cómo quieres que se vea esta campaña?",
                 "Solo cambia esta campaña. Tus colores, tu tipografía y tu logo siguen siendo los de Tu marca.")
-            + '<h3 class="wiz-sub">Apariencia de las fotos</h3><p class="ayuda">Elige una.</p>'
+            + '<h3 class="wiz-sub">Variedad visual</h3><p class="ayuda">Qué tan distintas se ven las fotos entre'
+            ' sí: el lugar, el encuadre y la luz.</p>'
+            f'<div class="wiz-ops tres">{variedad}</div>'
+            '<h3 class="wiz-sub">Apariencia de las fotos</h3><p class="ayuda">Elige una.</p>'
             f'<div class="wiz-ops">{apariencia}</div>'
             '<h3 class="wiz-sub">Texto dentro de la imagen</h3><p class="ayuda">No es el pie de foto: es lo que va'
             ' escrito sobre la imagen.</p><div class="wiz-chips">'
             + "".join(chip("texto_img", k, v, b["texto_img"] == k) for k, v in TEXTO.items()) + "</div>"
-            '<h3 class="wiz-sub">Variedad visual</h3><p class="ayuda">Cuánto cambian tus posts entre sí sin dejar de'
-            f' parecer tuyos.</p><div class="wiz-ops tres">{variedad}</div>'
             '<h3 class="wiz-sub">Cómo se arman tus posts</h3><p class="ayuda">Viene de Tu marca; puedes cambiarlo solo'
             ' para esta campaña.</p><div class="wiz-chips">'
             + "".join(chip("armado", k, v, b["armado"] == k) for k, v in ARMADO.items()) + "</div>" + pie(6))

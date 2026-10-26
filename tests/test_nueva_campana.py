@@ -362,3 +362,40 @@ def test_los_mensajes_dependen_del_objetivo(cliente, monkeypatch):
     client.portal.call(c.store.set, "campana_opciones", json.dumps(viejas))
     paso(client, 1, objetivo="vender")
     assert "Comunicar general" in client.get(f"{URL}?paso=2").text and programadas
+
+
+def test_cada_foto_tiene_su_escena_segun_la_variedad():
+    fichas = [{"formato": f, "ve": v} for f, v in [("foto", "productos"), ("texto", "productos"), ("titular", "personas"),
+                                                    ("foto", "graficos"), ("collage", "productos")] * 4]
+    assert brief.escenas(fichas, "reconocible") == [""] * len(fichas)  # Consistente: la da la dirección visual
+    esc = brief.escenas(fichas, "coherencia", semilla=5)
+    con_foto = [e for f, e in zip(fichas, esc) if f["formato"] in ("foto", "titular") and f["ve"] != "graficos"]
+    assert all(con_foto) and len(set(con_foto)) == len(con_foto)  # encuadre × luz sin repetir
+    assert all(not e for f, e in zip(fichas, esc) if f["formato"] in ("texto", "collage") or f["ve"] == "graficos")
+    assert brief.escenas(fichas, "coherencia", semilla=5) == esc
+    creativa = brief.escenas(fichas * 4, "experimental")
+    assert any(e.split(", ")[0] in brief.EXPERIMENTALES for e in creativa)
+    assert "Creativa" in brief.variedad_tag({"variedad": "experimental"})
+
+
+def test_la_variedad_llega_al_brief_al_plan_y_a_los_posts(cliente, monkeypatch):
+    client, c, *_ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 4)
+    llamadas = []
+    import app as bot
+    monkeypatch.setattr(bot.agent, "run_claude", claude_de_campana(llamadas))
+    listo(client, c)
+    client.portal.call(c.store.set, "productos", json.dumps([PRODUCTO]))
+    r = llenar(client)
+    paso_6 = client.get(f"{URL}?paso=6").text
+    assert paso_6.index("Variedad visual") < paso_6.index("Apariencia de las fotos")
+    assert "Consistente" in paso_6 and "Variada" in paso_6 and "Creativa" in paso_6
+    generar(client)
+    prompts = [p for p, *_ in llamadas]
+    assert sum("<variedad_visual>" in p for p in prompts) >= 3  # brief, plan y posts
+    camp = leer(client, c)
+    assert camp["variedad"] == "coherencia"
+    fotos = [p for p in camp["posts"] if p["formato"] == "titular"]
+    assert fotos and all(p.get("escena") for p in fotos)
+    assert all(not p.get("escena") for p in camp["posts"] if p["formato"] == "texto")
+    assert any("| escena: " in p for p in prompts)
