@@ -102,6 +102,10 @@ class Cuenta:
     def prompt_editado(self) -> Path:
         return Path(self.db_path).parent / "system.md"
 
+    def prompt_destino(self) -> Path:
+        """Dónde escribe el panel las instrucciones: la principal, aparte del repo (prompt_editado)."""
+        return Path(self.prompt_path) if self.slug else self.prompt_editado()
+
     @classmethod
     def desde_env(cls, slug: str, env: Mapping[str, str]) -> "Cuenta":
         """Arma la cuenta con las variables de su .env (ver .env.example)."""

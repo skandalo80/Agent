@@ -10,8 +10,8 @@ contraseñas) y desde ahí:
 - ve sus números del día y sus conversaciones recientes: toma un chat (pausa al
   asistente ahí para contestar él), reactiva los que están en pausa o los abre en Instagram.
 
-La cuenta principal también se edita aquí (para enseñarlo en una demo): lo que
-guarda va a data/system.md y manda sobre prompts/system.md hasta que lo restaure.
+La cuenta principal se configura igual que las demás; lo que guarda va a
+data/system.md y manda sobre prompts/system.md hasta que lo restaure.
 
 /panel lleva a Resultados cuando el asistente ya está encendido y con mensajes
 de clientes; si no, a Tu asistente (/panel/asistente) para configurarlo.
@@ -40,7 +40,7 @@ from urllib.parse import parse_qs
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
 
-from . import config, conversaciones, imagenes, posicionamiento
+from . import config, conversaciones, imagenes
 from .cuenta import Cuenta, usar
 
 log = logging.getLogger("igbot.panel")
@@ -54,7 +54,6 @@ alta: Callable[[str, str, str, bool], Awaitable[Cuenta | None]] | None = None
 COOKIE = "panel"
 SESSION_DAYS = 30  # Instagram vuelve a pedir el permiso en cada inicio de sesión
 MAX_CAMPO = 3000
-MAX_PROMPT = 12000
 # Modelo del plan Asistente virtual (solo chat).
 MODELO_BASICO = "claude-haiku-5-5"
 # Lo que ve una cuenta grande recién conectada mientras se revisa (ver conectar.py).
@@ -77,20 +76,11 @@ POLITICAS = [
 ]
 HUMANO = ("humano", "Si piden hablar con una persona",
           "Qué debe decir. Ej.: que alguien del equipo le contesta hoy mismo.", 2)
-MIN_PREGUNTAS = 3
 EJEMPLOS = [  # para que vean cómo llenar cada par
     ("¿Hacen envíos?", "Sí, a todo México por paquetería."),
     ("¿Tienen estacionamiento?", "Sí, gratis para clientes."),
     ("¿Dan factura?", "Sí, pídela al momento de pagar."),
 ]
-MAX_PREGUNTAS = 40
-
-TONOS = {
-    "amigable": ("Amigable", "Cercano y cálido. Tuteas, usas frases cortas y puedes poner algún emoji de vez en cuando."),
-    "profesional": ("Profesional", "Claro y profesional. Tuteas, vas directo al punto y no usas emojis."),
-    "formal": ("Formal", "Formal y respetuoso. Hablas de usted y no usas emojis."),
-}
-
 
 def preguntas(perfil: dict) -> list[dict]:
     """[{"p": pregunta, "r": respuesta}]; antes del panel con pares era un solo texto."""
@@ -1154,33 +1144,21 @@ def caja(nombre: str, etiqueta: str, ayuda: str, valor: str, filas: int = 2) -> 
             f'<textarea id="{nombre}" name="{nombre}" rows="{filas}" maxlength="{MAX_CAMPO}">{escape(valor)}</textarea>')
 
 
-async def panel_de(c: Cuenta, aviso: str = "", datos: dict | None = None, prompt: str | None = None,
-                   pares_minimos: int = MIN_PREGUNTAS, nota: str = "", ver: str = "",
-                   confirmar: bool = False, vista: str = "", abrir: bool = False, buscar: str = "",
-                   hoja: int = 1, chat: str = "", n: int = 0) -> HTMLResponse:
+async def panel_de(c: Cuenta, aviso: str = "", ver: str = "", vista: str = "", abrir: bool = False,
+                   buscar: str = "", hoja: int = 1, chat: str = "", n: int = 0) -> HTMLResponse:
     """Tu asistente. Tres vistas, cada una con su dirección: las conversaciones (/panel/asistente),
-    "configura" (el formulario, /panel/asistente/configura) y "conexion". `aviso` sale arriba;
-    `nota`, junto a las instrucciones (ahí deja la página "Generar instrucciones", con #instrucciones)."""
-    # Lo que viene de editar el formulario (Guardar, Generar, agregar una pregunta...) vuelve al formulario.
-    if not vista and (abrir or datos is not None or prompt is not None or bool(nota) or confirmar):
+    "configura" (los pasos de asistente.py, /panel/asistente/configura) y "conexion". `aviso` sale arriba."""
+    if not vista and abrir:
         vista = "configura"
-    datos = datos if datos is not None else await perfil(c)
-    if prompt is None:  # el cliente ve solo su tono e instrucciones; el prompt completo se arma aparte
-        prompt = datos.get("instrucciones", "") if c.slug else prompt_actual(c)
     encendido = await activo(c)
     from . import ajustes  # ajustes usa este módulo
     estado_conexion, tarjeta_conexion = await ajustes.conexion(c)
 
     if vista == "conexion":
         titulo, bajada, cuerpo = "Conexión", "Cómo está conectada tu cuenta de Instagram.", tarjeta_conexion
-    elif vista == "configura" and c.slug:  # los clientes configuran por pasos (asistente.py)
+    elif vista == "configura":  # todas las cuentas, también la principal, configuran por pasos
         from . import asistente
         return await asistente.pagina(c, aviso=aviso)
-    elif vista == "configura":
-        titulo, bajada = "Configura", "Tu negocio, preguntas, políticas, tono, horario y avisos."
-        cuerpo = (principal(c) + '<div class="grupo" id="configura">'
-                  + _formulario(c, datos, prompt, pares_minimos, nota, confirmar, ajustes.tarjeta(c))
-                  + "</div>")
     else:
         titulo = bajada = ""
         cuerpo = (await pendiente(c, "asistente")
@@ -1300,113 +1278,8 @@ def paginas(actual: int, total: int, enlace) -> str:
             f'{"".join(partes)}{flecha(actual + 1, "›", "Siguiente")}</nav>')
 
 
-# La cuenta principal (la vendedora, la del .env) usa prompts/system.md, que vive en el
-# repo. Lo que se guarda aquí va aparte (Cuenta.prompt_editado) para no chocar con git pull;
-# "Volver a las del servidor" lo borra y vuelve a mandar el del repo.
-def principal(c: Cuenta) -> str:
-    if c.prompt_editado().is_file():
-        return ('<form method="post" action="/panel/guardar" class="aviso acciones-fila" style="align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">'
-                "<span>Tu asistente usa las instrucciones que guardaste aquí, no las del servidor"
-                " (prompts/system.md). Los cambios a ese archivo no se aplican mientras tanto.</span>"
-                '<button class="boton secundario chico" name="accion" value="restaurar">'
-                "Volver a las del servidor</button></form>")
-    return ('<div class="aviso">Cuenta principal: abajo, en Tono e instrucciones, están las del servidor'
-            " (prompts/system.md). Si las cambias y guardas, tu asistente usa las tuyas hasta que las restaures.</div>")
-
-
-def campos_negocio(datos: dict, pares_minimos: int) -> tuple[str, str, str]:
-    """Los campos del negocio, las preguntas frecuentes y las políticas (formulario de la principal)."""
-    pares = preguntas(datos)
-    pares += [{"p": "", "r": ""}] * (max(MIN_PREGUNTAS, pares_minimos) - len(pares))
-    temas = politicas(datos)
-    negocio = "".join(caja(k, etq, ayuda, datos.get(k, ""), filas) for k, etq, ayuda, filas in CAMPOS)
-    faq = "".join(
-        f'<div class="par"><label for="faq_p_{i}">Pregunta {i + 1}</label>'
-        f'<input type="text" id="faq_p_{i}" name="faq_p_{i}" maxlength="300" value="{escape(q["p"])}"'
-        f' placeholder="{EJEMPLOS[i % len(EJEMPLOS)][0]}">'
-        f'<textarea name="faq_r_{i}" aria-label="Respuesta {i + 1}" rows="2" maxlength="{MAX_CAMPO}" placeholder="{EJEMPLOS[i % len(EJEMPLOS)][1]}">'
-        f'{escape(q["r"])}</textarea>'
-        f'<button class="quitar" name="accion" value="quitar_{i}" formaction="/panel/guardar#preguntas">Quitar</button></div>'
-        for i, q in enumerate(pares)
-    )
-    pol = "".join(caja(k, etq, ayuda, temas.get(k, "")) for k, etq, ayuda in POLITICAS)
-    return negocio, faq, pol
-
-
-def _formulario(c: Cuenta, datos: dict, prompt: str, pares_minimos: int, nota: str, confirmar: bool = False,
-                horario: str = "") -> str:
-    """La cuenta principal: todo en una página y el prompt completo para editar."""
-    negocio, faq, pol = campos_negocio(datos, pares_minimos)
-    pares = preguntas(datos)
-    pares += [{"p": "", "r": ""}] * (max(MIN_PREGUNTAS, pares_minimos) - len(pares))
-    tono_actual = datos.get("tono", "amigable")
-    tonos = "".join(
-        f'<label><input type="radio" name="tono" value="{k}"{" checked" if k == tono_actual else ""}> {nombre}</label>'
-        for k, (nombre, _) in TONOS.items()
-    )
-    return (
-        '<form method="post" action="/panel/guardar">'
-        # Enter en un campo no debe quitar una pregunta: el primer botón del formulario solo recarga.
-        '<button class="oculto" name="accion" value="vista" tabindex="-1" aria-hidden="true">Actualizar</button>'
-        + seccion("tu-negocio", "Tu negocio", negocio)  # no "negocio": ese id es de su primera caja
-        + seccion("preguntas", "Preguntas frecuentes",
-                  '<p class="ayuda">Lo que más te preguntan, con la respuesta que darías tú.</p>'
-                  f'<input type="hidden" name="faq_n" value="{len(pares)}">{faq}'
-                  '<div class="acciones"><button class="boton secundario" name="accion" value="agregar"'
-                  ' formaction="/panel/guardar#preguntas">+ Agregar pregunta</button></div>',
-                  plural_(sum(1 for q in pares if q["p"].strip()), "pregunta", "preguntas"))
-        + seccion("politicas", "Políticas", f'<p class="ayuda">Llena solo las que apliquen a tu negocio.</p>{pol}')
-        + seccion("atencion", "Atención personal",
-                  caja(HUMANO[0], HUMANO[1], HUMANO[2], datos.get(HUMANO[0], ""), HUMANO[3]))
-        + seccion("instrucciones", "Tono e instrucciones",
-                  tono_principal(tonos, prompt, nota, confirmar))
-        + horario
-        # Un solo Guardar, hasta abajo y fuera de las secciones: guarda todo, aunque estén cerradas.
-        + '<div class="acciones guardar-todo"><button class="boton" name="accion" value="guardar">Guardar</button>'
-        '<span class="ayuda">Guarda todo lo de esta página.</span></div></form>'
-    )
-
-
-def seccion(id_: str, titulo: str, cuerpo: str, resumen: str = "") -> str:
-    """Una parte de Configura tu asistente que se abre y se cierra (panel.js recuerda si la cerraste)."""
-    return (f'<details class="tarjeta plegable seccion" id="{id_}" open><summary><span class="titulo-sec">'
-            f'<h2>{titulo}</h2></span>'
-            + (f'<span class="resumen">{resumen}</span>' if resumen else "") + f"</summary>{cuerpo}</details>")
-
-
 def plural_(n: int, uno: str, varios: str) -> str:
     return f"{n} {uno if n == 1 else varios}"
-
-
-def tono_principal(tonos: str, prompt: str, nota: str, confirmar: bool) -> str:
-    """La principal edita el prompt completo (el del vendedor no sale del formulario)."""
-    return (
-        f'<p class="ayuda">Elige cómo habla tu asistente y genera sus instrucciones con todo lo de arriba.</p>'
-        f'<div class="tonos">{tonos}</div>'
-        f'<div class="acciones"><button class="boton secundario" name="accion" value="generar" formaction="/panel/guardar#instrucciones">Generar instrucciones</button></div>'
-        + (f'<div class="aviso">{escape(nota)}</div>' if nota else "")
-        + ('<div class="aviso"><b>Ya tienes instrucciones escritas a mano.</b> Generar las reemplaza por unas nuevas'
-           " armadas solo con el formulario y se pierde lo que escribiste. Tus instrucciones siguen abajo sin cambios."
-           '<div class="acciones"><button class="boton" name="accion" value="generar_si"'
-           ' formaction="/panel/guardar#instrucciones">Sí, reemplazarlas</button>'
-           '<a class="boton secundario" href="/panel/asistente/configura#instrucciones">Cancelar</a></div></div>'
-           if confirmar else "") +
-        f'<label for="prompt">Instrucciones de tu asistente</label><p class="ayuda">Puedes editarlas antes de guardar.</p>'
-        f'<textarea class="prompt" id="prompt" name="prompt" maxlength="{MAX_PROMPT}">{escape(prompt)}</textarea>'
-    )
-
-
-def datos_de(f: dict[str, str]) -> dict:
-    """El perfil tal como viene del formulario (las preguntas vacías se quedan, para no moverlas)."""
-    datos = {k: f.get(k, "").strip()[:MAX_CAMPO] for k in [*(c[0] for c in CAMPOS), *(p[0] for p in POLITICAS), HUMANO[0]]}
-    datos["tono"] = f.get("tono") if f.get("tono") in TONOS else "amigable"
-    try:
-        n = min(int(f.get("faq_n", "0")), MAX_PREGUNTAS)
-    except ValueError:
-        n = 0
-    datos["faq"] = [{"p": f.get(f"faq_p_{i}", "").strip()[:300], "r": f.get(f"faq_r_{i}", "").strip()[:MAX_CAMPO]}
-                    for i in range(n)]
-    return datos
 
 
 # --- bienvenida: la primera vez que entra una cuenta nueva ---
@@ -1604,56 +1477,18 @@ async def no_encontrada(request: Request) -> HTMLResponse:
 
 @router.post("/guardar")
 async def guardar(request: Request):
+    """El formulario de antes. Ahora todo se guarda por pasos (asistente.py); aquí solo queda que la
+    principal vuelva a las instrucciones del servidor (prompts/system.md)."""
     de_aqui(request)
     if not (c := cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
-    if c.slug:  # los clientes guardan paso por paso (asistente.py)
-        return RedirectResponse("/panel/asistente/configura", status_code=303)
-    f = await form(request)
-    datos = datos_de(f)
-    accion = f.get("accion", "")
-    if accion == "guardar" and "pausa" in f:  # Horario y avisos (06) va en el mismo formulario
-        from . import ajustes
-        await ajustes.guardar_del_form(c, await request.form())
-    prompt = f.get("prompt", "")[:MAX_PROMPT]
-    # Agregar o quitar una pregunta solo redibuja la página: nada se guarda todavía.
-    if accion == "agregar":
-        return await panel_de(c, "", datos, prompt, pares_minimos=len(datos["faq"]) + 1)
-    if accion.startswith("quitar_") and accion[7:].isdigit():
-        del datos["faq"][int(accion[7:]):int(accion[7:]) + 1]
-        return await panel_de(c, "", datos, prompt)
-    if accion == "restaurar" and not c.slug:
+    if not c.slug and (await form(request)).get("accion") == "restaurar":
         c.prompt_editado().unlink(missing_ok=True)
         log.info("@%s volvió a las instrucciones del servidor", await usuario(c))
-        return await panel_de(c, "Listo: tu asistente vuelve a usar las instrucciones del servidor.", abrir=True)
-    if accion not in ("generar", "generar_si", "guardar"):
-        return await panel_de(c, "", datos, prompt)
-    datos["faq"] = [q for q in datos["faq"] if q["p"] or q["r"]]
-    with usar(c):
-        nombre = await usuario(c)
-        # Si el cuadro trae instrucciones escritas a mano (no las que salen del formulario
-        # guardado), generar las borraría: primero se pide confirmar.
-        if accion == "generar" and prompt.strip() and prompt.strip() != generar(nombre, await perfil(c)).strip():
-            return await panel_de(c, datos=datos, prompt=prompt, confirmar=True)
-        await c.store.set("perfil", json.dumps(datos, ensure_ascii=False))
-        if accion in ("generar", "generar_si"):
-            return await panel_de(c, nota="Listo: revísalas y pulsa Guardar para que tu asistente las use.",
-                                  datos=datos, prompt=generar(nombre, datos))
-        posicionamiento.programar(c, datos)
-        prompt = prompt.replace("\r\n", "\n").strip() or generar(nombre, datos)
-        servidor = Path(c.prompt_path)
-        if servidor.is_file() and prompt == servidor.read_text(encoding="utf-8").replace("\r\n", "\n").strip():
-            # Guardó el formulario sin tocar las instrucciones: sigue con las del repo y sus cambios.
-            c.prompt_editado().unlink(missing_ok=True)
-        else:
-            c.prompt_editado().parent.mkdir(parents=True, exist_ok=True)
-            c.prompt_editado().write_text(prompt + "\n", encoding="utf-8")
-    await c.store.set("asistente_listo", "1")
-    log.info("@%s guardó las instrucciones de su asistente desde el panel", nombre)
-    aviso = "Guardado. Tu asistente ya usa estas instrucciones."
-    if not await activo(c) and not c.en_revision:
-        aviso += " Cuando quieras que conteste, ve a tus conversaciones y pulsa Encender."
-    return await panel_de(c, aviso, abrir=True)
+        from . import asistente
+        return await asistente.pagina(c, "resumen", aviso="Listo: tu asistente vuelve a usar las instrucciones"
+                                                         " del servidor.")
+    return RedirectResponse("/panel/asistente/configura", status_code=303)
 
 
 @router.post("/estado")
