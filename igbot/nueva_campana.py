@@ -82,6 +82,13 @@ PALABRAS_MENSAJE = (
     ("novedad", ("nuevo", "novedad", "temporada", "lanz")),
     ("distinto", ("distint", "diferen", "elig", "propuesta", "calidad")),
 )
+# Sin opciones del Perfil de empresa: qué mensajes van con cada objetivo de respaldo.
+MENSAJES_DE = {"atraer": ("distinto", "producto", "humano", "clientes"),
+               "vender": ("producto", "novedad", "clientes", "distinto"),
+               "interaccion": ("consejos", "producto", "humano", "clientes"),
+               "educar": ("consejos", "producto", "distinto", "humano"),
+               "comunidad": ("humano", "clientes", "consejos", "novedad"),
+               "marca": ("distinto", "humano", "clientes", "consejos")}
 ACCIONES = {"lanzar": "Lanzarlo", "conocer": "Darlo a conocer", "promo": "Promoción con descuento",
             "impulsar": "Volver a impulsarlo"}
 FORMATOS = {  # clave: (título, descripción, color); "ia" = todos
@@ -156,12 +163,16 @@ def de_campana(camp: dict) -> dict:
 
 # --- las opciones (del Perfil de empresa o las de respaldo) ---
 
-async def opciones(c: Cuenta) -> tuple[list[dict], list[dict]]:
-    """Objetivos y mensajes: [{k, titulo, descripcion, ejemplo?}]."""
+async def opciones(c: Cuenta, objetivo: str = "") -> tuple[list[dict], list[dict]]:
+    """Objetivos y los mensajes del objetivo elegido: [{k, titulo, descripcion, ejemplo?}]. Salen ya escritos del
+    Perfil de empresa (empresa.generar_opciones, al guardarlo); aquí no se le pregunta nada a Claude."""
     if datos := await empresa.opciones_campana(c):
-        return datos["objetivos"][:6], datos["mensajes"][:6]
-    return ([{"k": k, "titulo": v[0], "descripcion": v[1]} for k, v in OBJETIVOS.items()],
-            [{"k": k, "titulo": v[0], "descripcion": v[1]} for k, v in MENSAJES.items()])
+        if datos.get("version") != empresa.VERSION_OPCIONES:
+            empresa.programar_opciones(c)  # las de antes no traían mensajes por objetivo: se rehacen una vez
+        return datos["objetivos"][:6], empresa.mensajes_de(datos, objetivo)[:6]
+    objetivos = [{"k": k, "titulo": v[0], "descripcion": v[1]} for k, v in OBJETIVOS.items()]
+    claves = MENSAJES_DE.get(objetivo, tuple(MENSAJES))
+    return objetivos, [{"k": k, "titulo": MENSAJES[k][0], "descripcion": MENSAJES[k][1]} for k in claves]
 
 
 def base_de(op: dict, propias: dict, palabras: tuple) -> str:
@@ -189,7 +200,7 @@ async def lista_para_empezar(c: Cuenta) -> tuple[bool, bool]:
 
 async def a_campana(c: Cuenta, b: dict) -> dict:
     """Lo que necesita campanas.proponer, sacado del borrador."""
-    objetivos, mensajes = await opciones(c)
+    objetivos, mensajes = await opciones(c, b["objetivo"])
     obj = next((o for o in objetivos if o["k"] == b["objetivo"]), objetivos[0])
     base = base_de(obj, OBJETIVOS, PALABRAS_OBJETIVO)
     msgs = [m for m in mensajes if m["k"] in b["mensajes"]]
@@ -257,8 +268,10 @@ def del_form(f, paso: int, b: dict, objetivos: list[dict], mensajes: list[dict],
     """Pasa al borrador lo que vino del paso; devuelve '' o lo que falta (el paso no se da por hecho)."""
     g = lambda k: str(f.get(k, "")).strip()  # noqa: E731
     if paso == 1:
-        if g("objetivo") in {o["k"] for o in objetivos}:
+        if g("objetivo") in {o["k"] for o in objetivos} and g("objetivo") != b["objetivo"]:
             b["objetivo"] = g("objetivo")
+            b["mensajes"] = []  # los mensajes dependen del objetivo: se eligen de nuevo
+            b["hechos"] = [h for h in b.get("hechos", []) if h != 2]
         return "" if b["objetivo"] else "Elige qué quieres lograr."
     if paso == 2:
         b["mensajes"] = _lista(f, "mensajes", {m["k"] for m in mensajes})[:MAX_MENSAJES]
@@ -383,7 +396,7 @@ def paso_1(b: dict, objetivos: list[dict]) -> str:
                    " respondemos».") + pie(1))
 
 
-def paso_2(b: dict, mensajes: list[dict], prods: list[dict]) -> str:
+def paso_2(b: dict, mensajes: list[dict], prods: list[dict], objetivos: list[dict]) -> str:
     ops = "".join(op("mensajes", m["k"], m["titulo"], m.get("descripcion", ""), "checkbox", m["k"] in b["mensajes"])
                   for m in mensajes)
     opciones_prod = '<option value="">Ninguno en especial</option>' + "".join(
@@ -407,8 +420,10 @@ def paso_2(b: dict, mensajes: list[dict], prods: list[dict]) -> str:
            '<p class="ayuda">Agrega tus productos en tu <a href="/panel/empresa">perfil de empresa</a> y podrás elegir'
            " uno para lanzarlo, darlo a conocer o hacerle una promoción.</p>")
         + "</div>")
+    obj = next((o["titulo"] for o in objetivos if o["k"] == b["objetivo"]), "")
     return (cab(2, "¿Qué quieres comunicar?",
-                f"Es el tema de la campaña: lo que la gente se va a llevar en la cabeza. Elige hasta {MAX_MENSAJES}.")
+                (f"Ideas pensadas para «{escape(obj)}». " if obj else "")
+                + f"Es el tema de la campaña: lo que la gente se va a llevar en la cabeza. Elige hasta {MAX_MENSAJES}.")
             + f'<div class="wiz-ops">{ops}</div>' + producto
             + '<div class="wiz-bloque"><h3>Cuéntalo en tus palabras <span class="opc">(opcional)</span></h3>'
             '<p class="ayuda">Un dato, una fecha o una idea que no debe faltar.</p>'
@@ -689,7 +704,7 @@ async def pagina(c: Cuenta, paso: int, aviso: str = "", b: dict | None = None):
     if not (hay_empresa and hay_marca):
         cuerpo, hero = bloqueo(hay_empresa, hay_marca), ""
     else:
-        objetivos, mensajes = await opciones(c)
+        objetivos, mensajes = await opciones(c, b["objetivo"])
         prods = await productos(c)
         if paso == BRIEF and not b.get("brief"):
             paso = RESUMEN
@@ -698,7 +713,7 @@ async def pagina(c: Cuenta, paso: int, aviso: str = "", b: dict | None = None):
         if paso == 1:
             contenido = paso_1(b, objetivos)
         elif paso == 2:
-            contenido = paso_2(b, mensajes, prods)
+            contenido = paso_2(b, mensajes, prods, objetivos)
         elif paso == 3:
             quedan_ia, fotos, anteriores, sugerido, resultados = await campanas.contexto_form(c)
             with usar(c):
@@ -768,7 +783,7 @@ async def guardar(request: Request):
         return sin_plan()
     f = await request.form()
     paso, b = _paso(f.get("paso")), await leer(c)
-    objetivos, mensajes = await opciones(c)
+    objetivos, mensajes = await opciones(c, b["objetivo"])
     b.setdefault("semilla", int(time.time()))  # el mismo cruce en el resumen y al escribir los posts
     if paso < RESUMEN:
         antes = {k: v for k, v in b.items() if k not in ("hechos", "brief")}

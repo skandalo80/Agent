@@ -20,8 +20,9 @@ PASO_1 = {"paso": "1", "nombre": "Café Lunar", "giro": "Restaurante o cafeterí
           "sitio_web": "cafelunar.mx", "caracter": ["Cercana", "Premium", "Natural", "Elegante"],
           "atiende": ["local", "nada"], "accion": "ir_2"}
 
-OPCIONES = {"objetivos": [{"k": f"Obj {i}", "titulo": f"Objetivo {i}", "descripcion": "x"} for i in range(7)],
-            "mensajes": [{"k": f"m{i}", "titulo": f"Mensaje {i}", "descripcion": "y", "ejemplo": "z"} for i in range(6)]}
+OPCIONES = {"objetivos": [{"k": f"Obj {i}", "titulo": f"Objetivo {i}", "descripcion": "x",
+                           "mensajes": [{"k": f"m{i}-{j}", "titulo": f"Mensaje {i}.{j}", "descripcion": "y",
+                                         "ejemplo": "z"} for j in range(5)]} for i in range(7)]}
 
 
 def test_pasos_guardan_y_el_asistente_usa_el_perfil(cliente):
@@ -158,19 +159,25 @@ def test_opciones_de_campana_al_terminar(cliente, monkeypatch):
     client.portal.call(empresa.generar_opciones, c)
     op = client.portal.call(empresa.opciones_campana, c)
     assert [o["k"] for o in op["objetivos"]] == ["obj-0", "obj-1", "obj-2", "obj-3", "obj-4", "obj-5"]
-    assert op["mensajes"][0] == {"k": "m0", "titulo": "Mensaje 0", "descripcion": "y", "ejemplo": "z"}
+    # Cada objetivo con sus propios mensajes (hasta 4), y todos juntos arriba para lo de antes.
+    assert op["version"] == empresa.VERSION_OPCIONES and len(op["objetivos"][1]["mensajes"]) == 4
+    assert op["objetivos"][1]["mensajes"][0] == {"k": "m1-0", "titulo": "Mensaje 1.0", "descripcion": "y",
+                                                 "ejemplo": "z"}
+    assert [m["k"] for m in empresa.mensajes_de(op, "obj-2")] == ["m2-0", "m2-1", "m2-2", "m2-3"]
+    assert len(op["mensajes"]) == 6
     assert "<empresa>" in respuestas[0] and "Café Lunar" in respuestas[0]
     client.portal.call(empresa.generar_opciones, c)  # sin cambios en el perfil no se vuelve a pedir
     assert len(respuestas) == 1
     r = client.get("/panel/empresa?paso=6&aviso=listo")
-    assert "Objetivo 0" in r.text and "Mensaje 5" in r.text and "ya usan tu perfil" in r.text
+    assert "Objetivo 0" in r.text and "Mensaje 5.3" in r.text and "ya usan tu perfil" in r.text
     # Ya terminado, cambiar un paso vuelve a pedirlas (en segundo plano).
     client.post("/panel/empresa", headers=ORIGEN, data={"paso": "2", "distinto": "Nuevo", "accion": "ir_3"})
     assert len(programadas) == 3
 
 
-@pytest.mark.parametrize("respuesta", ["no sé", json.dumps({"objetivos": OPCIONES["objetivos"][:2],
-                                                            "mensajes": OPCIONES["mensajes"]})])
+@pytest.mark.parametrize("respuesta", [
+    "no sé", json.dumps({"objetivos": OPCIONES["objetivos"][:2]}),
+    json.dumps({"objetivos": [{**o, "mensajes": o["mensajes"][:1]} for o in OPCIONES["objetivos"]]})])
 def test_opciones_malas_no_se_guardan(cliente, monkeypatch, respuesta):
     client, c, *_ = cliente
     client.post("/panel/empresa", headers=ORIGEN, data=PASO_1)
