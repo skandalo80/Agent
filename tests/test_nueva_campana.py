@@ -412,7 +412,8 @@ def test_la_variedad_llega_al_brief_al_plan_y_a_los_posts(cliente, monkeypatch):
     paso_6 = client.get(f"{URL}?paso=6").text
     assert paso_6.index("Variedad visual") < paso_6.index("Apariencia de las fotos")
     assert all(t in paso_6 for t in ("Consistente", "Equilibrado", "Diverso", "Creativo"))
-    assert "tarjetas/campana/variedad-diverso.webp" in paso_6
+    assert "tarjetas/campana/variedad-diverso.webp" in paso_6 and "tarjetas/campana/texto-info.webp" in paso_6
+    assert "Sin texto" in paso_6 and "Una frase principal que destaque el mensaje." in paso_6
     generar(client)
     prompts = [p for p, *_ in llamadas]
     assert sum("<variedad_visual>" in p for p in prompts) >= 3  # brief, plan y posts
