@@ -4,6 +4,8 @@
   --dorado: #D29441;
   --neon: #C6FA2C;
   --neon-sombra: #a0cb19;
+  --dorado-sombra: #a8701f;
+  --dorado-texto: #9a6420;
   --fondo: #f6f3f7;
   --banda: #eee8f1;
   --tinta: #211b25;
@@ -54,11 +56,11 @@ nav a:hover { color: var(--morado); }
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   padding: 13px 20px; border-radius: 14px; border: 1px solid transparent;
   font: inherit; font-weight: 700; font-size: 14px; line-height: 1.2; cursor: pointer;
-  background: var(--neon); color: var(--ciruela);
-  box-shadow: 0 4px 0 var(--neon-sombra), 0 9px 18px rgba(198, 250, 44, .17);
+  background: var(--dorado); color: var(--ciruela);
+  box-shadow: 0 4px 0 var(--dorado-sombra), 0 9px 18px rgba(210, 148, 65, .18);
   transition: transform .2s, box-shadow .2s;
 }
-.boton:hover { transform: translateY(-2px); box-shadow: 0 6px 0 var(--neon-sombra), 0 12px 22px rgba(198, 250, 44, .22); }
+.boton:hover { transform: translateY(-2px); box-shadow: 0 6px 0 var(--dorado-sombra), 0 12px 22px rgba(210, 148, 65, .24); }
 .boton.contorno {
   background: transparent; color: var(--morado); border-color: #cfc4d3;
   box-shadow: 0 4px 0 rgba(54, 32, 62, .10), 0 9px 18px rgba(54, 32, 62, .08);
@@ -67,7 +69,7 @@ nav a:hover { color: var(--morado); }
 .boton.chico { padding: 10px 16px; }
 .enlace { color: var(--morado); font-weight: 600; }
 .enlace:hover { text-decoration: underline; }
-.oscuro .enlace { color: var(--neon); }
+.oscuro .enlace { color: var(--dorado); }
 .acciones { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; justify-content: center; margin-top: 32px; }
 .izquierda-acciones { justify-content: flex-start; margin-top: 20px; }
 .izquierda-acciones + p { margin-top: 20px; }
@@ -77,8 +79,8 @@ section { padding: 84px 0; }
 .oscuro { background: linear-gradient(145deg, #3c2444, var(--ciruela) 65%, #2e1b35); color: var(--blanco); }
 .claro { background: var(--fondo); }
 .banda { background: var(--banda); }
-.antetitulo { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; color: #8a6a92; margin-bottom: 14px; }
-.oscuro .antetitulo { color: var(--neon); }
+.antetitulo { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; color: var(--dorado-texto); margin-bottom: 14px; }
+.oscuro .antetitulo { color: var(--dorado); }
 h1 { font-size: clamp(40px, 5.2vw, 64px); line-height: 1.05; letter-spacing: -2.4px; font-weight: 800; }
 h2 { font-size: clamp(30px, 3.6vw, 44px); line-height: 1.12; letter-spacing: -1.5px; font-weight: 800; max-width: 760px; margin: 0 auto 16px; }
 h3 { font-size: 18px; letter-spacing: -.3px; font-weight: 700; margin-bottom: 10px; }
@@ -163,7 +165,7 @@ h3 { font-size: 18px; letter-spacing: -.3px; font-weight: 700; margin-bottom: 10
   background: linear-gradient(145deg, #52305e, #402449);
   box-shadow: 12px 14px 28px #36203e20, inset 2px 2px 5px #ffffff0c;
 }
-.ejemplo .mini { color: var(--neon); font-size: 11px; letter-spacing: 1px; text-transform: uppercase; font-weight: 800; }
+.ejemplo .mini { color: var(--dorado); font-size: 11px; letter-spacing: 1px; text-transform: uppercase; font-weight: 800; }
 .ejemplo h3 { font-size: 24px; line-height: 1.25; margin: 12px 0; letter-spacing: -.6px; }
 .ejemplo p { color: #e2d8e6; font-size: 14px; line-height: 1.7; }
 .pastillas { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
@@ -310,7 +312,7 @@ footer a:hover { color: var(--morado); }
 .articulo-tarjeta .cuerpo { padding: 22px 24px 26px; display: grid; gap: 10px; }
 .articulo-tarjeta h3 { font-size: 19px; letter-spacing: -.3px; }
 .articulo-tarjeta p { font-size: 14px; color: var(--tenue); line-height: 1.65; }
-.categoria { font-size: 11px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; color: #8a6a92; }
+.categoria { font-size: 11px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; color: var(--dorado-texto); }
 .datos { font-size: 13px; color: var(--tenue); }
 .articulo-destacado { grid-column: span 3; flex-direction: row; }
 .articulo-destacado .portadilla { aspect-ratio: auto; flex: 1.1; min-height: 300px; padding: 30px; }
@@ -332,7 +334,7 @@ footer a:hover { color: var(--morado); }
 .articulo li { margin-bottom: 8px; }
 .articulo strong { color: var(--tinta); }
 .indice { padding: 22px 26px; margin-bottom: 30px; }
-.indice strong { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: 1.2px; color: #8a6a92; margin-bottom: 8px; }
+.indice strong { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--dorado-texto); margin-bottom: 8px; }
 .indice ol { padding-left: 1.2rem; }
 .indice li { font-size: 15px; margin-bottom: 4px; }
 .articulo a { color: var(--morado); font-weight: 600; }
