@@ -156,8 +156,8 @@ h3 { font-size: 18px; letter-spacing: -.3px; font-weight: 700; margin-bottom: 10
 .marcas li { display: flex; gap: 12px; align-items: flex-start; }
 .marcas li::before {
   content: ""; flex: none; width: 22px; height: 22px; border-radius: 50%; margin-top: 1px;
-  background: var(--neon) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2336203E' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center / 13px no-repeat;
-  box-shadow: inset 2px 2px 4px #ffffffa8, inset -2px -2px 4px #8eb21c55;
+  background: var(--dorado) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2336203E' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center / 13px no-repeat;
+  box-shadow: inset 2px 2px 4px #ffffff80, inset -2px -2px 4px #a8701f66;
 }
 .marcas strong { color: var(--tinta); }
 .ejemplo {
@@ -177,8 +177,8 @@ h3 { font-size: 18px; letter-spacing: -.3px; font-weight: 700; margin-bottom: 10
 .paso-num {
   width: 36px; height: 36px; border-radius: 50%; margin-bottom: 18px;
   display: grid; place-items: center; font-size: 13px; font-weight: 900;
-  background: var(--neon); color: var(--morado);
-  box-shadow: inset 2px 2px 5px #ffffffa8, inset -3px -3px 5px #8eb21c55, 0 5px 12px #36203e12;
+  background: var(--dorado); color: var(--ciruela);
+  box-shadow: inset 2px 2px 5px #ffffff80, inset -3px -3px 5px #a8701f66, 0 5px 12px #36203e12;
 }
 .pasos p { font-size: 14px; color: var(--tenue); line-height: 1.7; }
 
@@ -198,8 +198,8 @@ h3 { font-size: 18px; letter-spacing: -.3px; font-weight: 700; margin-bottom: 10
 .plan.destacado { border: 2px solid var(--morado); box-shadow: 10px 12px 25px #48295317, -5px -5px 15px #ffffffb5; }
 .popular {
   position: absolute; top: -12px; right: 20px; padding: 7px 10px; border-radius: 10px;
-  background: var(--neon); color: var(--ciruela); font-size: 10px; font-weight: 900; letter-spacing: .7px; text-transform: uppercase;
-  box-shadow: 0 3px 0 var(--neon-sombra);
+  background: var(--dorado); color: var(--ciruela); font-size: 10px; font-weight: 900; letter-spacing: .7px; text-transform: uppercase;
+  box-shadow: 0 3px 0 var(--dorado-sombra);
 }
 .plan h3 { font-size: 20px; margin-bottom: 6px; }
 .plan .resumen { font-size: 14px; color: var(--tenue); min-height: 44px; line-height: 1.5; }
@@ -210,7 +210,7 @@ h3 { font-size: 18px; letter-spacing: -.3px; font-weight: 700; margin-bottom: 10
 .plan li { display: flex; gap: 10px; }
 .plan li::before {
   content: ""; flex: none; width: 16px; height: 16px; margin-top: 3px;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23658a00' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center / contain no-repeat;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239a6420' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 .plan .boton { width: 100%; }
 .nota { color: var(--tenue); font-size: 13px; line-height: 1.7; max-width: 720px; margin: 30px auto 0; }

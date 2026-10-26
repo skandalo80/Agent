@@ -19,7 +19,7 @@ RAIZ = Path(__file__).resolve().parent.parent
 FUENTES = RAIZ / "blog"
 WEB = RAIZ / "web"
 SITIO = "https://skandar.online"
-CSS_VERSION = "2026-10-26c"
+CSS_VERSION = "2026-10-26d"
 
 # Orden en el índice: el primero es el destacado.
 ORDEN = [
