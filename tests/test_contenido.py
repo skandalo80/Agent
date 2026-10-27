@@ -1009,3 +1009,25 @@ def test_menu_de_tu_cuenta_en_tres_grupos(cliente, monkeypatch):
     orden = [menu.index(t) for t in ("Conectado como", "Información de empresa", "Tu marca", 'class="sep"',
                                      "Conexión", "Ver mi Instagram", "Salir")]
     assert orden == sorted(orden)
+
+
+def test_nombre_ia_y_transferir_si_esta_enojado(cliente):
+    client, c, *_ = cliente
+    r = client.get("/panel/asistente/configura?paso=reglas")
+    assert 'name="r_ia"' in r.text and 'name="r_enojado"' in r.text
+    assert 'name="msg_enojado_on" value="1">' in r.text  # plegado mientras no escriba nada
+    client.post("/panel/asistente/paso", headers=ORIGEN, data={
+        "paso": "personalidad", "personalidad": "cercano", "nombre_asistente": "  Sofía <b> ", "opcionales": "1"})
+    client.post("/panel/asistente/paso", headers=ORIGEN, data={
+        "paso": "reglas", "opcionales": "1", "r_ia": "1", "r_enojado": "1", "msg_enojado_on": "1",
+        "msg_enojado": "Entiendo tu molestia, te paso con alguien."})
+    prompt = Path(c.prompt_path).read_text()
+    assert "Te llamas Sofía &lt;b&gt;;" in prompt and "asistente virtual con inteligencia artificial" in prompt
+    assert "usa pasar_a_humano" in prompt and "<mensaje_al_transferir>\nEntiendo tu molestia" in prompt
+    r = client.get("/panel/asistente/configura?paso=resumen")
+    assert "Se llama Sofía" in r.text and "Pasa a tu equipo si nota al cliente enojado" in r.text
+    # Con la regla apagada el mensaje no va al prompt.
+    client.post("/panel/asistente/paso", headers=ORIGEN, data={
+        "paso": "reglas", "opcionales": "1", "msg_enojado_on": "1", "msg_enojado": "Entiendo tu molestia."})
+    prompt = Path(c.prompt_path).read_text()
+    assert "mensaje_al_transferir" not in prompt and "inteligencia artificial" not in prompt
