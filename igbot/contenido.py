@@ -738,12 +738,17 @@ async def editor(c: Cuenta, post_id: int, aviso: str = "", confirmar: bool = Fal
                  f'<textarea id="caption" name="caption" rows="6" maxlength="{MAX_CAPTION}">{escape(post["caption"])}'
                  "</textarea></div>")
                 + ("" if prompt is None else
-                   '<div class="campo"><label for="prompt">Prompt de la imagen</label>'
-                   f'<textarea id="prompt" name="prompt" rows="8" maxlength="{MAX_PROMPT}">{escape(prompt)}</textarea>'
-                   "<small>Es lo que le pedimos al generador. Puedes editarlo antes de volver a generar.</small></div>")
-                + '<div class="campo"><label for="cuando">Cuándo sale</label>'
-                f'<input type="datetime-local" id="cuando" name="cuando" value="{valor_cuando}">'
-                f"<small>Hora de tu negocio ({escape(c.timezone)}).</small></div>"
+                   '<details class="prompt-img"><summary>Prompt de la imagen</summary><div class="campo">'
+                   f'<textarea id="prompt" name="prompt" rows="8" maxlength="{MAX_PROMPT}" aria-label="Prompt de la'
+                   f' imagen">{escape(prompt)}</textarea>'
+                   "<small>Es lo que le pedimos al generador. Puedes editarlo antes de volver a generar.</small>"
+                   "</div></details>")
+                # Día y hora por separado, como en la ventana de la campaña.
+                + '<div class="dos-modal campo"><div><label for="dia">Día</label>'
+                f'<input type="date" id="dia" name="dia" value="{valor_cuando[:10]}"></div>'
+                '<div><label for="hora">Hora</label>'
+                f'<input type="time" id="hora" name="hora" value="{valor_cuando[11:]}"></div></div>'
+                f'<p class="ayuda chica" style="margin-top:-.6rem">Hora de tu negocio ({escape(c.timezone)}).</p>'
                 + ("" if historia else
                    '<div class="regla-modal"><label>Comentarios y DMs</label>'
                    '<p class="ayuda">Si alguien comenta la palabra clave de una regla en este post, le contestamos en'
@@ -929,6 +934,8 @@ async def editar(request: Request, post_id: int):
                 x["idea"] = prompt  # con la idea cambiada, la campaña la usa tal cual (campanas.imagen_de)
         if caption.count("#") > 30:
             return await editor(c, post_id, "Instagram acepta hasta 30 hashtags por post.")
+        if f.get("dia"):  # la ventana manda día y hora por separado
+            f["cuando"] = f"{f['dia']} {f.get('hora') or '09:00'}"
         try:
             publish_at = parse_when(f.get("cuando", "").replace("T", " ")) if f.get("cuando") else None
         except ValueError as e:

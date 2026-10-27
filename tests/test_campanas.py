@@ -226,6 +226,7 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
     foto = next(p for p in camp["posts"] if p["formato"] in ("foto", "titular"))
     r = client.get(f"{u}?post={foto['k']}")
     assert 'name="idea"' in r.text and "Puedes editarlo antes de generar" in r.text
+    assert '<details class="prompt-img"><summary>Prompt de la imagen</summary>' in r.text  # con imagen: cerrado
     client.post(u, headers=ORIGEN,
                 data={"accion": "generar", "k": str(foto["k"]), "idea": "Laptop en un escritorio de madera"})
     assert campanas.buscar_post(leer(client, c), foto["k"])["idea"] == "Laptop en un escritorio de madera"

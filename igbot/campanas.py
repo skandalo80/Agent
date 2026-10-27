@@ -1144,16 +1144,19 @@ async def detalle(c: Cuenta, camp: dict, p: dict, quedan_ia: int) -> str:
     cambia_formato = (f'<div><label for="d-formato">Formato</label><select id="d-formato" name="formato"'
                       f'{" disabled" if post else ""}>{formatos}</select></div>')
     # La idea se queda después de generar (menos en el collage, que no la usa) para irla puliendo con "Otra imagen".
+    # Desplegable, como en el editor del calendario: abierto mientras no hay imagen (hay que revisarlo antes de generar).
+    nombre_idea = "Qué deben mostrar las fotos" if formato == "collage" else "Prompt de la imagen"
     idea = ("" if formato in SIN_IDEA or (post and formato == "collage") else
-            f'<div class="campo"><label for="d-idea">{"Qué deben mostrar las fotos" if formato == "collage" else "Prompt de la imagen"}'
-            f'</label><textarea id="d-idea" name="idea" rows="8" maxlength="{MAX_IDEA}"{solo}>{escape(p["idea"])}'
+            f'<details class="prompt-img"{"" if post else " open"}><summary>{nombre_idea}</summary>'
+            f'<div class="campo"><textarea id="d-idea" name="idea" rows="8" maxlength="{MAX_IDEA}"'
+            f' aria-label="{nombre_idea}"{solo}>{escape(p["idea"])}'
             "</textarea>"
             + ("" if formato == "collage" else
                '<small>Lo escribe Claude con tu empresa, tu marca y esta campaña. Puedes editarlo antes de generar.</small>'
                '<input type="hidden" name="con_marca_en_form" value="1"><label class="check"><input type="checkbox"'
                f' name="con_marca" value="1"{" checked" if p.get("con_marca", True) else ""}{" disabled" if fija else ""}>'
                " Usar Tu marca como contexto</label>")
-            + "</div>")
+            + "</div></details>")
     r = p.get("regla") or {}
     regla = "" if historia else (
         '<div class="regla-modal"><input type="hidden" name="regla_en_form" value="1">'
