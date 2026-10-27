@@ -39,13 +39,7 @@ header {
   -webkit-backdrop-filter: saturate(160%) blur(14px);
 }
 header .contenedor { height: 72px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
-.marca { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 800; letter-spacing: -.5px; white-space: nowrap; }
-.sello {
-  width: 34px; height: 34px; border-radius: 12px; flex: none;
-  background: var(--morado); color: var(--neon);
-  display: grid; place-items: center; font-weight: 900; font-size: 19px;
-  box-shadow: inset 2px 2px 4px #ffffff20, inset -3px -3px 5px #1d1024a8, 4px 4px 10px #36203e20;
-}
+.marca { display: flex; align-items: center; gap: 10px; font-size: 22px; font-weight: 800; letter-spacing: -.6px; white-space: nowrap; }
 nav { display: flex; align-items: center; gap: 26px; font-size: 14px; color: #5f5863; }
 nav a:hover { color: var(--morado); }
 .nav-acciones { display: flex; align-items: center; gap: 16px; font-size: 14px; }
@@ -233,7 +227,6 @@ h3 { font-size: 18px; letter-spacing: -.3px; font-weight: 700; margin-bottom: 10
 footer { background: var(--fondo); color: var(--tenue); font-size: 13px; padding: 28px 0; }
 footer .contenedor { display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
 footer .marca { color: var(--tinta); font-size: 15px; }
-footer .sello { width: 28px; height: 28px; border-radius: 10px; font-size: 15px; }
 .pie-enlaces { display: flex; gap: 20px; flex-wrap: wrap; }
 footer a:hover { color: var(--morado); }
 
@@ -293,7 +286,6 @@ footer a:hover { color: var(--morado); }
   footer .contenedor { flex-direction: column; align-items: flex-start; }
 }
 @media (max-width: 420px) {
-  .marca .nombre-largo { display: none; }
   .nav-acciones { gap: 12px; }
 }
 
