@@ -263,6 +263,20 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
     assert camp["nombre"] == "Navidad" and not any(p["post_id"] for p in camp["posts"]) and campanas.url_de(camp) != u
     assert len(client.portal.call(campanas.todas_las, c)) == 2
 
+    # Borrar la de Otoño: primero pide confirmar; luego sus posts con imagen salen de Calendario.
+    r = client.get(u)
+    assert f'href="{u}?borrar=1">Borrar campaña</a>' in r.text
+    r = client.get(f"{u}?borrar=1")
+    assert "¿Borrar la campaña Otoño 2?" in r.text and 'value="borrar"' in r.text
+    assert len(client.portal.call(campanas.todas_las, c)) == 2  # ver la confirmación no borra
+    ids = [p["post_id"] for x in client.portal.call(campanas.todas_las, c) if campanas.url_de(x) == u
+           for p in x["posts"] if p["post_id"]]
+    r = client.post(u, headers=ORIGEN, data={"accion": "borrar"})
+    assert "Borraste la campaña Otoño 2 y se quitaron" in r.text
+    assert [x["nombre"] for x in client.portal.call(campanas.todas_las, c)] == ["Navidad"]
+    assert ids and all(client.portal.call(c.store.post, i)["status"] == "cancelada" for i in ids)
+    assert client.get(u, follow_redirects=False).status_code == 303
+
 
 def test_lo_que_preguntan_tus_clientes(cliente, monkeypatch):
     client, c, *_ = cliente
