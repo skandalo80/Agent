@@ -302,8 +302,7 @@ body:has(>.lateral){padding-left:19rem}
 html.menu-anima .lateral{transition:width .18s ease}html.menu-anima body:has(>.lateral){transition:padding-left .18s ease}
 .lat-cabeza{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:0 .35rem .9rem;border-bottom:1px solid #3E3C4A;margin-bottom:.9rem}
 .lateral .marca{display:flex;align-items:center;gap:.6rem;color:var(--claro);overflow:hidden;line-height:1.15}
-.lateral .marca{font-size:1.05rem}.lateral .marca small{display:block;font-size:.8rem;font-weight:400;opacity:.6}
-.logo{flex:none;width:2.4rem;height:2.4rem;border-radius:.7rem;font-size:1.1rem;background:var(--neon);color:var(--tinta);display:grid;place-items:center;font-weight:700}
+.lateral .marca{font-size:1.3rem;font-weight:600;letter-spacing:-.02em;padding:.35rem 0}
 .plegar,.cerrar{flex:none;background:none;border:0;color:var(--gris);cursor:pointer;padding:.3rem;border-radius:.5rem;display:grid;place-items:center;text-decoration:none;font-size:1.5rem;line-height:1}
 .plegar:hover,.cerrar:hover{color:var(--claro);background:#3A3746}
 .cerrar{display:none}
@@ -1097,7 +1096,7 @@ img.mrc-logo-mini{background:#fff}
 .boton.secundario{box-shadow:5px 7px 14px rgba(12,11,16,.4),inset 2px 2px 3px rgba(255,255,255,.08),inset -3px -4px 6px rgba(0,0,0,.25);background:#3A3746!important;border-color:transparent!important}
 .lat-item.on{border-radius:1.2rem;box-shadow:inset 2px 2px 4px rgba(255,255,255,.08),inset -3px -3px 6px rgba(0,0,0,.25);background:rgba(243,154,54,.16)}
 .lat-sub a.on,.wiz-pasos .actual,.as-paso.on,.paso.on{box-shadow:inset 2px 2px 4px rgba(255,255,255,.06),inset -3px -3px 6px rgba(0,0,0,.25);border-radius:1rem}
-.logo,.lat-avatar{box-shadow:3px 4px 8px rgba(12,11,16,.5),inset 2px 2px 3px rgba(255,255,255,.45),inset -2px -3px 4px rgba(0,0,0,.18)}
+.lat-avatar{box-shadow:3px 4px 8px rgba(12,11,16,.5),inset 2px 2px 3px rgba(255,255,255,.45),inset -2px -3px 4px rgba(0,0,0,.18)}
 input[type=text],input[type=search],textarea,select,.inbox input[type=search],.emp input[type=text],.emp textarea,.emp select{box-shadow:inset 3px 4px 8px rgba(0,0,0,.35),inset -2px -2px 4px rgba(255,255,255,.04);border-color:transparent!important;border-radius:1.1rem}
 .chips label,.opc,.wiz-chip span,.tonos label,.as-rasgos span,.wiz-op em{box-shadow:3px 4px 8px rgba(12,11,16,.35),inset 1px 1px 2px rgba(255,255,255,.08)}
 .wiz-pasos a b,.wiz-paso b,.as-n,.paso .n{box-shadow:2px 3px 5px rgba(12,11,16,.4),inset 1px 1px 2px rgba(255,255,255,.2)}
@@ -1189,7 +1188,7 @@ PRINCIPIO = (
     '<meta name="theme-color" content="#4C4D58">'
     '<link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" href="/favicon-32.png" sizes="32x32">'
     '<link rel="apple-touch-icon" href="/apple-touch-icon.png">'
-    '<title>Tu asistente · Agentes IA by Skandar</title>'
+    '<title>Tu asistente · Skandar</title>'
     f"<style>{ESTILO}{conversaciones.CSS}{FUENTES_CSS}</style>"
     # Solo JavaScript propio (CSP script-src 'self'): la vista previa al momento en Contenido.
     # menu.js sin defer: pliega el menú antes de pintar la página (si no, se ve abrirse y cerrarse).
@@ -1243,7 +1242,7 @@ def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None, 
     # Con sesión, el logo lleva al inicio del panel; sin sesión, a la página principal.
     inicio_marca = "/panel" if salir else config.SITE_URL
     if not menu:
-        return (f'<header><div class="contenedor"><a class="marca" href="{inicio_marca}">Agentes IA by Skandar</a>'
+        return (f'<header><div class="contenedor"><a class="marca" href="{inicio_marca}">Skandar</a>'
                 f"{boton}</div></header>")
     secciones = []
     for k, (nombre, href) in MENU.items():
@@ -1263,9 +1262,9 @@ def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None, 
     return (
         '<header class="movil"><a class="hamburguesa" href="#lateral" aria-label="Abrir menú">'
         '<span></span><span></span><span></span></a>'
-        '<a class="marca" href="/panel">Agentes IA by Skandar</a></header>'
+        '<a class="marca" href="/panel">Skandar</a></header>'
         '<aside class="lateral" id="lateral"><div class="lat-cabeza">'
-        '<a class="marca" href="/panel"><span class="logo">S</span><span class="txt">Agentes IA<small>by Skandar</small></span></a>'
+        '<a class="marca" href="/panel"><span class="txt">Skandar</span></a>'
         f'<button class="plegar" type="button" data-plegar aria-label="Plegar o fijar el menú" title="Plegar o fijar">'
         f'{ICONOS["plegar"]}</button><a class="cerrar" href="#" aria-label="Cerrar menú">×</a></div>'
         f'<nav class="lat-nav">{"".join(secciones)}</nav>'
