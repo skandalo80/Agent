@@ -162,8 +162,8 @@ def test_inicio_del_panel(cliente, monkeypatch):
     client.portal.call(c.store.add_incoming, "ana", "m1", "hola")
     assert client.get("/panel", follow_redirects=False).headers["location"] == "/panel/resultados"
     html = client.get("/panel").text
-    assert html.index(" title=\"Resultados\"") < html.index(" title=\"Tu asistente\"")  # primero en el menú
-    assert 'href="/panel/asistente" title="Tu asistente"' in html
+    assert html.index(" title=\"Resultados\"") < html.index(" title=\"Conversaciones\"")  # primero en el menú
+    assert 'href="/panel/asistente" title="Conversaciones"' in html
 
 
 def test_community_ve_comentarios_y_publicaciones(cliente, monkeypatch):
@@ -182,6 +182,6 @@ def test_community_ve_comentarios_y_publicaciones(cliente, monkeypatch):
 
     client.portal.call(actividad)
     html = client.get("/panel/resultados").text
-    assert 'href="/panel/contenido" title="Contenido"' in html
+    assert 'href="/panel/contenido" title="Calendario"' in html
     assert "De comentario a mensaje" in html and "PRECIO · 1" in html and "Spam ocultado" in html
     assert "1 publicada · 1 programada" in html and "https://www.instagram.com/p/X/" in html

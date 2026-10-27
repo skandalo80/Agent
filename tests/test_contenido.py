@@ -116,7 +116,7 @@ def test_sin_contenido_en_el_plan(cliente):
 def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     client, c, llamadas, proveedor = cliente
     monkeypatch.setattr(c, "imagenes_mes", 2)
-    assert 'href="/panel/contenido" title="Contenido"' in client.get("/panel/asistente").text
+    assert 'href="/panel/contenido" title="Calendario"' in client.get("/panel/asistente").text
     r = client.get("/panel/contenido")
     assert 'id="cal"' in r.text and "Próximos posts" not in r.text  # Calendario: solo el calendario
     r = client.get("/panel/contenido?fecha=2099-01-01&ver=lista")
@@ -125,11 +125,11 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     # Tu marca, paso a paso: sin marca abre el paso 1; cada paso guarda y lleva al siguiente.
     r = client.get("/panel/contenido/marca")
     assert "Paso 1 de 4" in r.text and '<main class="oscuro-pag">' in r.text and r.text.count('name="estilos"') == 12
-    assert "¿Cómo quieres que se vean los diseños de tu marca?" in r.text and "Tu cuenta · Tu marca" in r.text
+    assert "¿Cómo quieres que se vean los diseños de tu marca?" in r.text and 'class="antetitulo"' not in r.text
     assert "Sensación: Rebelde · Directo · Impactante" in r.text and "1.º · Estilo principal:" in r.text
     # Tu marca vive en el menú de perfil (abajo), no en el submenú de Contenido.
     assert '<a href="/panel/contenido/marca" class="on">Tu marca</a>' in r.text
-    assert 'Calendario</a></div>' in r.text and r.text.count('href="/panel/contenido/marca"') == 1
+    assert 'title="Calendario"><svg' in r.text and r.text.count('href="/panel/contenido/marca"') == 1
     r = client.post(MARCA, headers=ORIGEN, data={"paso": "1"})
     assert "Elige al menos un estilo" in r.text and client.portal.call(contenido.marca_de, c) == {}
     r = client.post(MARCA, headers=ORIGEN, follow_redirects=False,
@@ -721,11 +721,11 @@ def test_ajustes_y_conexion(cliente, monkeypatch):
     assert "Recibiendo mensajes" not in r.text and 'id="conexion"' not in r.text
     r = client.get("/panel/conexion")
     assert "Recibiendo mensajes" in r.text and 'id="ajustes"' not in r.text and "Gasto de hoy" not in r.text
-    assert '<a href="/panel/conexion" class="on">' in r.text and "compacta delgada" in r.text
+    assert '<a href="/panel/conexion" class="on">' in r.text
     assert "Volver a tus conversaciones" not in r.text
     assert client.get("/panel/asistente?vista=conexion", follow_redirects=False).headers["location"] == "/panel/conexion"
     # Ya no está en el submenú de Tu asistente: vive en el menú de tu cuenta, abajo.
-    assert "Tu cuenta · Conexión" in r.text and 'class="lat-item on"' not in r.text
+    assert 'class="lat-item on"' not in r.text
     assert r.text.index('href="/panel/conexion"') > r.text.index('class="perfil"')
     assert client.get("/panel/asistente/conexion", follow_redirects=False).headers["location"] == "/panel/conexion"
     # Una dirección que no existe: página 404 con el menú, no el JSON de FastAPI.
@@ -804,20 +804,20 @@ def test_bienvenida_con_contenido_y_lo_que_falta(cliente, monkeypatch):
 
 
 def test_encabezados_sin_titulo_ni_numeros(cliente, monkeypatch):
-    """Arriba solo va el antetítulo y sus botones: ni título, ni bajada, ni las tarjetas de números."""
+    """Arriba solo van los botones: ni antetítulo, ni título, ni bajada, ni las tarjetas de números."""
     client, c, *_ = cliente
     monkeypatch.setattr(c, "imagenes_mes", 40)
     monkeypatch.setattr(c, "posts_mes", 12)
     monkeypatch.setattr(c, "mensajes_mes", 1000)
     r = client.get("/panel/contenido")
-    assert '<p class="antetitulo">Contenido · Calendario</p>' in r.text and "+ Nueva campaña" in r.text
+    assert "+ Nueva campaña" in r.text and 'class="titulo-fila sin-ante"' in r.text
     assert "Posts restantes" not in r.text and 'class="hoy kpis"' not in r.text
-    assert '<nav class="pestanas">' not in r.text and 'class="lat-sub"' in r.text
+    assert '<nav class="pestanas">' not in r.text
     for ruta in ("/panel/contenido", "/panel/contenido/marca", "/panel/contenido/campanas",
                  "/panel/contenido/campanas/nueva", "/panel/asistente", "/panel/asistente/configura",
                  "/panel/probar", "/panel/conexion", "/panel/empresa", "/panel/resultados"):
         texto = client.get(ruta).text
-        assert "compacta delgada" in texto and "<h1>" not in texto and 'class="bajada"' not in texto, ruta
+        assert 'class="antetitulo"' not in texto.split("<main")[0] and "<h1>" not in texto and 'class="bajada"' not in texto, ruta
     r = client.get("/panel/asistente")
     assert "Mensajes restantes" not in r.text and 'class="hoy kpis"' not in r.text and 'class="estado-mini"' in r.text
 
@@ -854,10 +854,10 @@ def test_configura_tu_asistente_en_su_propia_pagina(cliente):
     # Conversaciones y el formulario van en direcciones distintas.
     r = client.get("/panel/asistente")
     assert 'id="chats"' in r.text and 'id="configura"' not in r.text and "Configurar tu asistente" not in r.text
-    assert '<a href="/panel/asistente" class="on">Conversaciones' in r.text
+    assert 'class="lat-item on" href="/panel/asistente" title="Conversaciones"' in r.text
     r = client.get("/panel/asistente/configura")
-    assert 'class="asis"' in r.text and 'id="chats"' not in r.text and "Tu asistente · Configura" in r.text
-    assert '<a href="/panel/asistente/configura" class="on">Configura tu asistente' in r.text
+    assert 'class="asis"' in r.text and 'id="chats"' not in r.text 
+    assert 'class="lat-item on" href="/panel/asistente/configura" title="Configura tu asistente"' in r.text
     # Sin configurar: las conversaciones invitan a configurarlo.
     client.portal.call(c.store.set, "asistente_listo", "0")
     client.portal.call(c.store.set, "perfil", "")
@@ -941,13 +941,20 @@ def test_identidad_de_marca_y_logo(cliente, monkeypatch):
     assert '<img class="lat-avatar"' not in r.text and '<span class="lat-avatar">' in r.text
 
 
-def test_menu_lateral_despliega_secciones(cliente, monkeypatch):
+def test_menu_lateral_sin_grupos(cliente, monkeypatch):
     client, c, *_ = cliente
     monkeypatch.setattr(c, "imagenes_mes", 5)
     r = client.get("/panel/asistente").text
-    # Las dos secciones traen su submenú; el de la sección en la que estás sale abierto.
-    assert 'data-sub="asistente" aria-expanded="true"' in r and 'data-sub="contenido" aria-expanded="false"' in r
-    assert '<div class="lat-sub" id="sub-asistente">' in r and '<div class="lat-sub cerrado" id="sub-contenido">' in r
+    # Cada sección es un renglón con su ícono, como Resultados; sin Tu asistente ni Contenido como grupos.
+    nav = r.split('<nav class="lat-nav">')[1].split("</nav>")[0]
+    titulos = ["Resultados", "Conversaciones", "Configura tu asistente", "Probar tu asistente", "Campañas", "Calendario"]
+    assert [nav.index(f'title="{t}"') for t in titulos] == sorted(nav.index(f'title="{t}"') for t in titulos)
+    assert nav.count("<svg") == 6 and "lat-sub" not in nav and "data-sub" not in nav
+    assert 'title="Tu asistente"' not in nav and 'title="Contenido"' not in nav
+    assert nav.count('class="lat-item on"') == 1 and 'class="lat-item on" href="/panel/asistente"' in nav
+    # Sin contenido en el plan, no salen Campañas ni Calendario.
+    monkeypatch.setattr(c, "imagenes_mes", 0)
+    assert 'title="Campañas"' not in client.get("/panel/asistente").text
 
 
 def test_posicionamiento_sale_de_configura_y_llega_a_los_posts(cliente, monkeypatch):

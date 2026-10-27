@@ -311,13 +311,10 @@ html.menu-anima .lateral{transition:width .18s ease}html.menu-anima body:has(>.l
 .lat-item svg{flex:none}
 .lat-item:hover{color:var(--claro);background:#35323F}
 .lat-item.on{color:var(--naranja-t);background:rgba(243,154,54,.12);font-weight:600;box-shadow:inset 3px 0 0 var(--acento)}
-.lat-sub{display:flex;flex-direction:column;margin:.2rem 0 .6rem 1.85rem;padding-left:.9rem;border-left:1px solid #45424F}
-.lat-sub a{color:#B9B5C5;text-decoration:none;font-size:.97rem;padding:.5rem .7rem;border-radius:.6rem;white-space:nowrap}
-.lat-sub a:hover,.lat-sub a.on{color:var(--claro);background:#3A3746}
 .lat-pie{border-top:1px solid #3E3C4A;padding-top:.75rem;margin:0}
 html.menu-plegado body:has(>.lateral){padding-left:7.25rem}
 html.menu-plegado .lateral{width:5.25rem}
-html.menu-plegado .lateral .txt,html.menu-plegado .lat-sub{display:none}
+html.menu-plegado .lateral .txt{display:none}
 html.menu-plegado .lat-cabeza{flex-direction:column}
 html.menu-plegado .plegar svg{transform:rotate(180deg)}
 .perfil{position:relative}
@@ -337,7 +334,7 @@ header.movil{display:none}
 header.movil{display:flex;align-items:center;gap:.9rem;height:3.25rem;padding:0 1.25rem;background:var(--grafito);color:var(--claro);border-bottom:1px solid var(--linea-oscura)}
 .hamburguesa{display:flex;flex-direction:column;gap:4px;padding:.4rem}.hamburguesa span{width:20px;height:2px;background:var(--claro);border-radius:2px}
 .lateral,html.menu-plegado .lateral{width:17rem;inset:.75rem auto .75rem .75rem;transform:translateX(calc(-100% - 1rem));transition:transform .2s ease}
-html.menu-plegado .lateral .txt{display:inline}html.menu-plegado .lat-sub{display:flex}html.menu-plegado .lat-cabeza{flex-direction:row}
+html.menu-plegado .lateral .txt{display:inline}html.menu-plegado .lat-cabeza{flex-direction:row}
 html.menu-plegado .perfil-menu{left:0;right:0;bottom:calc(100% + .4rem);width:auto}
 .lateral:target,html.menu-abierto .lateral{transform:none}
 .lateral:target~.velo,html.menu-abierto .velo{display:block;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:20}
@@ -384,12 +381,11 @@ main .boton.secundario{background:transparent;color:var(--negro);border-color:rg
 .compacta .antetitulo{margin-bottom:.5rem}.compacta .pestanas{margin-top:1rem}.compacta .estado{margin-top:1rem;padding:.75rem 1.1rem}
 .compacta .hoy{margin-top:auto;grid-template-columns:repeat(auto-fit,minmax(11rem,1fr))}.compacta .hoy .kpi{padding:.9rem 1.15rem}
 .titulo-fila{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap}
-.titulo-fila .antetitulo{margin:0}.titulo-fila:has(.boton){min-height:2.75rem}
+.titulo-fila .antetitulo{margin:0}.titulo-fila.sin-ante{justify-content:flex-end}.titulo-fila:has(.boton){min-height:2.75rem}
 .oscuro .boton.ajuste{padding:.55rem 1.1rem;font-size:.9rem}
 .oscuro .boton.ajuste.on,.oscuro .acciones-estado .boton.on{background:var(--acento);color:var(--tinta);border-color:var(--acento)}
 .boton .semaforo{display:inline-block;margin:0 .5rem 0 0;vertical-align:.05em}
-.lat-sub .semaforo{display:inline-block;margin:0 0 0 .35rem;vertical-align:.05em}
-html .lateral .lat-sub.cerrado{display:none}
+.lat-item .semaforo{display:inline-block;margin:0 0 0 .35rem;vertical-align:.05em}
 .compacta h1{font-size:clamp(1.8rem,4vw,2.4rem)}
 .compacta .bajada{font-size:1.05rem;margin-top:.5rem}
 .compacta+main{padding-top:1.5rem}
@@ -1096,7 +1092,7 @@ img.mrc-logo-mini{background:#fff}
 .boton,.wiz-pie .boton{border-radius:999px;box-shadow:5px 7px 14px rgba(12,11,16,.5),inset 2px 3px 4px rgba(255,255,255,.35),inset -3px -4px 6px rgba(120,60,10,.35);border-color:transparent}
 .boton.secundario{box-shadow:5px 7px 14px rgba(12,11,16,.4),inset 2px 2px 3px rgba(255,255,255,.08),inset -3px -4px 6px rgba(0,0,0,.25);background:#3A3746!important;border-color:transparent!important}
 .lat-item.on{border-radius:1.2rem;box-shadow:inset 2px 2px 4px rgba(255,255,255,.08),inset -3px -3px 6px rgba(0,0,0,.25);background:rgba(243,154,54,.16)}
-.lat-sub a.on,.wiz-pasos .actual,.as-paso.on,.paso.on{box-shadow:inset 2px 2px 4px rgba(255,255,255,.06),inset -3px -3px 6px rgba(0,0,0,.25);border-radius:1rem}
+.wiz-pasos .actual,.as-paso.on,.paso.on{box-shadow:inset 2px 2px 4px rgba(255,255,255,.06),inset -3px -3px 6px rgba(0,0,0,.25);border-radius:1rem}
 .lat-avatar{box-shadow:3px 4px 8px rgba(12,11,16,.5),inset 2px 2px 3px rgba(255,255,255,.45),inset -2px -3px 4px rgba(0,0,0,.18)}
 input[type=text],input[type=search],textarea,select,.inbox input[type=search],.emp input[type=text],.emp textarea,.emp select{box-shadow:inset 3px 4px 8px rgba(0,0,0,.35),inset -2px -2px 4px rgba(255,255,255,.04);border-color:transparent!important;border-radius:1.1rem}
 .chips label,.opc,.wiz-chip span,.tonos label,.as-rasgos span,.wiz-op em{box-shadow:3px 4px 8px rgba(12,11,16,.35),inset 1px 1px 2px rgba(255,255,255,.08)}
@@ -1204,8 +1200,15 @@ def pagina(cuerpo: str) -> HTMLResponse:
 
 
 ACTIVA = ' class="on"'
-MENU = {"resultados": ("Resultados", "/panel/resultados"), "asistente": ("Tu asistente", "/panel/asistente"),
-        "contenido": ("Contenido", "/panel/contenido")}
+# El menú lateral, sin grupos: cada sección con su ícono. (clave, nombre, dirección, grupo al que pertenece)
+MENU = [("resultados", "Resultados", "/panel/resultados", "resultados"),
+        ("chats", "Conversaciones", "/panel/asistente", "asistente"),
+        ("configura", "Configura tu asistente", "/panel/asistente/configura", "asistente"),
+        ("probar", "Probar tu asistente", "/panel/probar#ultimo", "asistente"),
+        ("campanas", "Campañas", "/panel/contenido/campanas", "contenido"),
+        ("calendario", "Calendario", "/panel/contenido", "contenido")]
+# La sección que se marca si la página no dice cuál (`sub`) dentro de su grupo (`menu`).
+POR_GRUPO = {"resultados": "resultados", "asistente": "chats", "contenido": "calendario"}
 
 
 # Íconos del menú lateral (trazo simple, color del texto).
@@ -1216,17 +1219,15 @@ def _icono(trazos: str) -> str:
 
 ICONOS = {
     "resultados": _icono('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'),
-    "asistente": _icono('<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/>'),
-    "contenido": _icono('<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/>'
-                        '<path d="m21 15-5-5L5 21"/>'),
+    "chats": _icono('<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/>'),
+    "configura": _icono('<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/>'
+                        '<circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>'),
+    "probar": _icono('<path d="M5 4l14 8-14 8z"/>'),
+    "campanas": _icono('<path d="M3 11v2a1 1 0 0 0 1 1h3l6 4V6L7 10H4a1 1 0 0 0-1 1z"/>'
+                       '<path d="M16.5 8.5a5 5 0 0 1 0 7M19.5 5.5a9 9 0 0 1 0 13"/>'),
+    "calendario": _icono('<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/>'),
     "salir": _icono('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>'),
     "plegar": _icono('<path d="m11 17-5-5 5-5M18 17l-5-5 5-5"/>'),
-}
-SUBMENU = {
-    "asistente": [("chats", "Conversaciones", "/panel/asistente"),
-                  ("configura", "Configura tu asistente", "/panel/asistente/configura"),
-                  ("probar", "Probar tu asistente", "/panel/probar#ultimo")],
-    "contenido": [("campanas", "Campañas", "/panel/contenido/campanas"), ("calendario", "Calendario", "/panel/contenido")],
 }
 
 
@@ -1245,20 +1246,14 @@ def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None, 
     if not menu:
         return (f'<header><div class="contenedor"><a class="marca" href="{inicio_marca}">Skandar</a>'
                 f"{boton}</div></header>")
+    activa = sub if any(k == sub for k, *_ in MENU) else POR_GRUPO.get(menu, "")
     secciones = []
-    for k, (nombre, href) in MENU.items():
-        if k == "contenido" and cuenta is not None and cuenta.imagenes_mes <= 0:
+    for k, nombre, href, grupo in MENU:
+        if grupo == "contenido" and cuenta is not None and cuenta.imagenes_mes <= 0:
             continue
-        # Con JavaScript, una sección con submenú lo despliega (y abre el menú si está plegado) en vez
-        # de cambiar de página; sin JavaScript es un enlace normal.
-        con_sub = f' data-sub="{k}" aria-expanded="{"true" if k == menu else "false"}"' if k in SUBMENU else ""
-        secciones.append(f'<a class="lat-item{" on" if k == menu else ""}" href="{href}" title="{nombre}"{con_sub}>'
-                         f'{ICONOS[k]}<span class="txt">{nombre}</span></a>')
-        if k in SUBMENU:
-            secciones.append(f'<div class="lat-sub{"" if k == menu else " cerrado"}" id="sub-{k}">' + "".join(
-                f'<a href="{h}"{ACTIVA if s == sub else ""}>{n}'
-                + (f' <span class="semaforo sem-{(luces or {})[s]}"></span>' if s in (luces or {}) else "")
-                + "</a>" for s, n, h in SUBMENU[k]) + "</div>")
+        luz = f' <span class="semaforo sem-{(luces or {})[k]}"></span>' if k in (luces or {}) else ""
+        secciones.append(f'<a class="lat-item{" on" if k == activa else ""}" href="{href}" title="{nombre}">'
+                         f'{ICONOS[k]}<span class="txt">{nombre}{luz}</span></a>')
     # Sin JavaScript también abre en el celular: la hamburguesa apunta a #lateral (:target).
     return (
         '<header class="movil"><a class="hamburguesa" href="#lateral" aria-label="Abrir menú">'
@@ -1303,7 +1298,7 @@ def entrar() -> HTMLResponse:
     return pagina(
         cabecera()
         + '<section class="oscuro entrar"><div class="contenedor centro">'
-        '<p class="antetitulo">Panel de clientes</p>'
+        ''
         '<h1>Tu asistente<span class="punto">.</span></h1>'
         '<p class="bajada">Entra con tu cuenta de Instagram para configurar lo que responde tu asistente.</p>'
         '<div class="acciones"><a class="boton" href="/conectar/instagram">Entrar con Instagram</a></div>'
@@ -1377,11 +1372,14 @@ def hace(t: float) -> str:
     return "ayer" if s < 2 * 86400 else f"hace {int(s // 86400)} días"
 
 
-def encabezado(ante: str, botones: str = "", extra: str = "") -> str:
-    """La franja de arriba de cada sección: solo el antetítulo (Contenido · Campañas) y sus botones.
-    Sin título ni bajada; `extra` va debajo (el estado del asistente, las pestañas, los pasos)."""
+def encabezado(ante: str = "", botones: str = "", extra: str = "") -> str:
+    """La franja de arriba de cada sección: sus botones a la derecha y `extra` debajo (el estado del
+    asistente, las pestañas, los pasos). Sin antetítulo (`ante` ya no se muestra); sin nada, no sale."""
+    if not botones and not extra:
+        return ""
+    fila = f'<div class="titulo-fila sin-ante">{botones}</div>' if botones else ""
     return ('<section class="oscuro portada compacta delgada"><div class="contenedor">'
-            f'<div class="titulo-fila"><p class="antetitulo">{ante}</p>{botones}</div>{extra}</div></section>')
+            f'{fila}{extra}</div></section>')
 
 
 def paginas(actual: int, total: int, enlace) -> str:
@@ -1520,7 +1518,7 @@ async def bienvenida(c: Cuenta) -> HTMLResponse:
     return pagina(
         cabecera(salir=True)
         + '<section class="oscuro portada compacta"><div class="contenedor">'
-        f'<p class="antetitulo">Bienvenido</p><h1>{titulo}<span class="punto">.</span></h1>'
+        f'<h1>{titulo}<span class="punto">.</span></h1>'
         f'<p class="bajada-bienvenida">{bajada}</p>{pasos_bienvenida(paso, empresa)}</div></section>'
         f'<main><div class="contenedor">{cuerpo}</div></main>'
     )
@@ -1592,7 +1590,7 @@ async def no_encontrada(request: Request) -> HTMLResponse:
     destino = ("/panel", "Ir a mi panel") if c else ("/panel", "Entrar a mi panel")
     respuesta = pagina(
         menu + '<section class="oscuro portada compacta delgada"><div class="contenedor">'
-        '<p class="antetitulo">Error 404</p><h1>Esta página no existe<span class="punto">.</span></h1>'
+        '<h1>Esta página no existe<span class="punto">.</span></h1>'
         '<p class="bajada" style="margin-left:0">Puede que el enlace esté mal escrito o que la página ya no exista.</p>'
         '</div></section><main><div class="contenedor"><div class="tarjeta"><h2>¿A dónde quieres ir?</h2>'
         f'<div class="acciones"><a class="boton" href="{destino[0]}">{destino[1]}</a>'

@@ -72,7 +72,7 @@ def test_pasos_guardan_y_el_asistente_usa_el_perfil(cliente):
 
     r = client.get("/panel/empresa")  # con lo esencial lleno abre el resumen
     assert "Así queda tu empresa" in r.text and "Se preparan cuando guardes" in r.text
-    assert "Tu cuenta · Perfil de empresa" in r.text and "Café Lunar<span" not in r.text  # sin título arriba
+    assert 'class="antetitulo"' not in r.text.split("<main")[0] and "Café Lunar<span" not in r.text  # sin título arriba
 
 
 def test_catalogo_con_fotos_y_texto_para_prompt(cliente):

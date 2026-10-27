@@ -498,7 +498,7 @@ def sin_plan() -> HTMLResponse:
     return panel.pagina(
         panel.cabecera(salir=True)
         + '<section class="oscuro entrar"><div class="contenedor centro">'
-        '<p class="antetitulo">Contenido</p><h1>Tus posts, listos para aprobar<span class="punto">.</span></h1>'
+        '<h1>Tus posts, listos para aprobar<span class="punto">.</span></h1>'
         '<p class="bajada">Tu plan actual es el Asistente virtual, que contesta tus mensajes. El contenido'
         ' viene en el plan Community Manager.</p>'
         f'<div class="acciones"><a class="boton" href="/panel/asistente">Volver a tu asistente</a>'
