@@ -229,13 +229,14 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     p = client.portal.call(contenido.pieza, c.store, 1)
     assert (p["plantilla"], p["clave"], p["objetivo"]) == ("banda", "PRECIO", "estrella")
 
-    # Editor: sin campos de la imagen; junto a ella, volver a generar, subir foto y el prompt en Avanzado (cerrado).
+    # Editor: la misma ventana que en Campañas, sobre el calendario: imagen con volver a generar y subir, y el prompt.
     r = client.get("/panel/contenido/post/1")
-    assert "Cartera Atelier" in r.text and "Aprobar y programar" in r.text and "Cancelar cambios" in r.text
+    assert 'class="modal-cam"' in r.text and 'class="velo-cam"' in r.text and "Cartera Atelier" in r.text
+    assert 'value="aprobar">Aprobar</button>' in r.text and "Texto que se publica" in r.text
     assert 'name="titulo"' not in r.text and 'name="plantilla"' not in r.text and 'id="con_precio"' not in r.text
     assert "data-vista" not in r.text and 'enctype="multipart/form-data"' in r.text
-    assert "↻ Volver a generar imagen" in r.text and 'value="subir">Subir foto' in r.text
-    assert '<details class="avanzado"><summary>Avanzado</summary>' in r.text and "leather handbag" in r.text
+    assert "↻ Volver a generar imagen" in r.text and 'value="subir">Subir imagen' in r.text
+    assert "Prompt de la imagen" in r.text and "leather handbag" in r.text
     editado = {"caption": "Nuevo texto #cartera", "clave_0": "precio", "respuesta_0": "¡Listo!", "dm_0": "Cuesta $1,190."}
     r = client.post("/panel/contenido/post/1", headers=ORIGEN, data={**editado, "accion": "guardar"})
     assert "Guardado." in r.text and len(proveedor.llamadas) == 1

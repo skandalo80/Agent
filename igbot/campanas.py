@@ -94,11 +94,14 @@ FORMATOS = {
     "collage": ("Collage", 0, "Un collage con fotos del negocio: de Tu marca o de posts que ya salieron (no se"
                 " genera foto nueva)."
                 " \"idea\": qué deben mostrar juntas, en una frase."),
+    "bento": ("Bento grid", 1, "Una sola imagen armada como cuadrícula bento: recuadros de distintos tamaños con el"
+              " producto, sus detalles y su uso, sin nada escrito. \"titulo\" solo sirve para reconocerlo en el"
+              " calendario. \"idea\": qué muestra cada recuadro."),
     "vs": ("Esto o aquello", 1, "Dos opciones lado a lado para que la gente elija en comentarios. \"titulo\" es la"
            " pregunta (\"¿A o B?\"). \"idea\": una sola foto dividida a la mitad, A a la izquierda y B a la derecha."),
 }
 SIN_IDEA = ("texto",)  # formatos que no necesitan idea de imagen
-FIJOS = ("foto", "texto", "collage")  # piezas sin título que se pueda cambiar en el editor
+FIJOS = ("foto", "texto", "collage", "bento")  # piezas sin título que se pueda cambiar en el editor
 FORMATO_VIEJO = "titular"  # el de los posts de antes, que no lo tenían
 HORARIOS = {"manana": ("Mañana", "09:00"), "mediodia": ("Mediodía", "14:00"), "noche": ("Noche", "20:00")}
 PUBLICAR = {  # clave: (cómo se le dice, días de la semana en que sale un post; 0 = lunes)
@@ -927,6 +930,10 @@ async def generar_imagen(c: Cuenta, camp: dict, p: dict, extra: bool) -> int:
                     f"\nPhoto style: {estilo_foto(marca)}" if con_marca else "")
             if con_marca and not camp.get("brief"):
                 idea += contexto_marca(marca)
+            if formato == "bento":
+                idea = ("A single image laid out as a bento grid: four to six rounded rectangular tiles of different"
+                        " sizes with thin even gaps, each tile a different photo (the product, a close-up detail, it in"
+                        f" use, a texture), same light and palette in all tiles. No text.\n{idea}")
             if formato == "vs":
                 idea = ("A single photo split vertically down the middle into two halves, one option on each side,"
                         f" same light and style on both.\n{idea}")
@@ -981,7 +988,7 @@ async def poner_pieza(c: Cuenta, p: dict, hecha: dict, pieza_: dict) -> int:
 def pieza_de(camp: dict, p: dict, plantilla: str) -> dict:
     formato = formato_de(p)
     return {"objetivo": tema_de(p["tipo"])[1], "tema": p["idea"], "fotos": [], "plantilla": plantilla,
-            "titulo": "" if formato in ("foto", "collage") else p["titulo"],
+            "titulo": "" if formato in ("foto", "collage", "bento") else p["titulo"],
             "subtitulo": p.get("subtitulo", "") if formato in ("titular", "texto") else "",
             "precio": "", "imagen": p["idea"], "campana": p["k"], "campana_id": camp["id"],
             "formato": formato, "medio": medio_de(p),
@@ -1127,7 +1134,7 @@ async def detalle(c: Cuenta, camp: dict, p: dict, quedan_ia: int) -> str:
             " imagen (no usa tu cupo).</p>")
     nombre_titulo = {"texto": "Frase principal", "vs": "La pregunta"}.get(formato, "Título sobre la imagen")
     titulo = ("" if post else
-              f'<div class="campo"><label for="d-titulo">{"Título (solo para el calendario)" if formato in ("foto", "collage") else nombre_titulo}'
+              f'<div class="campo"><label for="d-titulo">{"Título (solo para el calendario)" if formato in ("foto", "collage", "bento") else nombre_titulo}'
               f'</label><input type="text" id="d-titulo" name="titulo" maxlength="{MAX_TITULO}" value="{escape(p["titulo"])}"></div>')
     subtitulo = (f'<div class="campo"><label for="d-subtitulo">Lo que la completa</label><input type="text"'
                  f' id="d-subtitulo" name="subtitulo" maxlength="120" value="{escape(p.get("subtitulo", ""))}"></div>'

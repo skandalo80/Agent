@@ -137,6 +137,8 @@ FORMATOS = {  # clave: (título, descripción, color)
               "#26262a"),
     "collage": ("Collage", "Varias fotografías reunidas en una composición para mostrar opciones, detalles o"
                 " distintos aspectos de algo.", "#1f3029"),
+    "bento": ("Bento grid", "Varios recuadros de distintos tamaños en una sola imagen: el producto, sus detalles y su"
+              " uso, ordenados como una cuadrícula.", "#2a2833"),
 }
 VISUAL = {
     "productos": ("Tus productos", "Lo que vendes, sus detalles y cómo se ve en uso.", "#3a2f25"),
@@ -499,11 +501,11 @@ def paso_3(b: dict, objetivos: list[dict]) -> str:
     obj = next((o for o in objetivos if o["k"] == b["objetivo"]), None)
     van = sugeridos(obj) if obj else set()
     ops = "".join(op("enfoques", k, v[0], v[1], "checkbox", k in b.get("enfoques", []),
-                     img("enfoque", k, v[3], v[0]), em="Va con tu objetivo" if k in van else "")
+                     img("enfoque", k, v[3], v[0], alta=True), em="Va con tu objetivo" if k in van else "")
                   for k, v in ENFOQUES.items())
     return (cab(3, "¿De qué van a tratar tus posts?",
                 f"Elige uno o varios (hasta {MAX_ENFOQUES}). Los posts de la campaña se reparten entre ellos.")
-            + f'<div class="wiz-ops tres">{ops}</div>'
+            + f'<div class="wiz-ops cuatro">{ops}</div>'
             + pie(3))
 
 def paso_4(b: dict, fotos: int) -> str:
@@ -517,7 +519,7 @@ def paso_4(b: dict, fotos: int) -> str:
                   img("formato", k, color, t, alta=True), em, apagada=k == "collage" and sin_collage)
     return (cab(4, "¿Qué formatos te gustan?",
                 "Elige uno o varios. Se reparten parejo para que veas cuál le funciona mejor a tu audiencia.")
-            + f'<div class="formatos-cam"><div class="wiz-ops cuatro">{ops}</div>'
+            + f'<div class="formatos-cam"><div class="wiz-ops cinco">{ops}</div>'
             '<div class="wiz-si titular"><h3 class="wiz-sub">Texto dentro de la imagen</h3><p class="ayuda">Para'
             ' Foto con titular: elige una, dos o las tres. No es el pie de foto: es lo que va escrito sobre la'
             ' imagen.</p>'

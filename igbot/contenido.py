@@ -681,88 +681,103 @@ def prompt_de(p: dict, x: dict | None) -> str | None:
 
 
 async def editor(c: Cuenta, post_id: int, aviso: str = "", confirmar: bool = False) -> HTMLResponse:
+    """El post en la misma ventana que los de Campañas, sobre el calendario: la imagen con sus botones a la
+    izquierda; el texto, el prompt, cuándo sale y las reglas a la derecha."""
+    from . import calendario as cal  # calendario importa este módulo
+    from . import campanas
     with usar(c):
         post = await c.store.post(post_id)
         if not post or post["user_id"] != PANEL:
             raise HTTPException(status_code=404)
         p = await pieza(c.store, post_id)
+        _, x = await en_campana(c, p, post_id)
         media = await c.store.media(post["media_ids"][0]) if post["media_ids"] else None
-        imagen = (f'<img class="pieza" id="vista" src="{url_imagen(c, media[0])}" alt="{escape(p.get("titulo", ""))}">'
-                  if media else '<div class="pieza"></div>')
+        historia = " h" if p.get("medio") == "historia" else ""
+        imagen = (f'<img class="img-modal{historia}" id="vista" src="{url_imagen(c, media[0])}"'
+                  f' alt="{escape(p.get("titulo", ""))}">' if media else f'<div class="img-modal vacia{historia}">Sin imagen</div>')
         estado, color = ESTADOS.get(post["status"], (post["status"], ""))
         objetivo = OBJETIVOS.get(p.get("objetivo"), ("Post",))[0]
-        if post["status"] not in EDITABLES:
-            cuerpo = (f'<div class="editor"><div class="fija">{imagen}</div><div class="tarjeta">'
-                      f'<span class="chip {color}">{estado}</span><h2 style="margin-top:1rem">{escape(p.get("titulo", ""))}</h2>'
-                      f'<p class="ayuda">{escape(objetivo)}'
-                      + (f" · {cuando(post['publish_at'])}" if post["publish_at"] else "") + "</p>"
-                      f'<p style="white-space:pre-wrap">{escape(post["caption"])}</p>'
-                      + (f'<div class="aviso">Instagram respondió: {escape(post["error"][:300])}</div>' if post["error"] else "")
-                      + '<form method="post" class="acciones">'
-                      + (f'<a class="boton" href="{escape(post["permalink"])}" target="_blank" rel="noopener">Ver en Instagram</a>'
-                         if post["permalink"] else "")
-                      + ('<button class="boton" name="accion" value="reintentar">Volver a borrador</button>'
-                         if post["status"] == "fallida" else "")
-                      + '<a class="boton secundario" href="/panel/contenido">← Calendario</a></form></div></div>')
-            return await pagina(c, "calendario", cuerpo, aviso)
-
-        variables = escape(" · ".join(await de_campana(c, p, post_id)) or objetivo)
-        valor_cuando = (datetime.fromtimestamp(post["publish_at"], tools.tz()).strftime("%Y-%m-%dT%H:%M")
-                        if post["publish_at"] else "")
-        _, x = await en_campana(c, p, post_id)
-        prompt = prompt_de(p, x)
-        from . import campanas
-        usa = 1 if x is None else campanas.costo(x)
-        if post["status"] == "borrador":
-            botones = ('<button class="boton" name="accion" value="aprobar">Aprobar y programar</button>'
-                       '<button class="boton secundario" name="accion" value="guardar">Guardar borrador</button>'
-                       '<a class="boton secundario" href="/panel/contenido">Cancelar cambios</a>'
-                       '<button class="boton secundario" name="accion" value="cancelar" formnovalidate data-confirma="¿Descartar este post? Se borra y no se puede deshacer.">Descartar post</button>')
+        medio = "historia" if historia else "post"
+        etiquetas = f'<span class="medio-cam m-{medio}">{campanas.MEDIOS[medio][0]}</span>'
+        if x is not None:
+            formato = campanas.formato_de(x)
+            etiquetas += (f'<span class="etq-cam t-{x["tipo"]}">{campanas.tema_de(x["tipo"])[0]}</span>'
+                          f'<span class="fmt-cam bur f-{formato}">{campanas.FORMATOS[formato][0]}</span>')
         else:
-            botones = ('<button class="boton" name="accion" value="aprobar">Guardar cambios</button>'
-                       '<a class="boton secundario" href="/panel/contenido">Cancelar cambios</a>'
-                       '<button class="boton secundario" name="accion" value="borrador">Quitar de programados</button>'
-                       '<button class="boton secundario" name="accion" value="cancelar" formnovalidate data-confirma="¿Descartar este post? Se borra y no se puede deshacer.">Descartar post</button>')
+            etiquetas += f'<span class="etq-cam">{escape(objetivo)}</span>'
+        etiquetas += f'<span class="chip {color}">{estado}</span>'
+        titulo = escape(p.get("titulo") or (x or {}).get("titulo") or objetivo)
+        fecha = datetime.fromtimestamp(post["publish_at"], tools.tz()) if post["publish_at"] else None
+        fondo = await cal.seccion(c, "mes", fecha.date() if fecha else None, "", "", "", "")
+        editable = post["status"] in EDITABLES
+
+        if not editable:
+            derecha = (f'<div class="campo"><label>Texto que se publica</label>'
+                       f'<p style="white-space:pre-wrap;margin:0">{escape(post["caption"])}</p></div>'
+                       + (f'<div class="aviso">Instagram respondió: {escape(post["error"][:300])}</div>' if post["error"] else ""))
+            izquierda = imagen
+            botones = ((f'<a class="boton chico" href="{escape(post["permalink"])}" target="_blank" rel="noopener">Ver en Instagram</a>'
+                        if post["permalink"] else "")
+                       + ('<button class="boton chico" name="accion" value="reintentar">Volver a borrador</button>'
+                          if post["status"] == "fallida" else ""))
+        else:
+            valor_cuando = fecha.strftime("%Y-%m-%dT%H:%M") if fecha else ""
+            prompt = prompt_de(p, x)
+            usa = 1 if x is None else campanas.costo(x)
+            # Mientras no se publica, la imagen se cambia aquí mismo: generarla otra vez o subir una foto.
+            izquierda = (imagen + '<div class="botones-img">'
+                         '<button class="boton secundario" name="accion" value="otra">↻ Volver a generar imagen</button>'
+                         '<button class="boton secundario" name="accion" value="subir">Subir imagen</button></div>'
+                         '<input type="file" name="foto" accept="image/jpeg,image/png,image/webp" aria-label="Tu imagen">'
+                         f'<p class="ayuda chica">Generar {f"usa {usa} de tu cupo" if usa else "no usa tu cupo"}. Para usar'
+                         " tu propia foto, elígela aquí arriba y toca Subir imagen (no usa tu cupo).</p>")
+            derecha = (
+                ('<p class="ayuda">Es una historia: se ve 24 horas a pantalla completa y no lleva texto publicado.</p>'
+                 f'<input type="hidden" name="caption" value="{escape(post["caption"])}">' if historia else
+                 '<div class="campo"><label for="caption">Texto que se publica</label>'
+                 f'<textarea id="caption" name="caption" rows="6" maxlength="{MAX_CAPTION}">{escape(post["caption"])}'
+                 "</textarea></div>")
+                + ("" if prompt is None else
+                   '<div class="campo"><label for="prompt">Prompt de la imagen</label>'
+                   f'<textarea id="prompt" name="prompt" rows="8" maxlength="{MAX_PROMPT}">{escape(prompt)}</textarea>'
+                   "<small>Es lo que le pedimos al generador. Puedes editarlo antes de volver a generar.</small></div>")
+                + '<div class="campo"><label for="cuando">Cuándo sale</label>'
+                f'<input type="datetime-local" id="cuando" name="cuando" value="{valor_cuando}">'
+                f"<small>Hora de tu negocio ({escape(c.timezone)}).</small></div>"
+                + ("" if historia else
+                   '<div class="regla-modal"><label>Comentarios y DMs</label>'
+                   '<p class="ayuda">Si alguien comenta la palabra clave de una regla en este post, le contestamos en'
+                   " público y le mandamos el DM. «precio», «Precios» o «¿precio?» cuentan igual.</p>"
+                   + "".join(regla(str(i), r) for i, r in enumerate(reglas_de(p)))
+                   + ('<details class="nueva-regla"><summary class="boton secundario chico">Agregar regla +</summary>'
+                      + regla("nueva", {"clave": "", "respuesta": "", "dm": ""})
+                      + '<div class="acciones"><button class="boton chico" name="accion" value="regla">Guardar regla'
+                      "</button></div></details>" if len(reglas_de(p)) < MAX_REGLAS else "")
+                   + "</div>"))
+            descartar = ('<button class="boton secundario chico" name="accion" value="cancelar" formnovalidate'
+                         ' data-confirma="¿Descartar este post? Se borra y no se puede deshacer.">Descartar</button>')
+            if post["status"] == "borrador":
+                botones = (descartar + '<button class="boton secundario chico" name="accion" value="guardar">Guardar</button>'
+                           '<button class="boton chico" name="accion" value="aprobar">Aprobar</button>')
+            else:
+                botones = (descartar + '<button class="boton secundario chico" name="accion" value="borrador">Quitar de'
+                           ' programados</button><button class="boton chico" name="accion" value="aprobar">Guardar</button>')
         cuerpo = (
+            fondo + '<a class="velo-cam" href="/panel/contenido" aria-label="Cerrar"></a>'
+            '<div class="modal-cam" id="detalle" role="dialog" aria-labelledby="d-nombre">'
             f'<form method="post" action="/panel/contenido/post/{post_id}" enctype="multipart/form-data">'
             # Enter en un campo guarda; no aprueba ni genera otra imagen.
-            '<button class="oculto" name="accion" value="guardar" tabindex="-1" aria-hidden="true">Guardar</button>'
+            + ('<button class="oculto" name="accion" value="guardar" tabindex="-1" aria-hidden="true">Guardar</button>'
+               if editable else "")
+            + f'<div class="top"><div><div class="etqs-cam">{etiquetas}</div><h2 id="d-nombre">{titulo}</h2>'
+            + (f"<p>{campanas.fecha_larga(fecha.date().isoformat())} · {fecha:%H:%M}</p>" if fecha else "")
+            + '</div><a class="x" href="/panel/contenido" aria-label="Cerrar">×</a></div>'
+            + (f'<div class="aviso" style="margin:1rem 1.6rem 0">{escape(aviso)}</div>' if aviso else "")
             + (tarjeta_extra(c, "otra") if confirmar else "")
-            + f'<div class="editor"><div class="fija">{imagen}'
-            f'<p class="ayuda" style="margin-top:.75rem"><span class="chip {color}">{estado}</span> · {variables}</p>'
-            # Mientras no se publica, la imagen se cambia aquí mismo: generarla otra vez o subir una foto.
-            '<div class="botones-img">'
-            '<button class="boton secundario" name="accion" value="otra">↻ Volver a generar imagen</button>'
-            '<button class="boton secundario" name="accion" value="subir">Subir foto</button></div>'
-            '<input type="file" name="foto" accept="image/jpeg,image/png,image/webp" aria-label="Tu foto">'
-            f'<p class="ayuda chica">Volver a generar {f"usa {usa} de tu cupo" if usa else "no usa tu cupo"}. Para usar'
-            " tu propia foto, elígela aquí arriba y toca Subir foto (no usa tu cupo).</p>"
-            + ("" if prompt is None else
-               '<details class="avanzado"><summary>Avanzado</summary>'
-               '<label for="prompt">Prompt de la imagen</label>'
-               f'<textarea id="prompt" name="prompt" rows="8" maxlength="{MAX_PROMPT}">{escape(prompt)}</textarea>'
-               '<p class="ayuda chica">Es lo que le pedimos al generador. Edítalo y toca Volver a generar imagen.</p>'
-               "</details>")
-            + "</div><div>"
-            + '<div class="tarjeta"><span class="num">Publicación</span>'
-            '<label for="caption">Texto del post</label>'
-            f'<textarea id="caption" name="caption" rows="7" maxlength="{MAX_CAPTION}">{escape(post["caption"])}</textarea>'
-            '<label for="cuando">Cuándo sale</label>'
-            f'<p class="ayuda">Hora de tu negocio ({escape(c.timezone)}).</p>'
-            f'<input type="datetime-local" id="cuando" name="cuando" value="{valor_cuando}"></div>'
-            '<div class="tarjeta"><span class="num">Comentarios y DMs</span>'
-            '<p class="ayuda">Si alguien comenta la palabra clave de una regla en este post, le contestamos en público y le mandamos el DM.'
-            " Reconocemos variantes: «precio», «Precios» o «¿precio?» cuentan igual.</p>"
-            + "".join(regla(str(i), r) for i, r in enumerate(reglas_de(p)))
-            + ('<details class="nueva-regla"><summary class="boton secundario chico">Agregar regla +</summary>'
-               + regla("nueva", {"clave": "", "respuesta": "", "dm": ""})
-               + '<div class="acciones"><button class="boton chico" name="accion" value="regla">Guardar regla</button>'
-               "</div></details>" if len(reglas_de(p)) < MAX_REGLAS else "")
-            + "</div>"
-            f'<div class="acciones">{botones}</div>'
-            "</div></div></form>"
+            + f'<div class="cuerpo"><div class="izq">{izquierda}</div><div>{derecha}</div></div>'
+            f'<div class="pie"><span></span><div class="acciones">{botones}</div></div></form></div>'
         )
-        return await pagina(c, "calendario", cuerpo, aviso)
+        return await pagina(c, "calendario", cuerpo)
 
 
 # --- fotos de Tu marca ---
