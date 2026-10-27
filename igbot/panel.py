@@ -444,6 +444,11 @@ header form{display:flex;margin:0}
 .pieza{width:100%;aspect-ratio:4/5;object-fit:cover;border-radius:1rem;display:block;background:var(--claro)}
 .editor{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:1.25rem;align-items:start}
 .editor .fija{position:sticky;top:1rem}
+.editor .botones-img{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-top:.75rem}
+.editor .botones-img .boton{padding:.6rem .4rem;font-size:.9rem;text-align:center}
+.editor .fija input[type=file]{margin-top:.5rem;width:100%}
+.editor details.avanzado{margin-top:.75rem}.editor details.avanzado summary{cursor:pointer;color:var(--gris);font-size:.9rem}
+.editor details.avanzado textarea{margin-top:.4rem}
 @media(max-width:760px){.editor{grid-template-columns:1fr}.editor .fija{position:static}}
 .fila{display:flex;gap:1rem;align-items:center;padding:1rem 0;border-top:1px solid var(--linea-clara)}
 .fila:first-of-type{border-top:0}

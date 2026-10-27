@@ -186,13 +186,24 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
 
     # En el editor, una pieza fija guarda su texto y hora sin pedir título ni rotular de nuevo.
     r = client.get(f"/panel/contenido/post/{post['id']}")
-    assert "viene de tu campaña" in r.text and "data-vista" not in r.text
+    assert "↻ Volver a generar imagen" in r.text and "Volver a generar no usa tu cupo" in r.text
+    assert 'name="foto"' in r.text and 'class="avanzado"' not in r.text  # solo texto: sin prompt
+    assert "data-vista" not in r.text and 'name="titulo"' not in r.text and 'name="plantilla"' not in r.text
     p3 = campanas.buscar_post(leer(client, c), "3")
     assert f"{campanas.tema_de(p3['tipo'])[0]} · Solo texto</p>" in r.text  # tema y formato bajo la foto
     r = client.post(f"/panel/contenido/post/{post['id']}", headers=ORIGEN,
                     data={"accion": "guardar", "caption": "Desde el editor", "cuando": "2099-01-09T10:30"})
     assert "El título no puede quedar vacío" not in r.text
     assert client.portal.call(c.store.post, post["id"])["caption"] == "Desde el editor"
+    assert campanas.buscar_post(leer(client, c), "3")["caption"] == "Desde el editor"
+    # Volver a generar desde el editor: la campaña la arma de nuevo y se quedan el texto y la hora del editor.
+    antes = client.portal.call(c.store.post, post["id"])
+    r = client.post(f"/panel/contenido/post/{post['id']}", headers=ORIGEN,
+                    data={"accion": "otra", "caption": "Desde el editor", "cuando": "2099-01-09T10:30"})
+    ahora = client.portal.call(c.store.post, post["id"])
+    assert "Generando otra imagen" in r.text and ahora["media_ids"] != antes["media_ids"]
+    assert (ahora["caption"], ahora["publish_at"]) == ("Desde el editor", antes["publish_at"])
+    assert client.portal.call(contenido.imagenes.usadas, c.store) == (0, 0)
 
     # Moverlo después cambia también el post programado.
     client.post(u, headers=ORIGEN, data={"accion": "mover", "k": "3", "dia": lun})
@@ -212,7 +223,7 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
     assert all(p["post_id"] for p in camp["posts"])
     assert client.portal.call(contenido.imagenes.usadas, c.store)[0] == sum(campanas.costo(p) for p in pendientes)
     r = client.post(u, headers=ORIGEN, data={"accion": "aprobar_todas"})
-    assert "2 posts programados" in r.text
+    assert "3 posts programados" in r.text  # con su imagen nueva, el de solo texto volvió a borrador
 
     # Con la imagen hecha, la idea se queda para irla puliendo: "Otra imagen" usa la nueva.
     foto = next(p for p in camp["posts"] if p["formato"] in ("foto", "titular"))
@@ -236,6 +247,16 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
     assert "Brand context" not in proveedor.llamadas[-1][0] and "Photo style" not in proveedor.llamadas[-1][0]
     r = client.get(f"{u}?post={foto['k']}")
     assert 'name="con_marca" value="1"> Usar Tu marca como contexto' in r.text
+
+    # En el editor del post, el prompt va en Avanzado (cerrado) y "Volver a generar imagen" usa el editado.
+    pid = campanas.buscar_post(leer(client, c), foto["k"])["post_id"]
+    r = client.get(f"/panel/contenido/post/{pid}")
+    assert '<details class="avanzado"><summary>Avanzado</summary>' in r.text
+    assert "Laptop en un escritorio de madera</textarea>" in r.text and "Volver a generar usa 1 de tu cupo" in r.text
+    client.post(f"/panel/contenido/post/{pid}", headers=ORIGEN,
+                data={"accion": "otra", "caption": "x", "prompt": "A ceramic mug on a marble table"})
+    assert "A ceramic mug on a marble table" in proveedor.llamadas[-1][0]
+    assert campanas.buscar_post(leer(client, c), foto["k"])["idea"] == "A ceramic mug on a marble table"
 
     # Proponer de nuevo deja los que tienen imagen; una campaña nueva empieza en blanco y la otra sigue ahí.
     con_imagen = {p["k"] for p in leer(client, c)["posts"] if p["post_id"]}

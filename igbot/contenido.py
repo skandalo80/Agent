@@ -22,9 +22,8 @@ publicado funciona como una regla de comentarios (ver reglas()).
 
 Todo son formularios y la imagen se genera en una respuesta en partes, como el
 chat de prueba. El único JavaScript es igbot/static/panel.js (el CSP solo deja
-scripts del mismo dominio): cambia la vista previa al momento en el editor
-(/post/<id>/muestra.jpg rotula sin guardar). Sin él, el botón "Actualizar imagen"
-hace lo mismo.
+scripts del mismo dominio). En el editor del post, junto a la imagen: volver a
+generarla (con el prompt de Avanzado) o subir una foto, mientras no se publique.
 
 Publicados junta los posts del panel con los últimos de la cuenta en Instagram
 (también los subidos desde la app), pedidos cada 10 minutos como mucho.
@@ -77,7 +76,6 @@ OBJETIVOS = {
 OBJETIVO_INICIAL = "marca"
 
 
-NOMBRES_PLANTILLA = {"editorial": "Editorial", "minimal": "Minimal", "marco": "Marco", "banda": "Banda"}
 COLORES = [  # (campo, nombre, para qué se usa)
     ("principal", "Principal", "Títulos sobre fondos claros: plantillas Marco y Minimal. En Editorial el título"
                                 " va en blanco sobre la foto para que siempre se lea."),
@@ -95,6 +93,7 @@ MAX_FOTO_BYTES = 10 * 1024 * 1024
 MAX_TEMA = 500
 MAX_ESTILO = 400  # "Describe tu estilo" (Diseño libre)
 MAX_CAPTION = 2200  # lo que acepta Instagram
+MAX_PROMPT = 3200  # el prompt de la imagen (Avanzado, en el editor del post)
 HORA_SUGERIDA = 19  # los borradores nuevos salen al día siguiente a esta hora
 
 
@@ -131,11 +130,6 @@ def modo_de(datos: dict) -> str:
 
 def libre(p: dict) -> bool:
     return p.get("plantilla") == imagenes.LIBRE
-
-
-def sin_rotulo(p: dict) -> bool:
-    """Piezas de Campañas sin título que se pueda cambiar: foto sola, solo texto y collage."""
-    return p.get("formato") in ("foto", "texto", "collage")
 
 
 ESTILO_REFERENCIA = ("The reference images are the brand's own photos and posts: match their color palette, lighting,"
@@ -657,16 +651,33 @@ def reglas_del_form(f: dict, antes: list[dict], quitar: int | None) -> list[dict
     return out[:MAX_REGLAS]
 
 
-async def de_campana(c: Cuenta, p: dict, post_id: int) -> list[str]:
-    """Tema y formato de un post que viene de Campañas (vacío si no viene de ahí o ya no está)."""
+async def en_campana(c: Cuenta, p: dict, post_id: int) -> tuple[dict | None, dict | None]:
+    """La campaña y su post, si este post viene de Campañas y sigue ahí; si no, (None, None)."""
     from . import campanas  # campanas importa este módulo
     if "campana" not in p:
-        return []
+        return None, None
     for camp in await campanas.todas_las(c):
         if x := next((x for x in camp.get("posts", []) if x.get("post_id") == post_id), None):
-            return [campanas.MEDIOS[campanas.medio_de(x)][0], campanas.tema_de(x["tipo"])[0],
-                    campanas.FORMATOS[campanas.formato_de(x)][0]]
-    return []
+            return camp, x
+    return None, None
+
+
+async def de_campana(c: Cuenta, p: dict, post_id: int) -> list[str]:
+    """Tema y formato de un post que viene de Campañas (vacío si no viene de ahí o ya no está)."""
+    from . import campanas
+    camp, x = await en_campana(c, p, post_id)
+    if not x:
+        return []
+    return [campanas.MEDIOS[campanas.medio_de(x)][0], campanas.tema_de(x["tipo"])[0],
+            campanas.FORMATOS[campanas.formato_de(x)][0]]
+
+
+def prompt_de(p: dict, x: dict | None) -> str | None:
+    """El prompt de la imagen que se puede editar en Avanzado (None si su formato no usa el generador)."""
+    from . import campanas
+    if x is None:
+        return p.get("imagen", "")
+    return None if campanas.formato_de(x) in (*campanas.SIN_IDEA, "collage") else campanas.imagen_de(x)
 
 
 async def editor(c: Cuenta, post_id: int, aviso: str = "", confirmar: bool = False) -> HTMLResponse:
@@ -698,12 +709,10 @@ async def editor(c: Cuenta, post_id: int, aviso: str = "", confirmar: bool = Fal
         variables = escape(" · ".join(await de_campana(c, p, post_id)) or objetivo)
         valor_cuando = (datetime.fromtimestamp(post["publish_at"], tools.tz()).strftime("%Y-%m-%dT%H:%M")
                         if post["publish_at"] else "")
-        es_libre = libre(p)
-        fija = sin_rotulo(p)
-        actual = p.get("plantilla", imagenes.PLANTILLA_INICIAL)
-        plantillas = "".join(
-            f'<label><input type="radio" name="plantilla" value="{k}"{" checked" if k == actual else ""}> {nombre}</label>'
-            for k, nombre in NOMBRES_PLANTILLA.items())
+        _, x = await en_campana(c, p, post_id)
+        prompt = prompt_de(p, x)
+        from . import campanas
+        usa = 1 if x is None else campanas.costo(x)
         if post["status"] == "borrador":
             botones = ('<button class="boton" name="accion" value="aprobar">Aprobar y programar</button>'
                        '<button class="boton secundario" name="accion" value="guardar">Guardar borrador</button>'
@@ -715,33 +724,26 @@ async def editor(c: Cuenta, post_id: int, aviso: str = "", confirmar: bool = Fal
                        '<button class="boton secundario" name="accion" value="borrador">Quitar de programados</button>'
                        '<button class="boton secundario" name="accion" value="cancelar" formnovalidate data-confirma="¿Descartar este post? Se borra y no se puede deshacer.">Descartar post</button>')
         cuerpo = (
-            f'<form method="post" action="/panel/contenido/post/{post_id}"'
-            + ("" if es_libre or fija else f' data-vista="/panel/contenido/post/{post_id}/muestra.jpg?m={post["media_ids"][0]}"') + ">"
+            f'<form method="post" action="/panel/contenido/post/{post_id}" enctype="multipart/form-data">'
             # Enter en un campo guarda; no aprueba ni genera otra imagen.
             '<button class="oculto" name="accion" value="guardar" tabindex="-1" aria-hidden="true">Guardar</button>'
             + (tarjeta_extra(c, "otra") if confirmar else "")
             + f'<div class="editor"><div class="fija">{imagen}'
-            f'<p class="ayuda" style="margin-top:.75rem"><span class="chip {color}">{estado}</span> · {variables}</p></div><div>'
-            '<div class="tarjeta"><span class="num">Imagen</span>'
-            + (('<p class="ayuda">Esta pieza viene de tu campaña y su imagen no lleva un texto que se cambie aquí.'
-                ' Para hacerla de nuevo, ve a Campañas.</p></div>') if fija else
-               ('<p class="ayuda">Diseño libre: el texto va dentro del diseño.</p>' if es_libre
-               else f'<label>Plantilla</label><div class="chips">{plantillas}</div>')
-            + campo("titulo", "Título", p.get("titulo", ""), 80)
-            + campo("subtitulo", "Subtítulo", p.get("subtitulo", ""), 120)
-            + f'<label class="check"><input type="checkbox" id="con_precio" name="con_precio" value="1"'
-            f'{" checked" if p.get("precio") else ""}> Este post lleva precio</label>'
-            + '<div class="si-precio">' + campo("precio", "Precio", p.get("precio", ""), 40) + "</div>"
-            + (('<p class="ayuda" style="margin-top:1rem">Si cambias el texto, rehaz el diseño para que salga en la'
-                ' imagen. Revisa que el texto de la imagen salga bien escrito antes de aprobar.</p>'
-                '<div class="acciones"><button class="boton secundario" name="accion" value="otra">'
-                "Rehacer el diseño con este texto · usa 1 de tu cupo</button></div></div>") if es_libre else
-               ('<p class="ayuda" style="margin-top:1rem">El texto lo escribimos sobre la imagen: sale exacto y cambiarlo'
-                ' es gratis. La imagen de la izquierda cambia al momento; se guarda al guardar o aprobar.</p>'
-                '<div class="acciones"><button class="boton secundario sin-js" name="accion" value="actualizar">'
-                "Actualizar imagen</button>"
-                '<button class="boton secundario" name="accion" value="otra">Otra imagen · usa 1 de tu cupo</button>'
-                "</div></div>")))
+            f'<p class="ayuda" style="margin-top:.75rem"><span class="chip {color}">{estado}</span> · {variables}</p>'
+            # Mientras no se publica, la imagen se cambia aquí mismo: generarla otra vez o subir una foto.
+            '<div class="botones-img">'
+            '<button class="boton secundario" name="accion" value="otra">↻ Volver a generar imagen</button>'
+            '<button class="boton secundario" name="accion" value="subir">Subir foto</button></div>'
+            '<input type="file" name="foto" accept="image/jpeg,image/png,image/webp" aria-label="Tu foto">'
+            f'<p class="ayuda chica">Volver a generar {f"usa {usa} de tu cupo" if usa else "no usa tu cupo"}. Para usar'
+            " tu propia foto, elígela aquí arriba y toca Subir foto (no usa tu cupo).</p>"
+            + ("" if prompt is None else
+               '<details class="avanzado"><summary>Avanzado</summary>'
+               '<label for="prompt">Prompt de la imagen</label>'
+               f'<textarea id="prompt" name="prompt" rows="8" maxlength="{MAX_PROMPT}">{escape(prompt)}</textarea>'
+               '<p class="ayuda chica">Es lo que le pedimos al generador. Edítalo y toca Volver a generar imagen.</p>'
+               "</details>")
+            + "</div><div>"
             + '<div class="tarjeta"><span class="num">Publicación</span>'
             '<label for="caption">Texto del post</label>'
             f'<textarea id="caption" name="caption" rows="7" maxlength="{MAX_CAPTION}">{escape(post["caption"])}</textarea>'
@@ -870,8 +872,11 @@ async def editar(request: Request, post_id: int):
     panel.de_aqui(request)
     if not (c := panel.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
-    f = await panel.form(request)
+    datos = await request.form()  # multipart: puede traer su foto ("Subir foto")
+    subida = datos.get("foto")
+    f = {k: v for k, v in datos.items() if isinstance(v, str)}
     accion = f.get("accion", "guardar")
+    from . import campanas  # campanas importa este módulo
     with usar(c):
         post = await c.store.post(post_id)
         if not post or post["user_id"] != PANEL:
@@ -886,22 +891,18 @@ async def editar(request: Request, post_id: int):
             return await calendario(c, "Listo: ese post quedó descartado.")
 
         p = await pieza(c.store, post_id)
-        fija = sin_rotulo(p)
-        if not libre(p):
-            p["plantilla"] = f.get("plantilla") if f.get("plantilla") in imagenes.PLANTILLAS else p.get("plantilla")
-        for k, n in (("titulo", 80), ("subtitulo", 120), ("precio", 40)):
-            if not (fija and k in ("titulo", "subtitulo", "precio")):  # en una pieza fija, el texto de la imagen se queda
-                p[k] = f.get(k, "").strip()[:n]
-        if f.get("con_precio") != "1" and not fija:
-            p["precio"] = ""  # sin la casilla, el post no lleva precio aunque haya algo escrito
+        camp, x = await en_campana(c, p, post_id)
         quitar = int(accion[13:]) if accion.startswith("quitar_regla_") and accion[13:].isdigit() else None
         nueva = limpiar_clave(f.get("clave_nueva", ""))
         p["reglas"] = reglas_del_form(f, reglas_de(p), quitar)
         for k in ("clave", "respuesta", "dm"):
             p.pop(k, None)
         caption = f.get("caption", "").strip()[:MAX_CAPTION]
-        if not p["titulo"] and not fija:
-            return await editor(c, post_id, "El título no puede quedar vacío.")
+        # Avanzado: el prompt editado es el que usa "Volver a generar imagen".
+        if "prompt" in f and (prompt := f["prompt"].strip()[:MAX_PROMPT]) and prompt != prompt_de(p, x):
+            p["imagen"] = prompt
+            if x is not None:
+                x["idea"] = prompt  # con la idea cambiada, la campaña la usa tal cual (campanas.imagen_de)
         if caption.count("#") > 30:
             return await editor(c, post_id, "Instagram acepta hasta 30 hashtags por post.")
         try:
@@ -912,19 +913,39 @@ async def editar(request: Request, post_id: int):
             error_hora = ""
         await guardar_pieza(c.store, post_id, p)
         await c.store.update_post(post_id, caption=caption, publish_at=publish_at or None)
-        if not libre(p) and not fija:  # en diseño libre el texto está dentro de la imagen: se rehace con "Otra imagen"
+        if x is not None:
+            x["caption"] = caption
+            await campanas.guardar(c, camp)
+
+        async def despues(hacer) -> int:
+            """La imagen nueva sin perder lo que se acaba de guardar aquí (la campaña pone su día y hora)."""
+            await hacer()
+            with usar(c):
+                if x is not None:
+                    await campanas.guardar(c, camp)
+                    await c.store.update_post(post_id, caption=caption, publish_at=publish_at or post["publish_at"])
+            return post_id
+
+        if accion == "subir":
+            if not getattr(subida, "filename", ""):
+                return await editor(c, post_id, "Elige primero la foto que quieres subir.")
+            data = await subida.read(MAX_FOTO_BYTES + 1)
+            if len(data) > MAX_FOTO_BYTES:
+                return await editor(c, post_id, "Esa foto pesa más de 10 MB; sube una más ligera.")
             try:
-                await imagenes.rerotular(c.store, post["media_ids"][0], p["plantilla"],
-                                         texto_imagen(p, await panel.usuario(c)), kit(await marca_post(c, p)))
+                await despues(lambda: campanas.subir_imagen(c, camp, x, data) if x is not None
+                              else subir_foto(c, post_id, p, data))
             except imagenes.ErrorImagen as e:
                 return await editor(c, post_id, str(e))
-
-        if accion == "otra" and not fija:
-            falta = await falta_cupo(c, f.get("extra") == "1")
+            return await editor(c, post_id, "Listo: ya está tu foto.")
+        if accion == "otra":
+            extra = f.get("extra") == "1"
+            falta = await falta_cupo(c, extra) if x is None or campanas.costo(x) else ""
             if falta:
                 return await editor(c, post_id, confirmar=True) if falta == "extra" else sin_plan()
-            return generando(c, lambda: generar(c, extra=f.get("extra") == "1", post_id=post_id),
-                             f"/panel/contenido/post/{post_id}", "Generando otra imagen…")
+            hacer = ((lambda: campanas.generar_imagen(c, camp, x, extra)) if x is not None
+                     else (lambda: generar(c, extra=extra, post_id=post_id)))
+            return generando(c, lambda: despues(hacer), f"/panel/contenido/post/{post_id}", "Generando otra imagen…")
         if accion == "borrador":
             await c.store.set_post(post_id, "borrador", only_if="programada")
             return await editor(c, post_id, "Volvió a borrador: no sale hasta que lo apruebes.")
@@ -940,32 +961,19 @@ async def editar(request: Request, post_id: int):
             return await editor(c, post_id, f"Regla guardada: «{nueva}»." if nueva else "Escribe la palabra clave de la regla.")
         if quitar is not None:
             return await editor(c, post_id, "Regla quitada.")
-        return await editor(c, post_id, "Listo: la imagen ya tiene el texto nuevo." if accion == "actualizar"
-                            else "Guardado.")
+        return await editor(c, post_id, "Guardado.")
 
 
-@router.get("/post/{post_id}/muestra.jpg")
-async def muestra_post(request: Request, post_id: int):
-    """La imagen del post con el texto y la plantilla de la URL, sin guardar (vista previa del editor)."""
-    if not (c := panel.cuenta_de_sesion(request)):
-        raise HTTPException(status_code=404)
+async def subir_foto(c: Cuenta, post_id: int, p: dict, data: bytes) -> None:
+    """"Subir foto" en un post suelto: su foto en lugar de la generada (no usa el cupo), con el mismo texto encima."""
     with usar(c):
-        post = await c.store.post(post_id)
-        if not post or post["user_id"] != PANEL or not post["media_ids"]:
-            raise HTTPException(status_code=404)
-        token = (await c.store.media(post["media_ids"][0]))[0]
-        sin_texto = Path(c.media_dir) / f"{token}.base.jpg"
-        if not sin_texto.is_file():
-            raise HTTPException(status_code=404)
-        q = request.query_params
-        p = {"titulo": q.get("titulo", "")[:80], "subtitulo": q.get("subtitulo", "")[:120],
-             "precio": q.get("precio", "")[:40] if q.get("con_precio") == "1" else ""}
-        plantilla = q.get("plantilla") if q.get("plantilla") in imagenes.PLANTILLAS else imagenes.PLANTILLA_INICIAL
-        texto = texto_imagen(p, await panel.usuario(c))
-        marca = kit(await marca_post(c, await pieza(c.store, post_id)))
-    async with imagenes._turno:
-        jpg = await asyncio.to_thread(imagenes.rotular, sin_texto.read_bytes(), plantilla, texto, marca)
-    return Response(jpg, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=600"})
+        try:
+            hecha = await imagenes.crear_subida(c.store, PANEL, data, p.get("plantilla", imagenes.LIBRE),
+                                                texto_imagen(p, await panel.usuario(c)), kit(await marca_post(c, p)),
+                                                historia=p.get("medio") == "historia")
+        except (OSError, ValueError, Image.UnidentifiedImageError):
+            raise imagenes.ErrorImagen("No pudimos leer esa imagen. Sube una foto JPG o PNG.")
+        await c.store.update_post(post_id, media_ids=[hecha["media_id"]])
 
 
 @router.get("/insights/{media_id}")
