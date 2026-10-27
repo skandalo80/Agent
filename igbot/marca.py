@@ -195,7 +195,7 @@ def paso_estilo(marca: dict) -> str:
                      f'<em class="wiz-orden"{"" if n else " hidden"}>{n or ""}</em>{imagen_tarjeta(k, fondo)}'
                      f'<span class="cuerpo"><b>{nombre}</b><span class="mrc-rol"{"" if n else " hidden"}>'
                      f'{f"{n}.º · {ROLES[n - 1]}" if n else ""}</span><i class="mrc-lema">{lema}</i>'
-                     f'<small>{desc}</small><span class="mrc-sensa">Sensación: {", ".join(sensacion).lower()}.</span>'
+                     f'<small>{desc}</small><span class="mrc-sensa">Sensación: {" · ".join(sensacion)}</span>'
                      "</span></label>")
     tarjetas += ('<button class="wiz-op mrc-recomienda" name="accion" value="recomendar" formnovalidate>'
                  '<span class="ico">?</span><span class="cuerpo"><b>No estoy seguro, recomiéndame uno</b>'

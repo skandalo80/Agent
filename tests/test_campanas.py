@@ -752,7 +752,7 @@ def test_la_campana_se_escribe_con_la_empresa_la_marca_y_sus_parametros(cliente,
     negocio = prompt.split("</negocio>")[0]
     assert negocio.index("Perfil de la empresa") < negocio.index("Lo que sabe su asistente")
     assert "- Descripción: Café de especialidad en Puebla" in negocio and "desde 75 MXN" in negocio
-    assert "<marca_visual>\nEstilo visual (cómo se diseña la imagen, no objetos que deban salir siempre): Editorial." in prompt and "acento #E8590C" in prompt
+    assert "<marca_visual>\nEstilo visual (cómo se diseña la imagen, no objetos que deban salir siempre): Artesanal." in prompt and "acento #E8590C" in prompt
     assert "<objetivo>Vender más &lt;lattes&gt;</objetivo>" in prompt and "<producto>Latte de calabaza</producto>" in prompt
     assert "<lo_que_se_ve>Personas</lo_que_se_ve>" in prompt and "<estilo_de_campana>Poco texto</estilo_de_campana>" in prompt
     assert "de 120 a 180 palabras" in sistema and "nunca algo genérico del ramo" in sistema

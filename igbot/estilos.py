@@ -10,104 +10,125 @@ logo-<presencia>.webp (o .png/.jpg); mientras no exista, se pinta su color o su 
 
 ESTILOS = {
     # clave: (nombre, descripción, cómo se le pide al generador)
-    "brutalista": ("Brutalista",
-                   "Colores planos, titulares contundentes, contrastes fuertes y formas geométricas. Ideal para marcas"
-                   " con personalidad que quieren romper con lo convencional.",
-                   "Brutalist graphic design: flat solid colors, massive bold headlines, harsh contrast, raw geometric"
-                   " shapes and thick lines, no gradients or soft shadows, deliberately direct and unpolished."),
+    "lujo": ("Lujo sobrio",
+             "Materiales refinados, fotografías cuidadas y composiciones que transmiten exclusividad sin recurrir a"
+             " adornos excesivos.",
+             "Quiet luxury: refined materials (stone, brushed metal, fine fabrics, glass), carefully lit photography,"
+             " restrained muted palette, generous space, precise elegant composition, exclusive but never flashy,"
+             " no ornaments or gold glitter."),
     "minimalista": ("Minimalista",
-                    "Mucho espacio libre, pocos colores, tipografía limpia y composiciones cuidadas. Cada elemento"
-                    " tiene una razón para estar ahí.",
+                    "Mucho espacio libre, pocos colores y composiciones limpias. Cada elemento tiene una razón para"
+                    " estar ahí.",
                     "Minimalist premium design: generous negative space, very few elements, a restrained two or three"
                     " color palette, clean typography, soft diffused light, precise balanced composition."),
-    "neofuturista": ("Neofuturista",
-                     "Fondos oscuros, detalles luminosos, geometría precisa y pequeños acentos de neón. Ideal para"
-                     " marcas tecnológicas, de innovación e inteligencia artificial.",
-                     "Neo-futuristic look: dark background, luminous details and thin glowing lines, precise geometry,"
-                     " small neon accents, sleek high-tech surfaces, sophisticated and innovative mood."),
-    "cristalino": ("Cristalino",
-                   "Paneles translúcidos, superficies de cristal esmerilado y luces suaves que crean profundidad. Los"
-                   " colores del fondo se ven a través de los elementos.",
-                   "Glassmorphism and liquid glass: translucent frosted-glass panels, soft reflections and refractions,"
-                   " background colors blurred through the elements, soft light, layered depth, light and refined."),
-    "maximalista": ("Maximalista",
-                    "Titulares grandes, colores intensos, composiciones atrevidas, capas y elementos gráficos que"
-                    " llaman la atención sin perder el mensaje principal.",
-                    "Maximalist design: big headlines, saturated bold colors, daring layered composition with many"
-                    " graphic elements, patterns and stickers, energetic, while keeping one clear focal message."),
-    "claymorfismo": ("Claymorfismo",
-                     "Formas redondeadas, superficies mates, sombras suaves y elementos que parecen moldeados en"
-                     " plastilina. Una estética amable y táctil.",
-                     "Claymorphism 3D style: rounded puffy shapes, matte clay-like surfaces, soft inner and outer"
-                     " shadows, pastel-friendly colors, objects that look modeled in plasticine, friendly and tactile."),
     "editorial": ("Editorial",
-                  "Fotografías protagonistas, tipografía cuidada, titulares elegantes y composiciones equilibradas,"
-                  " como una revista de alta gama.",
+                  "Fotografías protagonistas, tipografía cuidada y composiciones equilibradas que combinan imágenes y"
+                  " mensajes con intención.",
                   "High-end editorial magazine look: a strong hero photograph, refined elegant typography, balanced"
                   " layout with clear hierarchy, natural sophisticated light, timeless and authoritative."),
-    "bento": ("Bento Grid",
-              "Bloques de distintos tamaños organizan fotografías, titulares, cifras y mensajes en una composición"
-              " modular, fácil de recorrer.",
-              "Bento grid layout: a modular composition of rounded blocks of different sizes holding a photo, a"
-              " headline, a key figure and short messages, tidy spacing, organized and easy to scan."),
-    "espacial": ("Espacial",
-                 "Tarjetas y objetos separados del fondo, sombras amplias, capas y sensación tridimensional. Los"
-                 " elementos parecen flotar dentro de una escena digital.",
-                 "Spatial 3D design: cards and objects floating above the background, wide soft shadows, several depth"
-                 " layers, a sense of three-dimensional space, immersive digital scene, sophisticated."),
+    "artesanal": ("Artesanal",
+                  "Texturas naturales, cerámica, papel y detalles imperfectos que transmiten trabajo manual y atención"
+                  " al producto.",
+                  "Artisanal handmade look: natural textures (ceramic, kraft paper, linen, wood), visible handcraft and"
+                  " small imperfections, warm natural light, close attention to the product, authentic and human."),
+    "organico": ("Orgánico contemporáneo",
+                 "Curvas suaves, materiales orgánicos y tonos tierra se combinan en composiciones fluidas, serenas y"
+                 " actuales.",
+                 "Contemporary organic design: soft curves and flowing shapes, organic materials (clay, travertine,"
+                 " plants, wood), earthy tones, calm fluid composition, soft daylight, serene and current."),
+    "retro": ("Retro moderno",
+              "Tipografías con carácter, paletas nostálgicas y formas vintage reinterpretadas con composiciones"
+              " frescas.",
+              "Modern retro: characterful display typography, nostalgic palettes (mustard, teal, burnt orange, cream),"
+              " vintage shapes and subtle grain reinterpreted with a fresh clean layout, original and expressive."),
+    "pop": ("Pop gráfico",
+            "Colores intensos, formas geométricas y titulares llamativos crean publicaciones enérgicas, atrevidas y"
+            " memorables.",
+            "Graphic pop design: saturated bold colors, playful geometric shapes, big punchy headlines, flat graphic"
+            " elements layered with the photo, energetic and daring, still one clear focal message."),
+    "documental": ("Fotográfico documental",
+                   "Escenas espontáneas, luz disponible y encuadres cotidianos que muestran el producto, las personas"
+                   " y el detrás de cámaras.",
+                   "Documentary photography: candid unposed moments, available natural light, everyday framing, real"
+                   " people, products and behind-the-scenes, honest and close, no studio look and no graphic"
+                   " overlays."),
+    "brutalista": ("Brutalista",
+                   "Colores planos, titulares contundentes, contrastes fuertes y formas geométricas que rompen con lo"
+                   " convencional.",
+                   "Brutalist graphic design: flat solid colors, massive bold headlines, harsh contrast, raw geometric"
+                   " shapes and thick lines, no gradients or soft shadows, deliberately direct and unpolished."),
+    "claymorfismo": ("Claymorfismo",
+                     "Formas redondeadas, superficies mates y objetos con volumen que aportan un aspecto lúdico y"
+                     " acogedor.",
+                     "Claymorphism 3D style: rounded puffy shapes, matte clay-like surfaces, soft inner and outer"
+                     " shadows, pastel-friendly colors, objects that look modeled in plasticine, friendly and tactile."),
+    "cristalino": ("Cristalino",
+                   "Capas translúcidas, superficies de cristal esmerilado y reflejos sutiles que interactúan con los"
+                   " colores del fondo.",
+                   "Glassmorphism and liquid glass: translucent frosted-glass panels, soft reflections and refractions,"
+                   " background colors blurred through the elements, soft light, layered depth, light and refined."),
+    "neofuturista": ("Neofuturista",
+                     "Geometría precisa, líneas técnicas y composiciones innovadoras que combinan formas modernas con"
+                     " detalles gráficos avanzados.",
+                     "Neo-futuristic look: precise geometry, thin technical lines and luminous details, innovative"
+                     " composition, sleek high-tech surfaces, small advanced graphic details, sophisticated and"
+                     " innovative mood."),
 }
 ESTILO_INICIAL = "minimalista"
 MAX_ESTILOS = 3
 ROLES = ["Estilo principal", "Estilo secundario", "Estilo de apoyo"]  # lo que aporta cada lugar
-# Estilos de versiones anteriores de Tu marca (los cuatro del primer formulario y los 15 del asistente
-# por pasos) y el estilo nuevo que más se les parece.
+# Estilos de versiones anteriores de Tu marca (los cuatro del primer formulario, los 15 del asistente por
+# pasos y los 9 de antes del catálogo de 12) y el estilo de hoy que más se les parece.
 VIEJOS_ESTILOS = {
-    "limpio": "minimalista", "premium": "editorial", "colorido": "maximalista",
-    "natural": "editorial", "minimal": "minimalista", "lujo": "editorial", "calido": "editorial",
-    "llamativo": "maximalista", "tecnologico": "neofuturista", "organico": "minimalista", "retro": "maximalista",
-    "artesanal": "editorial", "urbano": "brutalista", "geometrico": "bento", "ilustrado": "claymorfismo",
-    "fresco": "minimalista", "corporativo": "bento",
+    "limpio": "minimalista", "premium": "lujo", "colorido": "pop",
+    "natural": "organico", "minimal": "minimalista", "calido": "artesanal",
+    "llamativo": "pop", "tecnologico": "neofuturista", "urbano": "brutalista", "geometrico": "pop",
+    "ilustrado": "claymorfismo", "fresco": "minimalista", "corporativo": "minimalista",
+    "maximalista": "pop", "bento": "minimalista", "espacial": "neofuturista",
 }
 # Lo que solo ve el panel: la frase corta, la sensación y el color de respaldo mientras no hay imagen.
 TARJETA_ESTILO = {
-    "brutalista": ("Diseños atrevidos que no pasan desapercibidos.", ("Rebelde", "Directo", "Impactante"), "#8a3b2a"),
-    "minimalista": ("Menos elementos, más protagonismo.", ("Elegante", "Ordenado", "Premium"), "#6e6d68"),
-    "neofuturista": ("Una estética tecnológica y vanguardista.", ("Tecnológico", "Sofisticado", "Innovador"),
-                     "#1f2f4f"),
-    "cristalino": ("Transparencias, reflejos y un acabado moderno.", ("Moderno", "Ligero", "Refinado"), "#5b7c99"),
-    "maximalista": ("Más color, más energía, más personalidad.", ("Expresivo", "Creativo", "Enérgico"), "#b4532a"),
-    "claymorfismo": ("Diseños suaves que parecen tener volumen.", ("Cercano", "Divertido", "Acogedor"), "#a07a9a"),
-    "editorial": ("Como las páginas de una revista de alta gama.", ("Profesional", "Elegante", "Atemporal"),
+    "lujo": ("Elegancia que no necesita presumir.", ("Exclusivo", "Refinado", "Distinguido"), "#3b3631"),
+    "minimalista": ("Menos elementos, más protagonismo.", ("Elegante", "Ordenado", "Atemporal"), "#6e6d68"),
+    "editorial": ("Cada publicación parece una página de revista.", ("Profesional", "Elegante", "Atemporal"),
                   "#5a4e44"),
-    "bento": ("Cada elemento tiene su espacio.", ("Organizado", "Moderno", "Informativo"), "#3d5a80"),
-    "espacial": ("Elementos que flotan y crean profundidad.", ("Inmersivo", "Futurista", "Sofisticado"), "#433d63"),
+    "artesanal": ("La belleza de lo auténtico.", ("Cálido", "Auténtico", "Humano"), "#7a5a3f"),
+    "organico": ("Formas naturales con una mirada moderna.", ("Natural", "Sereno", "Actual"), "#6b6a52"),
+    "retro": ("Un guiño al pasado con personalidad actual.", ("Nostálgico", "Original", "Expresivo"), "#9a6a2f"),
+    "pop": ("Ideas que saltan a la vista.", ("Enérgico", "Atrevido", "Memorable"), "#b4532a"),
+    "documental": ("Momentos reales, sin posar para la cámara.", ("Cercano", "Honesto", "Espontáneo"), "#4f4a42"),
+    "brutalista": ("Diseños atrevidos que no pasan desapercibidos.", ("Rebelde", "Directo", "Impactante"), "#8a3b2a"),
+    "claymorfismo": ("Diseños suaves que parecen moldeados a mano.", ("Cercano", "Divertido", "Acogedor"), "#a07a9a"),
+    "cristalino": ("Transparencias que crean profundidad.", ("Moderno", "Ligero", "Refinado"), "#5b7c99"),
+    "neofuturista": ("Una mirada tecnológica al diseño del futuro.", ("Tecnológico", "Sofisticado", "Innovador"),
+                     "#1f2f4f"),
 }
 # «No estoy seguro, recomiéndame uno»: los tres que mejor van con cada giro de Perfil de empresa.
 RECOMENDADOS = {
-    "Restaurante o cafetería": ["editorial", "maximalista", "minimalista"],
-    "Alimentos y bebidas": ["maximalista", "editorial", "claymorfismo"],
-    "Tienda de ropa y accesorios": ["editorial", "minimalista", "brutalista"],
-    "Joyería": ["minimalista", "editorial", "cristalino"],
-    "Belleza y estética": ["editorial", "cristalino", "minimalista"],
-    "Salud y bienestar": ["minimalista", "cristalino", "editorial"],
-    "Consultorio médico o dental": ["minimalista", "bento", "cristalino"],
-    "Gimnasio o deporte": ["brutalista", "maximalista", "neofuturista"],
-    "Educación y cursos": ["bento", "claymorfismo", "maximalista"],
-    "Inmobiliaria": ["editorial", "minimalista", "bento"],
-    "Diseño de interiores": ["editorial", "minimalista", "espacial"],
-    "Arquitectura y construcción": ["minimalista", "editorial", "brutalista"],
-    "Hogar y decoración": ["editorial", "minimalista", "claymorfismo"],
-    "Servicios profesionales": ["minimalista", "bento", "editorial"],
-    "Tecnología y software": ["neofuturista", "cristalino", "bento"],
-    "Agencia o marketing": ["maximalista", "brutalista", "bento"],
-    "Eventos y bodas": ["editorial", "minimalista", "cristalino"],
-    "Fotografía y video": ["editorial", "minimalista", "brutalista"],
-    "Hotelería y turismo": ["editorial", "espacial", "minimalista"],
-    "Mascotas": ["claymorfismo", "maximalista", "editorial"],
-    "Automotriz": ["neofuturista", "brutalista", "espacial"],
-    "Tienda en línea": ["bento", "maximalista", "minimalista"],
+    "Restaurante o cafetería": ["documental", "artesanal", "editorial"],
+    "Alimentos y bebidas": ["artesanal", "pop", "documental"],
+    "Tienda de ropa y accesorios": ["editorial", "minimalista", "retro"],
+    "Joyería": ["lujo", "minimalista", "editorial"],
+    "Belleza y estética": ["editorial", "organico", "lujo"],
+    "Salud y bienestar": ["organico", "minimalista", "documental"],
+    "Consultorio médico o dental": ["minimalista", "cristalino", "documental"],
+    "Gimnasio o deporte": ["brutalista", "pop", "documental"],
+    "Educación y cursos": ["claymorfismo", "pop", "minimalista"],
+    "Inmobiliaria": ["lujo", "editorial", "minimalista"],
+    "Diseño de interiores": ["organico", "editorial", "lujo"],
+    "Arquitectura y construcción": ["minimalista", "brutalista", "editorial"],
+    "Hogar y decoración": ["organico", "artesanal", "editorial"],
+    "Servicios profesionales": ["minimalista", "editorial", "documental"],
+    "Tecnología y software": ["neofuturista", "cristalino", "minimalista"],
+    "Agencia o marketing": ["pop", "brutalista", "retro"],
+    "Eventos y bodas": ["editorial", "lujo", "documental"],
+    "Fotografía y video": ["documental", "editorial", "minimalista"],
+    "Hotelería y turismo": ["lujo", "editorial", "organico"],
+    "Mascotas": ["claymorfismo", "pop", "documental"],
+    "Automotriz": ["neofuturista", "brutalista", "lujo"],
+    "Tienda en línea": ["pop", "minimalista", "editorial"],
 }
-RECOMENDADOS_INICIAL = ["minimalista", "editorial", "bento"]  # sin giro (o uno escrito a mano)
+RECOMENDADOS_INICIAL = ["minimalista", "editorial", "documental"]  # sin giro (o uno escrito a mano)
 
 # Los cuatro colores: (campo, nombre, para qué se usa). El secundario solo orienta al generador de imágenes;
 # las plantillas usan principal, acento y fondo.
@@ -200,24 +221,29 @@ LETRAS = {
 
 # Tipografía recomendada según el estilo principal: (titulares, textos, por qué encaja).
 COMBINACIONES = {
-    "brutalista": ("Oswald", "Inter", "Una combinación contundente y directa: titulares que se imponen y textos claros"
-                   " que se leen sin esfuerzo."),
+    "lujo": ("Cormorant Garamond", "Inter", "Una combinación refinada y discreta: titulares con elegancia clásica y"
+             " textos limpios que no compiten con la imagen."),
     "minimalista": ("Raleway", "Work Sans", "Una combinación ligera y ordenada que deja respirar tus diseños y da"
                     " protagonismo al contenido."),
-    "neofuturista": ("Space Grotesk", "Inter", "Una combinación precisa y tecnológica que refuerza la sensación de"
-                     " innovación sin perder legibilidad."),
-    "cristalino": ("DM Sans", "Inter", "Una combinación moderna y suave que acompaña las transparencias y los reflejos"
-                   " sin recargar el diseño."),
-    "maximalista": ("Poppins", "DM Sans", "Una combinación con energía y carácter que aguanta colores intensos y"
-                    " composiciones atrevidas."),
-    "claymorfismo": ("Nunito", "Inter", "Una combinación cercana, moderna y legible que acompaña tus diseños sin quitar"
-                     " protagonismo al contenido."),
     "editorial": ("Playfair Display", "Inter", "Una combinación elegante de revista: titulares con carácter y textos"
                   " limpios que transmiten autoridad."),
-    "bento": ("Montserrat", "Inter", "Una combinación firme y muy legible que ordena cifras, titulares y mensajes en"
-              " cada bloque."),
-    "espacial": ("Space Grotesk", "DM Sans", "Una combinación actual y sofisticada que acompaña la profundidad y las"
-                 " capas de tus diseños."),
+    "artesanal": ("Lora", "Work Sans", "Una combinación cálida y humana que acompaña las texturas y el trabajo hecho a"
+                  " mano."),
+    "organico": ("Nunito", "Lora", "Una combinación suave y serena: titulares redondeados y textos con un toque"
+                 " natural."),
+    "retro": ("Oswald", "Lora", "Una combinación con carácter nostálgico: titulares condensados de cartel y textos"
+              " clásicos, con aire actual."),
+    "pop": ("Poppins", "DM Sans", "Una combinación con energía y carácter que aguanta colores intensos y"
+            " composiciones atrevidas."),
+    "documental": ("Work Sans", "Inter", "Una combinación sencilla y honesta que deja hablar a las fotografías."),
+    "brutalista": ("Oswald", "Inter", "Una combinación contundente y directa: titulares que se imponen y textos claros"
+                   " que se leen sin esfuerzo."),
+    "claymorfismo": ("Nunito", "Inter", "Una combinación cercana, moderna y legible que acompaña tus diseños sin quitar"
+                     " protagonismo al contenido."),
+    "cristalino": ("DM Sans", "Inter", "Una combinación moderna y suave que acompaña las transparencias y los reflejos"
+                   " sin recargar el diseño."),
+    "neofuturista": ("Space Grotesk", "Inter", "Una combinación precisa y tecnológica que refuerza la sensación de"
+                     " innovación sin perder legibilidad."),
 }
 COMBINACION_INICIAL = ("Montserrat", "Inter", "Una combinación clara, moderna y segura que funciona para casi cualquier"
                        " negocio.")
