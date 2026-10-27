@@ -368,3 +368,28 @@ document.querySelectorAll("form[data-marca]").forEach((form) => {
 document.querySelectorAll(".cal-filtros select").forEach((s) => {
   s.addEventListener("change", () => s.form.submit());
 });
+
+// Conversaciones en vivo: cuando llega o sale un mensaje, el servidor manda la lista y el chat abierto
+// ya armados (EventSource a /panel/vivo, sin fetch) y aquí solo se cambian. Lo que llevas escrito en
+// la respuesta se queda. Sin esto, la página funciona igual: recargando.
+document.querySelectorAll(".inbox[data-vivo]").forEach((inbox) => {
+  if (!window.EventSource) return;
+  const fuente = new EventSource(inbox.dataset.vivo);
+  fuente.addEventListener("message", (e) => {
+    let p;
+    try { p = JSON.parse(e.data); } catch { return; }
+    const lista = inbox.querySelector(".lista-vivo");
+    if (lista && p.lista) lista.innerHTML = p.lista;
+    const hilo = inbox.querySelector(".hilo");
+    if (!hilo || !p.hilo || !inbox.classList.contains("abierto")) return;
+    const caja = hilo.querySelector("textarea");
+    const texto = caja ? caja.value : "";
+    const foco = caja && document.activeElement === caja;
+    const desde = caja ? caja.selectionStart : 0;
+    const hasta = caja ? caja.selectionEnd : 0;
+    hilo.outerHTML = p.hilo;
+    const nueva = inbox.querySelector(".hilo textarea");
+    if (nueva && texto) nueva.value = texto;
+    if (nueva && foco) { nueva.focus(); nueva.setSelectionRange(desde, hasta); }
+  });
+});

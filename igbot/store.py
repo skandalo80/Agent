@@ -7,6 +7,7 @@ La tabla `messages` también funciona como cola: un DM entra como `pending` y
 pasa a `done` cuando el bot lo contestó. Así, si el proceso se reinicia, los
 mensajes sin contestar no se pierden.
 """
+import asyncio
 import json
 import time
 from datetime import datetime
@@ -163,6 +164,29 @@ class Store:
     def __init__(self, path: str):
         self.path = path
         self.db: aiosqlite.Connection | None = None
+        # Cuántas veces cambiaron los chats desde que arrancó el proceso, y quién espera el siguiente
+        # cambio (los paneles abiertos de esta cuenta, ver panel /vivo). Solo en memoria.
+        self.cambios = 0
+        self._esperando: set[asyncio.Event] = set()
+
+    def avisar(self) -> None:
+        """Un chat cambió (mensaje nuevo, respuesta o pausa): despierta a los paneles abiertos."""
+        self.cambios += 1
+        for e in self._esperando:
+            e.set()
+
+    async def esperar_cambio(self, visto: int, segundos: float) -> None:
+        """Vuelve en cuanto `cambios` deja de ser `visto`, o a los `segundos`."""
+        if self.cambios != visto:
+            return
+        e = asyncio.Event()
+        self._esperando.add(e)
+        try:
+            await asyncio.wait_for(e.wait(), segundos)
+        except TimeoutError:
+            pass
+        finally:
+            self._esperando.discard(e)
 
     async def open(self) -> None:
         if self.path != ":memory:":
@@ -194,6 +218,8 @@ class Store:
             (user_id, text, mid, time.time()),
         )
         await self.db.commit()
+        if cur.rowcount == 1:
+            self.avisar()
         return cur.rowcount == 1
 
     async def pending_users(self) -> list[str]:
@@ -220,6 +246,7 @@ class Store:
             (user_id, reply, time.time()),
         )
         await self.db.commit()
+        self.avisar()
 
     async def bot_replies_since(self, user_id: str, since: float) -> int:
         """Respuestas del bot (no las que el dueño escribió a mano, que llevan mid)."""
@@ -244,6 +271,7 @@ class Store:
             (user_id, f"{MANUAL} {text}", mid, time.time()),
         )
         await self.db.commit()
+        self.avisar()
 
     async def add_bot_message(self, user_id: str, text: str) -> None:
         """Guarda un mensaje que el bot mandó por su cuenta (p. ej. por un comentario)."""
@@ -252,6 +280,7 @@ class Store:
             (user_id, text, time.time()),
         )
         await self.db.commit()
+        self.avisar()
 
     async def add_comment(self, comment_id: str, user_id: str, media_id: str, text: str) -> bool:
         """Anota un comentario. False si ya se había procesado (Meta reintenta)."""
@@ -420,6 +449,7 @@ class Store:
             (user_id, until),
         )
         await self.db.commit()
+        self.avisar()
 
     async def paused_until(self, user_id: str) -> float:
         cur = await self.db.execute("SELECT until FROM paused WHERE user_id = ?", (user_id,))
@@ -534,6 +564,7 @@ class Store:
     async def unpause(self, user_id: str) -> None:
         await self.db.execute("DELETE FROM paused WHERE user_id = ?", (user_id,))
         await self.db.commit()
+        self.avisar()
 
     # --- publicaciones de los administradores ---
 

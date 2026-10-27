@@ -5,6 +5,8 @@ Pidieron una persona, Todas); a la derecha, el chat abierto con el interruptor
 Asistente / Tú y la caja para contestar desde aquí. Solo DMs: los comentarios no salen.
 Todo es HTML que arma el servidor; el buscador se manda solo mientras escribes con
 panel.js (sin fetch: recarga la página), y sin JS se busca con Enter.
+En vivo: panel.js escucha /panel/vivo (EventSource) y, cuando llega o sale un mensaje, cambia la
+lista y el chat abierto con el HTML que manda el servidor, sin recargar.
 """
 import time
 from datetime import datetime
@@ -32,6 +34,7 @@ MESES_LARGOS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", 
 CSS = """
 .inbox{display:grid;grid-template-columns:24rem minmax(0,1fr);background:var(--blanco);border-radius:1.5rem;overflow:hidden;min-height:38rem;margin-bottom:1.25rem;scroll-margin-top:1rem}
 .inbox .lista{border-right:1px solid var(--linea-clara);display:flex;flex-direction:column;min-width:0}
+.inbox .lista-vivo{display:flex;flex-direction:column;flex:1;min-width:0}
 .inbox .buscar{padding:1rem 1rem .5rem;margin:0}
 .inbox input[type=search]{width:100%;box-sizing:border-box;font:inherit;font-size:.95rem;padding:.65rem 1rem .65rem 2.4rem;border:1px solid var(--linea-clara);border-radius:999px;background:var(--claro) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%23C9B8D1' stroke-width='2' viewBox='0 0 24 24'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-4-4'/%3E%3C/svg%3E") no-repeat .9rem center}
 .inbox .buscar button{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
@@ -55,7 +58,7 @@ CSS = """
 .conv .lo-tiene.rojo{color:var(--naranja-t);font-weight:600}
 .punto-sin{position:absolute;left:.35rem;top:50%;width:.4rem;height:.4rem;border-radius:50%;background:var(--neon)}
 .inbox .vacio{padding:1.5rem 1rem;font-size:.9rem;color:var(--gris)}
-.inbox .lista .paginas{margin:auto 0 0;padding:.75rem;justify-content:center}
+.inbox .lista-vivo .paginas{margin:auto 0 0;padding:.75rem;justify-content:center}
 .hilo{display:flex;flex-direction:column;min-width:0}
 .hilo .cab{display:flex;align-items:center;gap:.85rem;padding:1rem 1.5rem;border-bottom:1px solid var(--linea-clara)}
 .hilo .cab .nom{flex:1;min-width:0}.hilo .cab .nom small{display:block;color:var(--gris);font-size:.8rem}
@@ -127,6 +130,20 @@ def _ocultos(ver: str, buscar: str, hoja: int, chat: str = "") -> str:
 
 
 async def bandeja(c: Cuenta, ver: str = "", buscar: str = "", hoja: int = 1, chat: str = "", n: int = 0) -> str:
+    """La bandeja completa. Con JS, panel.js abre /panel/vivo (data-vivo) y cambia la lista y el
+    chat abierto cuando llega algo, sin recargar."""
+    p = await partes(c, ver, buscar, hoja, chat, n)
+    vivo = enlace(p["ver"], p["buscar"], p["hoja"], p["chat"], n).replace("/panel/asistente", "/panel/vivo", 1)
+    vivo = vivo.split("#")[0] + ("&" if "?" in vivo else "?") + f"v={c.store.cambios}"
+    hilo = p["hilo"] or ('<div class="hilo"><p class="elige">Elige una conversación de la lista para verla y'
+                         " contestar.</p></div>")
+    return (f'<div class="inbox{" abierto" if p["hilo"] else ""}" id="chats" data-vivo="{escape(vivo)}">'
+            f'<div class="lista">{p["busqueda"]}<div class="lista-vivo">{p["lista"]}</div></div>{hilo}</div>')
+
+
+async def partes(c: Cuenta, ver: str = "", buscar: str = "", hoja: int = 1, chat: str = "", n: int = 0) -> dict:
+    """Las piezas de la bandeja: el buscador, la lista (pestañas, chats y páginas) y el chat abierto
+    ("" si no hay o no es de esta cuenta). También el filtro, la página y el chat que quedaron."""
     import asyncio
 
     from . import panel
@@ -188,14 +205,12 @@ async def bandeja(c: Cuenta, ver: str = "", buscar: str = "", hoja: int = 1, cha
                 '<button>Buscar</button></form>')
     cuantos_txt = (f'<p class="cuantos">{encontrados} {"chat" if encontrados == 1 else "chats"}'
                    + (f" · página {hoja} de {total}" if total > 1 else "") + "</p>") if buscar and encontrados else ""
-    lista = (f'<div class="lista">{busqueda}<nav class="filtros-chat" aria-label="Filtros">{pestanas}</nav>{cuantos_txt}'
+    lista = (f'<nav class="filtros-chat" aria-label="Filtros">{pestanas}</nav>{cuantos_txt}'
              + ("".join(conv) or f'<p class="vacio">{vacio}</p>')
-             + panel.paginas(hoja, total, lambda x: enlace(ver, buscar, x, chat)) + "</div>")
+             + panel.paginas(hoja, total, lambda x: enlace(ver, buscar, x, chat)))
     hilo = await _hilo(c, chat, ver, buscar, hoja, n, ahora, zona, hoy, humano_desde) if chat else ""
-    if not hilo:
-        chat = ""
-        hilo = '<div class="hilo"><p class="elige">Elige una conversación de la lista para verla y contestar.</p></div>'
-    return (f'<div class="inbox{" abierto" if chat else ""}" id="chats">{lista}{hilo}</div>')
+    return {"busqueda": busqueda, "lista": lista, "hilo": hilo, "ver": ver, "buscar": buscar, "hoja": hoja,
+            "chat": chat if hilo else ""}
 
 
 async def _hilo(c: Cuenta, u: str, ver: str, buscar: str, hoja: int, n: int, ahora: float, zona: ZoneInfo,
