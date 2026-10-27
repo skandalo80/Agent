@@ -856,6 +856,7 @@ select,input[type=date],input[type=number]{color:var(--negro);background:var(--c
 .wiz-sub{margin:1.75rem 0 .2rem;font-size:1.05rem}.wiz-sub+.ayuda{margin:0 0 .8rem}
 .wiz-ops{display:grid;grid-template-columns:repeat(auto-fit,minmax(14.5rem,1fr));gap:.85rem}
 .wiz-ops.tres{grid-template-columns:repeat(3,minmax(0,1fr))}
+.wiz-op .sug-ia{display:inline-flex;align-items:center;gap:.3rem;font-style:normal;font-size:.72rem;font-weight:600;letter-spacing:.04em;color:var(--neon);margin-bottom:.35rem}.wiz-op .sug-ia svg{flex:none}
 .wiz-ops.cuatro{grid-template-columns:repeat(4,minmax(0,1fr))}.wiz-ops.cinco{grid-template-columns:repeat(5,minmax(0,1fr))}.wiz-img.alta{aspect-ratio:2/3}
 .wiz-op{position:relative;display:flex;flex-direction:column;border:1px solid var(--linea-clara);border-radius:1rem;overflow:hidden;cursor:pointer;background:var(--suave,var(--blanco));margin:0;font-weight:400;transition:border-color .12s,box-shadow .12s}
 .wiz-op input{position:absolute;opacity:0;pointer-events:none}

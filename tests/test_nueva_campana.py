@@ -527,3 +527,62 @@ def test_historias_de_punta_a_punta(cliente, monkeypatch):
 
 async def _nada():
     return None
+
+
+def test_sugeridos_del_lunes(cliente, monkeypatch):
+    """Cada lunes en la mañana se agregan objetivos y mensajes sugeridos (una vez por semana), con brillitos lima."""
+    from datetime import datetime
+
+    from igbot import agent, empresa, sugeridos, tools
+    client, c, *_ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 4)
+    listo(client, c)
+    base = {"version": empresa.VERSION_OPCIONES, "huella": "h", "mensajes": [{"k": "general", "titulo": "General"}],
+            "objetivos": [{"k": "vender-latte", "titulo": "Vender el latte", "descripcion": "d",
+                           "mensajes": [{"k": "precio", "titulo": "El precio", "descripcion": "x", "ejemplo": "e"}]}]}
+    client.portal.call(c.store.set, "campana_opciones", json.dumps(base))
+    llamadas = []
+
+    async def fake(prompt, system, **kw):
+        llamadas.append(prompt)
+        return json.dumps({
+            "objetivos": [{"k": "llenar-tardes", "titulo": "Llenar las tardes", "descripcion": "Más gente de 4 a 7",
+                           "mensajes": [{"k": "promo-tarde", "titulo": "La hora de la tarde", "descripcion": "x"},
+                                        {"k": "ambiente", "titulo": "El ambiente tranquilo", "descripcion": "x"}]},
+                          {"k": "repetido", "titulo": "Vender el latte", "descripcion": "ya lo tiene",
+                           "mensajes": [{"k": "a", "titulo": "A"}, {"k": "b", "titulo": "B"}]}],
+            "mensajes": {"vender-latte": [{"k": "receta", "titulo": "La receta de la casa", "descripcion": "x"},
+                                          {"k": "precio-otra", "titulo": "El precio", "descripcion": "repetido"}],
+                         "no-existe": [{"k": "z", "titulo": "Z"}]}})
+
+    monkeypatch.setattr(agent, "run_claude", fake)
+    # Domingo: todavía no; lunes antes de las 8: tampoco.
+    for dia in (datetime(2099, 1, 4, 10), datetime(2099, 1, 5, 7)):
+        monkeypatch.setattr(tools, "now", lambda d=dia: d)
+        client.portal.call(sugeridos.tick, c)
+    assert not llamadas
+    monkeypatch.setattr(tools, "now", lambda: datetime(2099, 1, 5, 8, 30))
+    client.portal.call(sugeridos.tick, c)
+    client.portal.call(sugeridos.tick, c)  # una sola vez por semana
+    assert len(llamadas) == 1 and "<ya_tiene>" in llamadas[0] and "Vender el latte" in llamadas[0]
+    sug = client.portal.call(sugeridos.de, c)
+    assert [o["k"] for o in sug["objetivos"]] == ["sug-llenar-tardes"]  # el repetido no entra
+    assert [m["titulo"] for m in sug["mensajes"]["vender-latte"]] == ["La receta de la casa"]
+    assert "no-existe" not in sug["mensajes"]
+
+    # En el asistente: al final y con los brillitos de "Sugerido".
+    r = client.get(f"{URL}?paso=1")
+    assert r.text.index("Vender el latte") < r.text.index("Llenar las tardes")
+    assert r.text.count("class=sug-ia") == 1 and "Sugerido" in r.text
+    paso(client, 1, objetivo="vender-latte")
+    r = client.get(f"{URL}?paso=2")
+    assert "El precio" in r.text and "La receta de la casa" in r.text and r.text.count("class=sug-ia") == 1
+    paso(client, 1, objetivo="sug-llenar-tardes")
+    r = client.get(f"{URL}?paso=2")
+    assert "La hora de la tarde" in r.text and "El precio" not in r.text and r.text.count("class=sug-ia") == 2
+
+    # Sin contenido en su plan no corre.
+    monkeypatch.setattr(c, "imagenes_mes", 0)
+    monkeypatch.setattr(tools, "now", lambda: datetime(2099, 1, 12, 9))
+    client.portal.call(sugeridos.tick, c)
+    assert len(llamadas) == 1

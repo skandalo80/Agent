@@ -214,7 +214,8 @@ async def opciones(c: Cuenta, objetivo: str = "") -> tuple[list[dict], list[dict
     if datos := await empresa.opciones_campana(c):
         if datos.get("version") != empresa.VERSION_OPCIONES:
             empresa.programar_opciones(c)  # las de antes no traían mensajes por objetivo: se rehacen una vez
-        return datos["objetivos"][:6], empresa.mensajes_de(datos, objetivo)[:6]
+        from . import sugeridos
+        return sugeridos.mezclar(datos, await sugeridos.de(c), objetivo)  # los de cada lunes, al final
     objetivos = [{"k": k, "titulo": v[0], "descripcion": v[1]} for k, v in OBJETIVOS.items()]
     claves = MENSAJES_DE.get(objetivo, tuple(MENSAJES))
     return objetivos, [{"k": k, "titulo": MENSAJES[k][0], "descripcion": MENSAJES[k][1]} for k in claves]
@@ -391,12 +392,19 @@ def img(seccion: str, clave: str, color: str, texto: str = "", alta: bool = Fals
     return f'<span class="wiz-img{" alta" if alta else ""}" style="--fondo:{fondo}">{"" if (TARJETAS / archivo).is_file() else escape(texto)}</span>'
 
 
+# Los brillitos de IA de los sugeridos de cada lunes (en lima: un acento chico).
+BRILLOS = ('<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M10 2l1.9'
+           ' 5.6L17.5 9.5l-5.6 1.9L10 17l-1.9-5.6L2.5 9.5l5.6-1.9zM18.5 13l.95 2.55L22 16.5l-2.55.95L18.5 20l-.95-2.55'
+           'L15 16.5l2.55-.95z"/></svg>')
+
+
 def op(nombre: str, valor: str, titulo: str, desc: str, tipo: str = "radio", marcada: bool = False,
-       imagen: str = "", em: str = "", apagada: bool = False) -> str:
-    return (f'<label class="wiz-op{" apagada" if apagada else ""}">'
+       imagen: str = "", em: str = "", apagada: bool = False, sugerido: bool = False) -> str:
+    return (f'<label class="wiz-op{" apagada" if apagada else ""}{" sugerida" if sugerido else ""}">'
             f'<input type="{tipo}" name="{nombre}" value="{escape(valor)}"{" checked" if marcada else ""}'
             f'{" disabled" if apagada else ""}>{imagen}'
-            f'<span class="cuerpo"><b>{escape(titulo)}</b><small>{escape(desc)}</small>'
+            f'<span class="cuerpo">{f"<i class=sug-ia>{BRILLOS}Sugerido</i>" if sugerido else ""}'
+            f'<b>{escape(titulo)}</b><small>{escape(desc)}</small>'
             f'{f"<em>{em}</em>" if em else ""}</span></label>')
 
 
@@ -452,8 +460,8 @@ def nota(titulo: str, texto: str) -> str:
 
 
 def paso_1(b: dict, objetivos: list[dict]) -> str:
-    ops = "".join(op("objetivo", o["k"], o["titulo"], o.get("descripcion", ""), marcada=o["k"] == b["objetivo"])
-                  for o in objetivos)  # sin miniatura: cada opción es de su negocio
+    ops = "".join(op("objetivo", o["k"], o["titulo"], o.get("descripcion", ""), marcada=o["k"] == b["objetivo"],
+                     sugerido=bool(o.get("sugerido"))) for o in objetivos)  # sin miniatura: cada opción es de su negocio
     return (cab(1, "¿Qué quieres lograr con esta campaña?",
                 "Elige el resultado que buscas. Las opciones salen de tu perfil de empresa, así que hablan de tu"
                 " negocio.")
@@ -462,8 +470,8 @@ def paso_1(b: dict, objetivos: list[dict]) -> str:
 
 
 def paso_2(b: dict, mensajes: list[dict], prods: list[dict], objetivos: list[dict]) -> str:
-    ops = "".join(op("mensajes", m["k"], m["titulo"], m.get("descripcion", ""), "checkbox", m["k"] in b["mensajes"])
-                  for m in mensajes)
+    ops = "".join(op("mensajes", m["k"], m["titulo"], m.get("descripcion", ""), "checkbox", m["k"] in b["mensajes"],
+                     sugerido=bool(m.get("sugerido"))) for m in mensajes)
     opciones_prod = '<option value="">Ninguno en especial</option>' + "".join(
         f'<option value="{escape(p["id"])}"{" selected" if p["id"] == b["producto"] else ""}>{escape(p["nombre"])}'
         + (f" · {escape(precio_de(p))}" if precio_de(p) else "") + "</option>" for p in prods)
