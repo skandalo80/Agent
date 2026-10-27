@@ -1031,3 +1031,10 @@ def test_nombre_ia_y_transferir_si_esta_enojado(cliente):
         "paso": "reglas", "opcionales": "1", "msg_enojado_on": "1", "msg_enojado": "Entiendo tu molestia."})
     prompt = Path(c.prompt_path).read_text()
     assert "mensaje_al_transferir" not in prompt and "inteligencia artificial" not in prompt
+
+
+def test_la_plataforma_se_llama_skandar(cliente):
+    client, *_ = cliente
+    r = client.get("/panel/asistente").text
+    assert "<title>Tu asistente · Skandar</title>" in r and '<span class="txt">Skandar</span>' in r
+    assert "Agentes IA" not in r and 'class="logo"' not in r
