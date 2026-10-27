@@ -1059,7 +1059,7 @@ img.mrc-logo-mini{background:#fff}
 .modal-cam label{margin-top:0;font-size:.9rem;margin-bottom:.35rem}
 .modal-cam .campo{margin-bottom:1rem}.modal-cam .campo small{display:block;color:var(--gris);font-size:.8rem;margin-top:.3rem}
 .modal-cam select{width:100%;font:inherit;font-size:.95rem;padding:.6rem .7rem;border:1px solid var(--linea-clara);border-radius:.8rem;background:var(--claro);color:var(--negro)}
-.modal-cam .tres-modal{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.75rem;align-items:end}
+.modal-cam .tres-modal{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.75rem;align-items:end}.modal-cam .tres-modal.dos{grid-template-columns:1fr 1fr}
 .modal-cam select,.modal-cam input[type=time],.modal-cam input[type=date]{box-sizing:border-box;height:3rem;padding:0 .9rem;font-size:1rem;line-height:1;border-radius:.85rem;margin:0}
 .modal-cam label.check{margin-top:.6rem;font-weight:500}
 .regla-modal{border:1px solid var(--linea-clara);border-radius:1rem;padding:1rem;background:var(--suave,var(--claro))}

@@ -1139,11 +1139,6 @@ async def detalle(c: Cuenta, camp: dict, p: dict, quedan_ia: int) -> str:
     subtitulo = (f'<div class="campo"><label for="d-subtitulo">Lo que la completa</label><input type="text"'
                  f' id="d-subtitulo" name="subtitulo" maxlength="120" value="{escape(p.get("subtitulo", ""))}"></div>'
                  if formato == "texto" and not post else "")
-    formatos = "".join(f'<option value="{k}"{" selected" if k == formato else ""}>{v[0]}</option>'
-                       for k, v in FORMATOS.items())
-    cambia_formato = (f'<div><label for="d-formato">Formato</label><select id="d-formato" name="formato"'
-                      f'{" disabled" if post else ""}>{formatos}</select></div>')
-    # La idea se queda después de generar (menos en el collage, que no la usa) para irla puliendo con "Otra imagen".
     # Desplegable, como en el editor del calendario: abierto mientras no hay imagen (hay que revisarlo antes de generar).
     nombre_idea = "Qué deben mostrar las fotos" if formato == "collage" else "Prompt de la imagen"
     idea = ("" if formato in SIN_IDEA or (post and formato == "collage") else
@@ -1183,9 +1178,7 @@ async def detalle(c: Cuenta, camp: dict, p: dict, quedan_ia: int) -> str:
         f'<form method="post" action="{url_de(camp)}" id="f-cam" enctype="multipart/form-data">'
         f'<input type="hidden" name="k" value="{p["k"]}">'
         '<div class="top"><div>'
-        f'<div class="etqs-cam"><span class="medio-cam m-{medio_de(p)}">{MEDIOS[medio_de(p)][0]}</span>'
-        f'<span class="etq-cam t-{p["tipo"]}">{tema_de(p["tipo"])[0]}</span>'
-        f'<span class="fmt-cam bur f-{formato}">{FORMATOS[formato][0]}</span>{marca_estado}</div>'
+        f'<div class="etqs-cam"><span class="medio-cam m-{medio_de(p)}">{MEDIOS[medio_de(p)][0]}</span>{marca_estado}</div>'
         f'<h2 id="d-nombre">{escape(p["titulo"])}</h2><p>{fecha_larga(p["dia"])} · {p["hora"]}</p>'
         + (f'<p class="cli-cam">Responde a lo que te preguntan: {escape(p["responde"])}</p>' if p.get("responde") else "")
         + f'</div><a class="x" href="{url_de(camp)}" aria-label="Cerrar">×</a></div>'
@@ -1195,9 +1188,9 @@ async def detalle(c: Cuenta, camp: dict, p: dict, quedan_ia: int) -> str:
            f'<div class="campo"><label for="d-caption">Texto que se publica</label><textarea id="d-caption" name="caption"'
            f' rows="6" maxlength="{MAX_CAPTION}"{solo}>{escape(p["caption"])}</textarea></div>')
         + idea + titulo + subtitulo
-        + f'<div class="tres-modal campo"><div><label for="d-dia">Día</label><select id="d-dia" name="dia"'
+        + f'<div class="tres-modal dos campo"><div><label for="d-dia">Día</label><select id="d-dia" name="dia"'
         f'{" disabled" if fija else ""}>{opciones}</select></div><div><label for="d-hora">Hora</label>'
-        f'<input type="time" id="d-hora" name="hora" value="{p["hora"]}"{solo}></div>{cambia_formato}</div>'
+        f'<input type="time" id="d-hora" name="hora" value="{p["hora"]}"{solo}></div></div>'
         + regla
         + f'</div></div><div class="pie"><span></span><div class="acciones">{botones}</div></div></form></div>')
 
