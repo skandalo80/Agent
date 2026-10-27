@@ -1224,24 +1224,33 @@ async def detalle(c: Cuenta, camp: dict, p: dict, quedan_ia: int) -> str:
                  f' id="d-subtitulo" name="subtitulo" maxlength="120" value="{escape(p.get("subtitulo", ""))}"></div>'
                  if formato == "texto" and not post else "")
     # Desplegable, como en el editor del calendario: abierto mientras no hay imagen (hay que revisarlo antes de generar).
+    # Con brief, la idea corta (en español) y aparte el prompt detallado que recibe el generador, editable.
+    con_prompt = bool(camp.get("brief")) and formato not in SIN_IDEA and formato != "collage"
+    vigente = p.get("prompt", "") if con_prompt and p.get("idea_base") == p.get("idea") else ""
     nombre_idea = ("Qué deben mostrar las fotos" if formato == "collage" else
-                   "Idea de la imagen" if p.get("plan") else "Prompt de la imagen")
+                   "Idea de la imagen" if con_prompt else "Prompt de la imagen")
     idea = ("" if formato in SIN_IDEA or (post and formato == "collage") else
-            f'<details class="prompt-img"{"" if post else " open"}><summary>{nombre_idea}</summary>'
+            f'<details class="prompt-img"{"" if post or vigente else " open"}><summary>{nombre_idea}</summary>'
             f'<div class="campo"><textarea id="d-idea" name="idea" rows="8" maxlength="{MAX_IDEA}"'
             f' aria-label="{nombre_idea}"{solo}>{escape(p["idea"])}'
             "</textarea>"
             + ("" if formato == "collage" else
-               ('<small>Es la idea de la imagen. Al generarla la convertimos en un prompt detallado con la dirección visual'
-                ' de tu campaña. Puedes editarla antes.</small>' if p.get("plan") else
+               ('<small>La idea en pocas palabras. Con ella se escribe el prompt detallado de abajo; si la cambias,'
+                ' el prompt se vuelve a escribir.</small>' if con_prompt else
                 '<small>Lo escribe la IA con tu empresa, tu marca y esta campaña. Puedes editarlo antes de generar.</small>')
                + '<input type="hidden" name="con_marca_en_form" value="1"><label class="check"><input type="checkbox"'
                f' name="con_marca" value="1"{" checked" if p.get("con_marca", True) else ""}{" disabled" if fija else ""}>'
                " Usar Tu marca como contexto</label>")
             + "</div></details>")
-    if p.get("plan") and p.get("prompt") and p.get("idea_base") == p.get("idea") and formato not in SIN_IDEA:
-        idea += ('<details class="prompt-img"><summary>Prompt detallado que va al generador</summary>'
-                 f'<p class="ayuda" lang="en">{escape(p["prompt"])}</p></details>')
+    if con_prompt:
+        idea += ('<details class="prompt-img" open><summary>Prompt de la imagen</summary><div class="campo">'
+                 f'<textarea id="d-prompt" name="prompt" rows="9" maxlength="{MAX_IDEA * 2}" lang="en"'
+                 f' aria-label="Prompt de la imagen" placeholder="Aún no se escribe: toca Escribir el prompt o Generar'
+                 f' imagen."{solo}>{escape(vigente)}</textarea><small>Es lo que recibe el generador de imágenes, con la'
+                 " dirección visual de tu campaña. Puedes editarlo antes de generar.</small>"
+                 + ("" if fija else '<button class="boton secundario chico" name="accion" value="prompt">'
+                    + ("Volver a escribir el prompt" if vigente else "Escribir el prompt") + "</button>")
+                 + "</div></details>")
     r = p.get("regla") or {}
     regla = "" if historia else (
         '<div class="regla-modal"><input type="hidden" name="regla_en_form" value="1">'
@@ -1866,6 +1875,9 @@ async def accion(request: Request, cid: str):
         # Con imagen ya hecha solo cambian el texto y la idea (la que usa "Otra imagen").
         if campo in f and (f[campo].strip() or campo == "subtitulo") and not (post and campo not in ("caption", "idea")):
             p[campo] = f[campo].strip()[:maximo]
+    # El prompt que editó a mano es el que va al generador (mientras no cambie la idea otra vez).
+    if camp.get("brief") and (nuevo := f.get("prompt", "").strip()[:MAX_IDEA * 2]) and nuevo != p.get("prompt"):
+        p["prompt"], p["idea_base"] = nuevo, p["idea"]
     if f.get("con_marca_en_form") == "1":
         p["con_marca"] = f.get("con_marca") == "1"
     if not post and f.get("formato") in FORMATOS:
@@ -1912,6 +1924,16 @@ async def accion(request: Request, cid: str):
             yield f"{url}?post={k}#detalle"
 
         return trabajando(c, "Pensando otra idea…", "Tarda unos segundos.", otra, url)
+
+    if que == "prompt" and camp.get("brief"):
+        async def escribir_prompt():
+            with usar(c):
+                p.pop("prompt", None)
+                await prompt_de(c, camp, p, await marca_de(c))
+                await guardar(c, camp)
+            yield f"{url}?post={k}#detalle"
+
+        return trabajando(c, "Escribiendo el prompt…", "Tarda unos segundos.", escribir_prompt, url)
 
     if que == "generar":
         extra = f.get("extra") == "1"

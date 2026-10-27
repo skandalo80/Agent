@@ -634,7 +634,19 @@ def test_flujo_brief_y_plan_con_claude_posts_e_imagen_con_openai(cliente, monkey
     p = campanas.buscar_post(leer(client, c), foto["k"])
     assert p["prompt"] == "A detailed art-directed prompt" and p["idea_base"] == "Una taza en la barra"
     r = client.get(f"{u}?post={foto['k']}")
-    assert "Prompt detallado que va al generador" in r.text and "A detailed art-directed prompt" in r.text
+    assert 'name="prompt"' in r.text and ">A detailed art-directed prompt</textarea>" in r.text
+    # El prompt editado a mano es el que va al generador, sin volver a escribirlo.
+    llamadas_arte = len(arte)
+    client.post(u, headers=ORIGEN, data={"accion": "generar", "k": str(foto["k"]), "idea": "Una taza en la barra",
+                                         "prompt": "My own prompt, a cup on the bar"})
+    assert proveedor.llamadas[-1][0].startswith("My own prompt, a cup on the bar")
+    assert len([d for s, d in de_openai if "director de arte" in s]) == llamadas_arte
+    # "Escribir el prompt" lo escribe sin generar la imagen.
+    otro = next(p for p in leer(client, c)["posts"] if p["formato"] == "titular" and p["k"] != foto["k"])
+    n_imagenes = len(proveedor.llamadas)
+    client.post(u, headers=ORIGEN, data={"accion": "prompt", "k": str(otro["k"]), "idea": "Granos en la mano"})
+    assert len(proveedor.llamadas) == n_imagenes
+    assert campanas.buscar_post(leer(client, c), otro["k"])["prompt"] == "A detailed art-directed prompt"
 
 
 def test_si_openai_falla_el_prompt_lo_escribe_claude(cliente, monkeypatch):
