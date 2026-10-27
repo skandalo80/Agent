@@ -30,7 +30,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
 from igbot import (admin, agent, ajustes, asistente, botones, campanas, comentarios, conectar, config, contenido, empresa,
-                   limites, marca, nueva_campana, panel, reporte, resultados, semana)
+                   limites, marca, nueva_campana, panel, reporte, resultados, semana, sugeridos)
 from igbot.cuenta import Cuenta, cargar, cuenta, de_carpeta, usar
 from igbot.dispatcher import Dispatcher
 from igbot.google import Google
@@ -175,6 +175,10 @@ async def reporte_semanal(c: Cuenta) -> None:
         await reporte.tick(c.store, c.instagram, google)
 
 
+async def sugeridos_del_lunes(c: Cuenta) -> None:
+    await sugeridos.tick(c)  # más opciones de Objetivo y Mensaje para Crear campaña
+
+
 async def cada_cuenta(paso, every: float) -> None:
     """Un solo bucle de fondo por tarea, que pasa por todas las cuentas."""
     while True:
@@ -192,6 +196,7 @@ def fondo() -> list[asyncio.Task]:
         asyncio.create_task(cada_cuenta(renovar_token, 3600)),
         asyncio.create_task(cada_cuenta(publicar, 30)),
         asyncio.create_task(cada_cuenta(reporte_semanal, 600)),
+        asyncio.create_task(cada_cuenta(sugeridos_del_lunes, 600)),
     ]
 
 
