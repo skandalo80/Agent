@@ -108,25 +108,6 @@ document.addEventListener("click", (e) => {
   document.querySelectorAll("details.perfil[open]").forEach((d) => { if (!d.contains(e.target)) d.open = false; });
 });
 
-// Menú lateral: Tu asistente y Contenido despliegan sus opciones en vez de cambiar de página.
-// Si el menú está plegado (solo íconos), primero se abre.
-document.querySelectorAll(".lat-item[data-sub]").forEach((item) => {
-  item.addEventListener("click", (e) => {
-    const sub = document.getElementById("sub-" + item.dataset.sub);
-    if (!sub) return;
-    e.preventDefault();
-    if (raiz.classList.contains("menu-plegado") && matchMedia("(min-width: 901px)").matches) {
-      raiz.classList.add("menu-anima");
-      raiz.classList.remove("menu-plegado");
-      try { localStorage.setItem("menu:plegado", "0"); } catch (err) { /* sin almacenamiento */ }
-      sub.classList.remove("cerrado");
-    } else {
-      sub.classList.toggle("cerrado");
-    }
-    item.setAttribute("aria-expanded", sub.classList.contains("cerrado") ? "false" : "true");
-  });
-});
-
 // Campañas: arrastrar un post a otro día. Soltado sobre otro post, se intercambian; en el espacio libre del día,
 // se quedan los dos (hasta 2 por día). Sin esto, el día se cambia en el panel del post.
 (() => {
