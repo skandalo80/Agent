@@ -1117,7 +1117,7 @@ async def detalle(c: Cuenta, camp: dict, p: dict, quedan_ia: int) -> str:
         botones_img = ""
     else:
         # "Otra imagen" es un reintento junto a la imagen, para no confundirse con Aprobar (PR #84).
-        generar = ("↻ Otra imagen" if post else "Generar imagen")
+        generar = ("↻ Volver a generar imagen" if post else "Generar imagen")
         botones_img = (
             '<div class="botones-img">'
             f'<button class="boton{" secundario" if post else ""}" name="accion" value="generar">{generar}</button>'
@@ -1164,8 +1164,6 @@ async def detalle(c: Cuenta, camp: dict, p: dict, quedan_ia: int) -> str:
     else:
         botones = (("" if post else f'<button class="boton secundario chico" name="accion" value="otra"'
                     f'{"" if quedan_ia else " disabled"}>Otra idea</button>')
-                   + (f'<a class="boton secundario chico" href="/panel/contenido/post/{post["id"]}">Abrir en el editor</a>'
-                      if post else "")
                    + '<button class="boton secundario chico" name="accion" value="guardar">Guardar</button>'
                    + ('<button class="boton chico" name="accion" value="aprobar">Aprobar</button>'
                       if post and post["status"] == "borrador" else ""))
@@ -1190,8 +1188,6 @@ async def detalle(c: Cuenta, camp: dict, p: dict, quedan_ia: int) -> str:
         + f'<div class="tres-modal campo"><div><label for="d-dia">Día</label><select id="d-dia" name="dia"'
         f'{" disabled" if fija else ""}>{opciones}</select></div><div><label for="d-hora">Hora</label>'
         f'<input type="time" id="d-hora" name="hora" value="{p["hora"]}"{solo}></div>{cambia_formato}</div>'
-        + ('<p class="ayuda">Para cambiar el texto sobre la imagen, ábrelo en el editor.</p>'
-           if post and not fija and formato in ("titular", "vs") else "")
         + regla
         + f'</div></div><div class="pie"><span></span><div class="acciones">{botones}</div></div></form></div>')
 

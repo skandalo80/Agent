@@ -864,7 +864,16 @@ async def ver_nuevo():
 async def ver_post(request: Request, post_id: int):
     if not (c := panel.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
-    return await editor(c, post_id) if c.imagenes_mes > 0 else sin_plan()
+    if c.imagenes_mes <= 0:
+        return sin_plan()
+    with usar(c):
+        post = await c.store.post(post_id)
+        if post and post["user_id"] == PANEL and post["status"] in EDITABLES:
+            camp, x = await en_campana(c, await pieza(c.store, post_id), post_id)
+            if x is not None:  # un post de campaña se edita en su ventana de la campaña, como los que aún no tienen imagen
+                from . import campanas
+                return RedirectResponse(f"{campanas.url_de(camp)}?post={x['k']}#detalle", status_code=303)
+    return await editor(c, post_id)
 
 
 @router.post("/post/{post_id}")

@@ -176,21 +176,18 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
     assert client.portal.call(contenido.imagenes.usadas, c.store) == (0, 0)
     # "Otra imagen" va junto a la imagen (envía el mismo form) y no entre los botones de abajo, junto a Aprobar.
     r = client.get(f"{u}?post=3")
-    assert 'name="accion" value="generar">↻ Otra imagen' in r.text and 'class="modal-cam"' in r.text
-    assert r.text.index("↻ Otra imagen") < r.text.index('value="aprobar"')
+    assert 'name="accion" value="generar">↻ Volver a generar imagen' in r.text and 'class="modal-cam"' in r.text
+    assert r.text.index("↻ Volver a generar imagen") < r.text.index('value="aprobar"')
+    assert "Abrir en el editor" not in r.text
     if os.environ.get("GUARDAR_HTML"):
         open(os.environ["GUARDAR_HTML"], "w").write(r.text)
     r = client.post(u, headers=ORIGEN, data={"accion": "aprobar", "k": "3"})
     assert "Listo: sale el" in r.text
     assert client.portal.call(c.store.post, post["id"])["status"] == "programada"
 
-    # En el editor, una pieza fija guarda su texto y hora sin pedir título ni rotular de nuevo.
-    r = client.get(f"/panel/contenido/post/{post['id']}")
-    assert "↻ Volver a generar imagen" in r.text and "Volver a generar no usa tu cupo" in r.text
-    assert 'name="foto"' in r.text and 'class="avanzado"' not in r.text  # solo texto: sin prompt
-    assert "data-vista" not in r.text and 'name="titulo"' not in r.text and 'name="plantilla"' not in r.text
-    p3 = campanas.buscar_post(leer(client, c), "3")
-    assert f"{campanas.tema_de(p3['tipo'])[0]} · Solo texto</p>" in r.text  # tema y formato bajo la foto
+    # El post de campaña se edita en su ventana de la campaña: el editor manda ahí.
+    r = client.get(f"/panel/contenido/post/{post['id']}", follow_redirects=False)
+    assert r.headers["location"] == f"{u}?post=3#detalle"
     r = client.post(f"/panel/contenido/post/{post['id']}", headers=ORIGEN,
                     data={"accion": "guardar", "caption": "Desde el editor", "cuando": "2099-01-09T10:30"})
     assert "El título no puede quedar vacío" not in r.text
@@ -248,11 +245,8 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
     r = client.get(f"{u}?post={foto['k']}")
     assert 'name="con_marca" value="1"> Usar Tu marca como contexto' in r.text
 
-    # En el editor del post, el prompt va en Avanzado (cerrado) y "Volver a generar imagen" usa el editado.
+    # Si llega por el editor del post (formulario de antes), el prompt editado también se usa.
     pid = campanas.buscar_post(leer(client, c), foto["k"])["post_id"]
-    r = client.get(f"/panel/contenido/post/{pid}")
-    assert '<details class="avanzado"><summary>Avanzado</summary>' in r.text
-    assert "Laptop en un escritorio de madera</textarea>" in r.text and "Volver a generar usa 1 de tu cupo" in r.text
     client.post(f"/panel/contenido/post/{pid}", headers=ORIGEN,
                 data={"accion": "otra", "caption": "x", "prompt": "A ceramic mug on a marble table"})
     assert "A ceramic mug on a marble table" in proveedor.llamadas[-1][0]
@@ -732,10 +726,10 @@ def test_varias_campanas(cliente, monkeypatch):
     assert client.post(mover, data={"ref": f"p:{post_id}", "dia": "2099-01-25"}).status_code == 403  # sin Origin
     client.post(mover, headers=ORIGEN, data={"ref": f"p:{post_id}", "dia": "2099-01-05", "h": antes["hora"][:2]})
 
-    # En el editor del post se sabe de qué campaña viene.
+    # El editor del post abre su ventana en la campaña de la que viene.
     p = campanas.buscar_post(invierno(), k)
-    assert f"{campanas.tema_de(p['tipo'])[0]} · {campanas.FORMATOS[p['formato']][0]}</p>" in client.get(
-        f"/panel/contenido/post/{post_id}").text
+    r = client.get(f"/panel/contenido/post/{post_id}")
+    assert 'class="modal-cam"' in r.text and campanas.FORMATOS[p["formato"]][0] in r.text
     # Un id que no existe vuelve a la lista.
     assert client.get(f"{BASE}/123", follow_redirects=False).headers["location"] == BASE
 
