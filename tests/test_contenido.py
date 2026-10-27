@@ -124,18 +124,18 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
 
     # Tu marca, paso a paso: sin marca abre el paso 1; cada paso guarda y lleva al siguiente.
     r = client.get("/panel/contenido/marca")
-    assert "Paso 1 de 4" in r.text and '<main class="oscuro-pag">' in r.text and r.text.count('name="estilos"') == 9
+    assert "Paso 1 de 4" in r.text and '<main class="oscuro-pag">' in r.text and r.text.count('name="estilos"') == 12
     assert "¿Cómo quieres que se vean los diseños de tu marca?" in r.text and "Tu cuenta · Tu marca" in r.text
-    assert "Sensación: rebelde, directo, impactante." in r.text and "1.º · Estilo principal:" in r.text
+    assert "Sensación: Rebelde · Directo · Impactante" in r.text and "1.º · Estilo principal:" in r.text
     # Tu marca vive en el menú de perfil (abajo), no en el submenú de Contenido.
     assert '<a href="/panel/contenido/marca" class="on">Tu marca</a>' in r.text
     assert 'Calendario</a></div>' in r.text and r.text.count('href="/panel/contenido/marca"') == 1
     r = client.post(MARCA, headers=ORIGEN, data={"paso": "1"})
     assert "Elige al menos un estilo" in r.text and client.portal.call(contenido.marca_de, c) == {}
     r = client.post(MARCA, headers=ORIGEN, follow_redirects=False,
-                    data={"paso": "1", "estilos": ["brutalista", "editorial", "bento", "espacial"], "orden": "editorial,brutalista"})
+                    data={"paso": "1", "estilos": ["brutalista", "editorial", "pop", "retro"], "orden": "editorial,brutalista"})
     assert r.status_code == 303 and r.headers["location"] == f"{MARCA}?paso=2"
-    assert client.portal.call(contenido.marca_de, c)["estilos"] == ["editorial", "brutalista", "bento"]  # en el orden tocado
+    assert client.portal.call(contenido.marca_de, c)["estilos"] == ["editorial", "brutalista", "pop"]  # en el orden tocado
     r = client.get(f"{MARCA}?paso=1")
     assert "1.º · Estilo principal</span>" in r.text and "3.º · Estilo de apoyo</span>" in r.text
     # Colores: la paleta recién elegida (sin JavaScript) llena los cuatro; después manda el color que cambió.
@@ -626,13 +626,13 @@ def test_tu_marca_menu_de_pasos_y_marca_de_antes(cliente, monkeypatch):
                                                          "fuente": "Lora", "peso": 700, "estilo": "premium"}))
     assert client.portal.call(panel.marca_lista, c)
     r = client.get(MARCA)
-    assert "Así se verá tu contenido" in r.text and "<b>Editorial</b><small>Estilo principal" in r.text
+    assert "Así se verá tu contenido" in r.text and "<b>Lujo sobrio</b><small>Estilo principal" in r.text
     assert r.text.count(">Completar</a>") == 1
-    assert 'name="estilos" value="editorial" checked' in client.get(f"{MARCA}?paso=1").text
+    assert 'name="estilos" value="lujo" checked' in client.get(f"{MARCA}?paso=1").text
     # Sin colores no está lista: abre en el primer paso que falta.
-    # Los estilos de la versión anterior pasan a los nuevos (urbano y geométrico: brutalista y bento grid).
+    # Los estilos de la versión anterior pasan a los nuevos (urbano y geométrico: brutalista y pop gráfico).
     client.portal.call(c.store.set, "marca", json.dumps({"estilos": ["urbano", "geometrico", "minimal"]}))
-    assert 'name="orden" value="brutalista,bento,minimalista"' in client.get(f"{MARCA}?paso=1").text
+    assert 'name="orden" value="brutalista,pop,minimalista"' in client.get(f"{MARCA}?paso=1").text
     assert not client.portal.call(panel.marca_lista, c)
     assert "Paso 2 de 4" in client.get(MARCA).text
 
@@ -640,11 +640,11 @@ def test_tu_marca_menu_de_pasos_y_marca_de_antes(cliente, monkeypatch):
     assert contenido.uso_color({"uso_color": "oscuro"}) == "natural" and contenido.uso_color({"uso_color": "contraste"}) == "natural" and contenido.uso_color({}) == ""
     # «No estoy seguro, recomiéndame uno»: marca tres según el giro de Perfil de empresa, sin guardar.
     r = client.post(MARCA, headers=ORIGEN, data={"paso": "1", "accion": "recomendar"})
-    assert "Te recomendamos Minimalista, Editorial y Bento Grid (llena el giro" in r.text
+    assert "Te recomendamos Minimalista, Editorial y Fotográfico documental (llena el giro" in r.text
     client.portal.call(c.store.set, "empresa", json.dumps({"giro": "Tecnología y software"}))
     r = client.post(MARCA, headers=ORIGEN, data={"paso": "1", "accion": "recomendar"})
-    assert "Te recomendamos Neofuturista, Cristalino y Bento Grid para un negocio de tecnología y software" in r.text
-    assert 'name="orden" value="neofuturista,cristalino,bento"' in r.text
+    assert "Te recomendamos Neofuturista, Cristalino y Minimalista para un negocio de tecnología y software" in r.text
+    assert 'name="orden" value="neofuturista,cristalino,minimalista"' in r.text
     assert client.portal.call(contenido.marca_de, c)["estilos"] == ["urbano", "geometrico", "minimal"]
 
 
@@ -796,7 +796,7 @@ def test_crear_post_con_ajustes_solo_para_ese_post(cliente, monkeypatch):
                               "principal": "#111111", "fondo": "#000000"})
     p = client.portal.call(contenido.pieza, c.store, 1)
     assert p["plantilla"] == "banda" and p["marca"]["acento"] == "#2255AA" and p["marca"]["fuente"] == "Lora"
-    assert "High-end editorial magazine" in proveedor.llamadas[-1][0]  # el estilo de este post (lujo de antes)
+    assert "Quiet luxury" in proveedor.llamadas[-1][0]  # el estilo de este post
     marca = client.portal.call(contenido.marca_de, c)
     assert marca["acento"] == "#E8590C" and marca["plantilla"] == "editorial"
     assert client.portal.call(contenido.marca_post, c, p)["acento"] == "#2255AA"
