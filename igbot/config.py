@@ -91,3 +91,13 @@ IMAGE_COST_USD = float(os.getenv("IMAGE_COST_USD", "0.05"))
 EXTRA_IMAGE_USD = os.getenv("EXTRA_IMAGE_USD", "0.25")
 # Quién escribe los posts del panel (título, texto, palabra clave): mejor redacción que Haiku.
 CONTENT_MODEL = os.getenv("CONTENT_MODEL", "claude-sonnet-5-5")
+# Flujo de campañas: Claude escribe el brief (concepto + dirección visual) y el plan editorial; los posts y el
+# prompt de cada imagen los escribe "openai" o "claude" (sin OPENAI_API_KEY, siempre Claude).
+POSTS_IA = os.getenv("POSTS_IA", "openai").strip().lower()
+PROMPT_IA = os.getenv("PROMPT_IA", "openai").strip().lower()
+# El modelo de texto de OpenAI (platform.openai.com/docs/models) y su esfuerzo de razonamiento ("" = no se manda).
+OPENAI_TEXT_MODEL = os.getenv("OPENAI_TEXT_MODEL", "gpt-5")
+OPENAI_TEXT_EFFORT = os.getenv("OPENAI_TEXT_EFFORT", "low").strip()
+# Lo que cuesta, en US$ por millón de tokens de entrada y de salida, para el gasto diario de la cuenta.
+OPENAI_TEXT_USD_IN = float(os.getenv("OPENAI_TEXT_USD_IN", "1.25"))
+OPENAI_TEXT_USD_OUT = float(os.getenv("OPENAI_TEXT_USD_OUT", "10"))

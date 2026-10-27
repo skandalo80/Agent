@@ -907,6 +907,8 @@ select,input[type=date],input[type=number]{color:var(--negro);background:var(--c
 .brief-ed .pilares{display:grid;grid-template-columns:repeat(auto-fit,minmax(14rem,1fr));gap:.6rem}
 .brief-ed .pilares div{border:1px solid var(--linea-clara);border-radius:.8rem;padding:.6rem .75rem}
 .brief-ed .pilares input{font-weight:600}
+.brief-ed .brief-sub{margin:1.4rem 0 .6rem;font-size:.95rem}
+.conceptos small.visual{display:block;margin-top:.4rem;color:var(--gris)}
 .wiz-main:has(#concepto-0:checked) #brief-0,.wiz-main:has(#concepto-1:checked) #brief-1,.wiz-main:has(#concepto-2:checked) #brief-2{display:block}
 .brief-cam{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem;margin:1rem 0}
 .brief-cam div{border:1px solid var(--linea-clara);border-radius:1rem;padding:.85rem 1rem}
@@ -915,6 +917,7 @@ select,input[type=date],input[type=number]{color:var(--negro);background:var(--c
 .plan-post{border:1px solid var(--linea-clara);border-radius:.9rem;padding:.6rem .9rem;margin-bottom:.9rem;font-size:.88rem}
 .plan-post summary{cursor:pointer;font-weight:600;font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;color:var(--gris)}
 .plan-post p{margin:.45rem 0 0;line-height:1.45}.plan-post b{font-weight:600}
+.verificar{margin:-.4rem 0 .9rem;font-size:.85rem;color:var(--gris)}.verificar b{font-weight:600}
 .prompt-img{border:1px solid var(--linea-clara);border-radius:.9rem;padding:.6rem .9rem;margin-bottom:1rem}
 .prompt-img summary{cursor:pointer;font-weight:600;font-size:.9rem}.prompt-img .campo{margin:.6rem 0 0}
 .modal-cam .dos-modal{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}

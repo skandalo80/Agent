@@ -586,3 +586,59 @@ def test_sugeridos_del_lunes(cliente, monkeypatch):
     monkeypatch.setattr(tools, "now", lambda: datetime(2099, 1, 12, 9))
     client.portal.call(sugeridos.tick, c)
     assert len(llamadas) == 1
+
+
+def openai_de_campana(llamadas, fake_claude):
+    """OpenAI de texto falso: los posts como los escribe el Claude falso, y el prompt de cada imagen."""
+    async def fake(sistema, prompt, max_tokens=16000):
+        llamadas.append((sistema, prompt))
+        if "director de arte" in sistema:
+            return {"prompt": "A detailed art-directed prompt"}
+        return json.loads(await fake_claude(prompt, sistema))
+    return fake
+
+
+def test_flujo_brief_y_plan_con_claude_posts_e_imagen_con_openai(cliente, monkeypatch):
+    client, c, _, proveedor = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 10)
+    de_claude, de_openai = [], []
+    import app as bot
+    from igbot import config, openai_texto
+    fake_claude = claude_de_campana(de_claude)
+    monkeypatch.setattr(bot.agent, "run_claude", fake_claude)
+    monkeypatch.setattr(config, "OPENAI_API_KEY", "sk-prueba")
+    monkeypatch.setattr(openai_texto, "json_de", openai_de_campana(de_openai, claude_de_campana([])))
+    listo(client, c)
+    client.portal.call(c.store.set, "productos", json.dumps([PRODUCTO]))
+    llenar(client)
+    client.post(URL, headers=ORIGEN, data={"paso": "8", "accion": "brief"})
+    r = client.get(f"{URL}?paso=9")
+    assert "Cómo se ve" in r.text and 'name="b0_estetica"' in r.text and 'name="b0_limites_visuales"' in r.text
+    client.post(URL, headers=ORIGEN, data={"paso": "9", "accion": "proponer", "b0_estetica": "Fotos cálidas con textura de papel"})
+    sistemas_claude = [s for _, s in de_claude]
+    assert any("estratega de contenido" in s for s in sistemas_claude)  # 1. concepto + dirección visual
+    assert any("director creativo" in s for s in sistemas_claude)  # 2. plan editorial
+    assert not any("Escribes los posts" in s for s in sistemas_claude)  # 3. los posts ya no van a Claude
+    assert any("Escribes los posts" in s for s, _ in de_openai)
+    camp = leer(client, c)
+    assert camp["brief"]["estetica"] == "Fotos cálidas con textura de papel"
+    assert "Estética y recursos: Fotos cálidas con textura de papel" in brief.texto(camp["brief"])
+    # 4. el prompt de la imagen lo escribe OpenAI al pedirla, con la dirección visual; se guarda mientras no cambie la idea.
+    foto = next(p for p in camp["posts"] if p["formato"] == "titular")
+    u = campanas.url_de(camp)
+    client.post(u, headers=ORIGEN, data={"accion": "generar", "k": str(foto["k"]), "idea": "Una taza en la barra"})
+    arte = [d for s, d in de_openai if "director de arte" in s]
+    assert len(arte) == 1 and "Fotos cálidas con textura de papel" in arte[0] and "<idea>Una taza en la barra" in arte[0]
+    assert "<texto_encima>" in arte[0]
+    assert proveedor.llamadas[-1][0].startswith("A detailed art-directed prompt")
+    p = campanas.buscar_post(leer(client, c), foto["k"])
+    assert p["prompt"] == "A detailed art-directed prompt" and p["idea_base"] == "Una taza en la barra"
+
+
+def test_lo_que_hay_que_verificar_sale_en_el_post():
+    fichas = [{"dia": "2099-01-05", "hora": "09:00", "tipo": "producto", "formato": "texto", "rol": "", "ve": ""}]
+    posts = campanas.leer_posts({"posts": [{"dia": "2099-01-05", "titulo": "Hola", "caption": "Texto",
+                                            "verificar": ["Precio de 75 MXN", "  "]}]}, fichas, 1, False, 3, 0)
+    assert posts[0]["verificar"] == ["Precio de 75 MXN"]
+    html = campanas.plan_de_post({**posts[0], "plan": {"angulo": "A", "gancho": "Para"}})
+    assert "Revisa antes de publicar" in html and "Precio de 75 MXN" in html and "Gancho" in html
