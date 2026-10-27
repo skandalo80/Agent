@@ -680,6 +680,7 @@ def paso_brief(b: dict, quedan: int) -> str:
         f'{" checked" if i == elegido else ""}><span class="cuerpo"><b>{escape(x["titulo"])}</b>'
         f'<small>{escape(x["resumen"])}</small>'
         + (f'<em>Pilar fuerte: {escape(x["pilar_fuerte"])}</em>' if x.get("pilar_fuerte") else "")
+        + (f'<small class="visual">Cómo se ve: {escape(x["estetica"])}</small>' if x.get("estetica") else "")
         + "</span></label>" for i, x in enumerate(conceptos))
 
     def editor(i: int, x: dict) -> str:
@@ -694,8 +695,9 @@ def paso_brief(b: dict, quedan: int) -> str:
             f' maxlength="{brief.LIMITES_PILAR["detalle"]}">{escape(p.get("detalle", ""))}</textarea></div>'
             for j, p in enumerate(x.get("pilares", [])))
         # Los pilares van después del mensaje clave, como en el brief.
-        cuerpo = (campos(brief.CAMPOS[:2]) + f'<div class="campo"><label>Pilares</label><div class="pilares">{pilares}'
-                  "</div></div>" + campos(brief.CAMPOS[2:]))
+        cuerpo = (campos(brief.CAMPOS_IDEA[:2]) + f'<div class="campo"><label>Pilares</label><div class="pilares">'
+                  f"{pilares}</div></div>" + campos(brief.CAMPOS_IDEA[2:])
+                  + '<h4 class="brief-sub">Cómo se ve</h4>' + campos(brief.CAMPOS_VISUAL))
         return (f'<div class="brief-ed" id="brief-{i}"><h3>Brief de “{escape(x["titulo"])}”</h3>'
                 "<p>Puedes cambiar cualquier texto. Lo que dejes aquí es lo que se sigue en cada post.</p>"
                 f"{cuerpo}</div>")

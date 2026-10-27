@@ -477,6 +477,8 @@ class Brief(Cotizacion):
 
 async def brief_pdf(c: Cuenta, camp: dict, marca: dict, cuenta: str) -> bytes:
     """El brief de la campaña (la idea que eligió y ajustó), para guardarlo o compartirlo con su equipo."""
+    from . import brief  # import tardío: brief importa contenido
+
     b = camp["brief"]
     inicio, fin = date.fromisoformat(camp["inicio"]), fin_de(camp)
     doc = Brief(f"@{cuenta.lstrip('@')}", f"{fecha(inicio)} – {fecha(fin)}", fecha(tools.now().date()),
@@ -493,10 +495,12 @@ async def brief_pdf(c: Cuenta, camp: dict, marca: dict, cuenta: str) -> bytes:
             doc.seccion(titulo, [b[clave]])
     if b.get("pilares"):
         doc.seccion("Pilares", [f"{p['nombre']}: {p.get('detalle', '')}".strip(": ") for p in b["pilares"]])
-    for titulo, clave in (("Cómo avanza", "arco"), ("Dirección visual", "direccion_visual"),
-                          ("Lo que no se dice", "no_decir")):
+    for clave, titulo, _ in brief.CAMPOS_IDEA[2:]:
         if b.get(clave):
             doc.seccion(titulo, [b[clave]])
+    visual = [f"{t}: {b[k]}" for k, t, _ in brief.CAMPOS_VISUAL if b.get(k)]
+    if visual:
+        doc.seccion("Dirección visual", visual)
     if camp.get("visual") or camp.get("estilo"):
         doc.seccion("Cómo se ve", [x for x in (f"Qué se ve: {camp['visual']}" if camp.get("visual") else "",
                                                camp.get("estilo", "")) if x], chica=True)
