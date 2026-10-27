@@ -633,7 +633,7 @@ def test_el_estilo_depende_del_modo_del_post(cliente, monkeypatch):
     # Con plantilla mandan los estilos de la lista; en libre, su descripción.
     crear(client, c, modo="plantilla")
     assert "Minimalist premium" in proveedor.llamadas[-1][0] and "naranja" not in proveedor.llamadas[-1][0]
-    assert "objetos que deban salir siempre): Minimalista." in llamadas[-1][0] and "naranja" not in llamadas[-1][0]
+    assert "Estilo visual: Minimalista." in llamadas[-1][0] and "naranja" not in llamadas[-1][0]
 
     crear(client, c, modo="libre")
     assert "naranja" in proveedor.llamadas[-1][0] and "Minimalist premium" not in proveedor.llamadas[-1][0]

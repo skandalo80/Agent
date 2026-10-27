@@ -194,7 +194,7 @@ def test_editor_regla_subir_y_dos_en_un_dia(cliente, monkeypatch):
     # El editor centrado: texto, prompt, generar o subir, y la regla encendida (la campaña busca interacción).
     r = client.get(f"{u}?post={p1['k']}")
     assert 'class="modal-cam"' in r.text and 'class="velo-cam"' in r.text and "Texto que se publica" in r.text
-    assert "Prompt de la imagen" in r.text and 'value="subir">Subir imagen' in r.text
+    assert "Idea de la imagen" in r.text and 'value="subir">Subir imagen' in r.text
     assert 'name="regla_activa" value="1" checked' in r.text and "esta campaña busca interacción" in r.text
     assert "Notas de producción" not in r.text
 
@@ -633,6 +633,38 @@ def test_flujo_brief_y_plan_con_claude_posts_e_imagen_con_openai(cliente, monkey
     assert proveedor.llamadas[-1][0].startswith("A detailed art-directed prompt")
     p = campanas.buscar_post(leer(client, c), foto["k"])
     assert p["prompt"] == "A detailed art-directed prompt" and p["idea_base"] == "Una taza en la barra"
+    r = client.get(f"{u}?post={foto['k']}")
+    assert "Prompt detallado que va al generador" in r.text and "A detailed art-directed prompt" in r.text
+
+
+def test_si_openai_falla_el_prompt_lo_escribe_claude(cliente, monkeypatch):
+    client, c, _, proveedor = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 10)
+    import app as bot
+    from igbot import config, openai_texto
+    fake_claude = claude_de_campana([])
+
+    async def claude(prompt, system, **k):
+        if "director de arte" in system:
+            return json.dumps({"prompt": "Prompt from Claude"})
+        return await fake_claude(prompt, system, **k)
+
+    async def falla(sistema, prompt, max_tokens=16000):
+        if "director de arte" in sistema:
+            raise RuntimeError("modelo no disponible")
+        return json.loads(await fake_claude(prompt, sistema))
+
+    monkeypatch.setattr(bot.agent, "run_claude", claude)
+    monkeypatch.setattr(config, "OPENAI_API_KEY", "sk-prueba")
+    monkeypatch.setattr(openai_texto, "json_de", falla)
+    listo(client, c)
+    client.portal.call(c.store.set, "productos", json.dumps([PRODUCTO]))
+    llenar(client)
+    generar(client)
+    camp = leer(client, c)
+    foto = next(p for p in camp["posts"] if p["formato"] == "titular")
+    client.post(campanas.url_de(camp), headers=ORIGEN, data={"accion": "generar", "k": str(foto["k"]), "idea": "Otra idea"})
+    assert proveedor.llamadas[-1][0].startswith("Prompt from Claude")
 
 
 def test_lo_que_hay_que_verificar_sale_en_el_post():
