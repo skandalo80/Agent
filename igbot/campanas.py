@@ -263,6 +263,27 @@ async def guardar(c: Cuenta, camp: dict) -> None:
     await c.store.set("campanas", json.dumps(lista, ensure_ascii=False))
 
 
+async def borrar(c: Cuenta, camp: dict) -> int:
+    """Quita la campaña y descarta sus posts de Calendario que no han salido; los publicados se quedan en
+    Instagram. Devuelve cuántos posts descartó."""
+    descartados = 0
+    for p in camp.get("posts", []):
+        if (post := await estado_post(c, p)) and post["status"] in ("borrador", "programada", "fallida"):
+            descartados += await c.store.set_post(post["id"], "cancelada", only_if=post["status"])
+    await c.store.set("campanas", json.dumps([x for x in await todas_las(c) if x["id"] != camp["id"]],
+                                             ensure_ascii=False))
+    return descartados
+
+
+def tarjeta_borrar(camp: dict) -> str:
+    return (f'<form method="post" action="{url_de(camp)}" class="tarjeta extra">'
+            f"<h2>¿Borrar la campaña {escape(camp['nombre'])}?</h2>"
+            '<p class="ayuda">Se borra con todos sus posts: los que no han salido se quitan de Calendario. Los que ya'
+            " se publicaron se quedan en Instagram. No se puede deshacer.</p>"
+            '<div class="acciones"><button class="boton" name="accion" value="borrar">Sí, borrar la campaña</button>'
+            f'<a class="boton secundario" href="{url_de(camp)}">Cancelar</a></div></form>')
+
+
 def estado(camp: dict, hoy: date) -> str:
     """Activa, próxima o pasada: solo por sus fechas."""
     if date.fromisoformat(camp["inicio"]) > hoy:
@@ -1360,7 +1381,8 @@ async def pagina_campana(c: Cuenta, camp: dict, aviso: str = "", sel: str = "", 
         hoy = tools.now().date()
     quedan_ia = await ia_restantes(c)
     with usar(c):
-        cuerpo = tarjeta_extra(confirmar, k, url_de(camp)) if confirmar else ""
+        cuerpo = (tarjeta_borrar(camp) if confirmar == "borrar" else
+                  tarjeta_extra(confirmar, k, url_de(camp)) if confirmar else "")
         cuerpo += await calendario(c, camp, sel) + await barra(c, camp) + ver_brief(camp) + editar(camp)
         p = buscar_post(camp, sel) if sel else None
         modal = await detalle(c, camp, p, quedan_ia) if p else ""
@@ -1370,6 +1392,7 @@ async def pagina_campana(c: Cuenta, camp: dict, aviso: str = "", sel: str = "", 
                f'<a class="boton secundario ajuste" href="{url_de(camp)}/propuesta">↓ Descargar planeación</a>'
                + (f'<a class="boton secundario ajuste" href="{url_de(camp)}/brief">↓ Descargar brief</a>'
                   if camp.get("brief") else "")
+               + f'<a class="boton secundario ajuste" href="{url_de(camp)}?borrar=1">Borrar campaña</a>'
                + boton_todas(estado(camp, hoy)) + "</span>")
     return panel.pagina(
         panel.cabecera(salir=True, menu="contenido", cuenta=c, sub="campanas", perfil=await panel.usuario(c),
@@ -1641,6 +1664,8 @@ async def ver_campana(request: Request, cid: str):
         return sin_plan()
     if not (camp := await leer(c, cid)):
         return RedirectResponse(BASE, status_code=303)
+    if request.query_params.get("borrar") == "1":
+        return await pagina_campana(c, camp, confirmar="borrar")
     return await pagina_campana(c, camp, sel=request.query_params.get("post", ""))
 
 
@@ -1745,6 +1770,12 @@ async def accion(request: Request, cid: str):
 
     if que == "proponer":
         return await armar(c, del_form(f), camp)
+
+    if que == "borrar":  # ya confirmó en tarjeta_borrar
+        with usar(c):
+            n = await borrar(c, camp)
+        return await pagina_lista(c, aviso=f"Borraste la campaña {camp['nombre']}"
+                                  + (f" y se quitaron {n} post{'s' if n != 1 else ''} de Calendario." if n else "."))
 
     if que == "editar":
         try:
