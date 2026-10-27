@@ -393,3 +393,9 @@ document.querySelectorAll(".inbox[data-vivo]").forEach((inbox) => {
     if (nueva && foco) { nueva.focus(); nueva.setSelectionRange(desde, hasta); }
   });
 });
+
+// Después de enviar una respuesta desde Conversaciones, el cursor vuelve a la caja para seguir escribiendo.
+if (location.pathname === "/panel/responder") {
+  const caja = document.querySelector(".inbox .responder textarea");
+  if (caja) caja.focus();
+}
