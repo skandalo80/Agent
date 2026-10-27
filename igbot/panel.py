@@ -918,6 +918,10 @@ select,input[type=date],input[type=number]{color:var(--negro);background:var(--c
 .plan-post{border:1px solid var(--linea-clara);border-radius:.9rem;padding:.6rem .9rem;margin-bottom:.9rem;font-size:.88rem}
 .plan-post summary{cursor:pointer;font-weight:600;font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;color:var(--gris)}
 .plan-post p{margin:.45rem 0 0;line-height:1.45}.plan-post b{font-weight:600}
+.prompt-img{border:1px solid var(--linea-clara);border-radius:.9rem;padding:.6rem .9rem;margin-bottom:1rem}
+.prompt-img summary{cursor:pointer;font-weight:600;font-size:.9rem}.prompt-img .campo{margin:.6rem 0 0}
+.modal-cam .dos-modal{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}
+.modal-cam input[type=date]{width:100%;font:inherit;font-size:1rem;padding:.7rem .9rem;border-radius:.85rem}
 @media(max-width:900px){.conceptos,.brief-cam{grid-template-columns:1fr}}
 @media(max-width:900px){.wiz{grid-template-columns:1fr}.wiz-pasos{position:static}.wiz-ops.tres,.wiz-resumen{grid-template-columns:1fr}.wiz-ops.cuatro,.wiz-ops.cinco{grid-template-columns:repeat(2,minmax(0,1fr))}.wiz-main{padding:1.4rem}}
 /* Pasos de la marca (igbot/marca.py): el menú de pasos se pliega en el celular; paletas, letras, logo y fotos. */

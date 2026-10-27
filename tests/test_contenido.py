@@ -236,7 +236,8 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     assert 'name="titulo"' not in r.text and 'name="plantilla"' not in r.text and 'id="con_precio"' not in r.text
     assert "data-vista" not in r.text and 'enctype="multipart/form-data"' in r.text
     assert "↻ Volver a generar imagen" in r.text and 'value="subir">Subir imagen' in r.text
-    assert "Prompt de la imagen" in r.text and "leather handbag" in r.text
+    assert '<details class="prompt-img"><summary>Prompt de la imagen</summary>' in r.text and "leather handbag" in r.text
+    assert 'type="date" id="dia" name="dia"' in r.text and 'type="time" id="hora" name="hora"' in r.text
     editado = {"caption": "Nuevo texto #cartera", "clave_0": "precio", "respuesta_0": "¡Listo!", "dm_0": "Cuesta $1,190."}
     r = client.post("/panel/contenido/post/1", headers=ORIGEN, data={**editado, "accion": "guardar"})
     assert "Guardado." in r.text and len(proveedor.llamadas) == 1
@@ -268,6 +269,9 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
                     data={**editado, "cuando": hora.strftime("%Y-%m-%dT%H:%M"), "accion": "aprobar"})
     assert "Listo: sale el" in r.text and "Programado" in r.text
     assert "Quitar de programados" in client.get("/panel/contenido/post/1").text
+    # Día y hora por separado (la ventana) dan lo mismo que el campo de antes.
+    client.post("/panel/contenido/post/1", headers=ORIGEN,
+                data={**editado, "dia": hora.strftime("%Y-%m-%d"), "hora": hora.strftime("%H:%M"), "accion": "guardar"})
     post = client.portal.call(c.store.post, 1)
     assert post["status"] == "programada" and post["publish_at"] == hora.timestamp()
     assert post["caption"] == "Nuevo texto #cartera"
