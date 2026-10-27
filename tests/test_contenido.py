@@ -448,7 +448,7 @@ def test_conversaciones_y_tomar_un_chat(cliente):
     assert 'class="burbuja de-cliente">¿Tienen lugar mañana?' in r.text and 'de-bot">Sí, a las 5.' in r.text
     assert r.text.index("¿Tienen lugar mañana?</div>") < r.text.index("Sí, a las 5.</div>")
     assert '<button name="accion" value="reactivar" aria-pressed="true" disabled>Asistente</button>' in r.text
-    assert 'action="/panel/responder"' in r.text and 'href="/panel/asistente?ver=todas#chats">‹ Tus chats' in r.text
+    assert 'action="/panel/responder#chats"' in r.text and 'href="/panel/asistente?ver=todas#chats">‹ Tus chats' in r.text
 
     r = client.post("/panel/pausas", headers=ORIGEN, data={"usuario": "beto", "accion": "tomar", "chat": "beto"})
     assert "el asistente no le contesta a @beto en 12 h" in r.text and "Lo atiendes tú" in r.text
@@ -510,7 +510,7 @@ def test_contestar_desde_el_panel(cliente):
     # Pasadas 24 h desde su último mensaje, Instagram ya no deja: ni caja ni envío.
     client.portal.call(store.db.execute, "UPDATE messages SET created_at = created_at - 90000 WHERE role = 'user'")
     r = client.get("/panel/asistente?chat=caro")
-    assert "Instagram solo deja contestar dentro de las 24 horas" in r.text and 'action="/panel/responder"' not in r.text
+    assert "Instagram solo deja contestar dentro de las 24 horas" in r.text and 'action="/panel/responder#chats"' not in r.text
     r = client.post("/panel/responder", headers=ORIGEN, data={"usuario": "caro", "texto": "¿Sigues ahí?"})
     assert "Ya pasaron 24 horas" in r.text and len(c.instagram.sent) == 1
 

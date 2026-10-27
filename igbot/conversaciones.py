@@ -239,13 +239,13 @@ async def _hilo(c: Cuenta, u: str, ver: str, buscar: str, hoja: int, n: int, aho
         sub += (f' · <a class="enlace" href="https://ig.me/m/{escape(nombre[1:])}" target="_blank" rel="noopener">'
                 "Abrir en Instagram</a>")
     interruptor = (
-        '<form method="post" action="/panel/pausas" class="quien-contesta" aria-label="Quién contesta este chat">'
+        '<form method="post" action="/panel/pausas#chats" class="quien-contesta" aria-label="Quién contesta este chat">'
         + ocultos
         + f'<button name="accion" value="reactivar" aria-pressed="{"false" if en_pausa else "true"}"'
         + ("" if en_pausa else " disabled") + ">Asistente</button>"
         + f'<button name="accion" value="tomar" aria-pressed="{"true" if en_pausa else "false"}"'
         + (" disabled" if en_pausa else "") + ">Tú</button></form>")
-    extender = (f'<form method="post" action="/panel/pausas">{ocultos}'
+    extender = (f'<form method="post" action="/panel/pausas#chats">{ocultos}'
                 f'<button name="accion" value="extender">Darte {c.human_pause_hours:g} h más</button></form>')
     if en_pausa and motivo is not None:
         alerta = ('<div class="alerta"><b>Pidió hablar con una persona.</b> '
@@ -279,7 +279,7 @@ async def _hilo(c: Cuenta, u: str, ver: str, buscar: str, hoja: int, n: int, aho
 
     if ultimo_cliente and ahora - ultimo_cliente < VENTANA:
         responder = (
-            f'<form method="post" action="/panel/responder" class="responder">{ocultos}'
+            f'<form method="post" action="/panel/responder#chats" class="responder">{ocultos}'
             f'<label for="respuesta">Tu respuesta</label>'
             f'<textarea id="respuesta" name="texto" maxlength="{MAX_RESPUESTA}" required'
             f' placeholder="Escribe tu respuesta a {escape(nombre)}"></textarea>'
