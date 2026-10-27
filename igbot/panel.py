@@ -25,6 +25,7 @@ La sesión es una cookie firmada con IG_APP_SECRET que dura SESSION_DAYS; los
 POST solo se aceptan si vienen de esta misma página (cabecera Origin) y la
 cookie es SameSite=Lax.
 """
+import asyncio
 import hashlib
 import hmac
 import json
@@ -38,7 +39,7 @@ from pathlib import Path
 from urllib.parse import parse_qs
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response, StreamingResponse
 
 from . import config, conversaciones, imagenes
 from .cuenta import Cuenta, usar
@@ -1667,6 +1668,49 @@ async def cambiar_pausa(request: Request):
         aviso = f"Listo: {nombre} sigue en pausa {c.human_pause_hours:g} h más."
     log.info("@%s cambió la pausa de %s desde el panel (%s)", await usuario(c), usuario_chat, accion)
     return await panel_de(c, aviso, **bandeja)
+
+
+# Cuánto dura cada conexión en vivo antes de cerrarse sola (EventSource reconecta en 2 s con su
+# Last-Event-ID y no se pierde nada). Corta para que reiniciar igbot no espere a los paneles abiertos.
+VIVO_SEGUNDOS = 20
+MAX_VIVOS = 40  # conexiones en vivo a la vez, entre todas las cuentas (la instancia es chica)
+_vivos = 0
+
+
+@router.get("/vivo")
+async def vivo(request: Request):
+    """Conversaciones en vivo (Server-Sent Events): cada vez que un chat de la cuenta cambia, manda la
+    lista y el chat abierto ya armados, con los mismos filtros de la página. Solo HTML del servidor."""
+    global _vivos
+    if not (c := cuenta_de_sesion(request)):
+        return Response(status_code=204)  # sin sesión: EventSource deja de intentar
+    if _vivos >= MAX_VIVOS:
+        return Response("retry: 30000\n\n", media_type="text/event-stream")
+    q = request.query_params
+    hoja = int(q["p"]) if q.get("p", "").isdigit() else 1
+    n = int(q["n"]) if q.get("n", "").isdigit() else 0
+    visto = request.headers.get("last-event-id") or q.get("v", "")
+    visto = int(visto) if visto.isdigit() else -1
+
+    async def flujo():
+        global _vivos
+        _vivos += 1
+        nonlocal visto
+        try:
+            yield "retry: 2000\n\n"
+            fin = time.monotonic() + VIVO_SEGUNDOS
+            while (resto := fin - time.monotonic()) > 0:
+                await c.store.esperar_cambio(visto, resto)
+                if c.store.cambios == visto:
+                    break
+                await asyncio.sleep(0.3)  # un DM y la respuesta del bot seguidos van juntos
+                visto = c.store.cambios
+                p = await conversaciones.partes(c, q.get("ver", ""), q.get("q", ""), hoja, q.get("chat", "")[:64], n)
+                yield f"id: {visto}\ndata: {json.dumps({'lista': p['lista'], 'hilo': p['hilo']})}\n\n"
+        finally:
+            _vivos -= 1
+    return StreamingResponse(flujo(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
 
 
 @router.post("/responder")

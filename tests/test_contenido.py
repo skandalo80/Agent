@@ -409,7 +409,7 @@ def test_chats_en_pausa(cliente):
     client, c, *_ = cliente
     import time
     r = client.get("/panel/asistente")
-    assert '<div class="inbox" id="chats">' in r.text and "Aún no te escribe nadie" in r.text
+    assert '<div class="inbox" id="chats" data-vivo="/panel/vivo?' in r.text and "Aún no te escribe nadie" in r.text
     assert "Contestados hoy" not in r.text and "Mensajes restantes" not in r.text  # sin tarjetas de números
     client.portal.call(c.store.pause, "ana", time.time() + 3600)
     r = client.get("/panel/asistente?ver=todas")
@@ -458,6 +458,38 @@ def test_conversaciones_y_tomar_un_chat(cliente):
     # Un chat que no es de la cuenta no se abre.
     r = client.get("/panel/asistente?chat=nadie")
     assert 'class="inbox abierto"' not in r.text and "Elige una conversación" in r.text
+
+
+def test_conversaciones_en_vivo(cliente, monkeypatch):
+    import json as json_
+    client, c, *_ = cliente
+    store = c.store
+    monkeypatch.setattr(panel, "VIVO_SEGUNDOS", 0.5)
+    client.portal.call(store.add_incoming, "caro", "m2", "Hola, ¿precios?")
+    r = client.get("/panel/asistente?ver=todas&chat=caro")
+    visto = store.cambios
+    assert f'data-vivo="/panel/vivo?ver=todas&amp;chat=caro&amp;v={visto}"' in r.text
+    # Sin cambios desde la página: la conexión solo dice cada cuánto reconectar y se cierra sola.
+    r = client.get(f"/panel/vivo?ver=todas&chat=caro&v={visto}")
+    assert r.headers["content-type"].startswith("text/event-stream") and r.text == "retry: 2000\n\n"
+    # Llega otro mensaje: manda la lista y el chat ya armados, con su número de cambio.
+    client.portal.call(store.add_incoming, "caro", "m3", "¿Y envíos?")
+    assert store.cambios == visto + 1
+    r = client.get("/panel/vivo?ver=todas&chat=caro", headers={"Last-Event-ID": str(visto)})
+    evento = r.text.split("\n\n")[1].split("\n")
+    assert evento[0] == f"id: {visto + 1}"
+    datos = json_.loads(evento[1][len("data: "):])
+    assert "¿Y envíos?" in datos["hilo"] and 'class="burbuja de-cliente">¿Y envíos?' in datos["hilo"]
+    assert "@caro" in datos["lista"] and "Todas<b" in datos["lista"] and 'type="search"' not in datos["lista"]
+    # Contestar, la respuesta del bot y tomar o soltar un chat también avisan.
+    for paso in (lambda: store.mark_answered("caro", [], "Claro."), lambda: store.pause("caro", 9e9),
+                 lambda: store.unpause("caro"), lambda: store.add_owner_message("caro", None, "Yo te ayudo")):
+        antes = store.cambios
+        client.portal.call(paso)
+        assert store.cambios == antes + 1
+    # Sin sesión no hay nada que mandar.
+    client.cookies.clear()
+    assert client.get("/panel/vivo").status_code == 204
 
 
 def test_contestar_desde_el_panel(cliente):
