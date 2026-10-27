@@ -699,12 +699,6 @@ async def editor(c: Cuenta, post_id: int, aviso: str = "", confirmar: bool = Fal
         objetivo = OBJETIVOS.get(p.get("objetivo"), ("Post",))[0]
         medio = "historia" if historia else "post"
         etiquetas = f'<span class="medio-cam m-{medio}">{campanas.MEDIOS[medio][0]}</span>'
-        if x is not None:
-            formato = campanas.formato_de(x)
-            etiquetas += (f'<span class="etq-cam t-{x["tipo"]}">{campanas.tema_de(x["tipo"])[0]}</span>'
-                          f'<span class="fmt-cam bur f-{formato}">{campanas.FORMATOS[formato][0]}</span>')
-        else:
-            etiquetas += f'<span class="etq-cam">{escape(objetivo)}</span>'
         etiquetas += f'<span class="chip {color}">{estado}</span>'
         titulo = escape(p.get("titulo") or (x or {}).get("titulo") or objetivo)
         fecha = datetime.fromtimestamp(post["publish_at"], tools.tz()) if post["publish_at"] else None

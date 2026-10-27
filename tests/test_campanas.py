@@ -151,7 +151,7 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
 
     # El panel del post: cambiar hora, formato y texto; otra idea.
     r = client.get(f"{u}?post=3")
-    assert 'id="detalle"' in r.text and "Texto 3 #cafe" in r.text and 'name="formato"' in r.text
+    assert 'id="detalle"' in r.text and "Texto 3 #cafe" in r.text and 'name="formato"' not in r.text
     client.post(u, headers=ORIGEN,
                 data={"accion": "guardar", "k": "3", "dia": vie, "hora": "10:30", "formato": "texto",
                       "titulo": "El espresso tiene menos cafeína", "subtitulo": "Que un americano",
@@ -730,7 +730,8 @@ def test_varias_campanas(cliente, monkeypatch):
     # El editor del post abre su ventana en la campaña de la que viene.
     p = campanas.buscar_post(invierno(), k)
     r = client.get(f"/panel/contenido/post/{post_id}")
-    assert 'class="modal-cam"' in r.text and campanas.FORMATOS[p["formato"]][0] in r.text
+    assert 'class="modal-cam"' in r.text and f'?post={p["k"]}' in str(r.url)
+    assert 'class="etq-cam' not in r.text.split('id="detalle"')[1]  # sin etiquetas de tema ni formato
     # Un id que no existe vuelve a la lista.
     assert client.get(f"{BASE}/123", follow_redirects=False).headers["location"] == BASE
 
