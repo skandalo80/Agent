@@ -11,7 +11,7 @@ Lo que el dueño escribe a mano pasa por panel.revisar_instrucciones; elegir de 
 Las reglas base (prompts/base.md) siguen al final de todo prompt, como antes.
 Sin JavaScript: radios y casillas con CSS (:has) y un POST por paso.
 La cuenta principal se configura igual; su prompt va aparte del repo (Cuenta.prompt_destino) y
-con "Volver a las del servidor" (POST /panel/guardar) regresa a prompts/system.md.
+POST /panel/guardar con accion=restaurar la regresa a prompts/system.md (ya sin botón en el panel).
 """
 import json
 import logging
@@ -78,6 +78,7 @@ PERSONALIDADES = {
                  " sin exagerar."),
                 ("usted", "equilibrada", "nunca")),
 }
+MAX_NOMBRE = 40  # nombre del asistente
 MAX_TOQUE = 500  # "¿Quieres darle un toque más personal?" en Personalidad
 TRATOS = {"tu": ("De tú", "Tuteas a las personas."),
           "usted": ("De usted", "Hablas de usted a las personas.")}
@@ -94,6 +95,9 @@ TONO_VIEJO = {"amigable": ("cercano", "tu", "breve", "aveces"),
               "formal": ("profesional", "usted", "equilibrada", "nunca")}
 # (clave, título, para qué sirve, encendida al empezar, lo que va al prompt encendida, y apagada)
 REGLAS = [
+    ("ia", "Dice que es una IA al saludar", "En su primer mensaje aclara que es un asistente virtual.",
+     True, "En tu primer mensaje de cada conversación, aclara que eres un asistente virtual con inteligencia artificial.",
+     ""),
     ("preguntar", "Pregunta antes de recomendar", "Hace una o dos preguntas para entender qué busca la persona.",
      True, "Antes de recomendar algo, haces una o dos preguntas para entender qué busca la persona.", ""),
     ("siguiente", "Invita al siguiente paso", "Sugiere comprar, agendar o visitar cuando la persona muestra interés.",
@@ -102,6 +106,8 @@ REGLAS = [
      True, "Si preguntan por un producto o servicio que tiene link en tu información, compártelo.", ""),
     ("quejas", "Pasa las quejas a tu equipo", "Reclamos, reembolsos y casos delicados los atiende una persona.",
      True, "Las quejas, reclamos, reembolsos y casos delicados no los resuelves tú: usa pasar_a_humano.", ""),
+    ("enojado", "Pasa a tu equipo si nota al cliente enojado", "Si percibe molestia o enojo, deja la conversación a"
+     " una persona.", True, "Si notas a la persona molesta o enojada, no discutas: usa pasar_a_humano.", ""),
     ("descuentos", "Habla de descuentos", "Solo los que tengas escritos; nunca inventa promociones.",
      False, "Puedes mencionar los descuentos y promociones que aparecen en tu información, y ninguno más.",
      "No ofreces descuentos ni promociones aunque te los pidan; si insisten, ofrece pasar con una persona."),
@@ -140,7 +146,10 @@ def reglas_de(perfil: dict) -> dict[str, bool]:
 def tono_prompt(perfil: dict) -> list[str]:
     """Las líneas de TONO y CÓMO ATIENDES del prompt (panel.generar las pone después de la presentación)."""
     e = estilo(perfil)
-    out = ["TONO", PERSONALIDADES[e["personalidad"]][4],
+    out = []
+    if nombre := " ".join(perfil.get("nombre_asistente", "").split()):
+        out += [f"Te llamas {escape(nombre)}; preséntate con ese nombre cuando saludes.", ""]
+    out += ["TONO", PERSONALIDADES[e["personalidad"]][4],
            f"- {TRATOS[e['trato']][1]}", f"- {LARGOS[e['largo']][1]}", f"- {EMOJIS[e['emojis']][1]}"]
     if toque := perfil.get("toque", "").strip():
         out += ["Además, el dueño describe así cómo quiere que hables:",
@@ -149,6 +158,9 @@ def tono_prompt(perfil: dict) -> list[str]:
     reglas = [si if activas[k] else no for k, _, _, _, si, no in REGLAS if (si if activas[k] else no)]
     if reglas:
         out += ["", "CÓMO ATIENDES", *(f"- {r}" for r in reglas)]
+    if activas["enojado"] and (aviso := perfil.get("msg_enojado", "").strip()):
+        out += ["Antes de pasar a una persona molesta, dile esto (puedes ajustar las palabras):",
+                f"<mensaje_al_transferir>\n{escape(aviso)}\n</mensaje_al_transferir>"]
     # Lo que escribe el dueño va escapado y entre etiquetas: son datos, no instrucciones nuevas.
     if no_hacer := perfil.get("no_hacer", "").strip():
         out += ["", "LO QUE NO DEBES DECIR NI HACER (además de las reglas base)",
@@ -244,12 +256,16 @@ def _personalidad(perfil: dict) -> str:
                     " con tus clientes.")
             + '<fieldset class="as-tarjetas"><legend class="oculto">Personalidad</legend>'
             + "".join(_tarjeta(k, k == actual) for k in PERSONALIDADES) + "</fieldset>"
-            + '<div class="as-caja as-toque"><input type="hidden" name="opcionales" value="1">'
+            + '<div class="as-caja as-toque as-nombre"><input type="hidden" name="opcionales" value="1">'
+            '<label for="nombre_asistente">¿Cómo se llama tu asistente? <span class="as-opc">(Opcional)</span>'
+            '</label><p class="ayuda">Se presenta con este nombre al saludar.</p>'
+            f'<input type="text" id="nombre_asistente" name="nombre_asistente" maxlength="{MAX_NOMBRE}" placeholder="Ej. Sofía"'
+            f' value="{escape(perfil.get("nombre_asistente", ""))}"><div class="as-opt">'
             + _opcional("toque", "¿Quieres darle un toque más personal?",
                         "Describe brevemente cómo te gustaría que hablara tu asistente. Puedes mencionar algo que deba"
                         " hacer o evitar.",
                         "Ejemplo: Que explique todo con paciencia, recomiende productos sin presionar y hable como"
-                        " alguien de nuestro equipo.", perfil.get("toque", ""), MAX_TOQUE) + "</div>"
+                        " alguien de nuestro equipo.", perfil.get("toque", ""), MAX_TOQUE) + "</div></div>"
             + _pie("personalidad"))
 
 
@@ -278,10 +294,15 @@ def _reglas(perfil: dict) -> str:
     filas = ('<div class="as-fila"><span><b>Nunca inventa datos <em>Siempre activa</em></b>'
              "<small>Si no sabe un precio o un dato, lo dice y ofrece pasar con una persona.</small></span>"
              '<input type="checkbox" class="as-sw" checked disabled aria-label="Nunca inventa datos"></div>')
-    filas += "".join(
-        f'<label class="as-fila"><span><b>{titulo}</b><small>{ayuda}</small></span>'
-        f'<input type="checkbox" class="as-sw" name="r_{k}" value="1"{" checked" if activas[k] else ""}></label>'
-        for k, titulo, ayuda, *_ in REGLAS)
+    for k, titulo, ayuda, *_ in REGLAS:
+        filas += (f'<label class="as-fila"><span><b>{titulo}</b><small>{ayuda}</small></span>'
+                  f'<input type="checkbox" class="as-sw" name="r_{k}" value="1"{" checked" if activas[k] else ""}>'
+                  "</label>")
+        if k == "enojado":  # solo se ve con la regla encendida
+            filas += ('<div class="as-sub">' + _opcional(
+                "msg_enojado", "Mensaje al transferir", "Lo que le dice antes de pasar la conversación a tu equipo.",
+                "Ej. Entiendo tu molestia. Le pido a alguien del equipo que te atienda en un momento.",
+                perfil.get("msg_enojado", ""), MAX_TEXTO) + "</div>")
     extra = perfil.get("instrucciones", "")
     return (_cabeza("reglas", "Reglas y límites", "Qué puede hacer por su cuenta y qué no.")
             + f'<div class="as-caja">{filas}</div>'
@@ -306,19 +327,6 @@ def _equipo(c: Cuenta, perfil: dict) -> str:
                                                    ayuda, perfil.get("humano", ""), filas)
             + "</div>" + f'<div class="as-caja">{ajustes.campos(c)}</div>'
             + _pie("equipo", "Siguiente: ver resumen"))
-
-
-def _servidor(c: Cuenta) -> str:
-    """La principal: si usa lo de este panel o las instrucciones del vendedor del repo (prompts/system.md)."""
-    if c.slug:
-        return ""
-    if c.prompt_editado().is_file():
-        return ('<form method="post" action="/panel/guardar" class="as-caja as-srv"><span>Tu asistente usa lo que'
-                " configuraste aquí, no las instrucciones del servidor (prompts/system.md).</span>"
-                '<button class="boton secundario" name="accion" value="restaurar">Volver a las del servidor'
-                "</button></form>")
-    return ('<p class="as-caja as-srv">Ahora usa las instrucciones del servidor (prompts/system.md). En cuanto'
-            " guardes un paso, usa lo que configures aquí.</p>")
 
 
 async def _resumen(c: Cuenta, perfil: dict) -> str:
@@ -360,6 +368,7 @@ async def _resumen(c: Cuenta, perfil: dict) -> str:
                 PERSONALIDADES[e["personalidad"]][0],
                 (f"{TRATOS[e['trato']][0]}, respuestas {LARGOS[e['largo']][0].lower()},"
                 f" emojis: {EMOJIS[e['emojis']][0].lower()}"),
+                f"Se llama {perfil['nombre_asistente']}" if perfil.get("nombre_asistente") else "",
                 f"Tu toque: {perfil['toque'][:80]}" if perfil.get("toque") else ""])
             + caja("Reglas y límites", "reglas",
                    ["Nunca inventa datos"] + [t for k, t, *_ in REGLAS if activas[k]]
@@ -373,7 +382,6 @@ async def _resumen(c: Cuenta, perfil: dict) -> str:
                 (c.aviso_correo and c.owner_email) else "Sin avisos"])
             + caja("Lo que sabe de tu negocio", "empresa", negocio)
             + "</div>"
-            + _servidor(c)
             + '<p class="as-nota">Además siempre sigue las reglas base de la plataforma: no inventa precios, no comparte'
             " datos de otras personas y respeta los límites de Instagram.</p>"
             f'<div class="as-pie"><a class="boton secundario" href="{_href("probar")}">Probar tu asistente</a>{boton}</div>')
@@ -454,6 +462,7 @@ async def guardar(request: Request):
             datos.update(personalidad=k, trato=trato, largo=largo, emojis=emojis)
         datos["personalidad"] = k
         datos["toque"] = _texto(f, "toque", MAX_TOQUE)
+        datos["nombre_asistente"] = " ".join(f.get("nombre_asistente", "").split())[:MAX_NOMBRE]
     elif paso == "escribe":
         datos.update({k: v for k, v in estilo(antes).items() if k not in datos or k == "personalidad"})
         for campo, opciones in (("trato", TRATOS), ("largo", LARGOS), ("emojis", EMOJIS)):
@@ -461,6 +470,7 @@ async def guardar(request: Request):
                 datos[campo] = f[campo]
     elif paso == "reglas":
         datos["reglas"] = {k: f.get(f"r_{k}") == "1" for k, *_ in REGLAS}
+        datos["msg_enojado"] = _texto(f, "msg_enojado", MAX_TEXTO)
         datos["no_hacer"] = _texto(f, "no_hacer", MAX_TEXTO)
         datos["pasar_equipo"] = _texto(f, "pasar_equipo", MAX_TEXTO)
         datos["instrucciones"] = _texto(f, "instrucciones", panel.MAX_INSTRUCCIONES)
@@ -469,7 +479,7 @@ async def guardar(request: Request):
     datos["pasos"] = sorted(set(datos.get("pasos") or []) | {paso})
     nombre = await panel.usuario(c)
     prompt = panel.generar(nombre, datos, await panel.negocio_de_empresa(c))
-    if (paso in ESCRITOS or (paso == "personalidad" and datos["toque"])) and (motivo := await panel.revisar_instrucciones(c, prompt)):
+    if (paso in ESCRITOS or (paso == "personalidad" and (datos["toque"] or datos["nombre_asistente"]))) and (motivo := await panel.revisar_instrucciones(c, prompt)):
         log.warning("@%s: no se guardó %s: %s", nombre, paso, motivo)
         return await pagina(c, paso, nota=f"No se guardó: {motivo} Corrígelo y vuelve a intentar.", perfil=datos)
     if paso == "equipo":
@@ -541,6 +551,9 @@ fieldset.as-caja legend{float:left;width:100%;padding:0;font-weight:600;font-siz
 .as-optc{display:flex;gap:.7rem;align-items:center;margin:0;cursor:pointer;font-weight:400}
 .as-optc input{width:1.15rem;height:1.15rem;flex:none;margin:0;accent-color:var(--acento)}
 .as-optb{display:none;margin-top:.7rem}
+.as-sub{padding:0 0 .9rem}
+.as-caja:has(input[name=r_enojado]:not(:checked)) .as-sub{display:none}
+.as-nombre>.as-opt{margin-top:1rem;padding-top:1rem;border-top:1px solid var(--linea-oscura)}
 .as-opt:has(.as-optc input:checked) .as-optb{display:block}
 .as-lbl{display:block;margin-bottom:.35rem;font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--gris)}
 .as-uso{display:block;font-size:.86rem;color:#E6E3EC;line-height:1.45;margin-bottom:.75rem}
@@ -576,7 +589,6 @@ form:has(#emojis-nunca:checked) .v-emoji{display:none}form:has(#emojis-seguido:c
 .as-res+.as-nota,.as-resumen+.as-nota{margin-top:1rem}
 .as-pie{display:flex;justify-content:space-between;align-items:center;gap:1rem;margin-top:1.5rem;flex-wrap:wrap}
 .as-pie form{margin:0}
-.as-srv{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-top:1rem;color:#d1d1d6;font-size:.9rem}
 @media(max-width:900px){.asis{grid-template-columns:1fr}.as-pasos{position:static;display:flex;gap:.4rem;overflow-x:auto;padding:.75rem}
 .as-t,.as-barra,.as-pasos .as-nota,.as-paso small,.as-paso:not(.on) b{display:none}.as-paso{flex:none;padding:.35rem}.as-paso.on{padding-right:.8rem}.as-paso b{font-size:.82rem;white-space:nowrap}}
 @media(max-width:560px){.as-cont{padding:1.4rem 1.1rem}.as-h{font-size:1.55rem}.as-caja{padding:1.1rem}.as-seg{display:flex}.as-seg label{flex:1;text-align:center;padding:.5rem .6rem}}
