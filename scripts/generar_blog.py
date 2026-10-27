@@ -129,7 +129,7 @@ def cabeza(titulo, descripcion, url, tipo="website", extra=""):
 <meta name="twitter:card" content="summary_large_image">
 {extra}<link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap">
 <link rel="stylesheet" href="/estilos.css?v={CSS_VERSION}">
 </head>
 <body>
