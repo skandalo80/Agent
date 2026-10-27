@@ -657,7 +657,7 @@ label.check input[type=email]{flex:1;max-width:22rem;margin:0}
 .fmt-cam.bur{color:#fff;font-weight:600;padding:.12rem .5rem;border-radius:999px;background:#7a2232}
 .fmt-cam.bur:before{display:none}
 .fmt-cam.f-foto{background:#6e1d2b}.fmt-cam.f-titular{background:#76202f}.fmt-cam.f-texto{background:#7e2434}
-.fmt-cam.f-collage{background:#862839}.fmt-cam.f-vs{background:#8e2c3e}
+.fmt-cam.f-collage{background:#862839}.fmt-cam.f-vs{background:#8e2c3e}.fmt-cam.f-bento{background:#962f42}
 .cli-cam{display:inline-block;width:max-content;max-width:100%;font-size:.7rem;font-weight:600;color:#C6FA2C;background:rgba(198,250,44,.08);border:1px solid rgba(198,250,44,.35);border-radius:999px;padding:.05rem .45rem;margin:0}
 p.cli-cam{margin:.5rem 0 0;font-size:.78rem;border-radius:.6rem;padding:.3rem .6rem;width:auto}
 .clientes-cam{margin-top:1rem}
@@ -856,7 +856,7 @@ select,input[type=date],input[type=number]{color:var(--negro);background:var(--c
 .wiz-sub{margin:1.75rem 0 .2rem;font-size:1.05rem}.wiz-sub+.ayuda{margin:0 0 .8rem}
 .wiz-ops{display:grid;grid-template-columns:repeat(auto-fit,minmax(14.5rem,1fr));gap:.85rem}
 .wiz-ops.tres{grid-template-columns:repeat(3,minmax(0,1fr))}
-.wiz-ops.cuatro{grid-template-columns:repeat(4,minmax(0,1fr))}.wiz-img.alta{aspect-ratio:2/3}
+.wiz-ops.cuatro{grid-template-columns:repeat(4,minmax(0,1fr))}.wiz-ops.cinco{grid-template-columns:repeat(5,minmax(0,1fr))}.wiz-img.alta{aspect-ratio:2/3}
 .wiz-op{position:relative;display:flex;flex-direction:column;border:1px solid var(--linea-clara);border-radius:1rem;overflow:hidden;cursor:pointer;background:var(--suave,var(--blanco));margin:0;font-weight:400;transition:border-color .12s,box-shadow .12s}
 .wiz-op input{position:absolute;opacity:0;pointer-events:none}
 .wiz-op:hover{border-color:#6A6678}
@@ -919,7 +919,7 @@ select,input[type=date],input[type=number]{color:var(--negro);background:var(--c
 .plan-post summary{cursor:pointer;font-weight:600;font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;color:var(--gris)}
 .plan-post p{margin:.45rem 0 0;line-height:1.45}.plan-post b{font-weight:600}
 @media(max-width:900px){.conceptos,.brief-cam{grid-template-columns:1fr}}
-@media(max-width:900px){.wiz{grid-template-columns:1fr}.wiz-pasos{position:static}.wiz-ops.tres,.wiz-resumen{grid-template-columns:1fr}.wiz-ops.cuatro{grid-template-columns:repeat(2,minmax(0,1fr))}.wiz-main{padding:1.4rem}}
+@media(max-width:900px){.wiz{grid-template-columns:1fr}.wiz-pasos{position:static}.wiz-ops.tres,.wiz-resumen{grid-template-columns:1fr}.wiz-ops.cuatro,.wiz-ops.cinco{grid-template-columns:repeat(2,minmax(0,1fr))}.wiz-main{padding:1.4rem}}
 /* Pasos de la marca (igbot/marca.py): el menú de pasos se pliega en el celular; paletas, letras, logo y fotos. */
 .wiz-pasos summary{display:none}
 .wiz-pasos a span small{display:block;font-size:.76rem;font-weight:400;color:var(--gris);margin-top:.05rem}
