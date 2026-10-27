@@ -344,7 +344,8 @@ def poner_logo(doc: Cotizacion, c: Cuenta, marca: dict) -> None:
 class Propuesta(Cotizacion):
     etiqueta = "PROPUESTA DE CAMPAÑA"
 
-    def post(self, n: int, cuando: str, titulo: str, etiquetas: str, texto: str, foto: Path | None, idea: str) -> None:
+    def post(self, n: int, cuando: str, titulo: str, etiquetas: str, texto: str, foto: Path | None, idea: str,
+             sin_foto: str = "IMAGEN PENDIENTE") -> None:
         """Un post: la imagen (o el aviso de que falta) a la izquierda y su texto a la derecha."""
         ancho_foto, alto_foto = 30, 37.5
         if self.get_y() > self.page_break_trigger - alto_foto - 6:
@@ -357,7 +358,7 @@ class Propuesta(Cotizacion):
             self.rect(self.l_margin, y, ancho_foto, alto_foto, style="F", round_corners=True, corner_radius=1.5)
             self.set_xy(self.l_margin + 2.5, y + 3)
             self.font(6.8, bold=True, color=GRIS)
-            self.multi_cell(ancho_foto - 5, 3.4, "IMAGEN PENDIENTE", new_x="LEFT", new_y="NEXT")
+            self.multi_cell(ancho_foto - 5, 3.4, sin_foto, new_x="LEFT", new_y="NEXT")
             self.font(6.8, color=GRIS)
             self.multi_cell(ancho_foto - 5, 3.2, idea[:140] + ("…" if len(idea) > 140 else ""), new_x="LEFT",
                             new_y="NEXT")
@@ -426,6 +427,47 @@ async def propuesta(c: Cuenta, camp: dict, marca: dict, cuenta: str) -> bytes:
     doc.seccion("¿Te gusta? ¿Cambiamos algo?", [
         "Podemos mover cualquier post a otro día u hora, cambiar su formato o su texto, o pedir otra idea.",
         "Las imágenes que dicen «Imagen pendiente» se generan cuando el calendario quede aprobado."])
+    return doc.bytes()
+
+
+class PlanCalendario(Propuesta):
+    etiqueta = "CALENDARIO DE CONTENIDO"
+
+
+async def calendario_pdf(c: Cuenta, titulo: str, ini: date, fin: date, items: list, marca: dict, cuenta: str) -> bytes:
+    """Lo que se ve en Calendario (mes, semana o día, con sus filtros): cada post e historia por día, con su
+    imagen, hora, estado y texto. `items` son calendario.Item."""
+    from .calendario import DIAS_LARGOS, ESTADOS
+    from .campanas import MEDIOS
+
+    periodo = fecha(ini) if ini == fin else f"{fecha(ini)} – {fecha(fin)}"
+    doc = PlanCalendario(f"@{cuenta.lstrip('@')}", periodo, fecha(tools.now().date()), marca.get("acento", ""))
+    doc.alias_nb_pages()
+    poner_logo(doc, c, marca)
+    doc.titulo("Calendario de contenido", titulo)
+    con_fecha = [x for x in items if x.cuando]
+    doc.datos([("Posts", cifra(sum(x.tipo != "historia" for x in con_fecha))),
+               ("Historias", cifra(sum(x.tipo == "historia" for x in con_fecha))),
+               ("Programados", cifra(sum(x.estado == "programado" for x in con_fecha))),
+               ("Publicados", cifra(sum(x.estado == "publicado" for x in con_fecha)))])
+    if not con_fecha:
+        doc.seccion("Nada en estas fechas", ["No hay posts ni historias en este periodo."])
+    dia_actual = None
+    for n, x in enumerate(con_fecha, 1):
+        if x.cuando.date() != dia_actual:
+            dia_actual = x.cuando.date()
+            if doc.get_y() > doc.page_break_trigger - 60:
+                doc.add_page()
+            doc.ln(4)
+            doc.font(12, bold=True, color=NEGRO)
+            doc.cell(doc.epw, 7, f"{DIAS_LARGOS[dia_actual.weekday()].capitalize()} {fecha(dia_actual)}",
+                     new_x="LMARGIN", new_y="NEXT")
+            doc.rule(NEGRO, 0.3)
+        foto = Path(c.media_dir) / f"{x.foto}.jpg" if x.foto else None
+        etiquetas = " · ".join([MEDIOS.get(x.tipo, MEDIOS["post"])[0], ESTADOS[x.estado][0], x.sub])
+        doc.post(n, f"{x.cuando:%H:%M}", x.titulo, etiquetas, x.texto, foto if foto and foto.is_file() else None,
+                 "Publicado desde la app de Instagram." if x.externo and not x.foto else x.idea,
+                 sin_foto="EN INSTAGRAM" if x.externo else "IMAGEN PENDIENTE")
     return doc.bytes()
 
 

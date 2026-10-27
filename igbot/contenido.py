@@ -848,6 +848,25 @@ async def ver(request: Request):
                             campana=q.get("campana", "")[:80])
 
 
+@router.get("/descargar")
+async def descargar_calendario(request: Request):
+    """El periodo que se ve en Calendario (mes, semana o día) en PDF."""
+    if not (c := panel.cuenta_de_sesion(request)):
+        return RedirectResponse("/panel", status_code=303)
+    if c.imagenes_mes <= 0:
+        return sin_plan()
+    from . import calendario as cal
+    q = request.query_params
+    try:
+        dia = date.fromisoformat(q.get("fecha", ""))
+    except ValueError:
+        dia = None
+    pdf, nombre = await cal.descarga(c, q.get("vista", "mes"), dia, q.get("q", "")[:80], q.get("estado", ""),
+                                     q.get("campana", "")[:80])
+    return Response(pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{nombre}.pdf"'})
+
+
 @router.post("/mover")
 async def mover_en_calendario(request: Request):
     """Lo manda el arrastre del calendario (panel.js), como formulario: la CSP no deja usar fetch."""

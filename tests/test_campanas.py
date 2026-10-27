@@ -696,6 +696,17 @@ def test_varias_campanas(cliente, monkeypatch):
     r = client.get("/panel/contenido?fecha=2099-01-05&estado=publicado")
     assert 'e-borrador" href' not in r.text and 'class="ev e-publicado con-img" href="https://www.instagram.com/p/DESDEAPP/"' in r.text
 
+    # Descargar: el periodo que se ve, en PDF.
+    r = client.get("/panel/contenido?vista=semana&fecha=2099-01-05")
+    assert 'href="/panel/contenido/descargar?vista=semana&amp;fecha=2099-01-05"' in r.text
+    r = client.get("/panel/contenido/descargar?vista=semana&fecha=2099-01-05")
+    assert r.content.startswith(b"%PDF") and r.headers["content-type"] == "application/pdf"
+    assert 'filename="calendario-2099-01-05-al-2099-01-11.pdf"' in r.headers["content-disposition"]
+    r = client.get("/panel/contenido/descargar?vista=mes&fecha=2099-01-17")
+    assert 'filename="calendario-2099-01-01-al-2099-01-31.pdf"' in r.headers["content-disposition"]
+    r = client.get("/panel/contenido/descargar?vista=dia&fecha=2099-01-05&estado=publicado")
+    assert 'filename="calendario-2099-01-05.pdf"' in r.headers["content-disposition"] and r.content.startswith(b"%PDF")
+
     # Arrastrar en el calendario: el post con imagen pasa a otro día con su misma hora, y en Semana/Día a otra hora.
     assert f'draggable="true" data-mover="p:{post_id}"' in client.get("/panel/contenido?mes=2099-01").text
     assert 'DESDEAPP/" target="_blank" rel="noopener" draggable' not in r.text  # lo publicado no se arrastra

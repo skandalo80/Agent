@@ -43,6 +43,9 @@ class Item:
     ig_id: str = ""
     tipo: str = "post"  # o "historia" (campanas.MEDIOS)
     mover: str = ""  # para arrastrarlo: "p:<id del post>" o "c:<id de la campaña>:<k>"; vacío si ya no se mueve
+    texto: str = ""  # el caption, para la descarga
+    foto: str = ""  # el token de su imagen en el servidor (lo de la app de Instagram no lo tiene)
+    idea: str = ""  # lo que mostrará la imagen, si aún no tiene
 
 
 def rango(vista: str, fecha: date) -> tuple[date, date]:
@@ -93,7 +96,7 @@ async def de_instagram(c: Cuenta, desde: float, hasta: float, del_panel: set[str
                 titulo = contenido.recortar((m.get("caption") or "").strip().split("\n")[0], 50) or "Post de Instagram"
                 items.append(Item(datetime.fromtimestamp(ts, tools.tz()), titulo, "Desde Instagram", "publicado",
                                   m.get("permalink", ""), m.get("thumbnail_url") or m.get("media_url") or "",
-                                  externo=True, ig_id=m.get("id", "")))
+                                  externo=True, ig_id=m.get("id", ""), texto=m.get("caption") or ""))
             if len(posts) < contenido.POR_HOJA or ts < desde:  # ya no hay más, o ya pasamos el inicio
                 break
     except Exception as e:  # sin Instagram el calendario sale igual, con lo del panel
@@ -125,7 +128,8 @@ async def items_de(c: Cuenta, ini: date, fin: date, con_sin_fecha: bool = False)
             de_la_campana.get("titulo") or p.get("titulo") or contenido.recortar(post["caption"], 50) or "Sin título",
             camp["nombre"] if camp else "Post suelto", DE_POST[post["status"]],
             post["permalink"] if publicado else f"{BASE}/post/{post['id']}",
-            contenido.url_imagen(c, media[0]) if media else "", externo=bool(publicado), tipo=post.get("tipo") or "post"))
+            contenido.url_imagen(c, media[0]) if media else "", externo=bool(publicado), tipo=post.get("tipo") or "post",
+            texto=post["caption"], foto=media[0] if media else "", idea=de_la_campana.get("idea", "")))
         if post["status"] in contenido.EDITABLES and post["publish_at"]:
             item.mover = f"p:{post['id']}"
     for camp in camps:  # propuestas sin imagen: borradores que llevan a su campaña
@@ -134,7 +138,7 @@ async def items_de(c: Cuenta, ini: date, fin: date, con_sin_fecha: bool = False)
                 items.append(Item(datetime.fromisoformat(f"{p['dia']}T{p['hora']}").replace(tzinfo=zona),
                                   p.get("titulo") or "Sin título", camp["nombre"], "borrador",
                                   f"{campanas.url_de(camp)}?post={p['k']}#detalle", tipo=campanas.medio_de(p),
-                                  mover=f"c:{camp['id']}:{p['k']}"))
+                                  mover=f"c:{camp['id']}:{p['k']}", texto=p.get("caption", ""), idea=p.get("idea", "")))
     del_panel = {shortcode(post["permalink"]) for post in posts if post["permalink"]}
     with usar(c):
         items += await de_instagram(c, desde, hasta, del_panel)
@@ -248,7 +252,7 @@ def vista_lista(items: list[Item], est: dict) -> str:
     return out
 
 
-def filtros(est: dict, nombres: list[str], n: int) -> str:
+def filtros(est: dict, nombres: list[str], n: int, descarga: str) -> str:
     def opcion(valor, texto, actual):
         return f'<option value="{escape(valor)}"{" selected" if valor == actual else ""}>{escape(texto)}</option>'
     ocultos = "".join(f'<input type="hidden" name="{k}" value="{escape(est[k])}">' for k in ("vista", "fecha", "ver")
@@ -261,7 +265,37 @@ def filtros(est: dict, nombres: list[str], n: int) -> str:
             '<select name="estado" aria-label="Estado">' + opcion("", "Todos los estados", est["estado"])
             + "".join(opcion(k, ESTADOS[k][0], est["estado"]) for k in ("borrador", "programado", "publicado"))
             + '</select><button class="boton secundario chico cal-aplicar">Filtrar</button>'
-            f'<span class="cal-total">{n} post{"" if n == 1 else "s"}</span></form>')
+            f'<span class="cal-total">{n} post{"" if n == 1 else "s"}</span>'
+            f'<a class="boton secundario chico cal-bajar" href="{escape(descarga)}" title="Lo que ves, en PDF">'
+            '↓ Descargar</a></form>')
+
+
+def solo_el_periodo(vista: str, fecha: date) -> tuple[date, date]:
+    """Como rango(), pero el mes sin los días de relleno de otros meses (la lista y la descarga)."""
+    if vista == "mes":
+        return fecha.replace(day=1), campanas.otro_mes(fecha.replace(day=1), 1) - timedelta(days=1)
+    return rango(vista, fecha)
+
+
+def enlace_descarga(est: dict, fecha: date) -> str:
+    datos = {"vista": est["vista"], "fecha": fecha.isoformat(), "q": est["q"], "estado": est["estado"],
+             "campana": est["campana"]}
+    return f"{BASE}/descargar?" + urlencode({k: v for k, v in datos.items() if v})
+
+
+async def descarga(c: Cuenta, vista: str, fecha: date | None, q: str, estado: str, campana: str) -> tuple[bytes, str]:
+    """El periodo que se ve (mes, semana o día, con sus filtros) en PDF, y el nombre del archivo."""
+    from . import informe
+    vista = vista if vista in VISTAS else "mes"
+    with usar(c):
+        fecha = fecha or tools.now().date()
+    ini, fin = solo_el_periodo(vista, fecha)
+    items = filtrar(await items_de(c, ini, fin), q, estado if estado in ESTADOS else "", campana)
+    with usar(c):
+        pdf = await informe.calendario_pdf(c, titulo_rango(vista, fecha), ini, fin, items, await contenido.marca_de(c),
+                                           await panel.usuario(c))
+    nombre = f"calendario-{ini.isoformat()}" + (f"-al-{fin.isoformat()}" if fin != ini else "")
+    return pdf, nombre
 
 
 async def seccion(c: Cuenta, vista: str, fecha: date | None, ver: str, q: str, estado: str, campana: str) -> str:
@@ -273,9 +307,7 @@ async def seccion(c: Cuenta, vista: str, fecha: date | None, ver: str, q: str, e
     fecha = fecha or hoy
     est = {"vista": vista, "fecha": "" if fecha == hoy else fecha.isoformat(), "ver": ver, "q": q,
            "estado": estado, "campana": campana}
-    ini, fin = rango(vista, fecha)
-    if vista == "mes" and ver == "lista":  # la lista del mes es solo del mes, sin los días de relleno
-        ini, fin = fecha.replace(day=1), campanas.otro_mes(fecha.replace(day=1), 1) - timedelta(days=1)
+    ini, fin = solo_el_periodo(vista, fecha) if ver == "lista" else rango(vista, fecha)
     todos = await items_de(c, ini, fin, con_sin_fecha=ver == "lista")
     nombres = sorted({x["nombre"] for x in await campanas.todas_las(c)})
     items = filtrar(todos, q, estado, campana)
@@ -297,7 +329,7 @@ async def seccion(c: Cuenta, vista: str, fecha: date | None, ver: str, q: str, e
             f'<a href="{enlace(est, fecha=mover(vista, fecha, 1).isoformat())}" aria-label="Siguiente">›</a>'
             f'<a class="hoy-b" href="{enlace(est, fecha="")}">Hoy</a></div>'
             f'<div class="cal-sw modo">{modos}</div><div class="cal-sw">{vistas}</div></div>'
-            + filtros(est, nombres, len([x for x in items if x.cuando or ver == "lista"]))
+            + filtros(est, nombres, len([x for x in items if x.cuando or ver == "lista"]), enlace_descarga(est, fecha))
             + cuerpo
             + f'<div class="cal-leyenda"><span class="t">Estados:</span>{leyenda}'
             '<span class="t">Toca un post para abrirlo, o arrástralo a otro día u hora.</span></div></div>')

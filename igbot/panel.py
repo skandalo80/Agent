@@ -676,7 +676,7 @@ p.cli-cam{margin:.5rem 0 0;font-size:.78rem;border-radius:.6rem;padding:.3rem .6
 .cal-nav{display:flex;gap:.4rem}.cal-nav a{display:grid;place-items:center;min-width:2.1rem;height:2.1rem;padding:0 .7rem;border-radius:.7rem;background:#25232F;color:#fff;text-decoration:none;font-weight:600;box-shadow:inset 1px 1px 2px rgba(255,255,255,.06),inset -2px -2px 4px rgba(0,0,0,.25)}
 .cal-nav a:hover{background:#3A3746}.cal-nav .hoy-b{font-size:.85rem}
 .cal-sw{display:flex;gap:.2rem;padding:.25rem;border-radius:.9rem;background:#25232F;box-shadow:inset 2px 2px 5px rgba(0,0,0,.35)}
-.cal-sw.modo{margin-left:auto}
+.cal-sw.modo{margin-left:auto}.cal-bajar{white-space:nowrap}
 .cal-sw a{padding:.35rem .8rem;border-radius:.65rem;color:#B9B5C5;text-decoration:none;font-size:.85rem;font-weight:600}
 .cal-sw a.on{background:#4C4D58;color:#fff;box-shadow:2px 3px 6px rgba(18,6,24,.45),inset 1px 1px 2px rgba(255,255,255,.1)}
 .cal-filtros{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;margin:1.1rem 0 1rem;padding-top:1rem;border-top:1px solid var(--linea-clara)}
