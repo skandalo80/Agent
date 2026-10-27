@@ -229,24 +229,34 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     p = client.portal.call(contenido.pieza, c.store, 1)
     assert (p["plantilla"], p["clave"], p["objetivo"]) == ("banda", "PRECIO", "estrella")
 
-    # Editor: cambiar el texto vuelve a rotular sin gastar imagen.
+    # Editor: sin campos de la imagen; junto a ella, volver a generar, subir foto y el prompt en Avanzado (cerrado).
     r = client.get("/panel/contenido/post/1")
-    assert "Cartera Atelier" in r.text and "Aprobar y programar" in r.text
+    assert "Cartera Atelier" in r.text and "Aprobar y programar" in r.text and "Cancelar cambios" in r.text
+    assert 'name="titulo"' not in r.text and 'name="plantilla"' not in r.text and 'id="con_precio"' not in r.text
+    assert "data-vista" not in r.text and 'enctype="multipart/form-data"' in r.text
+    assert "↻ Volver a generar imagen" in r.text and 'value="subir">Subir foto' in r.text
+    assert '<details class="avanzado"><summary>Avanzado</summary>' in r.text and "leather handbag" in r.text
+    editado = {"caption": "Nuevo texto #cartera", "clave_0": "precio", "respuesta_0": "¡Listo!", "dm_0": "Cuesta $1,190."}
+    r = client.post("/panel/contenido/post/1", headers=ORIGEN, data={**editado, "accion": "guardar"})
+    assert "Guardado." in r.text and len(proveedor.llamadas) == 1
+    p = client.portal.call(contenido.pieza, c.store, 1)
+    assert (p["titulo"], p["precio"]) == ("Cartera Atelier", "Desde $1,290 MXN")  # el texto de la imagen se queda
+    # Subir foto: su foto en lugar de la generada, con el mismo texto encima y sin usar el cupo.
+    r = client.post("/panel/contenido/post/1", headers=ORIGEN, data={**editado, "accion": "subir"})
+    assert "Elige primero la foto" in r.text
+    r = client.post("/panel/contenido/post/1", headers=ORIGEN, data={**editado, "accion": "subir"},
+                    files={"foto": ("mia.png", png(), "image/png")})
+    assert "ya está tu foto" in r.text and len(proveedor.llamadas) == 1
+    post = client.portal.call(c.store.post, 1)
     token = client.portal.call(c.store.media, post["media_ids"][0])[0]
-    antes = Path(f"data/cafe_lunar/media/{token}.jpg").read_bytes()
-    assert 'id="con_precio"' in r.text and "Cancelar cambios" in r.text
-    assert f'muestra.jpg?m={post["media_ids"][0]}"' in r.text  # otra imagen = otra URL: no sale la vieja del caché
-    r = client.get("/panel/contenido/post/1/muestra.jpg?titulo=Otro&plantilla=minimal&precio=$9&con_precio=1")
-    assert r.headers["content-type"] == "image/jpeg"
-    assert Image.open(io.BytesIO(r.content)).size == (1080, 1350)
-    assert client.get("/panel/contenido/post/99/muestra.jpg").status_code == 404
-    editado = {"plantilla": "marco", "titulo": "Cartera Atelier", "subtitulo": "", "precio": "$1,190 MXN",
-               "con_precio": "1",
-               "caption": "Nuevo texto #cartera", "clave_0": "precio", "respuesta_0": "¡Listo!", "dm_0": "Cuesta $1,190."}
-    r = client.post("/panel/contenido/post/1", headers=ORIGEN, data={**editado, "accion": "actualizar"})
-    assert "texto nuevo" in r.text
-    assert Path(f"data/cafe_lunar/media/{token}.jpg").read_bytes() != antes
-    assert len(proveedor.llamadas) == 1
+    assert Path(f"data/cafe_lunar/media/{token}.base.jpg").is_file()
+    # Volver a generar usa el prompt editado en Avanzado.
+    client.post("/panel/contenido/post/1", headers=ORIGEN,
+                data={**editado, "accion": "otra", "prompt": "A red leather handbag on a stone bench"})
+    assert len(proveedor.llamadas) == 2 and "A red leather handbag on a stone bench" in proveedor.llamadas[-1][0]
+    assert client.portal.call(contenido.pieza, c.store, 1)["imagen"] == "A red leather handbag on a stone bench"
+    post = client.portal.call(c.store.post, 1)
+    token = client.portal.call(c.store.media, post["media_ids"][0])[0]
 
     # Aprobar sin hora no se puede; con hora queda programado.
     r = client.post("/panel/contenido/post/1", headers=ORIGEN, data={**editado, "cuando": "", "accion": "aprobar"})
@@ -260,7 +270,6 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     post = client.portal.call(c.store.post, 1)
     assert post["status"] == "programada" and post["publish_at"] == hora.timestamp()
     assert post["caption"] == "Nuevo texto #cartera"
-    assert client.portal.call(contenido.pieza, c.store, 1)["precio"] == "$1,190 MXN"
 
     # Varias reglas de palabra clave: se agrega una con "Agregar regla +" y se puede quitar.
     r = client.get("/panel/contenido/post/1")
@@ -565,12 +574,11 @@ def test_diseno_libre_con_el_estilo_de_sus_fotos(cliente, monkeypatch):
     assert not Path(f"data/cafe_lunar/media/{token}.base.jpg").exists()
 
     r = client.get("/panel/contenido/post/1")
-    assert "Rehacer el diseño" in r.text and "data-vista" not in r.text and 'name="plantilla"' not in r.text
-    r = client.post("/panel/contenido/post/1", headers=ORIGEN,
-                    data={"titulo": "Otro título", "caption": "x", "accion": "guardar"})
+    assert "↻ Volver a generar imagen" in r.text and "data-vista" not in r.text and 'name="plantilla"' not in r.text
+    r = client.post("/panel/contenido/post/1", headers=ORIGEN, data={"caption": "x", "accion": "guardar"})
     assert "Guardado." in r.text and client.portal.call(contenido.pieza, c.store, 1)["plantilla"] == "libre"
-    client.post("/panel/contenido/post/1", headers=ORIGEN, data={"titulo": "Otro título", "caption": "x", "accion": "otra"})
-    assert 'Headline (largest): "Otro título"' in proveedor.llamadas[-1][0]
+    client.post("/panel/contenido/post/1", headers=ORIGEN, data={"caption": "x", "accion": "otra"})
+    assert 'Headline (largest): "Cartera Atelier"' in proveedor.llamadas[-1][0]
 
     # Con plantilla en este post, aunque la marca diga libre.
     crear(client, c, modo="plantilla")
