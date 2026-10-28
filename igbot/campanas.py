@@ -878,6 +878,18 @@ async def estado_post(c: Cuenta, p: dict) -> dict | None:
     return post
 
 
+async def guardar_descartados(c: Cuenta, camp: dict, antes: dict) -> None:
+    """Si al pintar la campaña salió algún post descartado en Calendario (estado_post lo vuelve propuesta), lo
+    guarda; si no, no escribe nada. Sobre la campaña recién leída: otra pestaña pudo cambiarla mientras tanto."""
+    descartados = {p["k"]: antes[p["k"]] for p in camp["posts"] if antes.get(p["k"]) and not p.get("post_id")}
+    if not descartados or not (fresca := await leer(c, camp["id"])):
+        return
+    for p in fresca["posts"]:
+        if p.get("post_id") and descartados.get(p["k"]) == p["post_id"]:
+            p["post_id"] = None
+    await guardar(c, fresca)
+
+
 async def sincronizar(c: Cuenta, p: dict) -> None:
     """Día, hora y texto de la campaña al post que ya existe (si todavía se puede cambiar)."""
     post = await estado_post(c, p)
@@ -1658,13 +1670,14 @@ async def pagina_campana(c: Cuenta, camp: dict, aviso: str = "", sel: str = "", 
     with usar(c):
         hoy = tools.now().date()
     quedan_ia = await ia_restantes(c)
+    antes = {p["k"]: p.get("post_id") for p in camp["posts"]}
     with usar(c):
         cuerpo = (tarjeta_borrar(camp, volver) if confirmar == "borrar" else
                   tarjeta_extra(confirmar, k, url_de(camp)) if confirmar else "")
         cuerpo += await calendario(c, camp, sel) + await barra(c, camp) + ver_brief(camp) + editar(camp)
         p = buscar_post(camp, sel) if sel else None
         modal = await detalle(c, camp, p, quedan_ia) if p else ""
-        await guardar(c, camp)  # por si se descartó algún post en Calendario
+        await guardar_descartados(c, camp, antes)
     u = url_de(camp)
     descargas = (f'<a href="{u}/propuesta">Planeación (PDF)</a>'
                  + (f'<a href="{u}/brief">Brief (PDF)</a>' if camp.get("brief") else ""))

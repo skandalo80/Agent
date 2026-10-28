@@ -382,6 +382,13 @@ class Propuesta(Cotizacion):
 async def propuesta(c: Cuenta, camp: dict, marca: dict, cuenta: str) -> bytes:
     """La campaña que se está armando, para mandarla a la marca antes de publicar: qué sale cada día,
     con su imagen si ya la tiene, y su texto."""
+    posts = camp.get("posts", [])
+    publicados = await c.store.posts_by_id([p["post_id"] for p in posts if p.get("post_id")])
+    medias = {k: await c.store.media(post["media_ids"][0]) for k, post in publicados.items() if post["media_ids"]}
+    return await asyncio.to_thread(_propuesta, c, camp, marca, cuenta, publicados, medias)
+
+
+def _propuesta(c: Cuenta, camp: dict, marca: dict, cuenta: str, publicados: dict, medias: dict) -> bytes:
     from .campanas import FORMATOS, MESES, PUBLICAR, fecha_larga, formato_de, tema_de
 
     inicio, fin = date.fromisoformat(camp["inicio"]), fin_de(camp)
@@ -397,7 +404,6 @@ async def propuesta(c: Cuenta, camp: dict, marca: dict, cuenta: str) -> bytes:
     formatos = {formato_de(p) for p in posts}
     doc.datos([("Posts", cifra(len(posts))), ("Publica", PUBLICAR.get(camp.get("publicar"), ("",))[0] or "—"),
                ("Temas", cifra(len(temas))), ("Formatos", cifra(len(formatos)))])
-    publicados = await c.store.posts_by_id([p["post_id"] for p in posts if p.get("post_id")])
     semana_actual = None
     for n, p in enumerate(sorted(posts, key=lambda p: (p["dia"], p["hora"])), 1):
         dia = date.fromisoformat(p["dia"])
@@ -416,7 +422,7 @@ async def propuesta(c: Cuenta, camp: dict, marca: dict, cuenta: str) -> bytes:
                      align="R", new_x="LMARGIN", new_y="NEXT")
             doc.rule(NEGRO, 0.3)
         post = publicados.get(p.get("post_id"))
-        media = await c.store.media(post["media_ids"][0]) if post and post["media_ids"] else None
+        media = medias.get(p.get("post_id")) if post else None
         foto = Path(c.media_dir) / f"{media[0]}.jpg" if media else None
         etiquetas = f"{tema_de(p['tipo'])[0]} · {FORMATOS[formato_de(p)][0]}" + (
             f" · Responde: {p['responde']}" if p.get("responde") else "")
@@ -437,6 +443,10 @@ class PlanCalendario(Propuesta):
 async def calendario_pdf(c: Cuenta, titulo: str, ini: date, fin: date, items: list, marca: dict, cuenta: str) -> bytes:
     """Lo que se ve en Calendario (mes, semana o día, con sus filtros): cada post e historia por día, con su
     imagen, hora, estado y texto. `items` son calendario.Item."""
+    return await asyncio.to_thread(_calendario_pdf, c, titulo, ini, fin, items, marca, cuenta)
+
+
+def _calendario_pdf(c: Cuenta, titulo: str, ini: date, fin: date, items: list, marca: dict, cuenta: str) -> bytes:
     from .calendario import DIAS_LARGOS, ESTADOS
     from .campanas import MEDIOS
 
@@ -477,6 +487,10 @@ class Brief(Cotizacion):
 
 async def brief_pdf(c: Cuenta, camp: dict, marca: dict, cuenta: str) -> bytes:
     """El brief de la campaña (la idea que eligió y ajustó), para guardarlo o compartirlo con su equipo."""
+    return await asyncio.to_thread(_brief_pdf, c, camp, marca, cuenta)
+
+
+def _brief_pdf(c: Cuenta, camp: dict, marca: dict, cuenta: str) -> bytes:
     from . import brief  # import tardío: brief importa contenido
 
     b = camp["brief"]
@@ -514,6 +528,21 @@ async def pdf(c: Cuenta, camps: list[dict], marca: dict, cuenta: str) -> bytes:
     nombres = {"tema": {k: tema_de(k)[0] for k in {*TEMAS, *(f["tema"] for f in renglones)}},
                "formato": {k: v[0] for k, v in FORMATOS.items()},
                "franja": {k: f"{v[0]} ({v[1]})" for k, v in HORARIOS.items()}}
+    con_datos = [f for f in renglones if f["datos"]]
+    grupos = {k: por(renglones, k) for k in ("tema", "formato", "franja")}
+    lista = []
+    if con_datos:
+        resumen = {"posts_con_resultados": sum(1 for f in renglones if f["maduro"] and f["tasa"] is not None),
+                   **{f"tasa_por_{k}": [(nombres[k].get(g, g), v, n) for g, v, n in lista_]
+                      for k, lista_ in grupos.items()},
+                   "mejores": [(f["titulo"], nombres["tema"].get(f["tema"]), nombres["formato"].get(f["formato"]),
+                                f["tasa"], f["datos"]) for f in renglones[:3]]}
+        lista = await conclusiones(c, resumen)
+    return await asyncio.to_thread(_pdf, c, camps, marca, cuenta, renglones, nombres, grupos, lista)
+
+
+def _pdf(c: Cuenta, camps: list[dict], marca: dict, cuenta: str, renglones: list[dict], nombres: dict, grupos: dict,
+         lista: list[str]) -> bytes:
     inicio = min(date.fromisoformat(x["inicio"]) for x in camps)
     fin = max(fin_de(x) for x in camps)
     hoy = tools.now().date()
@@ -541,15 +570,8 @@ async def pdf(c: Cuenta, camps: list[dict], marca: dict, cuenta: str) -> bytes:
             "Casi siempre es porque la cuenta se conectó antes de que pidiéramos ese permiso. Vuelve a conectarla"
             " en Conectar Instagram y acepta el permiso de estadísticas."])
 
-    grupos = {k: por(renglones, k) for k in ("tema", "formato", "franja")}
-    if con_datos:
-        resumen = {"posts_con_resultados": sum(1 for f in renglones if f["maduro"] and f["tasa"] is not None),
-                   **{f"tasa_por_{k}": [(nombres[k].get(g, g), v, n) for g, v, n in lista]
-                      for k, lista in grupos.items()},
-                   "mejores": [(f["titulo"], nombres["tema"].get(f["tema"]), nombres["formato"].get(f["formato"]),
-                                f["tasa"], f["datos"]) for f in renglones[:3]]}
-        if lista := await conclusiones(c, resumen):
-            doc.seccion("Lo más importante", lista)
+    if lista:
+        doc.seccion("Lo más importante", lista)
 
     doc.font(11, bold=True, color=NEGRO)
     doc.cell(doc.epw, 7, "Posts de mayor a menor interacción", new_x="LMARGIN", new_y="NEXT")
@@ -613,7 +635,14 @@ async def resultados_pdf(c: Cuenta, titulo: str, d: dict, m: dict, cuenta: str, 
     """Lo que se ve en Resultados para un periodo: en Instagram, sus números, día por día y el público; en
     Conversaciones, los mensajes, los comentarios y las ciudades. `d` sale de resultados.numeros_de y `m` de
     metricas.numeros."""
-    from . import contenido, metricas
+    from . import contenido
+
+    marca = await contenido.marca_de(c)
+    return await asyncio.to_thread(_resultados_pdf, c, titulo, d, m, cuenta, vista, marca)
+
+
+def _resultados_pdf(c: Cuenta, titulo: str, d: dict, m: dict, cuenta: str, vista: str, marca: dict) -> bytes:
+    from . import metricas
     from .resultados import duracion
 
     def signo(n: float | None) -> str:
@@ -624,7 +653,6 @@ async def resultados_pdf(c: Cuenta, titulo: str, d: dict, m: dict, cuenta: str, 
         return ", ".join(f"{(nombres or {}).get(k, k.split(',')[0])} {v / total:.0%}"
                          for k, v in sorted(grupo.items(), key=lambda x: -x[1])[:n])
 
-    marca = await contenido.marca_de(c)
     doc = ReporteResultados(f"@{cuenta.lstrip('@')}", titulo, fecha(tools.now().date()), marca.get("acento", ""))
     doc.alias_nb_pages()
     poner_logo(doc, c, marca)
