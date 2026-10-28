@@ -1598,10 +1598,6 @@ def botones_nueva() -> str:
             f'<a class="boton ajuste boton-ia" href="{BASE}/rapida">{BRILLOS_IA} Crear con IA</a></span>')
 
 
-def boton_todas(ver: str = "") -> str:
-    return (f'<a class="boton secundario ajuste" href="{BASE}{f"?ver={ver}" if ver else ""}">‹ Todas las campañas</a>')
-
-
 async def barra(c: Cuenta, camp: dict) -> str:
     posts = camp["posts"]
     estados = [await estado_post(c, p) for p in posts]
