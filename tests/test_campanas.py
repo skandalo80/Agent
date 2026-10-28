@@ -673,7 +673,7 @@ def test_varias_campanas(cliente, monkeypatch):
     r = client.get(BASE)
     assert 'class="on">Activas<small>2</small>' in r.text and "día 3 de 14" in r.text and "<b>0 de 6</b>" in r.text
     r = client.get(f"{BASE}?ver=proxima")
-    assert "Febrero" in r.text and "Se cruza 7 días con «Invierno»" in r.text and "empieza en 5 días" in r.text
+    assert "Febrero" in r.text and "Se cruza" not in r.text and "empieza en 5 días" in r.text
 
     # Editar: un post no puede quedar fuera; si no, solo cambia el rango y los posts se quedan en su día.
     dias = [p["dia"] for p in inv["posts"]]

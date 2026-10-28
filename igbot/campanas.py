@@ -1646,15 +1646,6 @@ PESTANAS = {"activa": "Activas", "proxima": "Próximas", "pasada": "Pasadas"}
 COLOR = {"activa": "b-activa", "proxima": "b-proxima", "pasada": "b-pasada"}
 
 
-def se_cruza(camp: dict, otras: list[dict]) -> str:
-    """Con qué otras campañas comparte días, para decirlo en su fila (publicar el mismo día se vale)."""
-    mios = set(rango(camp))
-    cruces = [(x, sorted(mios & set(rango(x)))) for x in otras if x["id"] != camp["id"]]
-    return " ".join(f"Se cruza {len(d)} día{'s' if len(d) != 1 else ''} con «{escape(x['nombre'])}»"
-                    f" ({', '.join(fecha_larga(i) for i in d[:3])}{'…' if len(d) > 3 else ''})."
-                    for x, d in cruces if d)
-
-
 async def numeros_de(c: Cuenta, camp: dict) -> tuple[int, int, float | None]:
     """Publicados, alcance y tasa de interacción de la campaña (de Instagram, con su caché de 1 hora)."""
     renglones = await informe.filas(c, [camp])
@@ -1669,7 +1660,7 @@ def objetivo_corto(camp: dict) -> str:
         "explorar": "Explorar", "repetir": "Repetir lo que funcionó"}.get(camp.get("modo", ""), "")
 
 
-async def tarjeta_campana(c: Cuenta, camp: dict, cual: str, hoy: date, otras: list[dict], marcar: bool | None = None,
+async def tarjeta_campana(c: Cuenta, camp: dict, cual: str, hoy: date, marcar: bool | None = None,
                           completa: bool = True) -> str:
     """Una campaña en la lista: fechas, objetivo, sus números en miniatura y sus botones. En Pasadas, con su
     casilla para el reporte (marcar)."""
@@ -1697,7 +1688,6 @@ async def tarjeta_campana(c: Cuenta, camp: dict, cual: str, hoy: date, otras: li
     casilla = ("" if marcar is None else
                f'<input class="sel" type="checkbox" name="c" value="{camp["id"]}" form="tus-campanas"'
                f' aria-label="Incluir en el reporte"{" checked" if marcar else ""}{"" if publicados else " disabled"}>')
-    cruce = f'<p class="cruce">{c_}</p>' if cual == "proxima" and (c_ := se_cruza(camp, otras)) else ""
     botones = ((f'<a class="boton chico" href="{url_de(camp)}">Abrir</a>' if completa else "")
                + (f'<a class="boton secundario chico" href="{BASE}/reporte?c={camp["id"]}">Reporte PDF</a>'
                   if cual == "pasada" and publicados else "")
@@ -1711,7 +1701,7 @@ async def tarjeta_campana(c: Cuenta, camp: dict, cual: str, hoy: date, otras: li
             f'<div><h3>{escape(camp["nombre"])}</h3><span class="f">{fechas}</span></div>'
             + (f'<div><span class="obj">{escape(obj)}</span></div>' if obj else "")
             + '<div class="mets">' + "".join(f"<div><b>{v}</b><span>{t}</span></div>" for t, v in mets) + "</div>"
-            f'<div class="prog"><i style="width:{avance}%"></i></div>{cruce}<div class="acc">{botones}</div></div>')
+            f'<div class="prog"><i style="width:{avance}%"></i></div><div class="acc">{botones}</div></div>')
 
 
 PERIODOS = {"mes": ("Último mes", 31), "dos": ("Últimos 2 meses", 62), "rango": ("Rango de fechas", 0)}
@@ -1752,7 +1742,7 @@ async def pasadas_html(c: Cuenta, camps: list[dict], q: dict | None = None) -> s
     tarjetas, marcadas = [], 0
     for x in lista[:MAX_PASADAS]:
         marcar = marcadas < informe.MAX_REPORTE
-        tarjeta = await tarjeta_campana(c, completas.get(x["id"], x), "pasada", hoy, [], marcar, x["id"] in completas)
+        tarjeta = await tarjeta_campana(c, completas.get(x["id"], x), "pasada", hoy, marcar, x["id"] in completas)
         if marcar and "disabled" not in tarjeta.split('class="sel"')[-1].split(">")[0]:
             marcadas += 1
         tarjetas.append(tarjeta)
@@ -1786,8 +1776,7 @@ async def pagina_lista(c: Cuenta, ver: str = "", aviso: str = "", q: dict | None
     if ver == "pasada":
         cuerpo = await pasadas_html(c, grupos["pasada"], q)
     elif grupos[ver]:
-        otras = grupos["activa"] + grupos["proxima"]
-        cuerpo = '<div class="camps">' + "".join([await tarjeta_campana(c, x, ver, hoy, otras)
+        cuerpo = '<div class="camps">' + "".join([await tarjeta_campana(c, x, ver, hoy)
                                                   for x in grupos[ver]]) + "</div>"
     else:
         cuerpo = (f'<p class="ayuda">No tienes campañas {PESTANAS[ver].lower()}.</p>'
