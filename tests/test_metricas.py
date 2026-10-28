@@ -136,4 +136,9 @@ def test_barra_del_periodo_y_descarga(cliente, monkeypatch):  # noqa: F811
 
     r = client.get(f"/panel/resultados/descargar?dias=30&fin={atras}")
     assert r.status_code == 200 and r.content.startswith(b"%PDF")
-    assert f"resultados-{(hoy - timedelta(days=59)).isoformat()}-al-{atras}.pdf" in r.headers["content-disposition"]
+    assert f"resultados-instagram-{(hoy - timedelta(days=59)).isoformat()}-al-{atras}.pdf" in r.headers["content-disposition"]
+
+    r = client.get("/panel/resultados/descargar?dias=7&ver=conversaciones")
+    assert r.status_code == 200 and "resultados-conversaciones-" in r.headers["content-disposition"]
+    html = client.get("/panel/resultados?ver=conversaciones").text
+    assert "Mensajes: se actualizan cada 10 minutos" in html and "Seguidores vs." not in html
