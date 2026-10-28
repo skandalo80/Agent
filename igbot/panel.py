@@ -312,6 +312,22 @@ html.menu-anima .lateral{transition:width .18s ease}html.menu-anima body:has(>.l
 .lat-item:hover{color:var(--claro);background:#2A2C30}
 .lat-item.on{color:var(--naranja-t);background:rgba(255,138,61,.12);font-weight:600;box-shadow:inset 3px 0 0 var(--acento)}
 .lat-pie{border-top:1px solid #34363B;padding-top:.75rem;margin:0}
+/* Abajo, antes de tu cuenta: los pasos iniciales (un anillo con el avance) y Ayuda. */
+.lat-abajo{display:flex;flex-direction:column;gap:.2rem;padding:.6rem 0 .5rem}
+.pasos-ini>summary{background:rgba(255,138,61,.08);border:1px solid rgba(255,138,61,.22);margin-bottom:.35rem;padding:.6rem .75rem}
+.pasos-ini>summary:hover{background:rgba(255,138,61,.14)}
+.pasos-ini .txt{color:var(--claro);font-weight:600;font-size:.95rem}
+.anillo-caja{position:relative;flex:none;width:34px;height:34px;display:grid;place-items:center}
+.anillo-caja b{position:relative;font-size:.62rem;font-weight:700;color:var(--claro)}
+.anillo{position:absolute;inset:0;transform:rotate(-90deg)}
+.anillo circle{fill:none;stroke-width:3.2}.anillo .fondo{stroke:#34363B}.anillo .lleno{stroke:var(--neon);stroke-linecap:round}
+.pasos-ini .perfil-menu a{display:flex;align-items:center;gap:.6rem}
+.marca-paso{flex:none;width:1.15rem;height:1.15rem;border-radius:50%;border:1.5px solid #55575E;display:grid;place-items:center}
+.pasos-ini a.hecho{color:var(--gris)}
+.pasos-ini a.hecho .marca-paso{background:var(--acento);border-color:var(--acento);color:var(--tinta)}
+html.menu-plegado .pasos-ini>summary{padding:.6rem;justify-content:center}
+/* En la computadora la ayuda está en el menú; el botón flotante queda para el celular. */
+@media(min-width:901px){body:has(>.lateral) .sk-boton{display:none}}
 html.menu-plegado body:has(>.lateral){padding-left:7.25rem}
 html.menu-plegado .lateral{width:5.25rem}
 html.menu-plegado .lateral .txt{display:none}
@@ -1271,33 +1287,79 @@ MENU = [("resultados", "Resultados", "/panel/resultados", "resultados"),
 POR_GRUPO = {"resultados": "resultados", "asistente": "chats", "contenido": "calendario"}
 
 
-# Íconos del menú lateral (trazo simple, color del texto).
-def _icono(trazos: str) -> str:
-    return ('<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"'
+# Íconos del menú lateral: de línea, todos del mismo trazo y tamaño (dibujos de Lucide, licencia ISC).
+def _icono(trazos: str, tam: int = 20) -> str:
+    return (f'<svg viewBox="0 0 24 24" width="{tam}" height="{tam}" fill="none" stroke="currentColor" stroke-width="1.75"'
             f' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{trazos}</svg>')
 
 
 ICONOS = {
-    "resultados": _icono('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'),
-    "chats": _icono('<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/>'),
-    "configura": _icono('<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/>'
-                        '<circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>'),
-    "probar": _icono('<path d="M5 4l14 8-14 8z"/>'),
-    "campanas": _icono('<path d="M3 11v2a1 1 0 0 0 1 1h3l6 4V6L7 10H4a1 1 0 0 0-1 1z"/>'
-                       '<path d="M16.5 8.5a5 5 0 0 1 0 7M19.5 5.5a9 9 0 0 1 0 13"/>'),
-    "calendario": _icono('<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/>'),
+    "resultados": _icono('<path d="M3 3v16a2 2 0 0 0 2 2h16M18 17V9M13 17V5M8 17v-3"/>'),
+    "chats": _icono('<path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"/>'
+                    '<path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"/>'),
+    "configura": _icono('<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/>'
+                        '<path d="M2 14h2M20 14h2M15 13v2M9 13v2"/>'),
+    "probar": _icono('<path d="M14.54 21.69a.5.5 0 0 0 .94-.03l6.5-19a.5.5 0 0 0-.64-.64l-19 6.5a.5.5 0 0 0-.03.93'
+                     'l7.93 3.18a2 2 0 0 1 1.11 1.11zM21.85 2.15 10.91 13.09"/>'),
+    "campanas": _icono('<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>'),
+    "calendario": _icono('<rect width="18" height="18" x="3" y="4" rx="2"/><path d="M8 2v4M16 2v4M3 10h18'
+                         'M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01"/>'),
+    "ayuda": _icono('<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/>'),
     "salir": _icono('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>'),
-    "plegar": _icono('<path d="m11 17-5-5 5-5M18 17l-5-5 5-5"/>'),
+    "plegar": _icono('<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18M16 15l-3-3 3-3"/>'),
+    "hecho": _icono('<path d="M20 6 9 17l-5-5"/>', 14),
 }
 
 
+async def pasos_iniciales(c: Cuenta) -> list[tuple[str, str, bool]]:
+    """Lo primero que conviene dejar listo, en orden: (nombre, dirección, ¿hecho?).
+    Tu marca y la primera campaña solo con contenido en el plan."""
+    pasos = [("Llena tu Perfil de empresa", "/panel/empresa", await empresa_lista(c)),
+             ("Configura tu asistente", "/panel/asistente/configura", await asistente_listo(c)),
+             ("Pruébalo como cliente", "/panel/probar#ultimo", await c.store.get("probo") == "1"),
+             ("Enciende tu asistente", "/panel/asistente", await activo(c))]
+    if c.imagenes_mes > 0:
+        from .campanas import todas_las  # campanas importa este módulo
+        pasos += [("Define tu marca", "/panel/contenido/marca", await marca_lista(c)),
+                  ("Crea tu primera campaña", "/panel/contenido/campanas", bool(await todas_las(c)))]
+    return pasos
+
+
+def tarjeta_pasos(pasos: list[tuple[str, str, bool]]) -> str:
+    """Abajo del menú, mientras falte alguno: un anillo con el avance y, al abrirla, la lista."""
+    listos = sum(1 for *_, hecho in pasos if hecho)
+    if not pasos or listos == len(pasos):
+        return ""
+    # El anillo: un círculo de perímetro 100 (r = 100 / 2π), lleno hasta el porcentaje.
+    pct = round(100 * listos / len(pasos))
+    anillo = ('<svg class="anillo" viewBox="0 0 36 36" width="34" height="34" aria-hidden="true">'
+              '<circle cx="18" cy="18" r="15.915" class="fondo"/>'
+              f'<circle cx="18" cy="18" r="15.915" class="lleno" stroke-dasharray="{pct} 100"/></svg>')
+    lista = "".join(
+        f'<a href="{href}" class="{"hecho" if hecho else ""}"><span class="marca-paso">'
+        f'{ICONOS["hecho"] if hecho else ""}</span>{nombre}</a>' for nombre, href, hecho in pasos)
+    return ('<details class="perfil pasos-ini">'
+            f'<summary class="lat-item" title="Pasos iniciales · {listos} de {len(pasos)}">'
+            f'<span class="anillo-caja">{anillo}<b>{pct}%</b></span>'
+            f'<span class="txt">Pasos iniciales<small>{listos} de {len(pasos)} listos</small></span></summary>'
+            f'<div class="perfil-menu"><div class="quien">Deja listo lo básico para empezar</div>{lista}</div></details>')
+
+
+async def menu_de(c: Cuenta, menu: str, sub: str = "", luces: dict[str, str] | None = None) -> str:
+    """El menú lateral de una página con sesión: con su @usuario, su logo y los pasos iniciales."""
+    return cabecera(salir=True, menu=menu, cuenta=c, sub=sub, perfil=await usuario(c), foto=await foto_perfil(c),
+                    luces=luces, pasos=await pasos_iniciales(c))
+
+
 def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None, sub: str = "",
-             perfil: str = "", luces: dict[str, str] | None = None, foto: str = "") -> str:
+             perfil: str = "", luces: dict[str, str] | None = None, foto: str = "",
+             pasos: list[tuple[str, str, bool]] | None = None) -> str:
     """Con `menu` (la sección en la que está): el menú lateral, plegable a solo íconos y con el
     botón de hamburguesa en el celular. Contenido sale solo si el plan de `cuenta` lo tiene.
     Con `perfil` (su @usuario), abajo va su menú de perfil en vez de solo Salir.
     `luces`: un semáforo junto a una parte del submenú o del menú de perfil (p. ej. {"conexion": "ok"}).
     `sub` también marca la parte activa del menú de perfil (Conexión vive ahí).
+    Abajo, como en otras plataformas: los pasos iniciales (`pasos`, mientras falte alguno), Ayuda y tu cuenta.
     Sin menú (la entrada y las páginas de espera): la barra de arriba de siempre."""
     boton = ('<form method="post" action="/panel/salir"><button class="salir">Salir</button></form>'
              if salir else "")
@@ -1324,9 +1386,13 @@ def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None, 
         f'<button class="plegar" type="button" data-plegar aria-label="Plegar o fijar el menú" title="Plegar o fijar">'
         f'{ICONOS["plegar"]}</button><a class="cerrar" href="#" aria-label="Cerrar menú">×</a></div>'
         f'<nav class="lat-nav">{"".join(secciones)}</nav>'
+        + '<div class="lat-abajo">' + tarjeta_pasos(pasos or [])
+        # Ayuda abre a Skandi (la ventanita de abajo).
+        + (f'<a class="lat-item" href="#skandi" data-abrir-skandi title="Ayuda">{ICONOS["ayuda"]}'
+           '<span class="txt">Ayuda</span></a>' if cuenta is not None else "") + '</div>'
         + menu_perfil(perfil, cuenta, foto, sub, luces or {}) + '</aside>'
         '<a class="velo" href="#" aria-label="Cerrar menú"></a>'
-        # El botón de ayuda (Skandi), en todas las páginas con menú.
+        # Skandi (la ayuda), en todas las páginas con menú.
         + (skandi.widget(cuenta) if cuenta is not None else "")
     )
 
@@ -1403,8 +1469,7 @@ async def panel_de(c: Cuenta, aviso: str = "", ver: str = "", vista: str = "", a
                   + await conversaciones.bandeja(c, ver, buscar, hoja, chat, n))
     return pagina(
         # Conexión es de tu cuenta (está en el menú de perfil), no de una sección.
-        cabecera(salir=True, menu="cuenta" if vista == "conexion" else "asistente", cuenta=c, sub=vista or "chats", perfil=await usuario(c), foto=await foto_perfil(c),
-                 luces={"conexion": estado_conexion})
+        await menu_de(c, "cuenta" if vista == "conexion" else "asistente", sub=vista or "chats", luces={"conexion": estado_conexion})
         # Sin la barra de estado: solo una luz y Pausar/Encender a la derecha del antetítulo, como los
         # botones de las demás páginas, para que todas arranquen a la misma altura.
         + (encabezado(f"Tu cuenta · {titulo}") if titulo else
@@ -1647,7 +1712,7 @@ async def conexion_vieja():
 async def no_encontrada(request: Request) -> HTMLResponse:
     """La página 404 del panel: con el menú lateral si hay sesión."""
     c = cuenta_de_sesion(request)
-    menu = (cabecera(salir=True, menu="ninguna", cuenta=c, perfil=await usuario(c), foto=await foto_perfil(c))
+    menu = (await menu_de(c, "ninguna")
             if c else cabecera())
     destino = ("/panel", "Ir a mi panel") if c else ("/panel", "Entrar a mi panel")
     respuesta = pagina(
@@ -1856,7 +1921,7 @@ async def prueba_inicio(c: Cuenta, mensajes: list[list[str]], aviso: str = "") -
         '<p class="vacio">Escribe como si fueras un cliente. Usa las instrucciones que guardaste.</p>')
     return (
         PRINCIPIO
-        + cabecera(salir=True, menu="asistente", cuenta=c, sub="probar", perfil=await usuario(c), foto=await foto_perfil(c))
+        + await menu_de(c, "asistente", sub="probar")
         + encabezado("Tu asistente · Probar")
         + '<main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
@@ -1926,6 +1991,7 @@ async def probar(request: Request):
             return
         nuevos = previos + [["user", texto], ["assistant", respuesta]]
         await c.store.set("prueba", json.dumps(nuevos[-MAX_PRUEBA_TURNOS:], ensure_ascii=False))
+        await c.store.set("probo", "1")  # un paso de los pasos iniciales
         yield ("<style>#escribiendo{display:none}</style>" + burbuja("assistant", respuesta)
                + await prueba_fin(c, ancla=False))
 

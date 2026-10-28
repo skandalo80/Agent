@@ -350,7 +350,7 @@ async def pagina(c: Cuenta, rango: str, fin: date | None = None, vista: str = "i
         if c.imagenes_mes > 0:
             cuerpo += seccion_publicaciones(await numeros_de(c, rango, fin))
     return panel.pagina(
-        panel.cabecera(salir=True, menu="resultados", cuenta=c, perfil=await panel.usuario(c), foto=await panel.foto_perfil(c))
+        await panel.menu_de(c, "resultados")
         + f'<main><div class="contenedor res">{await barra(c, rango, fin, hoy, vista)}{cuerpo}</div></main>'
     )
 

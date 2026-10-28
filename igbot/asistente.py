@@ -412,11 +412,9 @@ async def pagina(c: Cuenta, paso: str = "", aviso: str = "", nota: str = "", per
                   '<button class="oculto" name="accion" value="siguiente" tabindex="-1" aria-hidden="true">'
                   "Siguiente</button>"
                   f'<input type="hidden" name="paso" value="{paso}">{cuerpo}</form>')
-    nombre = await panel.usuario(c)
     return panel.pagina(
         f"<style>{ESTILO}</style>"
-        + panel.cabecera(salir=True, menu="asistente", cuenta=c, sub="configura", perfil=nombre,
-                         foto=await panel.foto_perfil(c))
+        + await panel.menu_de(c, "asistente", sub="configura")
         + panel.encabezado("Tu asistente · Configura")
         + '<main class="as-main"><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")

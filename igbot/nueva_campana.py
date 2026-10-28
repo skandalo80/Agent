@@ -810,8 +810,7 @@ async def pagina(c: Cuenta, paso: int, aviso: str = "", b: dict | None = None):
                   f'<div class="wiz-main">{contenido}</div></form>')
     editar = bool(b.get("cid"))
     return panel.pagina(
-        panel.cabecera(salir=True, menu="contenido", cuenta=c, sub="campanas", perfil=await panel.usuario(c),
-                       foto=await panel.foto_perfil(c))
+        await panel.menu_de(c, "contenido", sub="campanas")
         + campanas.cabeza(f'<div class="der-cam">{hero}{campanas.boton_todas()}</div>', "", "Editar estrategia" if editar else "Nueva campaña")
         + '<div class="oscuro-pag"><main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
@@ -973,8 +972,7 @@ async def pagina_rapida(c: Cuenta, aviso: str = "", b: dict | None = None):
             b["objetivo"] = next((o["k"] for o in objetivos if o.get("sugerido")), objetivos[0]["k"])
         cuerpo = pagina_rapida_html(b, objetivos)
     return panel.pagina(
-        panel.cabecera(salir=True, menu="contenido", cuenta=c, sub="campanas", perfil=await panel.usuario(c),
-                       foto=await panel.foto_perfil(c))
+        await panel.menu_de(c, "contenido", sub="campanas")
         + campanas.cabeza(f'<div class="der-cam">{campanas.boton_todas()}</div>', "", "Crear con IA")
         + '<div class="oscuro-pag"><main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")

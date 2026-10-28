@@ -451,7 +451,7 @@ def generando(c: Cuenta, trabajo, volver: str, mensaje: str) -> StreamingRespons
     """Sin JavaScript: primero la página con "generando…" y, al terminar, el salto al editor."""
 
     async def partes():
-        yield (panel.PRINCIPIO + panel.cabecera(salir=True, menu="contenido", cuenta=c, perfil=await panel.usuario(c), foto=await panel.foto_perfil(c))
+        yield (panel.PRINCIPIO + await panel.menu_de(c, "contenido")
                + '<main><div class="contenedor"><div class="tarjeta" id="generando"><div class="generando">'
                '<div class="escribiendo"><span></span><span></span><span></span></div>'
                f"<div><h2>{escape(mensaje)}</h2>"
@@ -489,7 +489,7 @@ async def pagina(c: Cuenta, actual: str, cuerpo: str, aviso: str = "", oscuro: b
     from .campanas import botones_nueva  # campanas importa este módulo
     crear = botones_nueva()
     return panel.pagina(
-        panel.cabecera(salir=True, menu="contenido", cuenta=c, sub=actual, perfil=await panel.usuario(c), foto=await panel.foto_perfil(c))
+        await panel.menu_de(c, "contenido", sub=actual)
         + panel.encabezado(f"Contenido · {NOMBRE_SECCION.get(actual, 'Calendario')}", crear)
         + ('<main class="oscuro-pag">' if oscuro else "<main>") + '<div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")

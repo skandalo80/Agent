@@ -412,10 +412,12 @@ if (skandi) {
     skandi.classList.remove("abierta");
     marcar("");
   });
-  document.querySelector(".sk-boton").addEventListener("click", (e) => {
+  // El botón flotante y Ayuda en el menú lateral (que en el celular se cierra al abrirla).
+  document.querySelectorAll('a[href="#skandi"]').forEach((a) => a.addEventListener("click", (e) => {
     e.preventDefault();
+    document.documentElement.classList.remove("menu-abierto");
     marcar("#skandi");
     abrir();
-  });
+  }));
   if (location.hash === "#skandi") abrir();
 }
