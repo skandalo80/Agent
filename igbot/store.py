@@ -504,8 +504,8 @@ class Store:
         Del lado "Tú" (el chat está en pausa: lo atiende una persona):
           "nuevo"  el asistente te lo pasó (pasar_a_humano) y aún no le contestas a mano;
           "tu_sin" el último mensaje es del cliente;  "tu" lo demás.
-        Del lado del asistente: "revisar" (el cliente escribió hace rato y no hubo respuesta, o tocó el
-        límite del plan) y "asistente"."""
+        "revisar": el asistente sigue encendido pero el cliente escribió hace rato y no hubo respuesta, o
+        tocó el límite del plan; sale del lado "Tú", en Sin contestar. "asistente": lo demás."""
         sql = (
             "WITH ult AS (SELECT user_id, MAX(id) AS id FROM messages WHERE user_id NOT LIKE 'admin:%'"
             " GROUP BY user_id"
@@ -528,12 +528,13 @@ class Store:
                      "limite": aviso_limite}
 
     # Cuántos hay en cada pestaña de Conversaciones (sin la búsqueda).
-    _CUANTOS = ("SELECT SUM(est = 'nuevo'), SUM(est = 'tu_sin'), SUM(est IN ('nuevo', 'tu_sin', 'tu')),"
-                " SUM(est IN ('asistente', 'revisar') AND t >= :curso), SUM(est = 'revisar'),"
-                " SUM(est IN ('asistente', 'revisar')) FROM c")
-    FILTROS_CHATS = {"nuevos": "est = 'nuevo'", "sin": "est = 'tu_sin'", "tuyas": "est IN ('nuevo', 'tu_sin', 'tu')",
-                     "curso": "est IN ('asistente', 'revisar') AND t >= :curso", "revisar": "est = 'revisar'",
-                     "bot": "est IN ('asistente', 'revisar')"}
+    # Los que el asistente no pudo contestar ("revisar") también te esperan a ti: salen en Sin contestar.
+    _CUANTOS = ("SELECT SUM(est = 'nuevo'), SUM(est IN ('tu_sin', 'revisar')),"
+                " SUM(est IN ('nuevo', 'tu_sin', 'tu', 'revisar')),"
+                " SUM(est = 'asistente' AND t >= :curso), SUM(est = 'asistente') FROM c")
+    FILTROS_CHATS = {"nuevos": "est = 'nuevo'", "sin": "est IN ('tu_sin', 'revisar')",
+                     "tuyas": "est IN ('nuevo', 'tu_sin', 'tu', 'revisar')",
+                     "curso": "est = 'asistente' AND t >= :curso", "bot": "est = 'asistente'"}
 
     async def chats_page(self, now: float, curso_desde: float, humano_desde: float, revisar_antes: float,
                          aviso_limite: str, ver: str, buscar: str, limit: int,
@@ -560,10 +561,10 @@ class Store:
             " ORDER BY id DESC LIMIT :limit OFFSET :offset", args)
         return list(await cur.fetchall()), cuantos, total
 
-    async def pendientes_tuyos(self, now: float, humano_desde: float) -> int:
+    async def pendientes_tuyos(self, now: float, humano_desde: float, revisar_antes: float, aviso_limite: str) -> int:
         """Chats del lado "Tú" que esperan tu respuesta (nuevos y sin contestar), para el punto del menú."""
-        base, args = self._chats(now, humano_desde, 0, "")
-        cur = await self.db.execute(base + "SELECT COUNT(*) FROM c WHERE est IN ('nuevo', 'tu_sin')", args)
+        base, args = self._chats(now, humano_desde, revisar_antes, aviso_limite)
+        cur = await self.db.execute(base + "SELECT COUNT(*) FROM c WHERE est IN ('nuevo', 'tu_sin', 'revisar')", args)
         return (await cur.fetchone())[0]
 
     async def chat_messages(self, user_id: str, limit: int) -> tuple[list[tuple[str, str, float]], bool]:

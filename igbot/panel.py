@@ -1388,7 +1388,10 @@ def tarjeta_pasos(pasos: list[tuple[str, str, bool]]) -> str:
 async def menu_de(c: Cuenta, menu: str, sub: str = "", luces: dict[str, str] | None = None) -> str:
     """El menú lateral de una página con sesión: con su @usuario, su logo y los pasos iniciales.
     Conversaciones lleva un punto amarillo si hay chats del lado "Tú" esperando tu respuesta."""
-    if await c.store.pendientes_tuyos(time.time(), time.time() - c.human_pause_hours * 3600 - 60):
+    from .limites import LIMIT_NOTICE
+    ahora = time.time()
+    if await c.store.pendientes_tuyos(ahora, ahora - c.human_pause_hours * 3600 - 60,
+                                      ahora - conversaciones.SIN_RESPUESTA, LIMIT_NOTICE):
         luces = {**(luces or {}), "chats": "pendiente"}
     return cabecera(salir=True, menu=menu, cuenta=c, sub=sub, perfil=await usuario(c), foto=await foto_perfil(c),
                     luces=luces, pasos=await pasos_iniciales(c))
