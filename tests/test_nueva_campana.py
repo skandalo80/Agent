@@ -533,7 +533,7 @@ def test_historias_de_punta_a_punta(cliente, monkeypatch):
 
     # En Contenido › Calendario dice que es historia, con su miniatura.
     r = client.get(f"/panel/contenido?vista=semana&fecha={LUNES.isoformat()}")
-    assert '<span class="m-historia">Historia</span>' in r.text and f'href="/panel/contenido/post/{post_id}"' in r.text
+    assert '<span class="m-historia">Historia</span>' in r.text and f'href="/panel/contenido/post/{post_id}?desde=' in r.text
 
     # Al publicarse va como historia (media_type=STORIES), no como post.
     class IG:

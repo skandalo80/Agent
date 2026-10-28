@@ -43,10 +43,10 @@ from PIL import Image
 
 from . import brief, config, empresa, imagenes, informe, openai_texto, panel, semana, tools
 from .admin import PANEL
-from .contenido import (ESTADOS, ESTILO_REFERENCIA, IMAGEN, MAX_CAPTION, archivo, contexto_marca, cuando, estilo_foto,
-                        estilos_de, falta_cupo,
+from .contenido import (DESDE, ESTADOS, ESTILO_REFERENCIA, IMAGEN, MAX_CAPTION, archivo, contexto_marca, cuando, estilo_foto,
+                        campo_desde, cerrar_a, con_desde, estilos_de, falta_cupo, ir_a_campana,
                         guardar_pieza, kit, libre, marca_de, modo_de, negocio_de, notas_estilo, pieza, plantilla_de,
-                        reglas_de, sin_plan, texto_imagen, url_imagen, usos_color, visual_marca)
+                        reglas_de, sin_plan, texto_imagen, tomar_desde, url_imagen, usos_color, visual_marca, vista_desde)
 from .cuenta import Cuenta, usar
 from .estilos import ESTILO_INICIAL, ESTILOS, USO_COLOR
 
@@ -1545,7 +1545,7 @@ async def detalle(c: Cuenta, camp: dict, p: dict, quedan_ia: int) -> str:
         f' value="{escape(r.get("dm", ""))}" placeholder="La información que pidió: precio, cómo comprar…"{solo}></div>'
         "</div></div>")
     if fija:
-        botones = f'<a class="boton secundario chico" href="/panel/contenido/post/{post["id"]}">Ver el post</a>'
+        botones = f'<a class="boton secundario chico" href="{con_desde(f"/panel/contenido/post/{post["id"]}")}">Ver el post</a>'
     else:
         botones = (("" if post else f'<button class="boton secundario chico" name="accion" value="otra"'
                     f'{"" if quedan_ia else " disabled"}>Otra idea</button>')
@@ -1553,15 +1553,16 @@ async def detalle(c: Cuenta, camp: dict, p: dict, quedan_ia: int) -> str:
                    + ('<button class="boton chico" name="accion" value="aprobar">Aprobar</button>'
                       if post and post["status"] == "borrador" else ""))
     return (
-        f'<a class="velo-cam" href="{url_de(camp)}" aria-label="Cerrar"></a>'
+        f'<a class="velo-cam" href="{cerrar_a(url_de(camp))}" aria-label="Cerrar"></a>'
         f'<div class="modal-cam" id="detalle" role="dialog" aria-labelledby="d-nombre">'
         f'<form method="post" action="{url_de(camp)}" id="f-cam" enctype="multipart/form-data">'
-        f'<input type="hidden" name="k" value="{p["k"]}">'
+        f'<input type="hidden" name="k" value="{p["k"]}">{campo_desde()}'
         '<div class="top"><div>'
         f'<div class="etqs-cam"><span class="medio-cam m-{medio_de(p)}">{MEDIOS[medio_de(p)][0]}</span>{marca_estado}</div>'
         f'<h2 id="d-nombre">{escape(p["titulo"])}</h2><p>{fecha_larga(p["dia"])} · {p["hora"]}</p>'
         + (f'<p class="cli-cam">Responde a lo que te preguntan: {escape(p["responde"])}</p>' if p.get("responde") else "")
-        + f'</div><a class="x" href="{url_de(camp)}" aria-label="Cerrar">×</a></div>'
+        + f'</div><div class="cierre">{ir_a_campana(url_de(camp))}'
+        f'<a class="x" href="{cerrar_a(url_de(camp))}" aria-label="Cerrar">×</a></div></div>'
         f'<div class="cuerpo"><div class="izq">{imagen}{botones_img}</div><div>{plan_de_post(p)}'
         + ('<p class="ayuda">Es una historia: se ve 24 horas a pantalla completa y no lleva texto publicado. Lo que'
            " se lee va en la imagen.</p>" if historia else
@@ -1699,6 +1700,9 @@ async def pagina_campana(c: Cuenta, camp: dict, aviso: str = "", sel: str = "", 
         p = buscar_post(camp, sel) if sel else None
         modal = await detalle(c, camp, p, quedan_ia) if p else ""
         await guardar_descartados(c, camp, antes)
+    if p and DESDE.get():  # abierto desde Calendario: la ventana va sobre esa misma vista
+        from . import calendario as cal, contenido
+        return await contenido.pagina(c, "calendario", await cal.seccion(c, **vista_desde()) + modal, aviso)
     u = url_de(camp)
     descargas = (f'<a href="{u}/propuesta">Planeación (PDF)</a>'
                  + (f'<a href="{u}/brief">Brief (PDF)</a>' if camp.get("brief") else ""))
@@ -2029,6 +2033,7 @@ async def ver_campana(request: Request, cid: str):
         return RedirectResponse(BASE, status_code=303)
     if (b := request.query_params.get("borrar")) in ("1", "lista"):  # "lista": Cancelar vuelve a Tus campañas
         return await pagina_campana(c, camp, confirmar="borrar", volver=BASE if b == "lista" else "")
+    tomar_desde(request.query_params.get("desde"))
     return await pagina_campana(c, camp, sel=request.query_params.get("post", ""))
 
 
@@ -2193,6 +2198,7 @@ async def accion(request: Request, cid: str):
     subida = datos.get("imagen")
     f = {k: v for k, v in datos.items() if isinstance(v, str)}
     que = f.get("accion", "")
+    tomar_desde(f.get("desde"))
     if not (camp := await leer(c, cid)) or not camp.get("posts"):
         return RedirectResponse(BASE, status_code=303)
     url = url_de(camp)
@@ -2322,7 +2328,7 @@ async def accion(request: Request, cid: str):
             return await pagina_campana(c, camp, str(e), sel=k)
         with usar(c):
             await guardar(c, camp)
-        return RedirectResponse(f"{url}?post={k}#detalle", status_code=303)
+        return RedirectResponse(con_desde(f"{url}?post={k}#detalle"), status_code=303)
 
     if que == "otra":
         if not await ia_restantes(c):
@@ -2335,7 +2341,7 @@ async def accion(request: Request, cid: str):
                 if camp.get("brief"):
                     await prompts_de(c, camp, [p])
                 await guardar_post(c, camp, p)
-            yield f"{url}?post={k}#detalle"
+            yield con_desde(f"{url}?post={k}#detalle")
 
         return await trabajando(c, "Pensando otra idea…", "Tarda unos segundos.", otra, url)
 
@@ -2345,7 +2351,7 @@ async def accion(request: Request, cid: str):
                 p.pop("prompt", None)
                 await prompt_de(c, camp, p, await marca_de(c))
                 await guardar_post(c, camp, p)
-            yield f"{url}?post={k}#detalle"
+            yield con_desde(f"{url}?post={k}#detalle")
 
         return await trabajando(c, "Escribiendo el prompt…", "Tarda unos segundos.", escribir_prompt, url)
 
@@ -2358,7 +2364,7 @@ async def accion(request: Request, cid: str):
             with usar(c):
                 await generar_imagen(c, camp, p, extra)
                 await guardar_post(c, camp, p)
-            yield f"{url}?post={k}#detalle"
+            yield con_desde(f"{url}?post={k}#detalle")
 
         return await trabajando(c, "Generando la imagen…" if costo(p) else "Armando la pieza…",
                           "Tarda alrededor de medio minuto." if costo(p) else "Tarda unos segundos.", una, url)

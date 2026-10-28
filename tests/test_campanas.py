@@ -720,8 +720,23 @@ def test_varias_campanas(cliente, monkeypatch):
     r = client.get("/panel/contenido?mes=2099-01")
     assert "Enero de 2099" in r.text and 'class="cal-mes"' in r.text and "fecha=2099-02-01" in r.text
     # Con miniatura, el título arriba y abajo la hora y si es post o historia; la campaña, en el título flotante.
-    assert f'class="ev e-borrador con-img" href="/panel/contenido/post/{post_id}"' in r.text
+    desde = "desde=%2Fpanel%2Fcontenido%3Ffecha%3D2099-01-01"  # el post se abre sobre esta misma vista
+    assert f'class="ev e-borrador con-img" href="/panel/contenido/post/{post_id}?{desde}"' in r.text
     assert f'href="{u}?post=' in r.text and " · Invierno &lt;b&gt; · Borrador" in r.text  # las propuestas sin imagen
+    # Abierto desde Calendario: la ventana va sobre esa vista, cierra ahí y lleva a la campaña con el enlace lima.
+    r = client.get(f"/panel/contenido/post/{post_id}?{desde}", follow_redirects=False)
+    assert r.headers["location"] == f"{u}?post={k}&{desde}#detalle"
+    r = client.get(r.headers["location"])
+    assert 'class="tarjeta cal"' in r.text and "Enero de 2099" in r.text and 'class="cab-camp' not in r.text
+    assert 'class="x" href="/panel/contenido?fecha=2099-01-01#cal"' in r.text
+    assert f'<a class="volver-cam ir-cam" href="{u}">Ir a la campaña ›</a>' in r.text
+    assert 'name="desde" value="/panel/contenido?fecha=2099-01-01"' in r.text
+    r = client.post(u, headers=ORIGEN, data={"accion": "guardar", "k": str(k), "caption": "Desde el calendario",
+                                             "desde": "/panel/contenido?fecha=2099-01-01"})
+    assert "Guardado." in r.text and 'class="tarjeta cal"' in r.text and "Desde el calendario" in r.text
+    assert "Ir a la campaña" not in client.get(f"{u}?post={k}").text  # desde la campaña, como siempre
+    assert client.get(f"{u}?post={k}&desde=https://otro.sitio").text.count('class="tarjeta cal"') == 0
+    r = client.get("/panel/contenido?mes=2099-01")
     assert '<span class="m-post">Post</span></small>' in r.text
     assert "Próximos posts" not in r.text and "Ya publicados" not in r.text  # sin listas debajo
     r = client.get("/panel/contenido?vista=semana&fecha=2099-01-05")
