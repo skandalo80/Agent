@@ -28,3 +28,10 @@ def sin_revision_de_instrucciones(monkeypatch):
             return ""
 
         monkeypatch.setattr(panel, "revisar_instrucciones", aprobar)
+
+
+@pytest.fixture(autouse=True)
+def trabajos_al_momento(monkeypatch):
+    """Los trabajos largos (campañas, imágenes) contestan ya terminados: los generadores falsos tardan nada."""
+    if "igbot.panel" in sys.modules:
+        monkeypatch.setattr(sys.modules["igbot.panel"], "ESPERA_TRABAJO", 30)

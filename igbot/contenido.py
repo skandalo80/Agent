@@ -40,7 +40,7 @@ from html import escape
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from PIL import Image, ImageOps
 
 from . import config, imagenes, informe, panel, posicionamiento, tools
@@ -447,45 +447,14 @@ async def generar(c: Cuenta, objetivo: str = "", tema: str = "", fotos: list[str
     return post_id
 
 
-def generando(c: Cuenta, trabajo, volver: str, mensaje: str) -> StreamingResponse:
-    """Sin JavaScript: primero la página con "generando…" y, al terminar, el salto al editor. Un doble
-    clic o recargar no lo repite (panel.empezar_trabajo)."""
-    clave = f"{mensaje} {volver}"
-    libre = panel.empezar_trabajo(c, clave)
+async def generando(c: Cuenta, trabajo, volver: str, mensaje: str) -> HTMLResponse:
+    """En segundo plano (panel.trabajo_largo): sigue aunque cierre la página y, al terminar, lleva al editor.
+    Un doble clic o recargar no lo repite."""
+    async def correr():
+        yield f"/panel/contenido/post/{await trabajo()}"
 
-    async def partes():
-        try:
-            menu = panel.PRINCIPIO + await panel.menu_de(c, "contenido") + '<main><div class="contenedor">'
-            if not libre:
-                yield menu + panel.ya_en_curso(volver)
-                return
-            yield (menu + '<div class="tarjeta" id="generando"><div class="generando">'
-                   '<div class="escribiendo"><span></span><span></span><span></span></div>'
-                   f"<div><h2>{escape(mensaje)}</h2>"
-                   '<p class="ayuda">Tarda alrededor de medio minuto. No cierres esta página.</p></div></div></div>')
-            try:
-                post_id = await trabajo()
-            except imagenes.ErrorImagen as e:
-                yield ('<style>#generando{display:none}</style>'
-                       f'<div class="aviso">{escape(str(e))}</div>'
-                       f'<div class="acciones"><a class="boton" href="{volver}">Volver</a></div></div></main>' + panel.FINAL)
-                return
-            except Exception:
-                log.exception("No se pudo generar el post de %s", c.slug)
-                yield ('<style>#generando{display:none}</style>'
-                       '<div class="aviso">No se pudo generar esta vez. No se usó tu cupo; intenta de nuevo en un momento.</div>'
-                       f'<div class="acciones"><a class="boton" href="{volver}">Volver</a></div></div></main>' + panel.FINAL)
-                return
-        finally:
-            if libre:
-                panel.terminar_trabajo(c, clave)
-        destino = f"/panel/contenido/post/{post_id}"
-        yield ('<style>#generando{display:none}</style>'
-               f'<meta http-equiv="refresh" content="0;url={destino}">'
-               f'<div class="tarjeta"><h2>Listo.</h2><div class="acciones">'
-               f'<a class="boton" href="{destino}">Ver tu post</a></div></div></div></main>' + panel.FINAL)
-
-    return StreamingResponse(partes(), media_type="text/html; charset=utf-8")
+    return await panel.trabajo_largo(c, f"{mensaje} {volver}", mensaje, "Tarda alrededor de medio minuto.", volver,
+                                     correr, boton="Ver tu post")
 
 
 # --- páginas ---
@@ -1001,7 +970,7 @@ async def editar(request: Request, post_id: int):
                 return await editor(c, post_id, confirmar=True) if falta == "extra" else sin_plan()
             hacer = ((lambda: campanas.generar_imagen(c, camp, x, extra)) if x is not None
                      else (lambda: generar(c, extra=extra, post_id=post_id)))
-            return generando(c, lambda: despues(hacer), f"/panel/contenido/post/{post_id}", "Generando otra imagen…")
+            return await generando(c, lambda: despues(hacer), f"/panel/contenido/post/{post_id}", "Generando otra imagen…")
         if accion == "borrador":
             await c.store.set_post(post_id, "borrador", only_if="programada")
             return await editor(c, post_id, "Volvió a borrador: no sale hasta que lo apruebes.")
