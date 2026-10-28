@@ -1697,13 +1697,13 @@ async def pagina_campana(c: Cuenta, camp: dict, aviso: str = "", sel: str = "", 
                f'<details class="menu-desc"><summary class="boton secundario ajuste">↓ Descargar</summary>'
                f'<div>{descargas}</div></details>'
                f'<a class="boton ajuste peligro" href="{u}?borrar=1">Borrar campaña</a></span>')
-    volver = f'<a class="volver-cam" href="{BASE}?ver={estado(camp, hoy)}">‹ Volver a campañas</a>'
+    cab = cabecera_campana(camp, hoy, botones)
     return panel.pagina(
         await panel.menu_de(c, "contenido", sub="campanas")
-        + cabeza(botones, donde=escape(camp["nombre"]))
+        + cabeza("<span></span>", donde=escape(camp["nombre"]))  # la franja vacía: arriba, a la misma altura que las demás
         + '<div class="oscuro-pag"><main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
-        + await panel.pendiente(c, "campanas") + volver + cuerpo + "</div></main>" + modal + "</div>")
+        + await panel.pendiente(c, "campanas") + cab + cuerpo + "</div></main>" + modal + "</div>")
 
 
 async def pagina_nueva(c: Cuenta, aviso: str = "", form: dict | None = None) -> HTMLResponse:
@@ -1722,6 +1722,24 @@ async def numeros_de(c: Cuenta, camp: dict) -> tuple[int, int, float | None]:
     alcance = sum(d.get("reach", 0) for d in con)
     tasa = round(sum(informe.interacciones(d) for d in con) / alcance * 100, 1) if alcance else None
     return len(renglones), alcance, tasa
+
+
+def cabecera_campana(camp: dict, hoy: date, botones: str) -> str:
+    """La tarjeta de arriba de una campaña: volver, su nombre, fechas y objetivo, y sus botones."""
+    ini, fin = date.fromisoformat(camp["inicio"]), informe.fin_de(camp)
+    cual = estado(camp, hoy)
+    cuando = (f"día {(hoy - ini).days + 1} de {(fin - ini).days + 1}" if cual == "activa" else
+              f"empieza {'mañana' if (ini - hoy).days == 1 else f'en {(ini - hoy).days} días'}" if cual == "proxima"
+              else "terminó")
+    historias = sum(1 for p in camp["posts"] if es_historia(p))
+    cuenta = cuantos(len(camp["posts"]) - historias, "post") + (f" y {cuantos(historias, 'historia')}" if historias else "")
+    obj = objetivo_corto(camp)
+    return (f'<div class="tarjeta cab-camp"><div class="cab-camp-txt">'
+            f'<a class="volver-cam" href="{BASE}?ver={cual}">‹ Volver a campañas</a>'
+            f'<h2>{escape(camp["nombre"])}</h2>'
+            f'<p class="ayuda">{de_a(ini, fin)} · {cuando} · {cuenta}</p>'
+            + (f'<p class="prueba-cam"><span class="etq-cam">{escape(obj)}</span></p>' if obj else "")
+            + f"</div>{botones}</div>")
 
 
 def objetivo_corto(camp: dict) -> str:
