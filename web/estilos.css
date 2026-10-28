@@ -334,7 +334,7 @@ footer a:hover { color: var(--tinta); }
 .indice strong { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--naranja); margin-bottom: 8px; }
 .indice ol { padding-left: 1.2rem; }
 .indice li { font-size: 15px; margin-bottom: 4px; }
-.articulo a { color: var(--naranja); font-weight: 600; }
+.articulo a:not(.boton) { color: var(--naranja); font-weight: 600; }
 .articulo h2 { scroll-margin-top: 90px; }
 .indice a { color: var(--naranja); font-weight: 600; text-decoration: none; }
 .recuadro { border-left: 4px solid var(--naranja); background: var(--tarjeta); border-radius: 0 16px 16px 0; padding: 18px 22px; margin: 26px 0; }
