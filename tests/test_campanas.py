@@ -791,3 +791,38 @@ def test_la_campana_se_escribe_con_la_empresa_la_marca_y_sus_parametros(cliente,
     assert "<objetivo>Vender más &lt;lattes&gt;</objetivo>" in prompt and "<producto>Latte de calabaza</producto>" in prompt
     assert "<lo_que_se_ve>Personas</lo_que_se_ve>" in prompt and "<estilo_de_campana>Poco texto</estilo_de_campana>" in prompt
     assert "de 120 a 180 palabras" in sistema and "nunca algo genérico del ramo" in sistema
+
+
+def test_abrir_la_campana_no_la_vuelve_a_guardar(cliente, monkeypatch):
+    """Abrir una campaña solo lee; guarda únicamente si un post se descartó en Calendario, y sobre lo último guardado."""
+    client, c, *_ = cliente
+    from igbot.admin import PANEL
+    monkeypatch.setattr(c, "imagenes_mes", 10)
+
+    async def preparar():
+        ids = [await c.store.add_post(PANEL, [], "t", 1) for _ in range(2)]
+        posts = [{"k": i + 1, "tipo": "dato", "formato": "texto", "dia": LUNES.isoformat(), "hora": "09:00",
+                  "titulo": f"Post {i + 1}", "caption": "c", "idea": "", "post_id": ids[i]} for i in range(2)]
+        await campanas.guardar(c, {"id": 7, "nombre": "Una", "inicio": LUNES.isoformat(), "semanas": 1,
+                                   "publicar": "lmv", "creada": 1.0, "modo": "explorar", "posts": posts})
+        return ids
+
+    ids = client.portal.call(preparar)
+    escrituras = []
+    original = c.store.set
+
+    async def contar(clave, valor):
+        if clave == "campanas":
+            escrituras.append(valor)
+        await original(clave, valor)
+    monkeypatch.setattr(c.store, "set", contar)
+
+    assert "Post 1" in client.get(f"{BASE}/7").text and "Post 1" in client.get(f"{BASE}/7?post=1").text
+    assert not escrituras  # nada cambió: no se escribe
+
+    client.portal.call(c.store.set_post, ids[0], "cancelada")  # lo descartaron en Calendario
+    client.get(f"{BASE}/7")
+    camp = client.portal.call(campanas.leer, c, 7)
+    assert len(escrituras) == 1 and [p["post_id"] for p in camp["posts"]] == [None, ids[1]]
+    client.get(f"{BASE}/7")
+    assert len(escrituras) == 1  # ya quedó guardado: no se repite
