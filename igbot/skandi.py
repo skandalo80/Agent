@@ -63,29 +63,29 @@ _avisos: dict[str, str] = {}
 # El ícono de chat de siempre (burbuja con tres puntos), en el botón redondo.
 ICONO = ('<svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor" aria-hidden="true">'
          '<path d="M12 3C6.5 3 2 6.8 2 11.5c0 2.4 1.2 4.6 3.1 6.1L4.3 21l4-1.9c1.2.4 2.4.6 3.7.6 5.5 0 10-3.8 10-8.6S17.5 3 12 3z"/>'
-         '<circle cx="8" cy="11.5" r="1.3" fill="var(--tinta,#1E1C26)"/><circle cx="12" cy="11.5" r="1.3" fill="var(--tinta,#1E1C26)"/>'
-         '<circle cx="16" cy="11.5" r="1.3" fill="var(--tinta,#1E1C26)"/></svg>')
+         '<circle cx="8" cy="11.5" r="1.3" fill="var(--tinta,#141518)"/><circle cx="12" cy="11.5" r="1.3" fill="var(--tinta,#141518)"/>'
+         '<circle cx="16" cy="11.5" r="1.3" fill="var(--tinta,#141518)"/></svg>')
 
 CSS = """
-.sk-boton{position:fixed;right:1.5rem;bottom:1.5rem;z-index:15;width:3.75rem;height:3.75rem;display:grid;place-items:center;background:var(--acento);color:#F7F5FA;border-radius:50%;text-decoration:none;box-shadow:0 10px 24px rgba(12,11,16,.45),inset 2px 2px 0 rgba(255,255,255,.25),inset -3px -4px 8px rgba(0,0,0,.12);transition:transform .15s}
+.sk-boton{position:fixed;right:1.5rem;bottom:1.5rem;z-index:15;width:3.75rem;height:3.75rem;display:grid;place-items:center;background:var(--acento);color:#F5F5F4;border-radius:50%;text-decoration:none;box-shadow:0 10px 24px rgba(12,11,16,.45),inset 2px 2px 0 rgba(255,255,255,.25),inset -3px -4px 8px rgba(0,0,0,.12);transition:transform .15s}
 .sk-boton:hover{transform:scale(1.06)}
-.skandi{display:none;position:fixed;right:1.25rem;bottom:1.25rem;z-index:50;width:min(23rem,calc(100vw - 2rem));height:min(34rem,calc(100dvh - 2.5rem));flex-direction:column;background:#302D3A;color:#F7F5FA;border-radius:1.6rem;box-shadow:10px 14px 28px rgba(12,11,16,.55),inset 2px 2px 0 rgba(255,255,255,.07);overflow:hidden}
+.skandi{display:none;position:fixed;right:1.25rem;bottom:1.25rem;z-index:50;width:min(23rem,calc(100vw - 2rem));height:min(34rem,calc(100dvh - 2.5rem));flex-direction:column;background:#1F2024;color:#F5F5F4;border-radius:1.6rem;box-shadow:10px 14px 28px rgba(12,11,16,.55),inset 2px 2px 0 rgba(255,255,255,.07);overflow:hidden}
 html:not(.js) .skandi:target,.skandi.abierta{display:flex}
 html:not(.js) .skandi:target~.sk-boton,.skandi.abierta~.sk-boton{display:none}
-.sk-cabeza{display:flex;align-items:center;gap:.7rem;padding:1rem 1.1rem;background:#25232F}
+.sk-cabeza{display:flex;align-items:center;gap:.7rem;padding:1rem 1.1rem;background:#18191C}
 .sk-avatar{width:2.2rem;height:2.2rem;border-radius:50%;background:var(--acento);color:var(--tinta);display:grid;place-items:center;font-weight:800}
-.sk-cabeza b{display:block;font-size:1rem}.sk-cabeza small{display:flex;align-items:center;gap:.35rem;color:#B9B5C5;font-size:.8rem}
+.sk-cabeza b{display:block;font-size:1rem}.sk-cabeza small{display:flex;align-items:center;gap:.35rem;color:#A8A8AE;font-size:.8rem}
 .sk-cabeza small::before{content:"";width:.45rem;height:.45rem;border-radius:50%;background:#C6FA2C}
-.sk-cerrar{margin-left:auto;color:#B9B5C5;font-size:1.5rem;line-height:1;text-decoration:none;padding:.2rem .45rem;border-radius:.6rem}
-.sk-cerrar:hover{color:#F7F5FA;background:rgba(255,255,255,.06)}
+.sk-cerrar{margin-left:auto;color:#A8A8AE;font-size:1.5rem;line-height:1;text-decoration:none;padding:.2rem .45rem;border-radius:.6rem}
+.sk-cerrar:hover{color:#F5F5F4;background:rgba(255,255,255,.06)}
 .sk-mensajes{flex:1;overflow-y:auto;padding:1rem;display:flex;flex-direction:column;gap:.5rem}
 .sk-msj{max-width:85%;padding:.55rem .85rem;border-radius:1.1rem;font-size:.92rem;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}
 .sk-msj.tu{align-self:flex-end;background:var(--acento);color:var(--tinta);border-bottom-right-radius:.3rem}
-.sk-msj.skandi-dice{align-self:flex-start;background:#3B3846;border-bottom-left-radius:.3rem}
-.sk-msj.escribiendo{color:#B9B5C5;font-style:italic}
-.sk-aviso{font-size:.85rem;color:#F6B262;background:rgba(243,154,54,.12);border-radius:.8rem;padding:.55rem .8rem}
+.sk-msj.skandi-dice{align-self:flex-start;background:#2E3035;border-bottom-left-radius:.3rem}
+.sk-msj.escribiendo{color:#A8A8AE;font-style:italic}
+.sk-aviso{font-size:.85rem;color:#FFAB70;background:rgba(255,138,61,.12);border-radius:.8rem;padding:.55rem .8rem}
 .sk-escribir{display:flex;gap:.5rem;padding:.8rem;border-top:1px solid rgba(255,255,255,.08)}
-.sk-escribir input[type=text]{flex:1;min-width:0;font:inherit;font-size:.95rem;color:#F7F5FA;background:#25232F;border:1px solid rgba(255,255,255,.1);border-radius:.9rem;padding:.6rem .8rem}
+.sk-escribir input[type=text]{flex:1;min-width:0;font:inherit;font-size:.95rem;color:#F5F5F4;background:#18191C;border:1px solid rgba(255,255,255,.1);border-radius:.9rem;padding:.6rem .8rem}
 .sk-escribir input[type=text]:focus{outline:2px solid var(--acento);outline-offset:1px;border-color:transparent}
 .sk-escribir button{font:inherit;font-weight:700;background:var(--acento);color:var(--tinta);border:0;border-radius:.9rem;padding:.6rem .95rem;cursor:pointer}
 .sk-escribir button:disabled{opacity:.6;cursor:wait}
