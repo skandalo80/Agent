@@ -29,7 +29,7 @@ FUENTES = RAIZ / "blog"
 GIROS = RAIZ / "giros"
 WEB = RAIZ / "web"
 SITIO = "https://skandar.online"
-CSS_VERSION = "2026-10-28c"
+CSS_VERSION = "2026-10-28d"
 
 # Orden en el índice: el primero es el destacado.
 ORDEN = [

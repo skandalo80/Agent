@@ -30,7 +30,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
 from igbot import (admin, agent, ajustes, asistente, botones, campanas, comentarios, conectar, config, contenido, empresa,
-                   limites, marca, metricas, nueva_campana, panel, reporte, resultados, semana, skandi,
+                   errores, limites, marca, metricas, nueva_campana, panel, reporte, resultados, semana, skandi,
                    sugeridos)
 from igbot.cuenta import Cuenta, cargar, cuenta, de_carpeta, usar
 from igbot.dispatcher import Dispatcher
@@ -276,6 +276,9 @@ if not config.CLIENTE:
         if exc.status_code == 404 and request.url.path.startswith(("/panel", "/conectar")):
             return await panel.no_encontrada(request)
         return await http_exception_handler(request, exc)
+
+    # Un error que nadie atrapó: página amable en vez de "Internal Server Error" y correo a soporte.
+    app.add_exception_handler(Exception, errores.inesperado)
 
 
 @app.get("/health")

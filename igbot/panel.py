@@ -1242,6 +1242,13 @@ input[type=text],input[type=search],textarea,select,.inbox input[type=search],.e
 .met-lista li small{color:var(--gris);font-size:.78rem;width:2.6rem;text-align:right}
 .met-lista li b{padding-left:1rem}
 @media(max-width:900px){.res-dos{grid-template-columns:1fr}}
+/* pulido: títulos sin una palabra sola abajo, cifras de ancho fijo (no "bailan"), el botón que se está
+   mandando (panel.js) y un fundido al cambiar de página (Chrome y Safari; los demás, igual que antes) */
+h1,h2,h3{text-wrap:balance}
+.kpi,.kpis,.num,.as-num,.datos,.t-dato,.res-kpis,.met-lista,table{font-variant-numeric:tabular-nums}
+.boton.mandando,button.mandando{opacity:.6;cursor:progress;pointer-events:none}
+@view-transition{navigation:auto}
+@media(prefers-reduced-motion:reduce){@view-transition{navigation:none}}
 """
 
 
@@ -1260,7 +1267,7 @@ VERSION_JS = hashlib.sha256((STATIC / "panel.js").read_bytes()).hexdigest()[:10]
 VERSION_MENU = hashlib.sha256((STATIC / "menu.js").read_bytes()).hexdigest()[:10]
 PRINCIPIO = (
     '<!doctype html><html lang="es"><head><meta charset="utf-8">'
-    '<meta name="viewport" content="width=device-width, initial-scale=1">'
+    '<meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">'
     '<meta name="robots" content="noindex"><meta name="referrer" content="same-origin">'
     '<meta name="theme-color" content="#2B2C30">'
     '<link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" href="/favicon-32.png" sizes="32x32">'
@@ -1732,6 +1739,55 @@ async def no_encontrada(request: Request) -> HTMLResponse:
     return respuesta
 
 
+# --- trabajos largos (generar campaña, imágenes, otra idea) ---
+# Uno a la vez por cuenta y tipo: un doble clic o recargar la página de "Generando…" no lo repite ni
+# gasta cupo doble. Si algo se quedó marcado (la página nunca empezó), se libera solo a los 10 minutos.
+TRABAJO_MAX = 600
+_en_curso: dict[tuple[str, str], float] = {}
+
+
+def empezar_trabajo(c: Cuenta, clave: str) -> bool:
+    """True si se puede empezar; False si ese mismo trabajo ya está corriendo para esta cuenta."""
+    k, ahora = (c.slug, clave), time.time()
+    if ahora - _en_curso.get(k, 0) < TRABAJO_MAX:
+        return False
+    _en_curso[k] = ahora
+    return True
+
+
+def terminar_trabajo(c: Cuenta, clave: str) -> None:
+    _en_curso.pop((c.slug, clave), None)
+
+
+def ya_en_curso(destino: str) -> str:
+    """Lo que ve el segundo clic: el primero sigue trabajando."""
+    return ('<div class="tarjeta"><h2>Ya lo estamos haciendo.</h2>'
+            '<p class="ayuda">Esto ya se está generando con tu primer clic (o en otra pestaña). Espera a que termine;'
+            ' no se cobra dos veces.</p>'
+            f'<div class="acciones"><a class="boton" href="{escape(destino)}">Ir a ver</a></div></div></div></main>'
+            + FINAL)
+
+
+async def error_inesperado(request: Request) -> HTMLResponse:
+    """La página de un error inesperado (ver errores.py): sin detalles técnicos y con salida."""
+    c = cuenta_de_sesion(request)
+    menu = await menu_de(c, "ninguna") if c else cabecera()
+    volver = request.url.path if request.method == "GET" else (request.headers.get("referer") or "/panel")
+    if not volver.startswith(("/panel", config.PUBLIC_URL + "/panel")):
+        volver = "/panel"
+    respuesta = pagina(
+        menu + '<section class="oscuro portada compacta delgada"><div class="contenedor">'
+        '<h1>Algo salió mal<span class="punto">.</span></h1>'
+        '<p class="bajada" style="margin-left:0">No pudimos terminar esto. Ya nos llegó el aviso para revisarlo.'
+        ' Si estabas guardando algo, revisa si quedó antes de intentarlo otra vez.</p>'
+        '</div></section><main><div class="contenedor"><div class="tarjeta"><h2>¿Qué quieres hacer?</h2>'
+        f'<div class="acciones"><a class="boton" href="{escape(volver)}">Intentar de nuevo</a>'
+        '<a class="boton secundario" href="/panel">Ir a mi panel</a></div></div>'
+        "</div></main>")
+    respuesta.status_code = 500
+    return respuesta
+
+
 @router.post("/guardar")
 async def guardar(request: Request):
     """El formulario de antes. Ahora todo se guarda por pasos (asistente.py); aquí solo queda que la
@@ -1906,7 +1962,7 @@ async def responder_prueba(c: Cuenta, previos: list[list[str]], texto: str) -> s
         if previos:
             partes.append(f"<conversacion_reciente>\n{agent.render(previos)}\n</conversacion_reciente>")
         partes.append(f"<ahora>{tools.fmt(tools.now())} ({c.timezone}), {tools.now():%Y-%m-%d}</ahora>")
-        partes.append(f"<mensajes_nuevos>\n{texto}\n</mensajes_nuevos>\n\n"
+        partes.append(f"<mensajes_nuevos>\n{agent.dato(texto)}\n</mensajes_nuevos>\n\n"
                       "Escribe la respuesta que se enviará por DM (solo el texto del mensaje).")
         return await agent.run_claude("\n\n".join(partes), agent.system_prompt() + NOTA_PRUEBA, max_turns=1)
 

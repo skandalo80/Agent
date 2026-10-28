@@ -1829,26 +1829,39 @@ def tarjeta_extra(accion: str, k: str, destino: str) -> str:
             f'<a class="boton secundario" href="{destino}">Cancelar</a></div></form>')
 
 
-def trabajando(c: Cuenta, titulo: str, nota: str, trabajo, destino: str = BASE) -> StreamingResponse:
-    """Sin JavaScript: "trabajando…" mientras tanto y, al terminar, de vuelta a la campaña."""
+def trabajando(c: Cuenta, titulo: str, nota: str, trabajo, destino: str = BASE, clave: str = "") -> StreamingResponse:
+    """Sin JavaScript: "trabajando…" mientras tanto y, al terminar, de vuelta a la campaña. Si ese mismo
+    trabajo (`clave`, o el título y el destino) ya está corriendo por un doble clic o al recargar, no se
+    repite (panel.empezar_trabajo)."""
+    ver = BASE if clave else destino  # con clave propia, el destino aún no existe (campaña nueva)
+    clave = clave or f"{titulo} {destino}"
+    libre = panel.empezar_trabajo(c, clave)
 
     async def partes():
-        yield (panel.PRINCIPIO + await panel.menu_de(c, "contenido", sub="campanas")
-               + '<main><div class="contenedor"><div class="tarjeta" id="generando"><div class="generando">'
-               '<div class="escribiendo"><span></span><span></span><span></span></div>'
-               f'<div><h2>{escape(titulo)}</h2><p class="ayuda">{escape(nota)} No cierres esta página.</p></div></div></div>')
-        ir, error = destino, ""
         try:
-            async for linea in trabajo():
-                if linea.startswith("/"):
-                    ir = linea
-                else:
-                    yield f'<p class="ayuda">{escape(linea)}</p>'
-        except imagenes.ErrorImagen as e:
-            error = str(e)
-        except Exception:
-            log.exception("Campaña de %s", c.slug)
-            error = "No se pudo terminar esta vez. Lo que no salió no usó tu cupo; intenta de nuevo en un momento."
+            menu = (panel.PRINCIPIO + await panel.menu_de(c, "contenido", sub="campanas")
+                    + '<main><div class="contenedor">')
+            if not libre:
+                yield menu + panel.ya_en_curso(ver)
+                return
+            yield (menu + '<div class="tarjeta" id="generando"><div class="generando">'
+                   '<div class="escribiendo"><span></span><span></span><span></span></div>'
+                   f'<div><h2>{escape(titulo)}</h2><p class="ayuda">{escape(nota)} No cierres esta página.</p></div></div></div>')
+            ir, error = destino, ""
+            try:
+                async for linea in trabajo():
+                    if linea.startswith("/"):
+                        ir = linea
+                    else:
+                        yield f'<p class="ayuda">{escape(linea)}</p>'
+            except imagenes.ErrorImagen as e:
+                error = str(e)
+            except Exception:
+                log.exception("Campaña de %s", c.slug)
+                error = "No se pudo terminar esta vez. Lo que no salió no usó tu cupo; intenta de nuevo en un momento."
+        finally:
+            if libre:
+                panel.terminar_trabajo(c, clave)
         yield ('<style>#generando{display:none}</style>'
                + ("" if error else f'<meta http-equiv="refresh" content="0;url={ir}">')
                + (f'<div class="aviso">{escape(error)}</div>' if error else "")
@@ -2043,7 +2056,8 @@ async def armar(c: Cuenta, datos: dict, camp: dict, borrador: bool = False):
                 await c.store.set(nueva_campana.BORRADOR, "{}")
         yield url_de(nueva)
 
-    return trabajando(c, "Armando tu campaña…", "Tarda alrededor de medio minuto.", trabajo, url_de(nueva))
+    return trabajando(c, "Armando tu campaña…", "Tarda alrededor de medio minuto.", trabajo, url_de(nueva),
+                      clave="armar campaña")
 
 
 @router.post("/campanas")
