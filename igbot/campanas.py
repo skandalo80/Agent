@@ -276,13 +276,18 @@ async def borrar(c: Cuenta, camp: dict) -> int:
     return descartados
 
 
-def tarjeta_borrar(camp: dict) -> str:
+PAPELERA = ('<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"'
+            ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6'
+            'M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>')
+
+
+def tarjeta_borrar(camp: dict, volver: str = "") -> str:
     return (f'<form method="post" action="{url_de(camp)}" class="tarjeta extra">'
             f"<h2>¿Borrar la campaña {escape(camp['nombre'])}?</h2>"
             '<p class="ayuda">Se borra con todos sus posts: los que no han salido se quitan de Calendario. Los que ya'
             " se publicaron se quedan en Instagram. No se puede deshacer.</p>"
             '<div class="acciones"><button class="boton" name="accion" value="borrar">Sí, borrar la campaña</button>'
-            f'<a class="boton secundario" href="{url_de(camp)}">Cancelar</a></div></form>')
+            f'<a class="boton secundario" href="{volver or url_de(camp)}">Cancelar</a></div></form>')
 
 
 def estado(camp: dict, hoy: date) -> str:
@@ -1523,14 +1528,14 @@ async def contexto_form(c: Cuenta) -> tuple[int, int, list[dict], dict, int]:
 
 
 async def pagina_campana(c: Cuenta, camp: dict, aviso: str = "", sel: str = "", confirmar: str = "", k: str = "",
-                         form: dict | None = None) -> HTMLResponse:
+                         form: dict | None = None, volver: str = "") -> HTMLResponse:
     """Una campaña: su calendario (con la ventana del post encima si se abrió uno) y, plegado, su nombre y fechas.
     La estrategia se cambia en el asistente (Editar estrategia)."""
     with usar(c):
         hoy = tools.now().date()
     quedan_ia = await ia_restantes(c)
     with usar(c):
-        cuerpo = (tarjeta_borrar(camp) if confirmar == "borrar" else
+        cuerpo = (tarjeta_borrar(camp, volver) if confirmar == "borrar" else
                   tarjeta_extra(confirmar, k, url_de(camp)) if confirmar else "")
         cuerpo += await calendario(c, camp, sel) + await barra(c, camp) + ver_brief(camp) + editar(camp)
         p = buscar_post(camp, sel) if sel else None
@@ -1620,8 +1625,10 @@ async def tarjeta_campana(c: Cuenta, camp: dict, cual: str, hoy: date, otras: li
                + (f'<a class="boton secundario chico" href="{url_de(camp)}/propuesta">Planeación</a>'
                   if cual != "pasada" and completa else "")
                + (f'<a class="boton secundario chico" href="{url_de(camp)}/brief">Brief</a>' if camp.get("brief") else ""))
+    tacho = (f'<a class="borrar{" con-sel" if casilla else ""}" href="{url_de(camp)}?borrar=lista"'
+              f' title="Borrar campaña" aria-label="Borrar campaña">{PAPELERA}</a>' if completa else "")
     return (f'<div class="camp{"" if publicados or cual != "pasada" else " apagada"}">'
-            f'<span class="barra-c {COLOR[cual]}"></span>{casilla}'
+            f'<span class="barra-c {COLOR[cual]}"></span>{casilla}{tacho}'
             f'<div><h3>{escape(camp["nombre"])}</h3><span class="f">{fechas}</span></div>'
             + (f'<div><span class="obj">{escape(obj)}</span></div>' if obj else "")
             + '<div class="mets">' + "".join(f"<div><b>{v}</b><span>{t}</span></div>" for t, v in mets) + "</div>"
@@ -1813,8 +1820,8 @@ async def ver_campana(request: Request, cid: str):
         return sin_plan()
     if not (camp := await leer(c, cid)):
         return RedirectResponse(BASE, status_code=303)
-    if request.query_params.get("borrar") == "1":
-        return await pagina_campana(c, camp, confirmar="borrar")
+    if (b := request.query_params.get("borrar")) in ("1", "lista"):  # "lista": Cancelar vuelve a Tus campañas
+        return await pagina_campana(c, camp, confirmar="borrar", volver=BASE if b == "lista" else "")
     return await pagina_campana(c, camp, sel=request.query_params.get("post", ""))
 
 
