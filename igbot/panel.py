@@ -32,6 +32,7 @@ import json
 import logging
 import os
 import re
+import secrets
 import time
 from collections.abc import Awaitable, Callable
 from html import escape
@@ -1861,32 +1862,92 @@ async def no_encontrada(request: Request) -> HTMLResponse:
 
 
 # --- trabajos largos (generar campaña, imágenes, otra idea) ---
-# Uno a la vez por cuenta y tipo: un doble clic o recargar la página de "Generando…" no lo repite ni
-# gasta cupo doble. Si algo se quedó marcado (la página nunca empezó), se libera solo a los 10 minutos.
-TRABAJO_MAX = 600
-_en_curso: dict[tuple[str, str], float] = {}
+# Corren en segundo plano, aparte de la página: si el dueño cierra la pestaña o se le bloquea el celular,
+# siguen. La página de espera se recarga sola (sin JavaScript) y muestra el avance; al terminar, lleva al
+# resultado. Uno a la vez por cuenta y tipo: un doble clic o recargar no lo repite ni gasta cupo doble.
+# Viven en memoria: si igbot se reinicia a la mitad, lo que ya salió se queda guardado y el resto se pide otra vez.
+ESPERA_TRABAJO = 2.0  # segundos que la respuesta espera: lo rápido llega ya terminado, sin página de espera
+RECARGA_TRABAJO = 3  # cada cuánto se recarga la página de espera
+GUARDAR_TRABAJO = 3600  # los terminados se olvidan después de esto
+_trabajos: dict[str, "Trabajo"] = {}
 
 
-def empezar_trabajo(c: Cuenta, clave: str) -> bool:
-    """True si se puede empezar; False si ese mismo trabajo ya está corriendo para esta cuenta."""
-    k, ahora = (c.slug, clave), time.time()
-    if ahora - _en_curso.get(k, 0) < TRABAJO_MAX:
-        return False
-    _en_curso[k] = ahora
-    return True
+class Trabajo:
+    """Un trabajo largo: `correr` es un generador async que va dando líneas de avance ("Pieza 2 de 9…") y,
+    si quiere, la dirección a la que lleva al terminar (una línea que empieza con "/")."""
+
+    def __init__(self, c: Cuenta, clave: str, titulo: str, nota: str, destino: str, menu: tuple[str, str],
+                 boton: str, correr):
+        self.id = secrets.token_urlsafe(9)
+        self.slug, self.clave, self.titulo, self.nota = c.slug, clave, titulo, nota
+        self.destino, self.menu, self.boton = destino, menu, boton
+        self.avance: list[str] = []
+        self.error = ""
+        self.hecho = False
+        self.fin = 0.0
+        self.tarea = asyncio.create_task(self._correr(c, correr))
+
+    async def _correr(self, c: Cuenta, correr) -> None:
+        try:
+            async for linea in correr():
+                if linea.startswith("/"):
+                    self.destino = linea
+                else:
+                    self.avance.append(linea)
+        except imagenes.ErrorImagen as e:
+            self.error = str(e)
+        except Exception:
+            log.exception("Trabajo «%s» de %s", self.titulo, c.slug or "la principal")
+            self.error = "No se pudo terminar esta vez. Lo que no salió no usó tu cupo; intenta de nuevo en un momento."
+        finally:
+            self.hecho, self.fin = True, time.time()
 
 
-def terminar_trabajo(c: Cuenta, clave: str) -> None:
-    _en_curso.pop((c.slug, clave), None)
+def en_curso(c: Cuenta, clave: str) -> Trabajo | None:
+    return next((t for t in _trabajos.values() if t.slug == c.slug and t.clave == clave and not t.hecho), None)
 
 
-def ya_en_curso(destino: str) -> str:
-    """Lo que ve el segundo clic: el primero sigue trabajando."""
-    return ('<div class="tarjeta"><h2>Ya lo estamos haciendo.</h2>'
-            '<p class="ayuda">Esto ya se está generando con tu primer clic (o en otra pestaña). Espera a que termine;'
-            ' no se cobra dos veces.</p>'
-            f'<div class="acciones"><a class="boton" href="{escape(destino)}">Ir a ver</a></div></div></div></main>'
-            + FINAL)
+async def trabajo_largo(c: Cuenta, clave: str, titulo: str, nota: str, destino: str, correr,
+                        menu: tuple[str, str] = ("contenido", ""), boton: str = "Ver el resultado") -> HTMLResponse:
+    """Lanza `correr` en segundo plano (o se suma al mismo trabajo si ya corre) y contesta con su página: el
+    resultado si terminó en ESPERA_TRABAJO, o la de espera que se recarga sola."""
+    ahora = time.time()
+    for k in [k for k, t in _trabajos.items() if t.hecho and ahora - t.fin > GUARDAR_TRABAJO]:
+        del _trabajos[k]
+    if not (t := en_curso(c, clave)):
+        t = Trabajo(c, clave, titulo, nota, destino, menu, boton, correr)
+        _trabajos[t.id] = t
+    await asyncio.wait({t.tarea}, timeout=ESPERA_TRABAJO)
+    return await pagina_trabajo(c, t)
+
+
+async def pagina_trabajo(c: Cuenta, t: Trabajo) -> HTMLResponse:
+    if not t.hecho:
+        recarga = f'<meta http-equiv="refresh" content="{RECARGA_TRABAJO};url=/panel/trabajo/{t.id}">'
+        avance = "".join(f'<p class="ayuda">{escape(x)}</p>' for x in t.avance[-1:])
+        cuerpo = (recarga + '<div class="tarjeta" id="generando"><div class="generando">'
+                  '<div class="escribiendo"><span></span><span></span><span></span></div>'
+                  f'<div><h2>{escape(t.titulo)}</h2><p class="ayuda">{escape(t.nota)} Puedes cerrar esta página:'
+                  " seguimos trabajando y lo verás al volver.</p></div></div>"
+                  f"{avance}</div>")
+    elif t.error:
+        cuerpo = (f'<div class="aviso">{escape(t.error)}</div><div class="tarjeta"><h2>{escape(t.titulo)}</h2>'
+                  '<p class="ayuda">No se terminó.</p>'
+                  f'<div class="acciones"><a class="boton" href="{escape(t.destino)}">{escape(t.boton)}</a></div></div>')
+    else:
+        cuerpo = (f'<meta http-equiv="refresh" content="0;url={escape(t.destino)}">'
+                  f'<div class="tarjeta"><h2>{escape(t.titulo)}</h2><p class="ayuda">Listo.</p>'
+                  f'<div class="acciones"><a class="boton" href="{escape(t.destino)}">{escape(t.boton)}</a></div></div>')
+    return pagina(await menu_de(c, t.menu[0], sub=t.menu[1]) + f'<main><div class="contenedor">{cuerpo}</div></main>')
+
+
+@router.get("/trabajo/{tid}")
+async def ver_trabajo(request: Request, tid: str):
+    if not (c := cuenta_de_sesion(request)):
+        return RedirectResponse("/panel", status_code=303)
+    if not (t := _trabajos.get(tid)) or t.slug != c.slug:  # ya se olvidó, o igbot se reinició
+        return RedirectResponse("/panel/contenido/campanas", status_code=303)
+    return await pagina_trabajo(c, t)
 
 
 async def error_inesperado(request: Request) -> HTMLResponse:

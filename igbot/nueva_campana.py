@@ -927,7 +927,7 @@ async def crear_brief(c: Cuenta, b: dict, datos: dict):
         await escribir(c, b)
         yield f"{URL}?paso={BRIEF}"
 
-    return campanas.trabajando(c, "Pensando las ideas de tu campaña…", "Tarda unos segundos.", trabajo,
+    return await campanas.trabajando(c, "Pensando las ideas de tu campaña…", "Tarda unos segundos.", trabajo,
                                f"{URL}?paso={RESUMEN}")
 
 
@@ -1051,4 +1051,4 @@ async def crear_rapida(request: Request):
             await campanas.guardar(c, hecha)
         yield campanas.url_de(camp)
 
-    return campanas.trabajando(c, "Creando tu campaña con IA…", "Tarda alrededor de un minuto.", trabajo, RAPIDA)
+    return await campanas.trabajando(c, "Creando tu campaña con IA…", "Tarda alrededor de un minuto.", trabajo, RAPIDA)

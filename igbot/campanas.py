@@ -37,7 +37,7 @@ from datetime import date, datetime, timedelta
 from html import escape
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from PIL import Image
 
 from . import brief, config, empresa, imagenes, informe, openai_texto, panel, semana, tools
@@ -891,6 +891,15 @@ async def estado_post(c: Cuenta, p: dict) -> dict | None:
         p["post_id"] = None  # lo descartaron: vuelve a ser propuesta
         return None
     return post
+
+
+async def guardar_post(c: Cuenta, camp: dict, p: dict) -> None:
+    """Guarda solo ese post, sobre la campaña recién leída: los trabajos largos corren en segundo plano y mientras
+    tanto el dueño pudo mover o editar otros posts. Si ya no está (borró el post o la campaña), no guarda nada."""
+    if not (fresca := await leer(c, camp["id"])):
+        return
+    fresca["posts"] = [p if str(x["k"]) == str(p["k"]) else x for x in fresca["posts"]]
+    await guardar(c, fresca)
 
 
 async def guardar_descartados(c: Cuenta, camp: dict, antes: dict) -> None:
@@ -1898,47 +1907,12 @@ def tarjeta_extra(accion: str, k: str, destino: str) -> str:
             f'<a class="boton secundario" href="{destino}">Cancelar</a></div></form>')
 
 
-def trabajando(c: Cuenta, titulo: str, nota: str, trabajo, destino: str = BASE, clave: str = "") -> StreamingResponse:
-    """Sin JavaScript: "trabajando…" mientras tanto y, al terminar, de vuelta a la campaña. Si ese mismo
-    trabajo (`clave`, o el título y el destino) ya está corriendo por un doble clic o al recargar, no se
-    repite (panel.empezar_trabajo)."""
-    ver = BASE if clave else destino  # con clave propia, el destino aún no existe (campaña nueva)
-    clave = clave or f"{titulo} {destino}"
-    libre = panel.empezar_trabajo(c, clave)
-
-    async def partes():
-        try:
-            menu = (panel.PRINCIPIO + await panel.menu_de(c, "contenido", sub="campanas")
-                    + '<main><div class="contenedor">')
-            if not libre:
-                yield menu + panel.ya_en_curso(ver)
-                return
-            yield (menu + '<div class="tarjeta" id="generando"><div class="generando">'
-                   '<div class="escribiendo"><span></span><span></span><span></span></div>'
-                   f'<div><h2>{escape(titulo)}</h2><p class="ayuda">{escape(nota)} No cierres esta página.</p></div></div></div>')
-            ir, error = destino, ""
-            try:
-                async for linea in trabajo():
-                    if linea.startswith("/"):
-                        ir = linea
-                    else:
-                        yield f'<p class="ayuda">{escape(linea)}</p>'
-            except imagenes.ErrorImagen as e:
-                error = str(e)
-            except Exception:
-                log.exception("Campaña de %s", c.slug)
-                error = "No se pudo terminar esta vez. Lo que no salió no usó tu cupo; intenta de nuevo en un momento."
-        finally:
-            if libre:
-                panel.terminar_trabajo(c, clave)
-        yield ('<style>#generando{display:none}</style>'
-               + ("" if error else f'<meta http-equiv="refresh" content="0;url={ir}">')
-               + (f'<div class="aviso">{escape(error)}</div>' if error else "")
-               + f'<div class="tarjeta"><h2>{"Listo." if not error else "No se terminó."}</h2>'
-               f'<div class="acciones"><a class="boton" href="{ir}">Ver tu campaña</a></div></div></div></main>'
-               + panel.FINAL)
-
-    return StreamingResponse(partes(), media_type="text/html; charset=utf-8")
+async def trabajando(c: Cuenta, titulo: str, nota: str, trabajo, destino: str = BASE, clave: str = "") -> HTMLResponse:
+    """En segundo plano (panel.trabajo_largo): sigue aunque cierre la página y, al terminar, lleva de vuelta a la
+    campaña. Si ese mismo trabajo (`clave`, o el título y el destino) ya está corriendo por un doble clic o al
+    recargar, no se repite."""
+    return await panel.trabajo_largo(c, clave or f"{titulo} {destino}", titulo, nota, destino, trabajo,
+                                     menu=("contenido", "campanas"), boton="Ver tu campaña")
 
 
 # --- rutas ---
@@ -2125,7 +2099,7 @@ async def armar(c: Cuenta, datos: dict, camp: dict, borrador: bool = False):
                 await c.store.set(nueva_campana.BORRADOR, "{}")
         yield url_de(nueva)
 
-    return trabajando(c, "Armando tu campaña…", "Tarda alrededor de medio minuto.", trabajo, url_de(nueva),
+    return await trabajando(c, "Armando tu campaña…", "Tarda alrededor de medio minuto.", trabajo, url_de(nueva),
                       clave="armar campaña")
 
 
@@ -2208,12 +2182,16 @@ async def accion(request: Request, cid: str):
         async def todas():
             for i, p in enumerate(pendientes, 1):
                 yield f"Pieza {i} de {len(pendientes)}: {p['titulo']}…"
-                with usar(c):
-                    await generar_imagen(c, camp, p, extra)
-                    await guardar(c, camp)
+                with usar(c):  # lo último de ese post: mientras tanto pudo moverlo, editarlo o borrarlo
+                    fresca = await leer(c, camp["id"])
+                    p = buscar_post(fresca, p["k"]) if fresca else None
+                    if not p or await estado_post(c, p):
+                        continue
+                    await generar_imagen(c, fresca, p, extra)
+                    await guardar_post(c, fresca, p)
             yield url
 
-        return trabajando(c, "Generando las imágenes…", f"Tarda alrededor de {len(pendientes) * 20} segundos.", todas,
+        return await trabajando(c, "Generando las imágenes…", f"Tarda alrededor de {len(pendientes) * 20} segundos.", todas,
                           url)
 
     if que == "aprobar_todas":
@@ -2290,20 +2268,20 @@ async def accion(request: Request, cid: str):
                 await otra_idea(c, camp, p)
                 if camp.get("brief"):
                     await prompts_de(c, camp, [p])
-                await guardar(c, camp)
+                await guardar_post(c, camp, p)
             yield f"{url}?post={k}#detalle"
 
-        return trabajando(c, "Pensando otra idea…", "Tarda unos segundos.", otra, url)
+        return await trabajando(c, "Pensando otra idea…", "Tarda unos segundos.", otra, url)
 
     if que == "prompt" and camp.get("brief"):
         async def escribir_prompt():
             with usar(c):
                 p.pop("prompt", None)
                 await prompt_de(c, camp, p, await marca_de(c))
-                await guardar(c, camp)
+                await guardar_post(c, camp, p)
             yield f"{url}?post={k}#detalle"
 
-        return trabajando(c, "Escribiendo el prompt…", "Tarda unos segundos.", escribir_prompt, url)
+        return await trabajando(c, "Escribiendo el prompt…", "Tarda unos segundos.", escribir_prompt, url)
 
     if que == "generar":
         extra = f.get("extra") == "1"
@@ -2313,10 +2291,10 @@ async def accion(request: Request, cid: str):
         async def una():
             with usar(c):
                 await generar_imagen(c, camp, p, extra)
-                await guardar(c, camp)
+                await guardar_post(c, camp, p)
             yield f"{url}?post={k}#detalle"
 
-        return trabajando(c, "Generando la imagen…" if costo(p) else "Armando la pieza…",
+        return await trabajando(c, "Generando la imagen…" if costo(p) else "Armando la pieza…",
                           "Tarda alrededor de medio minuto." if costo(p) else "Tarda unos segundos.", una, url)
 
     if que == "aprobar":

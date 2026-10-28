@@ -222,7 +222,7 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
     # Las demás de un jalón y aprobar todas: solo las fotos usan cupo.
     pendientes = [p for p in leer(client, c)["posts"] if not p["post_id"]]
     r = client.post(u, headers=ORIGEN, data={"accion": "generar_todas"})
-    assert f"Pieza {len(pendientes)} de {len(pendientes)}" in r.text
+    assert "Generando las imágenes" in r.text and "Listo." in r.text and f'content="0;url={u}"' in r.text
     camp = leer(client, c)
     assert all(p["post_id"] for p in camp["posts"])
     assert client.portal.call(contenido.imagenes.usadas, c.store)[0] == sum(campanas.costo(p) for p in pendientes)
@@ -829,3 +829,62 @@ def test_abrir_la_campana_no_la_vuelve_a_guardar(cliente, monkeypatch):
     client.post(f"{BASE}/7", headers=ORIGEN, data={"accion": "borrar"})
     assert client.portal.call(c.store.get, campanas.HAY_CAMPANAS) == "0"
     assert not client.portal.call(campanas.hay_campanas, c)
+
+
+def test_un_trabajo_largo_sigue_aunque_cierres_la_pagina(cliente, monkeypatch):
+    """Corre aparte de la página: la de espera se recarga sola con el avance, un doble clic se suma al mismo
+    trabajo y al terminar lleva al resultado. Solo lo ve su cuenta."""
+    import asyncio
+
+    from igbot import panel
+    client, c, *_ = cliente
+    monkeypatch.setattr(panel, "ESPERA_TRABAJO", 0)
+    corridas, sigue = [], {}
+
+    async def correr():
+        corridas.append(1)
+        yield "Pieza 1 de 2: Café"
+        await sigue["evento"].wait()
+        yield f"{BASE}/7"
+
+    async def lanzar():
+        sigue.setdefault("evento", asyncio.Event())
+        return await panel.trabajo_largo(c, "generar 7", "Generando las imágenes…", "Tarda un minuto.", BASE, correr)
+
+    r = client.portal.call(lanzar)
+    html = r.body.decode()
+    tid = re.search(r'url=/panel/trabajo/([\w-]+)"', html).group(1)
+    assert "Generando las imágenes" in html and "Puedes cerrar esta página" in html
+    r = client.get(f"/panel/trabajo/{tid}")
+    assert "Pieza 1 de 2: Café" in r.text and f"/panel/trabajo/{tid}" in r.text  # sigue: se recarga sola
+    assert tid in client.portal.call(lanzar).body.decode() and corridas == [1]  # doble clic: el mismo trabajo
+
+    client.portal.call(sigue["evento"].set)
+    client.portal.call(asyncio.wait, {panel._trabajos[tid].tarea})
+    r = client.get(f"/panel/trabajo/{tid}")
+    assert "Listo." in r.text and f'content="0;url={BASE}/7"' in r.text
+    monkeypatch.setattr(panel._trabajos[tid], "slug", "otra-cuenta")
+    assert client.get(f"/panel/trabajo/{tid}", follow_redirects=False).headers["location"] == BASE
+    assert client.get("/panel/trabajo/no-existe", follow_redirects=False).status_code == 303
+
+
+def test_un_trabajo_en_segundo_plano_no_pisa_lo_que_cambiaste(cliente):
+    """Mientras se genera un post, el dueño movió otro: guardar el primero no deshace el cambio del segundo."""
+    client, c, *_ = cliente
+    posts = [{"k": k, "tipo": "dato", "formato": "texto", "dia": LUNES.isoformat(), "hora": "09:00",
+              "titulo": f"Post {k}", "caption": "c", "idea": "", "post_id": None} for k in (1, 2)]
+    camp = {"id": 8, "nombre": "Dos", "inicio": LUNES.isoformat(), "semanas": 1, "publicar": "lmv", "creada": 1.0,
+            "modo": "explorar", "posts": posts}
+    client.portal.call(campanas.guardar, c, camp)
+    vieja = json.loads(json.dumps(camp))  # la copia con la que arrancó el trabajo
+
+    movida = client.portal.call(campanas.leer, c, 8)
+    campanas.buscar_post(movida, 2)["hora"] = "20:00"  # lo que cambió el dueño mientras tanto
+    client.portal.call(campanas.guardar, c, movida)
+
+    p = campanas.buscar_post(vieja, 1)
+    p["caption"] = "Texto nuevo"
+    client.portal.call(campanas.guardar_post, c, vieja, p)
+    ahora = client.portal.call(campanas.leer, c, 8)
+    assert campanas.buscar_post(ahora, 1)["caption"] == "Texto nuevo"
+    assert campanas.buscar_post(ahora, 2)["hora"] == "20:00"
