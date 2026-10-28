@@ -259,6 +259,22 @@ async def todas_las(c: Cuenta) -> list[dict]:
     return [{**vieja, "id": int(vieja.get("creada", 0) * 1000)}]
 
 
+async def escribir_todas(c: Cuenta, lista: list[dict]) -> None:
+    await c.store.set("campanas", json.dumps(lista, ensure_ascii=False))
+    await c.store.set(HAY_CAMPANAS, "1" if lista else "0")
+
+
+HAY_CAMPANAS = "hay_campanas"  # para el menú: saber si tiene alguna sin leer todas
+
+
+async def hay_campanas(c: Cuenta) -> bool:
+    """Si tiene al menos una campaña (Pasos iniciales, en cada página). Las cuentas de antes lo calculan una vez."""
+    if (guardado := await c.store.get(HAY_CAMPANAS)) is None:
+        guardado = "1" if await todas_las(c) else "0"
+        await c.store.set(HAY_CAMPANAS, guardado)
+    return guardado == "1"
+
+
 async def leer(c: Cuenta, cid) -> dict:
     """Una campaña por su id, o {}."""
     return next((x for x in await todas_las(c) if str(x["id"]) == str(cid)), {})
@@ -273,7 +289,7 @@ async def guardar(c: Cuenta, camp: dict) -> None:
         vieja = min(lista, key=lambda x: informe.fin_de(x))
         await informe.archivar(c, vieja)
         lista.remove(vieja)
-    await c.store.set("campanas", json.dumps(lista, ensure_ascii=False))
+    await escribir_todas(c, lista)
 
 
 async def borrar(c: Cuenta, camp: dict) -> int:
@@ -283,8 +299,7 @@ async def borrar(c: Cuenta, camp: dict) -> int:
     for p in camp.get("posts", []):
         if (post := await estado_post(c, p)) and post["status"] in ("borrador", "programada", "fallida"):
             descartados += await c.store.set_post(post["id"], "cancelada", only_if=post["status"])
-    await c.store.set("campanas", json.dumps([x for x in await todas_las(c) if x["id"] != camp["id"]],
-                                             ensure_ascii=False))
+    await escribir_todas(c, [x for x in await todas_las(c) if x["id"] != camp["id"]])
     return descartados
 
 

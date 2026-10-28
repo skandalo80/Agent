@@ -476,7 +476,10 @@ async def guardar(request: Request):
     datos["pasos"] = sorted(set(datos.get("pasos") or []) | {paso})
     nombre = await panel.usuario(c)
     prompt = panel.generar(nombre, datos, await panel.negocio_de_empresa(c))
-    if (paso in ESCRITOS or (paso == "personalidad" and (datos["toque"] or datos["nombre_asistente"]))) and (motivo := await panel.revisar_instrucciones(c, prompt)):
+    destino = c.prompt_destino()
+    igual = destino.is_file() and destino.read_text(encoding="utf-8") == prompt  # ya se revisó al guardarlo
+    if (not igual and (paso in ESCRITOS or (paso == "personalidad" and (datos["toque"] or datos["nombre_asistente"])))
+            and (motivo := await panel.revisar_instrucciones(c, prompt))):
         log.warning("@%s: no se guardó %s: %s", nombre, paso, motivo)
         return await pagina(c, paso, nota=f"No se guardó: {motivo} Corrígelo y vuelve a intentar.", perfil=datos)
     if paso == "equipo":

@@ -349,13 +349,14 @@ async def antes_de_guardar(c: Cuenta) -> None:
 
 async def revisar_y_aplicar(c: Cuenta) -> None:
     e, prods = await de(c), await productos(c)
-    if not (motivo := await revisar(c, e, prods)):
+    aprobado = json.loads(await c.store.get(CLAVE_APROBADO) or "{}")
+    igual = texto_asistente(e, prods) == texto_asistente(aprobado.get("empresa", {}), aprobado.get("productos", []))
+    if igual or not (motivo := await revisar(c, e, prods)):  # lo que lee el asistente no cambió: no se revisa
         await c.store.set(CLAVE_APROBADO, json.dumps({"empresa": e, "productos": prods}, ensure_ascii=False))
         await c.store.set(CLAVE_RECHAZO, "")
         await aplicar(c)
         return
     log.warning("@%s: perfil de empresa rechazado: %s", await panel.usuario(c), motivo)
-    aprobado = json.loads(await c.store.get(CLAVE_APROBADO) or "{}")
     viejos = aprobado.get("productos", [])
     nuevos = [p for p in prods if p not in viejos]
     producto = nuevos[-1] if nuevos else None
@@ -373,15 +374,39 @@ async def rechazo(c: Cuenta) -> dict:
     return json.loads(await c.store.get(CLAVE_RECHAZO) or "{}")
 
 
-def programar_revision(c: Cuenta) -> None:
-    """Una revisión a la vez por cuenta; si guarda mientras tanto, se revisa otra vez lo último."""
+ESPERA_REVISION = 45  # segundos sin guardar antes de revisar: recorrer los pasos lanza una sola revisión
+_ultimo: dict[str, float] = {}
+_ya: dict[str, asyncio.Event] = {}  # el de la revisión en curso de cada cuenta: revisar sin esperar más
+
+
+async def _esperar_calma(slug: str) -> None:
+    """Hasta que pasen ESPERA_REVISION segundos desde el último guardado, o hasta que pidan revisar ya."""
+    ya = _ya[slug]
+    while not ya.is_set() and (resto := _ultimo.get(slug, 0) + ESPERA_REVISION - time.monotonic()) > 0:
+        try:
+            await asyncio.wait_for(ya.wait(), resto)
+        except TimeoutError:
+            pass
+    ya.clear()
+
+
+def programar_revision(c: Cuenta, ya: bool = False) -> None:
+    """Revisa lo último que guardó cuando deja de guardar un rato (`ya`: al terminar, sin esperar). Una
+    revisión a la vez por cuenta; si guarda mientras tanto, se revisa otra vez lo último."""
+    _ultimo[c.slug] = time.monotonic()
     if (t := _revisiones.get(c.slug)) and not t.done():
         _otra_vez.add(c.slug)
+        if ya:
+            _ya[c.slug].set()
         return
+    _ya[c.slug] = asyncio.Event()
+    if ya:
+        _ya[c.slug].set()
 
     async def correr():
         try:
             while True:
+                await _esperar_calma(c.slug)
                 _otra_vez.discard(c.slug)
                 try:
                     await revisar_y_aplicar(c)
@@ -391,6 +416,7 @@ def programar_revision(c: Cuenta) -> None:
                     break
         finally:
             _revisiones.pop(c.slug, None)
+            _ya.pop(c.slug, None)
 
     tarea = asyncio.create_task(correr())
     _revisiones[c.slug] = tarea
@@ -399,9 +425,17 @@ def programar_revision(c: Cuenta) -> None:
 
 
 async def esperar_revision(c: Cuenta) -> None:
-    """Para las pruebas: espera la revisión en curso, si hay."""
+    """Para las pruebas: hace ya la revisión pendiente, si hay, y la espera."""
     while (t := _revisiones.get(c.slug)) and not t.done():
+        if ev := _ya.get(c.slug):
+            ev.set()
         await t
+
+
+async def revision_pendiente(c: Cuenta) -> bool:
+    """Si quedó algo guardado sin revisar (p. ej. igbot se reinició durante la espera)."""
+    aprobado = await c.store.get(CLAVE_APROBADO)
+    return bool(aprobado) and json.loads(aprobado) != {"empresa": await de(c), "productos": await productos(c)}
 
 
 SISTEMA_OPCIONES = """Preparas las opciones que verá el dueño de un negocio cuando crea una campaña de Instagram, para que tengan sentido con SU empresa.
@@ -980,7 +1014,7 @@ async def guardar(request: Request):
         await antes_de_guardar(c)
         e["actualizado"] = int(time.time())
         await c.store.set(CLAVE, json.dumps(e, ensure_ascii=False))
-        programar_revision(c)  # revisa y, si se aprueba, el asistente y las opciones lo usan
+        programar_revision(c, ya=accion == "terminar")  # revisa y, si se aprueba, el asistente y las opciones lo usan
         log.info("@%s guardó el paso %s de su perfil de empresa", await panel.usuario(c), paso)
     if accion == "terminar":
         if not cambio:  # si cambió, se piden al aprobarse

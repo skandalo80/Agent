@@ -826,3 +826,9 @@ def test_abrir_la_campana_no_la_vuelve_a_guardar(cliente, monkeypatch):
     assert len(escrituras) == 1 and [p["post_id"] for p in camp["posts"]] == [None, ids[1]]
     client.get(f"{BASE}/7")
     assert len(escrituras) == 1  # ya quedó guardado: no se repite
+
+    # El menú sabe si tiene campañas sin leerlas todas; al borrar la última, vuelve el paso «Crea tu primera campaña».
+    assert client.portal.call(campanas.hay_campanas, c)
+    client.post(f"{BASE}/7", headers=ORIGEN, data={"accion": "borrar"})
+    assert client.portal.call(c.store.get, campanas.HAY_CAMPANAS) == "0"
+    assert not client.portal.call(campanas.hay_campanas, c)
