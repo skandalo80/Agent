@@ -1603,8 +1603,8 @@ def cabeza(boton: str = "", pasos: str = "", donde: str = "") -> str:
 
 def botones_nueva() -> str:
     """Crear campaña (el asistente paso por paso) y Crear con IA (solo objetivo y fechas)."""
-    return (f'<span class="botones-nueva"><a class="boton secundario ajuste" href="{BASE}/nueva">Crear campaña</a>'
-            f'<a class="boton ajuste boton-ia" href="{BASE}/rapida">{BRILLOS_IA} Crear con IA</a></span>')
+    return (f'<span class="botones-nueva"><a class="boton secundario chico" href="{BASE}/nueva">Crear campaña</a>'
+            f'<a class="boton chico boton-ia" href="{BASE}/rapida">{BRILLOS_IA} Crear con IA</a></span>')
 
 
 async def barra(c: Cuenta, camp: dict) -> str:
@@ -1702,15 +1702,15 @@ async def pagina_campana(c: Cuenta, camp: dict, aviso: str = "", sel: str = "", 
     descargas = (f'<a href="{u}/propuesta">Planeación (PDF)</a>'
                  + (f'<a href="{u}/brief">Brief (PDF)</a>' if camp.get("brief") else ""))
     botones = ('<span class="botones-cab">'
-               f'<a class="boton secundario ajuste" href="{BASE}/nueva?editar={camp["id"]}">Editar estrategia</a>'
-               f'<details class="menu-desc"><summary class="boton secundario ajuste">↓ Descargar</summary>'
+               f'<a class="boton secundario chico" href="{BASE}/nueva?editar={camp["id"]}">Editar estrategia</a>'
+               f'<details class="menu-desc"><summary class="boton secundario chico">↓ Descargar</summary>'
                f'<div>{descargas}</div></details>'
-               f'<a class="boton ajuste peligro" href="{u}?borrar=1">Borrar campaña</a></span>')
+               f'<a class="boton chico peligro" href="{u}?borrar=1">Borrar campaña</a></span>')
     cab = cabecera_campana(camp, hoy, botones)
     return panel.pagina(
         await panel.menu_de(c, "contenido", sub="campanas")
-        + cabeza("<span></span>", donde=escape(camp["nombre"]))  # la franja vacía: arriba, a la misma altura que las demás
-        + '<div class="oscuro-pag"><main><div class="contenedor">'
+        + cabeza(donde=escape(camp["nombre"]))
+        + '<div class="oscuro-pag"><main><div class="contenedor pag-camp">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
         + await panel.pendiente(c, "campanas") + cab + cuerpo + "</div></main>" + modal + "</div>")
 
@@ -1866,7 +1866,7 @@ async def pagina_lista(c: Cuenta, ver: str = "", aviso: str = "", q: dict | None
     if ver not in PESTANAS:
         ver = next((k for k in ("activa", "proxima") if grupos[k]), "pasada")
     n_pasadas = len(await informe.todas(c, grupos["pasada"]))
-    pestanas = '<nav class="tabs-cam">' + "".join(
+    pestanas = '<nav class="cal-sw tabs-cam">' + "".join(
         f'<a href="{BASE}?ver={k}"{panel.ACTIVA if k == ver else ""}>{v}'
         f'<small>{n_pasadas if k == "pasada" else len(grupos[k])}</small></a>' for k, v in PESTANAS.items()) + "</nav>"
     if ver == "pasada":
@@ -1883,11 +1883,11 @@ async def pagina_lista(c: Cuenta, ver: str = "", aviso: str = "", q: dict | None
                    "</a></div>")
     return panel.pagina(
         await panel.menu_de(c, "contenido", sub="campanas")
-        + cabeza(botones_nueva())
-        + '<div class="oscuro-pag"><main><div class="contenedor">'
+        + '<div class="oscuro-pag"><main><div class="contenedor pag-camp">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
         + await panel.pendiente(c, "campanas")
-        + f'<div class="tarjeta">{pestanas}{cuerpo}</div></div></main></div>')
+        + f'<div class="tarjeta cal barra-camps"><div class="cal-cab">{pestanas}{botones_nueva()}</div></div>'  # la barra, como la de Resultados
+        + f'<div class="tarjeta">{cuerpo}</div></div></main></div>')
 
 
 # --- meses ---

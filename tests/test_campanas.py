@@ -136,7 +136,7 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
     # Las tarjetas dicen si es post o historia, sin el tema ni el formato en gris.
     assert '<span class="medio-cam m-post">Post</span>' in r.text and '<span class="fmt-cam">' not in r.text
     assert 'class="tarjeta cab-camp"' in r.text and "<h2>Otoño</h2>" in r.text
-    assert "Arma tu campaña" not in r.text and "Planeación (PDF)</a>" in r.text and "‹ Volver a campañas" in r.text and "boton ajuste peligro" in r.text  # sin los tres pasos arriba
+    assert "Arma tu campaña" not in r.text and "Planeación (PDF)</a>" in r.text and "‹ Volver a campañas" in r.text and "boton chico peligro" in r.text  # sin los tres pasos arriba
     assert "Generar las 3 que faltan · usa 2" in r.text  # el de solo texto no usa cupo
 
     # Arrastrar el del lunes al miércoles: se intercambian.
