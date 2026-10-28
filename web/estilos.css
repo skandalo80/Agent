@@ -345,3 +345,13 @@ footer a:hover { color: var(--morado); }
   .articulo-destacado .cuerpo { padding: 24px; }
 }
 .blog-portada .bajada, .articulo-cabecera .bajada, .relacionados h2 { margin-left: 0; margin-right: 0; }
+
+/* Páginas por giro */
+.otros-giros-titulo { margin-top: 44px; }
+.otros-giros { justify-content: center; }
+.otros-giros .pastilla, .giros-portada .pastilla { color: #fff; text-decoration: none; transition: background .2s; }
+.otros-giros .pastilla:hover, .giros-portada .pastilla:hover { background: #ffffff2e; }
+a.tarjeta { display: block; color: inherit; text-decoration: none; }
+.tarjeta h3 + p { margin-top: 8px; }
+.ejemplo .marcas { color: #e2d8e6; }
+.ejemplo .marcas strong { color: #fff; }
