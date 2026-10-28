@@ -603,25 +603,18 @@ label.check input[type=email]{flex:1;max-width:22rem;margin:0}
 .semaforo.sem-aviso{background:#ff9f0a}.semaforo.sem-mal{background:#ff453a}
 .caminos{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem}
 .camino{background:var(--blanco);border-radius:1.5rem;padding:2rem;display:flex;flex-direction:column;border:2px solid transparent}
-.camino.sugerido{border-color:var(--acento)}
 .camino h2{margin:.25rem 0 .5rem}.camino ul{margin:1rem 0 1.5rem;padding:0;list-style:none;color:#E4E4E2}
 .camino li{padding:.45rem 0;border-top:1px solid var(--linea-clara);display:flex;gap:.6rem}
 .camino li:first-child{border-top:0}.camino li b{color:var(--acento);font-weight:600;min-width:1.2rem}
 .camino .acciones{margin-top:auto}
+.pasos-bienv{margin-bottom:1.5rem}.explorar .boton{white-space:nowrap}.pasos-bienv .wiz-paso{cursor:default}.pasos-bienv .wiz-paso>span small{display:block;font-size:.76rem;font-weight:400;color:var(--gris);margin-top:.05rem}
 .tiempo{align-self:flex-start;font-size:.8rem;color:#A8A8AE;background:var(--claro);border-radius:999px;padding:.2rem .7rem}
-.sola{max-width:40rem;margin:0 auto}
-.bajada-bienvenida{color:#A8A8AE;font-size:1.15rem;max-width:40rem;margin:.75rem 0 0}
+.sola{max-width:46rem;margin:0 auto}
 .despues{margin-top:1.25rem;text-align:center;color:#A8A8AE;font-size:.9rem}.despues a{color:inherit}
 .despues button{background:none;border:0;padding:0;font:inherit;color:inherit;text-decoration:underline;cursor:pointer}
-.pasos-bienv{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;color:#A8A8AE;font-size:.85rem;margin-top:1.25rem}
-.pasos-bienv span{display:inline-flex;align-items:center;gap:.4rem}
-.pasos-bienv b{width:1.5rem;height:1.5rem;border-radius:50%;display:grid;place-items:center;background:#2E3035;color:#A8A8AE;font-size:.75rem}
-.pasos-bienv .on{color:var(--claro)}.pasos-bienv .on b{background:var(--acento);color:var(--tinta)}
-.pasos-bienv .hecho b{background:var(--neon);color:var(--tinta)}
-.pasos-bienv i{width:2rem;height:1px;background:#46484F}
 .explorar{margin-top:1.25rem;background:var(--blanco);border-radius:1.5rem;padding:1.25rem 2rem;display:flex;align-items:center;justify-content:space-between;gap:1rem}
 .explorar p{margin:0;color:#E4E4E2}.explorar b{color:var(--negro)}
-.sola+.explorar{max-width:40rem;margin-left:auto;margin-right:auto}
+.sola+.explorar{max-width:46rem;margin-left:auto;margin-right:auto}
 @media(max-width:700px){.caminos{grid-template-columns:1fr}.explorar{flex-direction:column;align-items:flex-start;padding:1.25rem 1.5rem}}
 .regla{border-top:1px solid var(--linea-clara);margin-top:1rem;padding-top:1rem}
 .cab-regla{display:flex;justify-content:space-between;align-items:center;gap:.75rem}
@@ -1124,7 +1117,7 @@ img.mrc-logo-mini{background:#fff}
 /* Clay ligero sobre el tema morado: relieve en tarjetas y botones, texto plano. */
 :root{--clay-sombra:10px 14px 28px rgba(12,11,16,.55);--clay-luz:inset 2px 2px 0 rgba(255,255,255,.07),inset -6px -8px 16px rgba(0,0,0,.22),inset 6px 6px 14px rgba(255,255,255,.035)}
 .lateral{border-radius:2rem;border:0;box-shadow:var(--clay-sombra),var(--clay-luz)}
-.tarjeta,.kpi,.estado,.aviso,.inbox,.wiz-main,.wiz-pasos,.as-pasos,.as-cont,.as-caja,.riel,.caja-o,.as-pers,.wiz-op,.camp,.barra-cam,.modal-cam,.chat{border-radius:1.75rem!important;border-color:transparent!important;box-shadow:var(--clay-sombra),var(--clay-luz)}
+.tarjeta,.camino,.explorar,.kpi,.estado,.aviso,.inbox,.wiz-main,.wiz-pasos,.as-pasos,.as-cont,.as-caja,.riel,.caja-o,.as-pers,.wiz-op,.camp,.barra-cam,.modal-cam,.chat{border-radius:1.75rem!important;border-color:transparent!important;box-shadow:var(--clay-sombra),var(--clay-luz)}
 .wiz-op,.as-pers{box-shadow:6px 9px 18px rgba(12,11,16,.45),var(--clay-luz)}
 .wiz-op:has(input:checked),.as-pers:has(input:checked){box-shadow:0 0 0 2px var(--acento),6px 9px 18px rgba(12,11,16,.45),var(--clay-luz)!important}
 .boton,.wiz-pie .boton{border-radius:999px;box-shadow:5px 7px 14px rgba(12,11,16,.5),inset 2px 3px 4px rgba(255,255,255,.35),inset -3px -4px 6px rgba(120,60,10,.35);border-color:transparent}
@@ -1157,7 +1150,7 @@ input[type=text],input[type=search],textarea,select,.inbox input[type=search],.e
 .wiz-op:has(input:checked)::after{background:var(--neon);color:var(--tinta)}
 /* Naranja como secundario: pasos hechos y todo lo seleccionado. El lima queda solo para dar
    punch: barras de avance y puntos de estado. */
-.wiz-pasos a.hecho b,.wiz-pasos .wiz-paso.hecho b,.paso-cam.hecho b,.pasos-bienv .hecho b{background:var(--acento);border-color:var(--acento);color:var(--tinta)}
+.wiz-pasos a.hecho b,.wiz-pasos .wiz-paso.hecho b,.paso-cam.hecho b{background:var(--acento);border-color:var(--acento);color:var(--tinta)}
 .opcion:has(input:checked),.letra:has(input:checked),.obj-cam .obj:has(input:checked),.mz:has(input:checked){border-color:var(--acento);box-shadow:0 0 0 1px var(--acento);background:rgba(255,138,61,.10)}
 .fmt-op:has(input:checked),.foto:has(input:checked){border-color:var(--acento)}
 .op-cam:has(input:checked){border-color:var(--acento);background:rgba(255,138,61,.10)}
@@ -1630,14 +1623,17 @@ def camino(etiqueta: str, titulo: str, desc: str, pasos: list[str], tiempo: str,
 
 
 def pasos_bienvenida(actual: int, empresa: bool = False) -> str:
-    """Los dos pasos arriba, en el hero: en el segundo, la empresa sale con palomita si ya la llenó."""
+    """Los dos pasos en la barra de arriba, como en los demás asistentes del panel: en el segundo,
+    la empresa sale con palomita si ya la llenó."""
     if actual == 1:
-        uno = '<span class="on"><b>1</b>Tu empresa</span>'
+        uno = '<span class="wiz-paso actual"><b>1</b><span>Tu empresa<small>Cuéntanos de tu negocio</small></span></span>'
+    elif empresa:
+        uno = '<span class="wiz-paso hecho"><b>✓</b><span>Tu empresa<small>Guardada</small></span></span>'
     else:
-        uno = ('<span class="hecho"><b>✓</b>Tu empresa</span>' if empresa else
-               '<span><b>1</b>Tu empresa · después</span>')
-    dos = f'<span class="{"on" if actual == 2 else ""}"><b>2</b>Elige por dónde seguir</span>'
-    return f'<div class="pasos-bienv">{uno}<i></i>{dos}</div>'
+        uno = '<span class="wiz-paso"><b>1</b><span>Tu empresa<small>La llenas después</small></span></span>'
+    dos = (f'<span class="wiz-paso{" actual" if actual == 2 else ""}"><b>2</b>'
+           '<span>¿Por dónde seguimos?<small>Tu asistente o tu marca</small></span></span>')
+    return f'<nav class="wiz-pasos pasos-bienv">{uno}<div class="sep"></div>{dos}</nav>'
 
 
 async def paso_empresa(c: Cuenta) -> bool:
@@ -1649,23 +1645,20 @@ async def bienvenida(c: Cuenta) -> HTMLResponse:
     """Paso 1: su Perfil de empresa. Paso 2, con contenido (Community Manager): Tu asistente o Tu marca;
     Asistente virtual: solo su asistente. En los dos, "Seguir explorando" entra al panel."""
     if await paso_empresa(c):
-        titulo = f"Hola, @{escape(await usuario(c))}"
-        bajada = "Antes de configurar tu asistente o tus posts, cuéntanos de tu empresa. Puedes guardar y seguir después."
         cuerpo = ('<div class="sola">' + camino(
-            "Primero lo esencial", "Perfil de empresa",
-            "Lo que tu asistente responde y lo que dicen tus posts sale de aquí. Lo llenas una vez y sirve para todo.",
+            f"Hola, @{escape(await usuario(c))}", "Perfil de empresa",
+            "Antes de configurar tu asistente o tus posts, cuéntanos de tu empresa: lo que tu asistente responde y"
+            " lo que dicen tus posts sale de aquí. Lo llenas una vez, sirve para todo y puedes guardar y seguir después.",
             PASOS_EMPRESA, "≈ 8 min", "Llenar mi perfil de empresa", "/panel/empresa", True)
             + '<form class="despues" method="post" action="/panel/bienvenida">'
             '<button name="accion" value="omitir">Omitir por ahora, lo lleno después</button></form></div>')
         paso, empresa = 1, False
     else:
-        titulo = "¿Por dónde seguimos?"
         empresa = await empresa_lista(c)
-        bajada = ("Tu perfil de empresa quedó guardado." if empresa else
-                  "Tu perfil de empresa te espera en el menú de tu cuenta.")
+        nota = ("Tu perfil de empresa quedó guardado." if empresa else
+                "Tu perfil de empresa te espera en el menú de tu cuenta.")
         asistente_desc = "El que contesta tus mensajes directos por ti, de día y de noche."
         if c.imagenes_mes > 0:
-            bajada += " Ahora elige qué configurar; lo otro lo haces cuando quieras."
             cuerpo = ('<div class="caminos">'
                       + camino("Recomendado", "Tu asistente", asistente_desc, PASOS_ASISTENTE, "≈ 10 min",
                                "Configurar tu asistente", "/panel/asistente/configura", True)
@@ -1673,21 +1666,21 @@ async def bienvenida(c: Cuenta) -> HTMLResponse:
                                " de la misma casa.", PASOS_MARCA, "≈ 5 min", "Configurar tu marca",
                                "/panel/contenido/marca", False)
                       + "</div>")
+            nota += " Elige qué configurar primero; lo otro lo haces cuando quieras."
         else:
-            bajada += " En 10 minutos dejas tu asistente contestando tus mensajes."
-            cuerpo = ('<div class="sola">' + camino("Tu plan Asistente virtual", "Tu asistente", asistente_desc,
+            cuerpo = ('<div class="sola">' + camino("Tu plan Asistente virtual", "Tu asistente", asistente_desc
+                                                    + " En 10 minutos lo dejas contestando tus mensajes.",
                                                     PASOS_ASISTENTE, "≈ 10 min", "Empezar",
                                                     "/panel/asistente/configura", True) + "</div>")
-        cuerpo += ('<div class="explorar"><p><b>¿Prefieres verlo todo primero?</b> Entra al panel;'
+        cuerpo += (f'<div class="explorar"><p>{nota} <b>¿Prefieres verlo todo primero?</b> Entra al panel;'
                    ' te recordamos lo que falta.</p><a class="boton secundario" href="/panel/asistente">Seguir explorando</a></div>')
         await c.store.set("bienvenida", "1")
         paso = 2
+    # Como las demás páginas del panel: el menú lateral, la barra de pasos arriba (dentro de main,
+    # con los colores oscuros) y las tarjetas.
     return pagina(
-        cabecera(salir=True)
-        + '<section class="oscuro portada compacta"><div class="contenedor">'
-        f'<h1>{titulo}<span class="punto">.</span></h1>'
-        f'<p class="bajada-bienvenida">{bajada}</p>{pasos_bienvenida(paso, empresa)}</div></section>'
-        f'<main><div class="contenedor">{cuerpo}</div></main>'
+        await menu_de(c, "ninguna")
+        + f'<main><div class="contenedor bienv">{pasos_bienvenida(paso, empresa)}{cuerpo}</div></main>'
     )
 
 
