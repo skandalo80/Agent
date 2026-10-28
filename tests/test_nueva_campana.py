@@ -194,7 +194,7 @@ def test_editor_regla_subir_y_dos_en_un_dia(cliente, monkeypatch):
     # El editor centrado: texto, prompt, generar o subir, y la regla encendida (la campaña busca interacción).
     r = client.get(f"{u}?post={p1['k']}")
     assert 'class="modal-cam"' in r.text and 'class="velo-cam"' in r.text and "Texto que se publica" in r.text
-    assert "Prompt de la imagen" in r.text and 'value="subir">Subir imagen' in r.text
+    assert "Idea de la imagen" in r.text and 'value="subir">Subir imagen' in r.text
     assert 'name="regla_activa" value="1" checked' in r.text and "esta campaña busca interacción" in r.text
     assert "Notas de producción" not in r.text
 
@@ -633,6 +633,50 @@ def test_flujo_brief_y_plan_con_claude_posts_e_imagen_con_openai(cliente, monkey
     assert proveedor.llamadas[-1][0].startswith("A detailed art-directed prompt")
     p = campanas.buscar_post(leer(client, c), foto["k"])
     assert p["prompt"] == "A detailed art-directed prompt" and p["idea_base"] == "Una taza en la barra"
+    r = client.get(f"{u}?post={foto['k']}")
+    assert 'name="prompt"' in r.text and ">A detailed art-directed prompt</textarea>" in r.text
+    # El prompt editado a mano es el que va al generador, sin volver a escribirlo.
+    llamadas_arte = len(arte)
+    client.post(u, headers=ORIGEN, data={"accion": "generar", "k": str(foto["k"]), "idea": "Una taza en la barra",
+                                         "prompt": "My own prompt, a cup on the bar"})
+    assert proveedor.llamadas[-1][0].startswith("My own prompt, a cup on the bar")
+    assert len([d for s, d in de_openai if "director de arte" in s]) == llamadas_arte
+    # "Escribir el prompt" lo escribe sin generar la imagen.
+    otro = next(p for p in leer(client, c)["posts"] if p["formato"] == "titular" and p["k"] != foto["k"])
+    n_imagenes = len(proveedor.llamadas)
+    client.post(u, headers=ORIGEN, data={"accion": "prompt", "k": str(otro["k"]), "idea": "Granos en la mano"})
+    assert len(proveedor.llamadas) == n_imagenes
+    assert campanas.buscar_post(leer(client, c), otro["k"])["prompt"] == "A detailed art-directed prompt"
+
+
+def test_si_openai_falla_el_prompt_lo_escribe_claude(cliente, monkeypatch):
+    client, c, _, proveedor = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 10)
+    import app as bot
+    from igbot import config, openai_texto
+    fake_claude = claude_de_campana([])
+
+    async def claude(prompt, system, **k):
+        if "director de arte" in system:
+            return json.dumps({"prompt": "Prompt from Claude"})
+        return await fake_claude(prompt, system, **k)
+
+    async def falla(sistema, prompt, max_tokens=16000):
+        if "director de arte" in sistema:
+            raise RuntimeError("modelo no disponible")
+        return json.loads(await fake_claude(prompt, sistema))
+
+    monkeypatch.setattr(bot.agent, "run_claude", claude)
+    monkeypatch.setattr(config, "OPENAI_API_KEY", "sk-prueba")
+    monkeypatch.setattr(openai_texto, "json_de", falla)
+    listo(client, c)
+    client.portal.call(c.store.set, "productos", json.dumps([PRODUCTO]))
+    llenar(client)
+    generar(client)
+    camp = leer(client, c)
+    foto = next(p for p in camp["posts"] if p["formato"] == "titular")
+    client.post(campanas.url_de(camp), headers=ORIGEN, data={"accion": "generar", "k": str(foto["k"]), "idea": "Otra idea"})
+    assert proveedor.llamadas[-1][0].startswith("Prompt from Claude")
 
 
 def test_lo_que_hay_que_verificar_sale_en_el_post():
@@ -642,3 +686,28 @@ def test_lo_que_hay_que_verificar_sale_en_el_post():
     assert posts[0]["verificar"] == ["Precio de 75 MXN"]
     html = campanas.plan_de_post({**posts[0], "plan": {"angulo": "A", "gancho": "Para"}})
     assert "Revisa antes de publicar" in html and "Precio de 75 MXN" in html and "Gancho" in html
+
+
+def test_los_documentos_de_cada_etapa_se_descargan(cliente, monkeypatch):
+    import io
+    import zipfile
+    client, c, *_ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 4)
+    import app as bot
+    monkeypatch.setattr(bot.agent, "run_claude", claude_de_campana([]))
+    listo(client, c)
+    client.portal.call(c.store.set, "productos", json.dumps([PRODUCTO]))
+    llenar(client)
+    generar(client)
+    camp = leer(client, c)
+    u = campanas.url_de(camp)
+    assert f'href="{u}/documentos"' in client.get(u).text
+    r = client.get(f"{u}/documentos")
+    assert r.headers["content-type"] == "application/zip" and 'filename="proceso-oto' in r.headers["content-disposition"]
+    z = zipfile.ZipFile(io.BytesIO(r.content))
+    assert z.namelist() == ["1-brief.md", "2-plan-editorial.md", "3-posts.md", "4-prompts-de-imagen.md"]
+    assert "# Brief: Idea 1" in z.read("1-brief.md").decode() and "Cómo se ve" in z.read("1-brief.md").decode()
+    plan = z.read("2-plan-editorial.md").decode()
+    assert "**Ángulo:** Ángulo 1" in plan and "**Dato:**" in plan
+    assert "Texto 1 #cafe" in z.read("3-posts.md").decode()
+    assert "**Prompt:** Photo" in z.read("4-prompts-de-imagen.md").decode()
