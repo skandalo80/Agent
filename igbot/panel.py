@@ -1206,6 +1206,14 @@ input[type=text],input[type=search],textarea,select,.inbox input[type=search],.e
 .cal-nav .off{display:grid;place-items:center;min-width:2.1rem;height:2.1rem;border-radius:.7rem;background:#25232F;color:#6A6678;font-weight:600}
 .res-kpis{margin-bottom:1rem}
 @media(max-width:700px){.res-barra .cal-sw.modo{margin-left:0}.res-info .cal-bajar{margin-left:0}}
+.res-vista a{font-size:.95rem;padding:.45rem 1.1rem}
+.res-barra .cal-sw a.on{background:var(--acento);color:var(--tinta)}
+.res-kpis .kpi b{color:var(--negro)}
+.res-dos{display:grid;grid-template-columns:minmax(0,2fr) minmax(16rem,1fr);gap:1rem;margin-bottom:1.25rem}.res-dos>*{margin:0}
+.res-dos .met-c{grid-column:auto}
+.met-lista li small{color:var(--gris);font-size:.78rem;width:2.6rem;text-align:right}
+.met-lista li b{padding-left:1rem}
+@media(max-width:900px){.res-dos{grid-template-columns:1fr}}
 """
 
 
