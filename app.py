@@ -242,6 +242,7 @@ async def lifespan(app: FastAPI):
     skandi.principal = lambda: principal
     for c in cuentas:
         await arrancar(c)
+    await skandi.cargar()  # el historial de Skandi de cada cuenta, a la memoria
     loops = fondo()
     yield
     for task in loops:

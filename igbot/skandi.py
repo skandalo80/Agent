@@ -23,11 +23,18 @@ con [SOPORTE]: esa línea no se muestra y manda un correo a SOPORTE_EMAIL con la
 cuenta y la conversación (como mucho MAX_CORREOS_DIA por cuenta al día).
 
 Cada cuenta tiene MAX_PREGUNTAS_DIA preguntas al día (cada una es una llamada a
-Claude). La conversación vive en memoria (las últimas MAX_TURNOS) y se borra
-al reiniciar el proceso: es ayuda rápida, no un historial.
+Claude). Los chats se guardan en la base de la cuenta principal (tabla
+skandi_chats, los de la web también). Arriba en la ventana, el ícono de historial
+(<details>, sin JavaScript) lista sus últimos MAX_HISTORIAL chats para abrir uno o
+empezar otro. Una copia de esa lista vive en memoria (_chats, se llena al
+arrancar con cargar()) para pintar el botón sin esperar a la base.
+
+La cuenta principal ve todos los chats (panel y web) en /panel/skandi, con los que
+pidieron soporte marcados.
 """
 import logging
 import os
+from datetime import datetime
 from html import escape
 from pathlib import Path
 from urllib.parse import urlparse
@@ -35,6 +42,7 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from starlette.routing import Match
+from zoneinfo import ZoneInfo
 
 from . import config
 from .cuenta import Cuenta, usar
@@ -53,11 +61,19 @@ MAX_PREGUNTAS_DIA = 30
 MAX_CORREOS_DIA = 3
 MAX_TURNOS = 16
 MAX_MENSAJE = 500
+MAX_HISTORIAL = 30  # chats que ve cada cuenta en su historial
+MAX_GUARDADOS = 200  # mensajes que se guardan por chat (a Claude solo van los últimos MAX_TURNOS)
 SALUDO = "Hola, soy Skandi. ¿Cómo te puedo ayudar?"
 
-# Por cuenta (su slug; "" la principal): [[rol, texto], ...] y un aviso que se muestra una vez.
-_charlas: dict[str, list[list[str]]] = {}
+# Por cuenta (clave): sus chats del más reciente al más viejo (como los da Store.chats_skandi),
+# el que tiene abierto (None = uno nuevo; sin entrada = el más reciente) y un aviso que sale una vez.
+_chats: dict[str, list[dict]] = {}
+_actual: dict[str, int | None] = {}
 _avisos: dict[str, str] = {}
+
+ICONO_HISTORIAL = ('<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"'
+                   ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/>'
+                   '<path d="M3 3v5h5M12 7v5l3 2"/></svg>')
 
 # El ícono de chat de siempre (burbuja con tres puntos), en el botón redondo.
 ICONO = ('<svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor" aria-hidden="true">'
@@ -75,8 +91,22 @@ html:not(.js) .skandi:target~.sk-boton,.skandi.abierta~.sk-boton{display:none}
 .sk-avatar{width:2.2rem;height:2.2rem;border-radius:50%;background:var(--acento);color:var(--tinta);display:grid;place-items:center;font-weight:800}
 .sk-cabeza b{display:block;font-size:1rem}.sk-cabeza small{display:flex;align-items:center;gap:.35rem;color:#A8A8AE;font-size:.8rem}
 .sk-cabeza small::before{content:"";width:.45rem;height:.45rem;border-radius:50%;background:#C6FA2C}
-.sk-cerrar{margin-left:auto;color:#A8A8AE;font-size:1.5rem;line-height:1;text-decoration:none;padding:.2rem .45rem;border-radius:.6rem}
+.sk-cerrar{color:#A8A8AE;font-size:1.5rem;line-height:1;text-decoration:none;padding:.2rem .45rem;border-radius:.6rem}
 .sk-cerrar:hover{color:#F5F5F4;background:rgba(255,255,255,.06)}
+.sk-hist{margin-left:auto}
+.sk-hist>summary{list-style:none;cursor:pointer;color:#A8A8AE;padding:.35rem;border-radius:.6rem;display:grid;place-items:center}
+.sk-hist>summary::-webkit-details-marker{display:none}
+.sk-hist>summary:hover,.sk-hist[open]>summary{color:#F5F5F4;background:rgba(255,255,255,.06)}
+.sk-lista{position:absolute;left:0;right:0;top:4.4rem;bottom:0;z-index:2;background:#1F2024;overflow-y:auto;padding:.9rem;display:flex;flex-direction:column;gap:.45rem}
+.sk-lista h3{margin:.1rem .2rem .3rem;font-size:.85rem;color:#A8A8AE;font-weight:600}
+.sk-lista form{margin:0}
+.sk-lista button{width:100%;text-align:left;font:inherit;color:#F5F5F4;background:#2E3035;border:1px solid transparent;border-radius:.9rem;padding:.6rem .8rem;cursor:pointer;display:block}
+.sk-lista button:hover{border-color:rgba(255,255,255,.12)}
+.sk-lista button.on{border-color:var(--acento);background:rgba(255,138,61,.1)}
+.sk-lista button b{display:block;font-weight:600;font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sk-lista button small{color:#A8A8AE;font-size:.78rem}
+.sk-lista .sk-nueva{background:var(--acento);color:var(--tinta);font-weight:700;text-align:center}
+.sk-lista .vacio{color:#A8A8AE;font-size:.88rem;margin:.4rem .2rem}
 .sk-mensajes{flex:1;overflow-y:auto;padding:1rem;display:flex;flex-direction:column;gap:.5rem}
 .sk-msj{max-width:85%;padding:.55rem .85rem;border-radius:1.1rem;font-size:.92rem;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}
 .sk-msj.tu{align-self:flex-end;background:var(--acento);color:var(--tinta);border-bottom-right-radius:.3rem}
@@ -106,9 +136,52 @@ def mensaje(rol: str, texto: str) -> str:
     return f'<div class="sk-msj {"tu" if rol == "user" else "skandi-dice"}">{escape(texto)}</div>'
 
 
+def abierto(k: str) -> dict | None:
+    """El chat que tiene abierto la cuenta `k` (None si empieza uno nuevo)."""
+    lista = _chats.get(k, [])
+    if k in _actual:
+        return next((x for x in lista if x["id"] == _actual[k]), None)
+    return lista[0] if lista else None
+
+
+def titulo(chat: dict) -> str:
+    """Su primera pregunta, para la lista."""
+    primera = next((t for r, t in chat["mensajes"] if r == "user"), "Conversación")
+    return primera if len(primera) <= 70 else primera[:69] + "…"
+
+
+def cuando(t: float, zona: str) -> str:
+    momento = datetime.fromtimestamp(t, ZoneInfo(zona))
+    meses = "ene feb mar abr may jun jul ago sep oct nov dic".split()
+    return f"{momento.day} {meses[momento.month - 1]}, {momento:%H:%M}"
+
+
+def boton_chat(accion: str, contenido: str, chat_id: int | None = None, clase: str = "") -> str:
+    """Un botón del historial: un formulario a /panel/ayuda (abrir un chat o empezar otro)."""
+    return ('<form method="post" action="/panel/ayuda" data-skandi>'
+            '<input type="hidden" name="volver" value="">'
+            f'<input type="hidden" name="accion" value="{accion}">'
+            + (f'<input type="hidden" name="chat" value="{chat_id}">' if chat_id else "")
+            + (f'<button class="{clase}">' if clase else "<button>") + f"{contenido}</button></form>")
+
+
+def historial(c: Cuenta, actual: dict | None) -> str:
+    """El ícono de historial y su lista (se abre y cierra sin JavaScript)."""
+    lista = _chats.get(clave(c), [])
+    filas = "".join(
+        boton_chat("abrir", f"<b>{escape(titulo(x))}</b><small>{cuando(x['actualizado'], c.timezone)}</small>",
+                   x["id"], "on" if actual and x["id"] == actual["id"] else "")
+        for x in lista) or '<p class="vacio">Aquí vas a ver tus conversaciones anteriores.</p>'
+    return ('<details class="sk-hist"><summary aria-label="Conversaciones anteriores" title="Conversaciones anteriores">'
+            f'{ICONO_HISTORIAL}</summary><div class="sk-lista">'
+            + boton_chat("nueva", "Nueva conversación", clase="sk-nueva")
+            + f'<h3>Conversaciones anteriores</h3>{filas}</div></details>')
+
+
 def widget(c: Cuenta) -> str:
     """El botón de ayuda y la ventanita (cerrada hasta que la abren con #skandi)."""
-    charla = _charlas.get(clave(c), [])
+    actual = abierto(clave(c))
+    charla = actual["mensajes"] if actual else []
     aviso = _avisos.pop(clave(c), "")
     mensajes = mensaje("assistant", SALUDO) + "".join(mensaje(r, t) for r, t in charla)
     if aviso:
@@ -118,6 +191,7 @@ def widget(c: Cuenta) -> str:
         '<section class="skandi" id="skandi" aria-label="Skandi, tu ayuda">'
         '<div class="sk-cabeza"><span class="sk-avatar" aria-hidden="true">S</span>'
         '<div><b>Skandi</b><small>Tu ayuda en Skandar</small></div>'
+        + historial(c, actual) +
         '<a class="sk-cerrar" href="#cerrar-ayuda" data-cerrar-skandi aria-label="Cerrar ayuda">×</a></div>'
         f'<div class="sk-mensajes" id="sk-mensajes">{mensajes}<span id="sk-fin"></span></div>'
         '<form class="sk-escribir" method="post" action="/panel/ayuda" data-skandi>'
@@ -127,6 +201,29 @@ def widget(c: Cuenta) -> str:
         '<button>Enviar</button></form></section>'
         f'<a class="sk-boton" href="#skandi" aria-label="Ayuda: pregúntale a Skandi" title="Ayuda">{ICONO}</a>'
     )
+
+
+async def cargar() -> None:
+    """Al arrancar: los últimos chats de cada cuenta, de la base a la memoria."""
+    if (p := principal()) is None:
+        return
+    _chats.clear()
+    chats, _ = await p.store.chats_skandi("panel", cuantos=100_000)
+    for x in chats:
+        lista = _chats.setdefault(x["quien"], [])
+        if len(lista) < MAX_HISTORIAL:
+            lista.append(x)
+
+
+async def guardar(c: Cuenta, actual: dict | None, mensajes: list, soporte: bool) -> None:
+    """En la base (de la cuenta principal) y en la memoria; queda como su chat abierto."""
+    from . import panel
+    k, usuario = clave(c), await panel.usuario(c)
+    chat_id = await principal().store.guardar_skandi(actual["id"] if actual else None, "panel", k, usuario,
+                                                     mensajes[-MAX_GUARDADOS:], soporte)
+    chat = await principal().store.chat_skandi(chat_id)
+    _chats[k] = [chat] + [x for x in _chats.get(k, []) if x["id"] != chat_id][:MAX_HISTORIAL - 1]
+    _actual[k] = chat_id
 
 
 # --- contestar ---
@@ -225,16 +322,26 @@ async def preguntar(request: Request):
         return RedirectResponse("/panel", status_code=303)
     f = await panel.form(request)
     destino = volver_a(request, f.get("volver", "")) + "#skandi"
+    k = clave(c)
+    if f.get("accion") == "nueva":
+        _actual[k] = None
+        return RedirectResponse(destino, status_code=303)
+    if f.get("accion") == "abrir":
+        if f.get("chat", "").isdigit() and any(x["id"] == int(f["chat"]) for x in _chats.get(k, [])):
+            _actual[k] = int(f["chat"])
+        return RedirectResponse(destino, status_code=303)
     texto = " ".join(f.get("mensaje", "").split())[:MAX_MENSAJE]
     if not texto:
         return RedirectResponse(destino, status_code=303)
-    k, usadas = await preguntas_hoy(c)
+    limite, usadas = await preguntas_hoy(c)
     if usadas >= MAX_PREGUNTAS_DIA:
-        _avisos[clave(c)] = ("Llegaste al límite de preguntas de hoy. Mañana sigo contigo; si es urgente,"
+        _avisos[k] = ("Llegaste al límite de preguntas de hoy. Mañana sigo contigo; si es urgente,"
                              " escríbenos por Instagram a @skandar.online.")
         return RedirectResponse(destino, status_code=303)
-    await c.store.set(k, str(usadas + 1))
-    previos = _charlas.get(clave(c), [])[-MAX_TURNOS:]
+    await c.store.set(limite, str(usadas + 1))
+    actual = abierto(k)
+    todos = actual["mensajes"] if actual else []
+    previos = todos[-MAX_TURNOS:]
     try:
         extra = f"<cuenta_de_quien_pregunta>\n{await datos_cuenta(c)}\n</cuenta_de_quien_pregunta>"
         respuesta = await responder(c, previos, texto, await sistema(PROMPT, extra))
@@ -244,10 +351,10 @@ async def preguntar(request: Request):
         return RedirectResponse(destino, status_code=303)
     soporte = MARCA_SOPORTE in respuesta
     respuesta = respuesta.replace(MARCA_SOPORTE, "").strip() or "El equipo de soporte se comunicará contigo pronto."
-    charla = (previos + [["user", texto], ["assistant", respuesta]])[-MAX_TURNOS:]
-    _charlas[clave(c)] = charla
+    charla = todos + [["user", texto], ["assistant", respuesta]]
+    await guardar(c, actual, charla, soporte)
     if soporte:
-        await avisar_soporte(c, charla)
+        await avisar_soporte(c, charla[-MAX_TURNOS:])
     return RedirectResponse(destino, status_code=303)
 
 
@@ -256,8 +363,9 @@ async def preguntar(request: Request):
 # La web es estática: sitio.js pone el botón redondo y una ventanita con un <iframe>
 # a skandar.online/ayuda, que Caddy pasa a este proceso (mismo origen, así el CSP de
 # la web lo deja y aquí no hace falta fetch). Cada visitante tiene una cookie al azar;
-# su conversación vive en memoria. Contra abuso: MAX_WEB_VISITANTE preguntas por
-# visitante al día y MAX_WEB_DIA entre todos; correos a soporte, MAX_WEB_CORREOS al día.
+# su conversación vive en memoria y se guarda en skandi_chats. Contra abuso:
+# MAX_WEB_VISITANTE preguntas por visitante al día y MAX_WEB_DIA entre todos;
+# correos a soporte, MAX_WEB_CORREOS al día.
 
 web_router = APIRouter(prefix="/ayuda")
 PROMPT_WEB = Path("prompts/skandi-web.md")
@@ -376,7 +484,8 @@ async def preguntar_web(request: Request):
         return volver
     v["n"] += 1
     await p.store.set(k, str(total + 1))
-    previos = v["charla"][-MAX_TURNOS:]
+    todos = v["charla"]
+    previos = todos[-MAX_TURNOS:]
     try:
         respuesta = await responder(p, previos, texto, await sistema(PROMPT_WEB))
     except Exception:
@@ -385,12 +494,83 @@ async def preguntar_web(request: Request):
         return volver
     soporte = MARCA_SOPORTE in respuesta
     respuesta = respuesta.replace(MARCA_SOPORTE, "").strip() or "El equipo se comunicará contigo pronto."
-    v["charla"] = (previos + [["user", texto], ["assistant", respuesta]])[-MAX_TURNOS:]
+    v["charla"] = (todos + [["user", texto], ["assistant", respuesta]])[-MAX_GUARDADOS:]
+    v["chat_id"] = await p.store.guardar_skandi(v.get("chat_id"), "web", token, "", v["charla"], soporte)
     if soporte:
         kc, enviados = await preguntas_hoy(p, "skandi_web_correos")
         if enviados < MAX_WEB_CORREOS and await correo_a_soporte(
                 "Web: un visitante quiere que lo contacten",
                 "Un visitante de skandar.online habló con Skandi y pidió que lo contacte el equipo.\n\n"
-                "Conversación:\n" + texto_charla(v["charla"], "Visitante")):
+                "Conversación:\n" + texto_charla(v["charla"][-MAX_TURNOS:], "Visitante")):
             await p.store.set(kc, str(enviados + 1))
     return volver
+
+
+# --- todos los chats con Skandi (solo la cuenta principal) ---
+
+FILTROS = {"todos": "Todos", "soporte": "Pidieron soporte", "panel": "Clientes", "web": "Visitantes de la web"}
+POR_PAGINA = 20
+
+CSS_CHATS = """
+.skc-filtros{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem}
+.skc-filtros a{padding:.45rem .95rem;border-radius:999px;color:#A8A8AE;text-decoration:none;font-size:.9rem;font-weight:600;background:#1F2024}
+.skc-filtros a.on{background:var(--acento);color:var(--tinta)}
+.skc{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:1.25rem;align-items:start}
+.skc-lista,.skc-chat{background:#1F2024;border-radius:1.5rem;padding:1rem}
+.skc-fila{display:block;padding:.75rem .9rem;border-radius:1rem;text-decoration:none;color:#F5F5F4;border:1px solid transparent}
+.skc-fila:hover{background:#26272C}.skc-fila.on{border-color:var(--acento);background:rgba(255,138,61,.08)}
+.skc-fila b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.skc-fila small{color:#A8A8AE;font-size:.8rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+.skc-marca{background:rgba(255,138,61,.16);color:#FFAB70;border-radius:999px;padding:0 .5rem;font-weight:600}
+.skc-chat h2{font-size:1.05rem;margin:.2rem .3rem .9rem}
+.skc-chat .sk-msj{margin-bottom:.5rem}
+.skc-chat .sk-mensajes{padding:0}
+@media(max-width:900px){.skc{grid-template-columns:1fr}}
+"""
+
+
+def quien_es(x: dict) -> str:
+    return f"@{x['usuario']}" if x["origen"] == "panel" and x["usuario"] else (
+        "Cliente" if x["origen"] == "panel" else "Visitante de la web")
+
+
+@router.get("/skandi")
+async def ver_chats(request: Request, ver: str = "todos", p: int = 1, chat: int = 0):
+    from . import panel
+    c = panel.cuenta_de_sesion(request)
+    if not c:
+        return RedirectResponse("/panel", status_code=303)
+    if c.slug or (pr := principal()) is None:
+        return await panel.no_encontrada(request)
+    ver = ver if ver in FILTROS else "todos"
+    origen = ver if ver in ("panel", "web") else ""
+    p = max(p, 1)
+    chats, total = await pr.store.chats_skandi(origen, soporte=ver == "soporte",
+                                                desde=(p - 1) * POR_PAGINA, cuantos=POR_PAGINA)
+    paginas = max(1, -(-total // POR_PAGINA))
+
+    def enlace(ver_: str = ver, pagina: int = p, chat_: int = 0) -> str:
+        return f"/panel/skandi?ver={ver_}" + (f"&p={pagina}" if pagina > 1 else "") + (f"&chat={chat_}" if chat_ else "")
+
+    filtros = "".join(f'<a href="{enlace(k, 1)}"{panel.ACTIVA if k == ver else ""}>{n}</a>'
+                      for k, n in FILTROS.items())
+    filas = "".join(
+        f'<a class="skc-fila{" on" if x["id"] == chat else ""}" href="{escape(enlace(chat_=x["id"]))}">'
+        f'<b>{escape(titulo(x))}</b><small>{escape(quien_es(x))} · {cuando(x["actualizado"], c.timezone)}'
+        f' · {len(x["mensajes"]) // 2} preguntas'
+        + (' <span class="skc-marca">Soporte</span>' if x["soporte"] else "") + "</small></a>"
+        for x in chats) or '<p class="vacio">Todavía no hay conversaciones aquí.</p>'
+    abierto_ = await pr.store.chat_skandi(chat) if chat else None
+    detalle = (
+        f'<div class="skc-chat"><h2>{escape(quien_es(abierto_))} · {cuando(abierto_["creado"], c.timezone)}'
+        + (' <span class="skc-marca">Soporte</span>' if abierto_["soporte"] else "") + '</h2>'
+        '<div class="sk-mensajes">' + "".join(mensaje(r, t) for r, t in abierto_["mensajes"]) + "</div></div>"
+        if abierto_ else '<div class="skc-chat"><p class="vacio">Elige una conversación para verla.</p></div>')
+    return panel.pagina(
+        f"<style>{CSS_CHATS}</style>"
+        + await panel.menu_de(c, "cuenta", sub="skandi")
+        + '<main><div class="contenedor">'
+        f'<nav class="skc-filtros" aria-label="Filtros">{filtros}</nav>'
+        f'<div class="skc"><div class="skc-lista">{filas}'
+        + panel.paginas(p, paginas, lambda n: enlace(pagina=n)) + f"</div>{detalle}</div>"
+        "</div></main>")

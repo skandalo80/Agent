@@ -160,6 +160,20 @@ CREATE TABLE IF NOT EXISTS metricas_dia (
     datos TEXT NOT NULL DEFAULT '{}'
 );
 
+-- Chats con Skandi (la ayuda del panel y de la web), en la base de la cuenta principal.
+-- origen: "panel" o "web"; quien: la carpeta de la cuenta (panel) o la cookie del visitante (web).
+CREATE TABLE IF NOT EXISTS skandi_chats (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    origen      TEXT NOT NULL,
+    quien       TEXT NOT NULL,
+    usuario     TEXT NOT NULL DEFAULT '',   -- @ de Instagram (panel)
+    creado      REAL NOT NULL,
+    actualizado REAL NOT NULL,
+    mensajes    TEXT NOT NULL,              -- JSON [[rol, texto], ...]
+    soporte     INTEGER NOT NULL DEFAULT 0  -- 1 si se pasó a soporte
+);
+CREATE INDEX IF NOT EXISTS skandi_quien ON skandi_chats (origen, quien, actualizado);
+
 CREATE TABLE IF NOT EXISTS kv (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -872,6 +886,53 @@ class Store:
             " ON CONFLICT (dia) DO UPDATE SET datos = excluded.datos",
             (dia, json.dumps(datos)))
         await self.db.commit()
+
+    # --- chats con Skandi ---
+
+    @staticmethod
+    def _skandi(row) -> dict:
+        return {"id": row[0], "origen": row[1], "quien": row[2], "usuario": row[3], "creado": row[4],
+                "actualizado": row[5], "mensajes": json.loads(row[6]), "soporte": bool(row[7])}
+
+    async def guardar_skandi(self, chat_id: int | None, origen: str, quien: str, usuario: str,
+                             mensajes: list, soporte: bool) -> int:
+        """Crea el chat (sin `chat_id`) o lo actualiza; `soporte` solo se prende. Devuelve su id."""
+        ahora, datos = time.time(), json.dumps(mensajes, ensure_ascii=False)
+        if chat_id is None:
+            cur = await self.db.execute(
+                "INSERT INTO skandi_chats (origen, quien, usuario, creado, actualizado, mensajes, soporte)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?)", (origen, quien, usuario, ahora, ahora, datos, int(soporte)))
+            chat_id = cur.lastrowid
+        else:
+            await self.db.execute(
+                "UPDATE skandi_chats SET actualizado = ?, mensajes = ?, soporte = MAX(soporte, ?), usuario = ?"
+                " WHERE id = ?", (ahora, datos, int(soporte), usuario, chat_id))
+        await self.db.commit()
+        return chat_id
+
+    async def chats_skandi(self, origen: str, quien: str | None = None, soporte: bool = False,
+                           desde: int = 0, cuantos: int = 30) -> tuple[list[dict], int]:
+        """Del más reciente al más viejo; con `quien`, solo los suyos. También el total."""
+        donde, args = ["origen = ?"] if origen else [], [origen] if origen else []
+        if quien is not None:
+            donde.append("quien = ?")
+            args.append(quien)
+        if soporte:
+            donde.append("soporte = 1")
+        filtro = f" WHERE {' AND '.join(donde)}" if donde else ""
+        cur = await self.db.execute(f"SELECT COUNT(*) FROM skandi_chats{filtro}", args)
+        total = (await cur.fetchone())[0]
+        cur = await self.db.execute(
+            "SELECT id, origen, quien, usuario, creado, actualizado, mensajes, soporte FROM skandi_chats"
+            f"{filtro} ORDER BY actualizado DESC, id DESC LIMIT ? OFFSET ?", [*args, cuantos, desde])
+        return [self._skandi(r) for r in await cur.fetchall()], total
+
+    async def chat_skandi(self, chat_id: int) -> dict | None:
+        cur = await self.db.execute(
+            "SELECT id, origen, quien, usuario, creado, actualizado, mensajes, soporte FROM skandi_chats"
+            " WHERE id = ?", (chat_id,))
+        row = await cur.fetchone()
+        return self._skandi(row) if row else None
 
     # --- valores sueltos (token de Instagram, etc.) ---
 
