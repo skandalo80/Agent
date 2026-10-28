@@ -114,6 +114,16 @@ class Instagram:
                                  metric="reach,views,likes,comments,saved,shares,total_interactions")
         return {m["name"]: (m.get("values") or [{}])[0].get("value", 0) for m in data.get("data", [])}
 
+    async def numeros_cuenta(self) -> dict[str, int]:
+        """Seguidores, seguidos y publicaciones de la cuenta, en este momento."""
+        data = await self._graph("GET", "me", fields="followers_count,follows_count,media_count")
+        return {k: int(data[k]) for k in ("followers_count", "follows_count", "media_count") if k in data}
+
+    async def insights_cuenta(self, metric: str, **params) -> list[dict]:
+        """Insights de la cuenta (alcance, vistas, seguidores ganados, público...), tal como los da
+        Instagram: una lista con name y total_value. Necesita instagram_business_manage_insights."""
+        return (await self._graph("GET", "me/insights", metric=metric, **params)).get("data", [])
+
     async def recent_media(self, limit: int = 12) -> list[dict]:
         """Las últimas publicaciones de la cuenta (las suba quien las suba)."""
         data = await self._graph("GET", "me/media", limit=limit,

@@ -6,6 +6,8 @@ o 30 días:
   cuántas resolvió el asistente sin pasar a una persona, su tiempo de
   respuesta (mediana) y cuántas veces contestó fuera del horario de atención.
 - Gráficas: mensajes por día y a qué hora escriben (dentro y fuera de horario).
+- Arriba, las tarjetas de Instagram (seguidores, alcance, vistas, interacciones y
+  público) que guarda metricas.py una vez al día.
 - Si el plan tiene contenido (Community Manager): comentarios, DMs que salieron
   de un comentario, palabras clave, spam ocultado y publicaciones.
 
@@ -23,7 +25,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from . import panel
+from . import metricas, panel
 from .comentarios import SPAM
 from .cuenta import Cuenta
 
@@ -277,6 +279,7 @@ async def pagina(c: Cuenta, rango: str) -> HTMLResponse:
                   '<div class="acciones"><a class="boton" href="/panel/asistente">Ir a tu asistente</a></div></div>')
     if c.imagenes_mes > 0:
         cuerpo += seccion_contenido(d)
+    cuerpo = metricas.seccion(await metricas.numeros(c, int(rango))) + cuerpo
     return panel.pagina(
         panel.cabecera(salir=True, menu="resultados", cuenta=c, perfil=await panel.usuario(c), foto=await panel.foto_perfil(c))
         + panel.encabezado("Resultados", extra=f'<nav class="pestanas">{pestanas}</nav>{numeros}')

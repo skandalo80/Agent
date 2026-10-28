@@ -1166,6 +1166,39 @@ input[type=text],input[type=search],textarea,select,.inbox input[type=search],.e
 .ev .m-historia{color:var(--naranja-t);font-weight:600}
 .cal-horas[style*="--dias:1"] .ev.con-img{grid-template-columns:3rem minmax(0,1fr)}.cal-horas[style*="--dias:1"] .ev.con-img img{width:3rem}
 @media(max-width:900px){.cal-d .ev.con-img{display:block}.cal-d .ev img{display:none}}
+/* Resultados: tarjetas de Instagram (metricas.py), en 12 columnas; una sola en el celular. */
+.met{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:1rem;margin-bottom:1.25rem}
+.met-c{grid-column:span 6;background:var(--grafito);border:1px solid var(--linea-oscura);border-radius:1.25rem;padding:1.25rem 1.4rem;min-width:0;display:flex;flex-direction:column}
+.met-c.t3{grid-column:span 3}.met-c.t4{grid-column:span 4}.met-c.ancho{grid-column:1/-1}
+.met-c>header{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;margin-bottom:.75rem}
+.met-c>header span{color:var(--gris);font-size:.9rem}.met-c>header b{font-size:1.15rem;font-weight:700;color:var(--claro)}
+.met-c>header b small{font-size:.8rem;font-weight:400;color:var(--gris)}
+.met-grande{font-size:clamp(2.8rem,5vw,4rem);font-weight:800;letter-spacing:-.03em;color:var(--claro);margin:auto 0 .75rem;line-height:1}
+.met-cambios{display:flex;flex-direction:column;gap:.35rem;color:var(--gris);font-size:.85rem}
+.met-pct{font-weight:700;color:var(--claro)}.met-pct.sube{color:var(--naranja-t)}.met-pct.baja{color:#E58C8C}
+.met .ayuda.chica{margin-top:.75rem;font-size:.82rem}
+.met-escala{display:flex;flex-direction:column;justify-content:space-between;position:absolute;color:var(--gris);font-size:.7rem;height:9rem;pointer-events:none}
+.met-c:has(.met-linea){position:relative}
+.met-linea{width:100%;height:9rem;display:block;padding-left:2rem;box-sizing:border-box;overflow:visible}
+.met-linea+.ejex{padding-left:2rem}
+.met-linea .guia{stroke:var(--linea-clara)}.met-linea .area{fill:rgba(243,154,54,.12)}
+.met-linea .trazo{fill:none;stroke:var(--acento);stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}
+.met-linea .zona{fill:transparent}.met-linea .zona:hover{fill:rgba(255,255,255,.05)}
+.met-dona{display:flex;align-items:center;justify-content:center;gap:1.75rem;flex-wrap:wrap;margin:auto 0}
+.met-dona .aro{position:relative;width:11rem;height:11rem}
+.met-dona svg{width:100%;height:100%;transform:rotate(-90deg)}
+.met-dona circle{fill:none;stroke-width:13}.met-dona .fondo{stroke:#3A3746}
+.met-dona .c0{stroke:var(--acento)}.met-dona .c1{stroke:#8F7FD6}.met-dona .c2{stroke:#C6FA2C}.met-dona .c3{stroke:var(--gris)}
+.met-dona .centro{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.met-dona .centro b{font-size:1.7rem;font-weight:800;color:var(--claro)}.met-dona .centro small{color:var(--gris);font-size:.78rem}
+.met-dona ul,.met-lista{list-style:none;margin:0;padding:0;display:grid;gap:.55rem;font-size:.9rem;color:var(--claro)}
+.met-dona li,.met-lista li{display:flex;align-items:center;gap:.55rem}.met-dona li b,.met-lista li b{margin-left:auto;padding-left:1.25rem;font-weight:700}
+.met-dona li i{width:.7rem;height:.7rem;border-radius:50%;display:inline-block}
+.met-dona li i.c0{background:var(--acento)}.met-dona li i.c1{background:#8F7FD6}.met-dona li i.c2{background:#C6FA2C}.met-dona li i.c3{background:var(--gris)}
+.met-lista{counter-reset:c}.met-lista li::before{counter-increment:c;content:counter(c);color:var(--naranja-t);font-weight:700;width:1rem}
+.met .grafica{height:11rem}
+@media(max-width:1100px){.met-c.t3,.met-c.t4{grid-column:span 6}}
+@media(max-width:700px){.met{grid-template-columns:1fr}.met-c,.met-c.t3,.met-c.t4,.met-c.ancho{grid-column:1/-1}}
 """
 
 
