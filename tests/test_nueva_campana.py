@@ -3,6 +3,7 @@ resumen; y en la campaña, el editor del post con su regla, subir su imagen y do
 import io
 import json
 import os
+import re
 
 os.environ.update(IG_VERIFY_TOKEN="vt", IG_APP_SECRET="secreto", IG_ACCESS_TOKEN="tok", DB_PATH=":memory:")
 
@@ -588,12 +589,18 @@ def test_sugeridos_del_lunes(cliente, monkeypatch):
     assert len(llamadas) == 1
 
 
+def prompts_para(datos: str, texto) -> dict:
+    """La respuesta del director de arte: un prompt por cada <post n="…"> que le llegó."""
+    return {"prompts": [{"n": int(n), "prompt": texto(n) if callable(texto) else texto}
+                        for n in re.findall(r'<post n="(\d+)">', datos)]}
+
+
 def openai_de_campana(llamadas, fake_claude):
     """OpenAI de texto falso: los posts como los escribe el Claude falso, y el prompt de cada imagen."""
     async def fake(sistema, prompt, max_tokens=16000):
         llamadas.append((sistema, prompt))
         if "director de arte" in sistema:
-            return {"prompt": "A detailed art-directed prompt"}
+            return prompts_para(prompt, "A detailed art-directed prompt")
         return json.loads(await fake_claude(prompt, sistema))
     return fake
 
@@ -628,8 +635,11 @@ def test_flujo_brief_y_plan_con_claude_posts_e_imagen_con_openai(cliente, monkey
     u = campanas.url_de(camp)
     client.post(u, headers=ORIGEN, data={"accion": "generar", "k": str(foto["k"]), "idea": "Una taza en la barra"})
     arte = [d for s, d in de_openai if "director de arte" in s]
-    assert len(arte) == 1 and "Fotos cálidas con textura de papel" in arte[0] and "<idea>Una taza en la barra" in arte[0]
-    assert "<texto_encima>" in arte[0]
+    # Al cambiar la idea se reescribe solo el de ese post, comparado con los demás y con la idea del dueño mandando.
+    assert len(arte) == 1
+    assert "Fotos cálidas con textura de papel" in arte[0] and arte[0].count('<post n="') == 1
+    assert "idea del dueño (manda): Una taza en la barra" in arte[0] and "Protagonista" in arte[0]
+    assert "texto encima:" in arte[0] and "<otros_posts>" in arte[0] and "Café Lunar" in arte[0]
     assert proveedor.llamadas[-1][0].startswith("A detailed art-directed prompt")
     p = campanas.buscar_post(leer(client, c), foto["k"])
     assert p["prompt"] == "A detailed art-directed prompt" and p["idea_base"] == "Una taza en la barra"
@@ -658,7 +668,7 @@ def test_si_openai_falla_el_prompt_lo_escribe_claude(cliente, monkeypatch):
 
     async def claude(prompt, system, **k):
         if "director de arte" in system:
-            return json.dumps({"prompt": "Prompt from Claude"})
+            return json.dumps(prompts_para(prompt, "Prompt from Claude"))
         return await fake_claude(prompt, system, **k)
 
     async def falla(sistema, prompt, max_tokens=16000):
@@ -724,7 +734,7 @@ def test_los_prompts_de_imagen_ya_vienen_escritos_al_crear_la_campana(cliente, m
     async def openai(sistema, prompt, max_tokens=16000):
         if "director de arte" in sistema:
             arte.append(prompt)
-            return {"prompt": f"Detailed prompt {len(arte)}"}
+            return prompts_para(prompt, lambda n: f"Detailed prompt {n}")
         datos = json.loads(await fake_claude(prompt, sistema))
         for x in datos.get("posts", []):
             x.pop("prompt", None)  # los posts ya no traen prompt: lo escribe el último paso
@@ -738,8 +748,67 @@ def test_los_prompts_de_imagen_ya_vienen_escritos_al_crear_la_campana(cliente, m
     generar(client)
     camp = leer(client, c)
     fotos = [p for p in camp["posts"] if p["formato"] == "titular"]
-    assert fotos and len(arte) == len(fotos) and not proveedor.llamadas  # sin gastar imágenes
+    assert fotos and len(arte) == 1 and not proveedor.llamadas  # todos juntos, sin gastar imágenes
+    assert arte[0].count('<post n="') == sum(1 for p in camp["posts"] if campanas.con_foto(p))
     assert all(p["prompt"].startswith("Detailed prompt") and p["idea_base"] == p["idea"] for p in fotos)
     assert all(not p.get("prompt") for p in camp["posts"] if p["formato"] == "texto")
     r = client.get(f"{campanas.url_de(camp)}?post={fotos[0]['k']}")
     assert f">{fotos[0]['prompt']}</textarea>" in r.text
+
+
+def test_la_idea_de_la_imagen_sale_del_plan_visual():
+    foto = {"protagonista": "Una barista", "accion": "sirve un latte", "escenario": "La barra de la tienda",
+            "encuadre": "plano medio", "luz": "luz de ventana"}
+    fichas = [{"dia": "2099-01-05", "hora": "09:00", "tipo": "producto", "formato": "titular", "rol": "", "ve": "",
+               "plan": {"angulo": "A", "foto": foto}},
+              {"dia": "2099-01-06", "hora": "09:00", "tipo": "producto", "formato": "texto", "rol": "", "ve": "",
+               "plan": {"angulo": "B", "foto": foto}}]
+    posts = campanas.leer_posts({"posts": [{"dia": "2099-01-05", "titulo": "Hola", "caption": "Texto", "idea": ""},
+                                           {"dia": "2099-01-06", "titulo": "Dos", "caption": "Texto", "idea": ""}]},
+                                fichas, 1, False, 3, 0)
+    assert posts[0]["idea"] == ("Una barista sirve un latte, en la barra de la tienda. plano medio. luz de ventana.")
+    assert posts[0]["idea_original"] == posts[0]["idea"] and posts[1]["idea"] == ""
+    assert not campanas.idea_editada(posts[0]) and campanas.idea_editada({**posts[0], "idea": "Otra cosa"})
+    html = campanas.plan_de_post(posts[0])
+    assert "Plan de la imagen" in html and "Protagonista:</b> Una barista" in html
+
+
+def test_cada_post_usa_su_estilo_y_su_color():
+    marca = {"estilos": ["minimalista", "editorial"], "usos_color": ["sutil", "protagonista"]}
+    camp = {"brief": {}, "producto": "", "posts": []}
+    opciones = campanas.opciones_visuales(camp, marca)
+    assert "Minimalista (principal)" in opciones and "Editorial (secundario)" in opciones
+    assert "- Sutil:" in opciones and "- Protagonista:" in opciones and "Equilibrado" not in opciones
+    p = {"k": 3, "formato": "titular", "idea": "x", "titulo": "Hola",
+         "plan": {"foto": {"protagonista": "Una barista", "estilo": "Editorial", "color": "Protagonista"}}}
+    bloque = campanas.bloque_imagen(camp, marca, p)
+    assert '<post n="3">' in bloque and "estilo: Editorial. High-end editorial" in bloque
+    assert "color: Protagonista. Brand colors define the image" in bloque and "Minimalist" not in bloque
+    # Si el plan no eligió (o eligió algo que no existe), va el preferido.
+    otro = campanas.bloque_imagen(camp, marca, {**p, "plan": {"foto": {"protagonista": "Granos", "estilo": "Otro"}}})
+    assert "estilo: Minimalista." in otro and "color: Sutil." in otro
+    libre = campanas.opciones_visuales({**camp, "modo_img": "libre"}, {**marca, "estilo_propio": "Fotos con grano"})
+    assert "Diseño libre" in libre and "Fotos con grano" in libre
+
+
+def test_otra_idea_trae_otro_plan_visual_y_otro_prompt(cliente, monkeypatch):
+    client, c, *_ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 10)
+    import app as bot
+    from igbot import config, openai_texto
+    fake_claude, arte = claude_de_campana([]), []
+    monkeypatch.setattr(bot.agent, "run_claude", fake_claude)
+    monkeypatch.setattr(config, "OPENAI_API_KEY", "sk-prueba")
+    monkeypatch.setattr(openai_texto, "json_de", openai_de_campana(arte, fake_claude))
+    listo(client, c)
+    client.portal.call(c.store.set, "productos", json.dumps([PRODUCTO]))
+    llenar(client)
+    generar(client)
+    camp = leer(client, c)
+    foto = next(p for p in camp["posts"] if p["formato"] == "titular")
+    client.post(campanas.url_de(camp), headers=ORIGEN, data={"accion": "otra", "k": str(foto["k"])})
+    p = campanas.buscar_post(leer(client, c), foto["k"])
+    assert p["plan"]["foto"]["protagonista"] == "Una barista" and p["idea"].startswith("Una barista muele café")
+    assert p["idea_original"] == p["idea"] and p["prompt"] == "A detailed art-directed prompt"
+    otra = next(d for s, d in arte if "otra versión" in s)
+    assert "<estilos_disponibles>" in otra and "<otras_fotos>" in otra

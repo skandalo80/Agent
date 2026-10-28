@@ -39,8 +39,11 @@ def claude_de_campana(llamadas):
         if "director creativo" in system:  # el plan de cada post, por su número
             n = len(re.findall(r"^\d+\. ", prompt.split("<posts>")[-1], re.M))
             return json.dumps({"plan": [{"n": i + 1, "objetivo": f"Objetivo {i + 1}", "angulo": f"Ángulo {i + 1}",
-                                         "titular": f"Titular {i + 1}", "visual": f"Visual {i + 1}", "cta": "Escríbenos",
-                                         "distinto": "Otra escena"} for i in range(n)]})
+                                         "titular": f"Titular {i + 1}", "cta": "Escríbenos", "distinto": "Otra escena",
+                                         "foto": {"funcion": "Mostrar el café", "protagonista": f"Protagonista {i + 1}",
+                                                  "escenario": f"Escenario {i + 1}", "accion": "sirve un café",
+                                                  "encuadre": "plano medio", "luz": "luz de ventana",
+                                                  "estilo": "Minimalista", "color": "Sutil"}} for i in range(n)]})
         if "estratega de contenido" in system:  # el brief: tres ideas de campaña
             return json.dumps({"conceptos": [{**CONCEPTO, "titulo": f"Idea {i + 1}"} for i in range(3)]})
         if "Armas una campaña" in system or "ya tiene su brief" in system:
@@ -51,7 +54,10 @@ def claude_de_campana(llamadas):
                  "responde": "Horario de fin de semana" if i == 0 and "<lo_que_preguntan>" in prompt else ""}
                 for i, (d, formato) in enumerate(LINEA.findall(prompt.split("<posts>")[-1]))]})
         if "otra versión" in system:
-            return json.dumps({"titulo": "Otra idea", "subtitulo": "", "caption": "Texto nuevo", "idea": "Foto nueva"})
+            foto = {"protagonista": "Una barista", "escenario": "la barra", "accion": "muele café",
+                    "estilo": "Minimalista"} if "<estilos_disponibles>" in prompt else None
+            return json.dumps({"titulo": "Otra idea", "subtitulo": "", "caption": "Texto nuevo",
+                               "idea": "" if foto else "Foto nueva", "foto": foto})
         return "{}"
     return fake
 
