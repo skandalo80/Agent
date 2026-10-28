@@ -33,7 +33,7 @@ GIROS = RAIZ / "giros"
 PAGINAS = RAIZ / "paginas"
 WEB = RAIZ / "web"
 SITIO = "https://skandar.online"
-CSS_VERSION = "2026-10-28d"
+CSS_VERSION = "2026-10-28e"
 
 # Orden en el índice: el primero es el destacado.
 ORDEN = [
