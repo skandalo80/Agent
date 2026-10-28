@@ -277,17 +277,17 @@ _visitantes: dict[str, dict] = {}
 
 ESTILO_WEB = """
 *{box-sizing:border-box}html,body{height:100%;margin:0}
-body{font:15px/1.5 "Nunito",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#211b25;background:#f6f3f7;display:flex;flex-direction:column}
+body{font:15px/1.5 "Nunito",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#F5F5F4;background:#2B2C30;display:flex;flex-direction:column}
 .mensajes{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:8px}
 .msj{max-width:85%;padding:9px 13px;border-radius:16px;white-space:pre-wrap;overflow-wrap:anywhere}
-.msj.tu{align-self:flex-end;background:#D29441;color:#36203E;border-bottom-right-radius:5px;font-weight:600}
-.msj.skandi{align-self:flex-start;background:#fff;border-bottom-left-radius:5px;box-shadow:4px 5px 12px rgba(54,32,62,.07)}
-.msj.escribiendo{color:#716a75;font-style:italic}
-.aviso{font-size:13px;color:#9a6420;background:#f7ecdc;border-radius:12px;padding:8px 12px}
-form{display:flex;gap:8px;padding:12px;border-top:1px solid #e9e3eb;background:#f6f3f7}
-input[type=text]{flex:1;min-width:0;font:inherit;color:#211b25;background:#fff;border:1px solid #e9e3eb;border-radius:12px;padding:10px 12px}
-input[type=text]:focus{outline:2px solid #D29441;outline-offset:1px;border-color:transparent}
-button{font:inherit;font-weight:700;background:#D29441;color:#36203E;border:0;border-radius:12px;padding:10px 15px;cursor:pointer;box-shadow:0 3px 0 #a8701f}
+.msj.tu{align-self:flex-end;background:#FF8A3D;color:#18191C;border-bottom-right-radius:5px;font-weight:600}
+.msj.skandi{align-self:flex-start;background:#1F2024;border:1px solid #34363B;border-bottom-left-radius:5px}
+.msj.escribiendo{color:#A8A8AE;font-style:italic}
+.aviso{font-size:13px;color:#FFAB70;background:rgba(255,138,61,.12);border-radius:12px;padding:8px 12px}
+form{display:flex;gap:8px;padding:12px;border-top:1px solid #34363B;background:#242529}
+input[type=text]{flex:1;min-width:0;font:inherit;color:#F5F5F4;background:#18191C;border:1px solid #34363B;border-radius:12px;padding:10px 12px}
+input[type=text]:focus{outline:2px solid #FF8A3D;outline-offset:1px;border-color:transparent}
+button{font:inherit;font-weight:700;background:#FF8A3D;color:#18191C;border:0;border-radius:12px;padding:10px 15px;cursor:pointer;box-shadow:0 3px 0 #C9621F}
 button:disabled{opacity:.6;cursor:wait}
 """
 
