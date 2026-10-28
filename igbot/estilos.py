@@ -73,6 +73,12 @@ ESTILOS = {
                      "Neo-futuristic look: precise geometry, thin technical lines and luminous details, innovative"
                      " composition, sleek high-tech surfaces, small advanced graphic details, sophisticated and"
                      " innovative mood."),
+    "anuncio": ("Anuncio comercial",
+                "Piezas que se ven como publicidad: el producto en grande, un titular claro y, si los hay, la oferta y"
+                " un botón.",
+                "Commercial social ad look: the product or service is the clear hero filling most of the frame, bold"
+                " clean composition built to sell, one short punchy headline in a strong display font, solid color"
+                " blocks or a clean backdrop behind the product, crisp studio-like lighting, polished and direct."),
 }
 ESTILO_INICIAL = "minimalista"
 MAX_ESTILOS = 3
@@ -102,12 +108,13 @@ TARJETA_ESTILO = {
     "cristalino": ("Transparencias que crean profundidad.", ("Moderno", "Ligero", "Refinado"), "#5b7c99"),
     "neofuturista": ("Una mirada tecnológica al diseño del futuro.", ("Tecnológico", "Sofisticado", "Innovador"),
                      "#1f2f4f"),
+    "anuncio": ("Tu producto al frente, listo para vender.", ("Comercial", "Directo", "Llamativo"), "#b8502a"),
 }
 # «No estoy seguro, recomiéndame uno»: los tres que mejor van con cada giro de Perfil de empresa.
 RECOMENDADOS = {
     "Restaurante o cafetería": ["documental", "artesanal", "editorial"],
-    "Alimentos y bebidas": ["artesanal", "pop", "documental"],
-    "Tienda de ropa y accesorios": ["editorial", "minimalista", "retro"],
+    "Alimentos y bebidas": ["anuncio", "artesanal", "pop"],
+    "Tienda de ropa y accesorios": ["anuncio", "editorial", "minimalista"],
     "Joyería": ["lujo", "minimalista", "editorial"],
     "Belleza y estética": ["editorial", "organico", "lujo"],
     "Salud y bienestar": ["organico", "minimalista", "documental"],
@@ -126,7 +133,7 @@ RECOMENDADOS = {
     "Hotelería y turismo": ["lujo", "editorial", "organico"],
     "Mascotas": ["claymorfismo", "pop", "documental"],
     "Automotriz": ["neofuturista", "brutalista", "lujo"],
-    "Tienda en línea": ["pop", "minimalista", "editorial"],
+    "Tienda en línea": ["anuncio", "pop", "minimalista"],
 }
 RECOMENDADOS_INICIAL = ["minimalista", "editorial", "documental"]  # sin giro (o uno escrito a mano)
 
@@ -240,6 +247,8 @@ COMBINACIONES = {
                    " que se leen sin esfuerzo."),
     "claymorfismo": ("Nunito", "Inter", "Una combinación cercana, moderna y legible que acompaña tus diseños sin quitar"
                      " protagonismo al contenido."),
+    "anuncio": ("Oswald", "DM Sans", "Una combinación de cartel publicitario: titulares condensados que se leen de un"
+                " vistazo y textos limpios para la oferta y el botón."),
     "cristalino": ("DM Sans", "Inter", "Una combinación moderna y suave que acompaña las transparencias y los reflejos"
                    " sin recargar el diseño."),
     "neofuturista": ("Space Grotesk", "Inter", "Una combinación precisa y tecnológica que refuerza la sensación de"
@@ -249,6 +258,16 @@ COMBINACION_INICIAL = ("Montserrat", "Inter", "Una combinación clara, moderna y
                        " negocio.")
 MUESTRA_TITULAR = "Tu negocio, más cerca de tus clientes."
 MUESTRA_TEXTO = "Descubre cómo podemos ayudarte con una experiencia pensada para ti."
+
+# Avanzado de Tu marca: lo que sale solo si no se toca («auto» es la primera opción de cada uno).
+LOGO_LUGAR = {"auto": "Automático", "arriba_izq": "Arriba a la izquierda", "arriba_der": "Arriba a la derecha",
+              "abajo": "Abajo al centro"}
+FORMA_BOTON = {"auto": "Según tu estilo", "pildora": "Píldora", "recto": "Rectangular"}
+FORMA_SELLO = {"auto": "Según tu estilo", "circulo": "Círculo", "cinta": "Cinta", "recuadro": "Recuadro"}
+# «Según tu estilo»: la forma que va con el estilo principal (si no está, píldora y círculo).
+FORMA_POR_ESTILO = {"brutalista": ("recto", "recuadro"), "neofuturista": ("recto", "recuadro"),
+                    "retro": ("recto", "cinta"), "editorial": ("recto", "cinta"), "lujo": ("recto", "cinta"),
+                    "minimalista": ("pildora", "recuadro"), "anuncio": ("pildora", "circulo")}
 
 LOGO_PRESENCIA = {
     # clave: (nombre, frase corta, para qué sirve)

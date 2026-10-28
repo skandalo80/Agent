@@ -124,7 +124,7 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
 
     # Tu marca, paso a paso: sin marca abre el paso 1; cada paso guarda y lleva al siguiente.
     r = client.get("/panel/contenido/marca")
-    assert "Paso 1 de 4" in r.text and '<main class="oscuro-pag">' in r.text and r.text.count('name="estilos"') == 12
+    assert "Paso 1 de 4" in r.text and '<main class="oscuro-pag">' in r.text and r.text.count('name="estilos"') == 13
     assert "¿Cómo quieres que se vean los diseños de tu marca?" in r.text and 'class="antetitulo"' not in r.text
     assert "Sensación: Rebelde · Directo · Impactante" in r.text and "1.º · Estilo principal:" in r.text
     # Tu marca vive abajo, en Configuración, no en el submenú de Contenido.
@@ -1159,3 +1159,25 @@ def test_mensaje_al_pasar_una_queja(cliente):
     client.post("/panel/asistente/paso", headers=ORIGEN, data={
         "paso": "reglas", "opcionales": "1", "msg_quejas_on": "1", "msg_quejas": "Lo siento."})
     assert "pasar una queja" not in Path(c.prompt_path).read_text()
+
+
+def test_tu_marca_avanzado_viene_en_automatico_y_se_guarda(cliente, monkeypatch):
+    client, c, *_ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 5)
+    from igbot import marca as tu_marca
+    r = client.get(f"{MARCA}?paso=2")
+    assert 'class="mrc-otras mrc-avanzado"' in r.text and 'name="forma_boton" value="auto" checked' in r.text
+    r = client.get(f"{MARCA}?paso=4")
+    assert 'name="logo_lugar" value="auto" checked' in r.text and 'name="logo_oscuro"' in r.text
+    # Sin tocar Avanzado: la forma sale del estilo principal.
+    assert tu_marca.formas_de({"estilos": ["brutalista"]}) == ("recto", "recuadro")
+    assert tu_marca.formas_de({}) == ("pildora", "circulo")
+    client.post(MARCA, headers=ORIGEN, data={"paso": "2", "principal": "#112233", "uso_color": "equilibrado",
+                                             "forma_boton": "recto", "forma_sello": "cinta"})
+    client.post(MARCA, headers=ORIGEN, data={"paso": "4", "logo_presencia": "discreta", "logo_lugar": "abajo"},
+                files={"logo_oscuro": ("blanco.png", png(), "image/png")})
+    m = client.portal.call(contenido.marca_de, c)
+    assert (m["forma_boton"], m["forma_sello"], m["logo_lugar"]) == ("recto", "cinta", "abajo") and m["logo_oscuro"]
+    assert tu_marca.formas_de({**m, "estilos": ["brutalista"]}) == ("recto", "cinta")
+    # «Anuncio comercial» es un estilo más y sale recomendado para las tiendas.
+    assert estilos.RECOMENDADOS["Tienda en línea"][0] == "anuncio" and "anuncio" in estilos.COMBINACIONES

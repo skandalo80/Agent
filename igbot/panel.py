@@ -1010,6 +1010,8 @@ select,input[type=date],input[type=number]{color:var(--negro);background:var(--c
 .mrc-subir input[type=file]{max-width:15rem;font-size:.82rem;color:var(--gris)}
 .mrc-logo{display:flex;align-items:center;gap:1rem;margin-bottom:.8rem;padding:.8rem 1rem;border:1px solid var(--linea-clara);border-radius:1rem}
 .mrc-logo img{width:4rem;height:4rem;object-fit:contain;border-radius:.6rem;background:#fff}.mrc-logo span{flex:1}.mrc-logo b{display:block}.mrc-logo small{color:var(--gris)}
+.mrc-logo.oscuro img{background:#18191C;width:7rem}.mrc-logo img.blanco{filter:grayscale(1) invert(1) contrast(4);background:#fff;padding:.3rem}.mrc-logo.oscuro b{color:var(--t-color,#F5F5F4)}
+.mrc-avanzado{margin-top:1.75rem;border-top:1px solid var(--linea-clara);padding-top:.4rem}.mrc-avanzado .wiz-sub:first-of-type{margin-top:.6rem}
 .mrc .fotos{display:grid;grid-template-columns:repeat(auto-fill,minmax(7rem,1fr));gap:.6rem;margin-bottom:.8rem}
 .mrc .fotos figure{margin:0;position:relative}.mrc .fotos img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:.7rem;display:block}
 .mrc .fotos .quitar{position:absolute;bottom:.35rem;right:.35rem;font:inherit;font-size:.75rem;border:0;border-radius:1rem;padding:.2rem .55rem;background:rgba(0,0,0,.65);color:#fff;cursor:pointer}

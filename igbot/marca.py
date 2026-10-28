@@ -9,6 +9,10 @@ console.skandar.online/panel/contenido/marca?paso=N (1 a 4, o "resumen"):
 3. Tipografía: la letra de los títulos (las tarjetas usan la letra real).
 4. Logotipo: el logo y cuánto se ve.
 
+Colores y Logotipo tienen un «Avanzado» plegado (forma de botones y sellos; dónde va el logo y el logo para
+fondos oscuros). Viene en automático: si nadie lo abre, la forma sale del estilo principal (formas_de) y el
+logo va donde menos estorba.
+
 Cada paso es un formulario que guarda en kv "marca" y lleva al siguiente (sin JavaScript; panel.js
 solo numera los estilos en el orden en que se tocan y llena los colores al elegir una paleta). Sin
 "paso", abre el resumen si la marca ya está lista o el primer paso pendiente si no.
@@ -28,7 +32,8 @@ from fastapi.responses import RedirectResponse
 from . import imagenes, panel
 from .contenido import archivo, estilos_de, guardar_fotos, marca_de, sin_plan, url_imagen, usos_color
 from .cuenta import Cuenta
-from .estilos import (COLORES, COMBINACION_INICIAL, COMBINACIONES, ESTILOS, LETRAS, LOGO_INICIAL, LOGO_PRESENCIA,
+from .estilos import (COLORES, COMBINACION_INICIAL, COMBINACIONES, ESTILOS, FORMA_BOTON, FORMA_POR_ESTILO, FORMA_SELLO,
+                      LETRAS, LOGO_INICIAL, LOGO_LUGAR, LOGO_PRESENCIA,
                       MAX_ESTILOS, MUESTRA_TEXTO, MUESTRA_TITULAR, PALETA_INICIAL, PALETAS, RECOMENDADOS,
                       RECOMENDADOS_INICIAL, ROLES, TARJETA_ESTILO, USO_COLOR, USO_INICIAL, USO_TARJETA)
 
@@ -116,6 +121,14 @@ def logos_de(marca: dict) -> list[str]:
     return elegidos or [LOGO_INICIAL]
 
 
+def formas_de(marca: dict) -> tuple[str, str]:
+    """La forma de los botones y los sellos: la elegida en Avanzado o, si no, la que va con el estilo principal."""
+    estilos = estilos_de(marca)
+    boton, sello = FORMA_POR_ESTILO.get(estilos[0] if estilos else "", ("pildora", "circulo"))
+    b, s = marca.get("forma_boton", "auto"), marca.get("forma_sello", "auto")
+    return (b if b in FORMA_BOTON and b != "auto" else boton), (s if s in FORMA_SELLO and s != "auto" else sello)
+
+
 def color_elegido(f, k: str, antes: str) -> str:
     """El código escrito o el del selector: el que cambió (sin JavaScript no se mantienen iguales)."""
     validos = []
@@ -143,6 +156,21 @@ def marca_orden(n: int) -> str:
 
 
 # --- piezas de la página ---
+
+def chips(nombre: str, opciones: dict[str, str], actual: str) -> str:
+    """Una fila de opciones chicas (la primera, «auto», queda marcada si no se eligió otra)."""
+    actual = actual if actual in opciones else next(iter(opciones))
+    return '<div class="chips">' + "".join(
+        f'<label><input type="radio" name="{nombre}" value="{k}"{" checked" if k == actual else ""}>{t}</label>'
+        for k, t in opciones.items()) + "</div>"
+
+
+def avanzado(cuerpo: str) -> str:
+    """Lo que casi nadie necesita tocar: plegado, y si no se abre, sale solo."""
+    return ('<details class="mrc-otras mrc-avanzado"><summary>Avanzado <span class="suave">· opcional</span></summary>'
+            '<p class="ayuda">Ya viene resuelto según tu estilo. Cámbialo solo si quieres algo concreto.</p>'
+            f"{cuerpo}</details>")
+
 
 def imagen_tarjeta(clave: str, fondo: str) -> str:
     """La imagen de la tarjeta (igbot/static/tarjetas/marca/) o, mientras no exista, su color de respaldo."""
@@ -266,7 +294,14 @@ def paso_colores(marca: dict) -> str:
             f'<div class="wiz-ops" data-orden="orden_uso" data-campo="uso_color" data-max="{len(USO_COLOR)}">{usos}</div>'
             '<p class="wiz-nota"><b>Puedes elegir varios,</b> en orden de preferencia: el primero es el que más usamos.'
             ' <b>Si dudas,</b> «Equilibrado» funciona para casi cualquier negocio. Elige «Natural»'
-            " si prefieres que se vean los colores reales de tus productos y tu lugar.</p>")
+            " si prefieres que se vean los colores reales de tus productos y tu lugar.</p>"
+            + avanzado('<h3 class="wiz-sub">Forma de los botones</h3>'
+                       '<p class="ayuda">El botón que aparece en tus piezas, como «Compra ahora» o «Reserva».</p>'
+                       + chips("forma_boton", FORMA_BOTON, marca.get("forma_boton", ""))
+                       + '<h3 class="wiz-sub">Forma de los sellos</h3>'
+                       '<p class="ayuda">Las etiquetas de oferta, como «20% de descuento» o «Nuevo». Solo salen si'
+                       " la oferta es real.</p>"
+                       + chips("forma_sello", FORMA_SELLO, marca.get("forma_sello", ""))))
 
 
 def vista_par(titulo: str, texto: str, chica: bool = False) -> str:
@@ -325,7 +360,33 @@ def paso_logotipo(c: Cuenta, marca: dict) -> str:
             " la primera es la que más usamos.</p>"
             f'<input type="hidden" name="orden_logo" value="{",".join(elegidos)}">'
             f'<div class="wiz-ops mrc-logos" data-orden="orden_logo" data-campo="logo_presencia"'
-            f' data-max="{len(LOGO_PRESENCIA)}">{tarjetas}</div>')
+            f' data-max="{len(LOGO_PRESENCIA)}">{tarjetas}</div>'
+            + avanzado(lugar_y_oscuro(c, marca, url)))
+
+
+def lugar_y_oscuro(c: Cuenta, marca: dict, url: str) -> str:
+    """Avanzado del logo: en qué esquina va y la versión para fondos oscuros."""
+    oscuro = marca.get("logo_oscuro", "")
+    url_oscuro = url_imagen(c, oscuro) if oscuro and archivo(c, oscuro).is_file() else ""
+    if url_oscuro:
+        muestra = (f'<div class="mrc-logo oscuro"><img src="{url_oscuro}" alt="Tu logo para fondos oscuros">'
+                   '<span><b>Tu logo para fondos oscuros</b><small>Lo usamos cuando la pieza es oscura.</small></span>'
+                   '<button class="boton secundario chico" name="accion" value="quitar_oscuro" formnovalidate>Quitar'
+                   "</button></div>")
+    elif url:
+        muestra = (f'<div class="mrc-logo oscuro"><img class="blanco" src="{url}" alt="Versión blanca de tu logo">'
+                   '<span><b>Así se verá en fondos oscuros</b><small>Si no subes otro, usamos esta versión blanca de'
+                   " tu logo.</small></span></div>")
+    else:
+        muestra = ""
+    return ('<h3 class="wiz-sub">¿Dónde va tu logo?</h3>'
+            '<p class="ayuda">En automático lo ponemos en la esquina donde menos estorba en cada pieza.</p>'
+            + chips("logo_lugar", LOGO_LUGAR, marca.get("logo_lugar", ""))
+            + '<h3 class="wiz-sub">Tu logo para fondos oscuros</h3>'
+            '<p class="ayuda">Una versión en blanco o en negativo de tu logo.</p>'
+            f'{muestra}<label class="mrc-subir"><span class="ico">↑</span><span class="t"><b>Elige el logo para fondos'
+            ' oscuros</b><small>PNG con fondo transparente, de hasta 10 MB.</small></span>'
+            '<input type="file" name="logo_oscuro" accept="image/png,image/webp"></label>')
 
 
 def resumen(c: Cuenta, marca: dict) -> str:
@@ -421,6 +482,9 @@ def guardar_paso(f, antes: dict, paso: str) -> tuple[dict, str]:
                 datos[k] = color_elegido(f, k, colores.get(k, ""))
         usos = en_orden(f, "uso_color", "orden_uso", USO_COLOR, len(USO_COLOR)) or usos_de(antes)
         datos["usos_color"], datos["uso_color"] = usos, usos[0]  # uso_color: el principal, para lo de antes
+        for campo, validos in (("forma_boton", FORMA_BOTON), ("forma_sello", FORMA_SELLO)):
+            if f.get(campo) in validos:
+                datos[campo] = f.get(campo)
     elif paso == "tipografia":
         titulo, texto, _ = combinacion(antes)
         # «Usar esta combinación», o seguir sin elegir otra: la recomendada.
@@ -429,6 +493,8 @@ def guardar_paso(f, antes: dict, paso: str) -> tuple[dict, str]:
     elif paso == "logotipo":
         logos = en_orden(f, "logo_presencia", "orden_logo", LOGO_PRESENCIA, len(LOGO_PRESENCIA)) or logos_de(antes)
         datos["logos_presencia"], datos["logo_presencia"] = logos, logos[0]
+        if f.get("logo_lugar") in LOGO_LUGAR:
+            datos["logo_lugar"] = f.get("logo_lugar")
     datos["pasos"] = [k for k in CLAVES if k in set(antes.get("pasos", [])) | {paso}]
     return datos, ""
 
@@ -476,15 +542,19 @@ async def guardar_marca(request: Request):
     if accion == "quitar_logo" and datos.get("logo"):
         archivo(c, datos.pop("logo")).unlink(missing_ok=True)
         aviso = "Listo: quitamos tu logo."
-    logo = f.get("logo")
-    if getattr(logo, "filename", ""):
-        tokens, _ = await guardar_fotos(c, [logo], 1)
-        if tokens:
-            if datos.get("logo"):
-                archivo(c, datos["logo"]).unlink(missing_ok=True)
-            datos["logo"] = tokens[0]
-        else:
-            aviso = "No se pudo leer el logo (usa JPG o PNG de hasta 10 MB)."
+    if accion == "quitar_oscuro" and datos.get("logo_oscuro"):
+        archivo(c, datos.pop("logo_oscuro")).unlink(missing_ok=True)
+        aviso = "Listo: quitamos tu logo para fondos oscuros."
+    for campo in ("logo", "logo_oscuro"):
+        subido = f.get(campo)
+        if getattr(subido, "filename", ""):
+            tokens, _ = await guardar_fotos(c, [subido], 1)
+            if tokens:
+                if datos.get(campo):
+                    archivo(c, datos[campo]).unlink(missing_ok=True)
+                datos[campo] = tokens[0]
+            else:
+                aviso = "No se pudo leer el logo (usa JPG o PNG de hasta 10 MB)."
 
     await c.store.set("marca", json.dumps(datos, ensure_ascii=False))
     log.info("@%s guardó Tu marca: %s", await panel.usuario(c), paso)

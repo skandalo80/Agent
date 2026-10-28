@@ -853,8 +853,13 @@ def foto_valida(c: Cuenta, marca: dict, token: str) -> bool:
 
 
 def preparar_foto(data: bytes) -> bytes:
-    """Una foto de producto como JPG de hasta 1600 px (para la referencia del generador de imágenes)."""
-    img = ImageOps.exif_transpose(Image.open(io.BytesIO(data))).convert("RGB")
+    """Una foto de producto como JPG de hasta 1600 px (para la referencia del generador de imágenes). Lo
+    transparente (un logo o un producto recortado en PNG) queda blanco, no negro."""
+    img = ImageOps.exif_transpose(Image.open(io.BytesIO(data)))
+    if img.mode in ("RGBA", "LA", "P"):
+        img = img.convert("RGBA")
+        img = Image.alpha_composite(Image.new("RGBA", img.size, "white"), img)
+    img = img.convert("RGB")
     img.thumbnail((1600, 1600))
     out = io.BytesIO()
     img.save(out, "JPEG", quality=90)
