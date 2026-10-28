@@ -272,6 +272,8 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
     # Borrar la de Otoño: primero pide confirmar; luego sus posts con imagen salen de Calendario.
     r = client.get(u)
     assert f'href="{u}?borrar=1">Borrar campaña</a>' in r.text
+    assert f'href="{u}?borrar=lista" title="Borrar campaña"' in client.get(BASE + "?ver=proxima").text
+    assert f'href="{BASE}">Cancelar' in client.get(f"{u}?borrar=lista").text  # desde la lista, vuelve a la lista
     r = client.get(f"{u}?borrar=1")
     assert "¿Borrar la campaña Otoño 2?" in r.text and 'value="borrar"' in r.text
     assert len(client.portal.call(campanas.todas_las, c)) == 2  # ver la confirmación no borra

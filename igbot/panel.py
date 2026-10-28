@@ -1078,6 +1078,7 @@ img.mrc-logo-mini{background:#fff}
 .camp .prog{height:4px;background:var(--claro);border-radius:2px}.camp .prog i{display:block;height:100%;background:var(--neon);border-radius:2px}
 .camp .acc{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}.camp .acc .boton{padding:.4rem .95rem;font-size:.88rem}
 .camp .sel{position:absolute;top:1.1rem;right:1rem;width:1.1rem;height:1.1rem;accent-color:var(--acento-claro);margin:0}
+.camp .borrar{position:absolute;top:.9rem;right:.9rem;display:flex;padding:.35rem;border-radius:.6rem;color:var(--gris)}.camp .borrar:hover{color:#FFA494;background:rgba(255,107,87,.14)}.camp .borrar.con-sel{right:2.6rem}.camp:has(.borrar) h3{padding-right:2.2rem}.camp:has(.con-sel) h3{padding-right:3.8rem}
 .camp .cruce{font-size:.82rem;color:#fbbf6a;margin:0}
 .camp.apagada{opacity:.6}
 .filtros-cam{display:flex;flex-wrap:wrap;align-items:flex-end;gap:.75rem;margin-top:.5rem;padding:1rem;border-radius:1rem;background:var(--suave);border:1px solid var(--linea-clara)}
