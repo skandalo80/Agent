@@ -1572,7 +1572,6 @@ async def panel_de(c: Cuenta, aviso: str = "", ver: str = "", vista: str = "", a
     "configura" (los pasos de asistente.py, /panel/asistente/configura) y "conexion". `aviso` sale arriba."""
     if not vista and abrir:
         vista = "configura"
-    encendido = await activo(c)
     from . import ajustes  # ajustes usa este módulo
     estado_conexion, tarjeta_conexion = await ajustes.conexion(c)
 
@@ -1592,22 +1591,16 @@ async def panel_de(c: Cuenta, aviso: str = "", ver: str = "", vista: str = "", a
                   + ("" if estado_conexion == "ok" else
                      '<div class="aviso">Hay algo que revisar en tu conexión.'
                      ' <a class="enlace" href="/panel/conexion">Ver conexión</a></div>')
+                  # Solo si está apagado: el estado y Pausar/Encender viven en el Resumen de Configura.
+                  + ("" if c.en_revision or await activo(c) else
+                     '<div class="aviso">Tu asistente está en pausa: no contesta ningún chat.'
+                     ' <a class="enlace" href="/panel/asistente/configura?paso=resumen">Encenderlo</a></div>')
                   + await conversaciones.bandeja(c, ver, buscar, hoja, chat, n))
     return pagina(
         # Conexión es de tu cuenta (está en el menú de perfil), no de una sección.
         await menu_de(c, "cuenta" if vista == "conexion" else "asistente", sub=vista or "chats", luces={"conexion": estado_conexion})
-        # Sin la barra de estado: solo una luz y Pausar/Encender a la derecha del antetítulo, como los
-        # botones de las demás páginas, para que todas arranquen a la misma altura.
-        + (encabezado(f"Tu cuenta · {titulo}") if titulo else
-           encabezado("Tu asistente", (
-               f'<div class="estado-mini"><span class="luz{" on" if encendido else ""}"></span>'
-               f'{"Contestando tus mensajes" if encendido else "En revisión" if c.en_revision else "Está en pausa"}'
-               + ("" if c.en_revision else
-                  '<form method="post" action="/panel/estado">'
-                  f'<input type="hidden" name="activo" value="{"0" if encendido else "1"}">'
-                  f'<button class="boton chico{" secundario" if encendido else ""}">{"Pausar" if encendido else "Encender"}</button>'
-                  "</form>")
-               + "</div>")))
+        # Sin estado ni Pausar arriba: el asistente completo se pausa en el Resumen de Configura tu asistente.
+        + encabezado(f"Tu cuenta · {titulo}" if titulo else "Tu asistente")
         + '<main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
         + cuerpo + "</div></main>"
@@ -1934,11 +1927,14 @@ async def estado(request: Request):
     de_aqui(request)
     if not (c := cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
-    encender = (await form(request)).get("activo") == "1"
+    f = await form(request)
+    encender = f.get("activo") == "1"
     if encender and c.en_revision:
         return await panel_de(c, REVISION)
     await c.store.set("bot_activo", "1" if encender else "0")
     log.info("@%s %s su asistente desde el panel", await usuario(c), "encendió" if encender else "pausó")
+    if f.get("volver") == "configura":
+        return RedirectResponse("/panel/asistente/configura?paso=resumen", status_code=303)
     return await panel_de(c, "Tu asistente ya está contestando." if encender else "Tu asistente quedó en pausa.")
 
 
