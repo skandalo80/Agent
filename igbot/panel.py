@@ -1461,7 +1461,7 @@ def tarjeta_pasos(pasos: list[tuple[str, str, bool]]) -> str:
 
 async def menu_de(c: Cuenta, menu: str, sub: str = "", luces: dict[str, str] | None = None) -> str:
     """El menú lateral de una página con sesión: con su @usuario, su logo y los pasos iniciales.
-    Conversaciones lleva un punto amarillo si hay chats del lado "Tú" esperando tu respuesta."""
+    Conversaciones lleva un punto lima si hay chats del lado "Tú" esperando tu respuesta."""
     from .limites import LIMIT_NOTICE
     ahora = time.time()
     if await c.store.pendientes_tuyos(ahora, ahora - c.human_pause_hours * 3600 - 60,
