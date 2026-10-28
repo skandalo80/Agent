@@ -485,8 +485,9 @@ NOMBRE_SECCION = {"campanas": "Campañas", "calendario": "Calendario", "marca": 
 
 
 async def pagina(c: Cuenta, actual: str, cuerpo: str, aviso: str = "", oscuro: bool = False) -> HTMLResponse:
-    """Las secciones de Contenido van en el menú lateral; arriba solo el antetítulo y + Nueva campaña."""
-    crear = '<a class="boton ajuste" href="/panel/contenido/campanas/nueva">+ Nueva campaña</a>'
+    """Las secciones de Contenido van en el menú lateral; arriba solo el antetítulo y los botones de crear campaña."""
+    from .campanas import botones_nueva  # campanas importa este módulo
+    crear = botones_nueva()
     return panel.pagina(
         panel.cabecera(salir=True, menu="contenido", cuenta=c, sub=actual, perfil=await panel.usuario(c), foto=await panel.foto_perfil(c))
         + panel.encabezado(f"Contenido · {NOMBRE_SECCION.get(actual, 'Calendario')}", crear)

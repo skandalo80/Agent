@@ -395,9 +395,7 @@ def img(seccion: str, clave: str, color: str, texto: str = "", alta: bool = Fals
 
 
 # Los brillitos de IA de los sugeridos de cada lunes (en lima: un acento chico).
-BRILLOS = ('<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M10 2l1.9'
-           ' 5.6L17.5 9.5l-5.6 1.9L10 17l-1.9-5.6L2.5 9.5l5.6-1.9zM18.5 13l.95 2.55L22 16.5l-2.55.95L18.5 20l-.95-2.55'
-           'L15 16.5l2.55-.95z"/></svg>')
+BRILLOS = campanas.BRILLOS_IA
 
 
 def op(nombre: str, valor: str, titulo: str, desc: str, tipo: str = "radio", marcada: bool = False,
@@ -931,3 +929,127 @@ async def crear_brief(c: Cuenta, b: dict, datos: dict):
 
     return campanas.trabajando(c, "Pensando las ideas de tu campaña…", "Tarda unos segundos.", trabajo,
                                f"{URL}?paso={RESUMEN}")
+
+
+# --- Crear con IA: solo el objetivo y las fechas; lo demás lo decide la IA ---
+
+RAPIDA = f"{campanas.BASE}/rapida"
+POSTS_SEMANA = 4  # Crear con IA: posts por semana, de lunes a viernes
+
+
+def pagina_rapida_html(b: dict, objetivos: list[dict]) -> str:
+    ops = "".join(op("objetivo", o["k"], o["titulo"], o.get("descripcion", ""), marcada=o["k"] == b["objetivo"],
+                     sugerido=bool(o.get("sugerido"))) for o in objetivos)
+    semanas = "".join(f'<option value="{n}"{" selected" if b["semanas"] == n else ""}>{n} semana{"s" if n > 1 else ""}'
+                      "</option>" for n in campanas.SEMANAS)
+    return (f'<form method="post" action="{RAPIDA}" class="wiz rapida-cam"><div class="wiz-main">'
+            '<div class="wiz-cab"><p class="ante">Crear con IA</p><h2>¿Qué quieres lograr con esta campaña?</h2>'
+            '<p class="baj">Elige el objetivo y cuándo empieza. Nosotros escribimos todos los posts con tu perfil de'
+            " empresa, tu marca y tus resultados. Las imágenes las generas después, cuando las revises.</p></div>"
+            f'<div class="wiz-ops">{ops}</div>'
+            '<h3 class="wiz-sub">Cuándo</h3><div class="wiz-campos dos-r">'
+            f'<div><label for="r-inicio">Empieza</label><input type="date" id="r-inicio" name="inicio"'
+            f' value="{b["inicio"]}"></div>'
+            f'<div><label for="r-semanas">Duración</label><select id="r-semanas" name="semanas">{semanas}</select></div>'
+            "</div>"
+            '<details class="prompt-img rapida-extra"><summary>¿Algo que debamos saber? (opcional)</summary>'
+            f'<textarea name="texto" rows="3" maxlength="{MAX_TEXTO}" placeholder="Ej. Tenemos 20 % de descuento en'
+            f' noviembre, o abrimos sucursal el día 15.">{escape(b.get("texto", ""))}</textarea></details>'
+            '<div class="wiz-pie">'
+            f'<a class="boton secundario" href="{campanas.BASE}">Cancelar</a>'
+            f'<span>{POSTS_SEMANA} posts por semana, sin imágenes</span>'
+            f'<button class="boton" name="accion" value="crear">{BRILLOS} Crear con IA</button></div>'
+            "</div></form>")
+
+
+async def pagina_rapida(c: Cuenta, aviso: str = "", b: dict | None = None):
+    hay_empresa, hay_marca = await lista_para_empezar(c)
+    b = b or inicial(await marca_de(c))
+    if not (hay_empresa and hay_marca):
+        cuerpo = bloqueo(hay_empresa, hay_marca)
+    else:
+        objetivos, _ = await opciones(c)
+        if not b["objetivo"] and objetivos:  # uno ya marcado: el sugerido de esta semana, si hay
+            b["objetivo"] = next((o["k"] for o in objetivos if o.get("sugerido")), objetivos[0]["k"])
+        cuerpo = pagina_rapida_html(b, objetivos)
+    return panel.pagina(
+        panel.cabecera(salir=True, menu="contenido", cuenta=c, sub="campanas", perfil=await panel.usuario(c),
+                       foto=await panel.foto_perfil(c))
+        + campanas.cabeza(f'<div class="der-cam">{campanas.boton_todas()}</div>', "", "Crear con IA")
+        + '<div class="oscuro-pag"><main><div class="contenedor">'
+        + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
+        + cuerpo + "</div></main></div>")
+
+
+def borrador_rapido(b: dict, f, objetivos: list[dict], mensajes: list[dict]) -> str:
+    """El borrador completo con lo poco que eligió; devuelve '' o lo que falta."""
+    g = lambda k: str(f.get(k, "")).strip()  # noqa: E731
+    if g("objetivo") not in {o["k"] for o in objetivos}:
+        return "Elige qué quieres lograr."
+    b["objetivo"] = g("objetivo")
+    b["inicio"] = _fecha(g("inicio")) or b["inicio"]
+    b["semanas"] = int(g("semanas")) if g("semanas").isdigit() and int(g("semanas")) in campanas.SEMANAS else 2
+    b["texto"] = g("texto")[:MAX_TEXTO]
+    b["con_texto"] = bool(b["texto"])
+    b["mensajes"] = [m["k"] for m in mensajes][:MAX_MENSAJES]
+    b["formatos"], b["horarios"] = ["ia"], ["ia"]  # la IA reparte todos los formatos y los horarios
+    b["n_posts"] = min(POSTS_SEMANA * b["semanas"], MAX_POSTS)
+    return "" if b["mensajes"] else "Ese objetivo todavía no tiene mensajes; elige otro."
+
+
+@router.get("/campanas/rapida")
+async def ver_rapida(request: Request):
+    if not (c := panel.cuenta_de_sesion(request)):
+        return RedirectResponse("/panel", status_code=303)
+    if c.imagenes_mes <= 0:
+        return sin_plan()
+    return await pagina_rapida(c)
+
+
+@router.post("/campanas/rapida")
+async def crear_rapida(request: Request):
+    panel.de_aqui(request)
+    if not (c := panel.cuenta_de_sesion(request)):
+        return RedirectResponse("/panel", status_code=303)
+    if c.imagenes_mes <= 0:
+        return sin_plan()
+    hay_empresa, hay_marca = await lista_para_empezar(c)
+    if not (hay_empresa and hay_marca):
+        return RedirectResponse(RAPIDA, status_code=303)
+    f = await request.form()
+    b = inicial(await marca_de(c))
+    b["semilla"] = int(time.time())
+    objetivos, _ = await opciones(c)
+    _, mensajes = await opciones(c, str(f.get("objetivo", "")))
+    if error := borrador_rapido(b, f, objetivos, mensajes):
+        return await pagina_rapida(c, error, b)
+    with usar(c):
+        hoy = tools.now().date()
+    if date.fromisoformat(b["inicio"]) < hoy:
+        return await pagina_rapida(c, "La campaña no puede empezar en un día que ya pasó.", b)
+    if await campanas.ia_restantes(c) < 2:  # dos propuestas del día: el brief y los posts
+        return await pagina_rapida(c, "Por hoy ya no quedan propuestas; mañana puedes pedir más.", b)
+    datos = await a_campana(c, b)
+    if falta := campanas.falta_en(datos):
+        return await pagina_rapida(c, falta, b)
+    with usar(c):
+        todas = await campanas.todas_las(c)
+        anteriores = await campanas.informe.todas(c, todas)
+        fotos = len(campanas.fotos_marca(c, await marca_de(c)))
+    camp = {**datos, "id": int(time.time() * 1000), "posts": [], "creada": time.time()}
+
+    async def trabajo():
+        with usar(c):
+            await campanas.usar_ia(c)
+            yield "Pensando la idea de tu campaña…"
+            conceptos = await brief.conceptos(c, datos, todas)
+            b["brief"] = {"conceptos": conceptos, "elegido": 0}  # la primera idea: la que la IA pone primero
+            camp["brief"] = conceptos[0]
+            camp["asistente"] = {k: v for k, v in b.items() if k not in ("cid", "hechos", "adn")}
+            await campanas.usar_ia(c)
+            yield "Escribiendo los posts…"
+            hecha = await campanas.proponer(c, camp, anteriores, None, fotos)
+            await campanas.guardar(c, hecha)
+        yield campanas.url_de(camp)
+
+    return campanas.trabajando(c, "Creando tu campaña con IA…", "Tarda alrededor de un minuto.", trabajo, RAPIDA)

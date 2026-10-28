@@ -1085,6 +1085,7 @@ img.mrc-logo-mini{background:#fff}
 .camp .prog{height:4px;background:var(--claro);border-radius:2px}.camp .prog i{display:block;height:100%;background:var(--neon);border-radius:2px}
 .camp .acc{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}.camp .acc .boton{padding:.4rem .95rem;font-size:.88rem}
 .camp .sel{position:absolute;top:1.1rem;right:1rem;width:1.1rem;height:1.1rem;accent-color:var(--acento-claro);margin:0}
+.rapida-cam .wiz-campos.dos-r{grid-template-columns:repeat(2,minmax(0,14rem))}.rapida-extra{margin:1.2rem 0 0}.rapida-extra textarea{width:100%;box-sizing:border-box;margin-top:.6rem;font:inherit;padding:.65rem .8rem;border:1px solid var(--linea-clara);border-radius:.8rem;background:var(--claro);color:var(--negro)}.rapida-cam .wiz-pie .boton svg,.boton-ia svg{vertical-align:-3px;margin-right:.2rem}.botones-nueva{display:flex;gap:.6rem;flex-wrap:wrap}
 .camp .borrar{position:absolute;top:.9rem;right:.9rem;display:flex;padding:.35rem;border-radius:.6rem;color:var(--gris)}.camp .borrar:hover{color:#FFA494;background:rgba(255,107,87,.14)}.camp .borrar.con-sel{right:2.6rem}.camp:has(.borrar) h3{padding-right:2.2rem}.camp:has(.con-sel) h3{padding-right:3.8rem}
 .camp .cruce{font-size:.82rem;color:#fbbf6a;margin:0}
 .camp.apagada{opacity:.6}

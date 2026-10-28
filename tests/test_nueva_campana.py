@@ -891,3 +891,34 @@ def test_las_fotos_de_referencia_mandan_en_la_direccion_visual(cliente, monkeypa
     client.post(campanas.url_de(camp), headers=ORIGEN, data={"accion": "generar", "k": str(p["k"])})
     prompt, fotos = proveedor.llamadas[-1][:2]
     assert len(fotos) >= 2 and "The first 2 reference images are the visual style to follow" in prompt
+
+
+def test_crear_con_ia_solo_pide_objetivo_y_fechas(cliente, monkeypatch):
+    client, c, *_ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 4)
+    llamadas = []
+    import app as bot
+    monkeypatch.setattr(bot.agent, "run_claude", claude_de_campana(llamadas))
+    rapida = f"{BASE}/rapida"
+    # Sin empresa ni marca, lo mismo que el asistente: pide completarlas.
+    assert "Necesitamos conocer tu negocio" in client.get(rapida).text
+    listo(client, c)
+    r = client.get("/panel/contenido")  # el encabezado de Contenido y el de Campañas
+    assert f'href="{BASE}/nueva">Crear campaña</a>' in r.text and f'href="{rapida}">' in r.text
+
+    r = client.get(rapida)
+    assert r.text.count('name="objetivo"') >= 2 and 'checked' in r.text  # uno ya marcado
+    assert 'name="inicio"' in r.text and 'name="semanas"' in r.text and 'name="texto"' in r.text
+    assert 'name="mensajes"' not in r.text and 'name="formatos"' not in r.text
+
+    r = client.post(rapida, headers=ORIGEN, data={"objetivo": "no-existe", "inicio": LUNES.isoformat()})
+    assert "Elige qué quieres lograr." in r.text and not llamadas
+
+    r = client.post(rapida, headers=ORIGEN, data={"objetivo": "vender", "inicio": LUNES.isoformat(), "semanas": "1",
+                                                  "texto": "20 % de descuento en noviembre"})
+    assert "Creando tu campaña con IA" in r.text, r.text[-500:]
+    camp = leer(client, c)
+    assert camp["brief"] and len(camp["posts"]) == nueva_campana.POSTS_SEMANA
+    assert not any(p.get("post_id") for p in camp["posts"])  # sin imágenes
+    assert "20 % de descuento en noviembre" in llamadas[0][0]  # lo que escribió llega al brief
+    assert camp["asistente"]["objetivo"] == "vender" and camp["asistente"]["mensajes"]
