@@ -18,7 +18,7 @@
   --hueco: 1rem;               /* espacio entre tarjetas */
   --caja-radio: 1.25rem;       /* redondeo de las esquinas de las tarjetas */
 
-  /* Barra de pasos de arriba (Tu asistente, Tu marca, Tu empresa, Crear campaña) */
+  /* Barra de pasos de arriba (las tres páginas de Configuración y Crear campaña) */
   --paso-pad: .55rem .6rem;    /* relleno de cada paso */
   --paso-hueco: .65rem;        /* espacio entre el círculo y el texto */
   --paso-circulo: 1.75rem;     /* tamaño del círculo con el número */
