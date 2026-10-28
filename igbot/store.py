@@ -872,6 +872,12 @@ class Store:
         await self.db.execute("UPDATE conexiones SET slug = ? WHERE ig_id = ?", (slug, ig_id))
         await self.db.commit()
 
+    async def conexion(self, ig_id: str) -> tuple[str, str | None] | None:
+        """(usuario, slug) de una cuenta conectada, o None si nunca se conectó."""
+        cur = await self.db.execute("SELECT usuario, slug FROM conexiones WHERE ig_id = ?", (ig_id,))
+        row = await cur.fetchone()
+        return (row[0], row[1]) if row else None
+
     async def correo_de(self, usuario: str) -> str:
         """El correo que dejó en el formulario de /conectar (el más reciente), si lo llenó."""
         cur = await self.db.execute(
