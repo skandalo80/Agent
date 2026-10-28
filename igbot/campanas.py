@@ -730,19 +730,37 @@ def linea_ficha(camp: dict, f: dict) -> str:
             + (f" | escena: {f['escena']}" if f.get("escena") else "") + (" | medio: historia" if es_historia(f) else ""))
 
 
+TANDA_PLAN = 10  # posts por llamada al plan: con su foto completa, muchos juntos rebasan la respuesta de Claude
+
+
 async def planear(base: str, camp: dict, fichas: list[dict]) -> None:
-    """El plan creativo de todos los posts juntos (objetivo, ángulo, titular, concepto visual, llamada a la acción
-    y en qué se distingue), en ficha["plan"]. Si no sale, los posts se escriben sin él."""
+    """El plan creativo de cada post (objetivo, ángulo, titular, plan visual, llamada a la acción y en qué se
+    distingue), en ficha["plan"]. Va en tandas de TANDA_PLAN: cada tanda ve lo ya planeado para no repetirlo, y lo
+    que no salió se pide otra vez. Sin plan, el post se escribe igual pero su imagen no la hace la IA completa."""
+    for desde in range(0, len(fichas), TANDA_PLAN):
+        await planear_tanda(base, camp, fichas, fichas[desde:desde + TANDA_PLAN])
+    if faltan := [f for f in fichas if not (f.get("plan") or {}).get("foto")]:
+        log.warning("Plan de la campaña %s: %d de %d posts sin foto; se piden otra vez", camp.get("nombre"),
+                    len(faltan), len(fichas))
+        for desde in range(0, len(faltan), TANDA_PLAN):
+            await planear_tanda(base, camp, fichas, faltan[desde:desde + TANDA_PLAN])
+    if faltan := sum(1 for f in fichas if not (f.get("plan") or {}).get("foto")):
+        log.error("Plan de la campaña %s: %d de %d posts quedaron sin foto", camp.get("nombre"), faltan, len(fichas))
+
+
+async def planear_tanda(base: str, camp: dict, fichas: list[dict], tanda: list[dict]) -> None:
     from . import agent  # import tardío: agent importa el SDK
 
-    lineas = "\n".join(f"{i}. {linea_ficha(camp, f)}" for i, f in enumerate(fichas, 1))
+    ya = "\n".join(f"- {linea_ficha(camp, f)} | plan: {brief.plan_texto(f['plan'])}"
+                   for f in fichas if f.get("plan") and not any(f is t for t in tanda))
+    lineas = "\n".join(f"{i}. {linea_ficha(camp, f)}" for i, f in enumerate(tanda, 1))
+    prompt = base + (f"<ya_planeados>\n{ya}\n</ya_planeados>\n\n" if ya else "") + f"<posts>\n{lineas}\n</posts>"
     try:
-        respuesta = _json(await agent.run_claude(base + f"<posts>\n{lineas}\n</posts>", brief.SISTEMA_PLAN,
-                                                 max_turns=1, model=config.CONTENT_MODEL))
+        respuesta = _json(await agent.run_claude(prompt, brief.SISTEMA_PLAN, max_turns=1, model=config.CONTENT_MODEL))
     except Exception:
         log.exception("Plan de la campaña %s", camp.get("nombre"))
         return
-    for f, plan in zip(fichas, brief.leer_plan(respuesta, len(fichas))):
+    for f, plan in zip(tanda, brief.leer_plan(respuesta, len(tanda))):
         if plan:
             f["plan"] = plan
 

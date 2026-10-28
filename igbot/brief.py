@@ -108,6 +108,7 @@ Para cada post:
 
 Reglas:
 - Ningún par de posts repite escena, gancho, titular ni estructura. Si dos fichas se parecen, búscales ángulos opuestos.
+- Si viene <ya_planeados>, son posts de esta misma campaña que ya se planearon: los de <posts> tampoco repiten su ángulo, titular, protagonista, escenario, acción ni metáfora.
 - Las fotos de la campaña se comparan entre sí: ningún par repite protagonista, escenario, acción ni metáfora visual (dos tazas en dos mesas son la misma foto aunque cambie el encuadre). En Consistente, todas usan el mismo estilo y el mismo color; en las demás variedades puedes alternarlos.
 - Si hay <referencias_visuales>, mandan sobre <marca_visual>: cada foto cabe en ese ADN (luz, paleta, texturas, ambiente) y "estilo" es "Referencias". La variedad cambia protagonista, lugar y acción, no el ADN.
 - La variedad de las imágenes la manda <variedad_visual>. <marca_visual> es el ambiente (luz, color, sensación), no objetos fijos: no repitas el mismo mueble, superficie u objeto en varios posts.

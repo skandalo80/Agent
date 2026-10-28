@@ -338,6 +338,31 @@ def test_leer_el_plan_por_numero():
     assert brief.plan_texto({"angulo": "<b>A</b>", "cta": "Ven"}) == "ángulo: &lt;b&gt;A&lt;/b&gt;; llamada a la acción: Ven"
 
 
+def test_el_plan_va_en_tandas_y_pide_otra_vez_lo_que_falta(monkeypatch):
+    import asyncio
+    from igbot import agent
+
+    llamadas, falla = [], {"una": True}
+
+    async def fake(prompt, system, mcp=None, allowed=(), max_turns=5, model=None):
+        llamadas.append(prompt)
+        n = len(re.findall(r"^\d+\. ", prompt.split("<posts>")[-1], re.M))
+        if falla.pop("una", False):  # la primera respuesta llega cortada: JSON inválido
+            return '{"plan": [{"n": 1, "angulo": "A"'
+        return json.dumps({"plan": [{"n": i + 1, "angulo": f"A{i}", "foto": {"protagonista": f"P{i}",
+                                                                              "escenario": "E"}} for i in range(n)]})
+
+    monkeypatch.setattr(agent, "run_claude", fake)
+    fichas = [{"dia": f"2099-01-{i + 1:02d}", "tipo": "ensena", "formato": "foto", "ve": "", "pilar": "", "dato": ""}
+              for i in range(23)]
+    asyncio.run(campanas.planear("<brief>b</brief>\n", {"nombre": "X", "inicio": "2099-01-01"}, fichas))
+    assert all(f["plan"]["foto"]["protagonista"] for f in fichas)
+    assert len(llamadas) == 4  # 10 + 10 + 3, y otra vez los 10 de la tanda que falló
+    assert "<ya_planeados>" not in llamadas[1]  # la primera tanda no salió: no hay nada planeado
+    assert llamadas[2].count("| plan: ") == 10  # la tercera ve lo que ya planeó la segunda
+    assert "10. 2099-01-10" in llamadas[3] and llamadas[3].count("| plan: ") == 13
+
+
 def test_limite_de_propuestas_al_dia(cliente, monkeypatch):
     client, c, *_ = cliente
     monkeypatch.setattr(campanas, "IA_POR_DIA", 0)  # sin límite (CAMPANA_IA_POR_DIA=0)
