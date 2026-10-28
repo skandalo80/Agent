@@ -388,7 +388,8 @@ def test_un_solo_archivo_de_ajustes():
     assert ajustes in panel.PRINCIPIO and panel.AJUSTES == ajustes
     assert '@import url("ajustes.css' in estilos.splitlines()[1]
     assert "--t-portada:" in (Path(__file__).resolve().parent.parent / "web" / "ajustes.css").read_text()
-    for var in ("--t-ante", "--t-titulo", "--t-tarjeta", "--caja-pad", "--hueco", "--paso-pad", "--paso-circulo", "--t-paso"):
+    for var in ("--t-ante", "--t-titulo", "--t-tarjeta", "--caja-pad", "--hueco", "--paso-pad", "--paso-circulo", "--t-paso",
+                "--margen-arriba", "--margen-izq", "--margen-der", "--margen-abajo", "--menu-margen"):
         assert f"var({var})" in panel.COMUN, var
     for var in ("--t-ante", "--t-portada", "--t-tarjeta", "--caja-pad"):
         assert f"var({var})" in estilos, var
