@@ -67,24 +67,21 @@ CAMPOS = {
         ("apartados", 1000), ("otras_politicas", 1000)],
     5: [],
 }
-LISTAS = {1: [("caracter", CARACTERES, MAX_CARACTER), ("atiende", [k for k, _ in ATIENDE], 4)],
+# "caracter" ya no se pregunta aquí: se queda lo que tenga guardado (lo usan las campañas).
+LISTAS = {1: [("atiende", [k for k, _ in ATIENDE], 4)],
           4: [("pagos", [k for k, _ in PAGOS], 5)]}
 MAX_PREGUNTAS, MIN_FILAS_FAQ = 40, 3
 
-# (título en el riel, bajada en el riel, título de la página, texto bajo el título)
+# (título en el riel, bajada en el riel). La clave es fija (va en la URL y en el formulario); el orden en
+# pantalla lo da ORDEN.
 PASOS = {
-    1: ("Tu empresa", "Lo esencial", "Empecemos por tu empresa",
-        "Cuéntanos quién eres y qué haces. No necesitas escribirlo perfecto: tu asistente y tus campañas lo usan tal cual."),
-    2: ("Tus clientes", "A quién ayudas y por qué te eligen", "Tus clientes y lo que te hace distinto",
-        "Con esto tus campañas le hablan a la persona correcta y tu asistente sabe qué destacar."),
-    3: ("Productos y servicios", "Tu catálogo", "Tus productos y servicios",
-        "Agrega lo que vendes. Tu asistente lo usa para contestar precios y mandar el enlace; tus campañas, para"
-        " promocionarlo con sus fotos."),
-    4: ("Cómo te compran", "Horarios, pagos y políticas", "Cómo te compran",
-        "Lo práctico: cuándo y dónde atiendes, cómo te pagan y tus políticas. Tu asistente no inventa nada de esto."),
-    5: ("Preguntas frecuentes", "Lo que más te preguntan", "Lo que más te preguntan",
-        "Escribe las preguntas que más te hacen y cómo las contestas. Las vacías no se usan."),
+    1: ("Tu empresa", "Lo esencial"),
+    2: ("Tus clientes", "A quién ayudas y por qué te eligen"),
+    3: ("Productos y servicios", "Tu catálogo"),
+    4: ("Cómo te compran", "Horarios, pagos y políticas"),
+    5: ("Preguntas frecuentes", "Lo que más te preguntan"),
 }
+ORDEN = [1, 3, 4, 5, 2]
 RESUMEN = 6
 
 MAX_PRODUCTOS, MAX_FOTOS_PRODUCTO = 60, 5
@@ -585,27 +582,55 @@ main.emp{color:var(--claro);padding-bottom:4rem}
 .riel .avance{position:absolute;left:1.3rem;right:1.3rem;bottom:.45rem;margin:0;padding:0;border:0;font-size:0}
 .riel .avance span{display:none}.riel .avance .barra-av{margin:0;height:.3rem}
 @media(max-width:860px){.riel .paso{flex:none}.riel .paso:not(.on) b{display:none}}
+/* Íconos de quién usa cada campo (asistente / campañas) y su leyenda bajo "Paso N de 5". */
+.cab-paso .antetitulo{margin-bottom:.6rem}
+.usos{display:inline-flex;gap:.3rem;margin-left:.5rem;vertical-align:-2px}
+.uso{display:inline-grid;place-items:center;width:1.45rem;height:1.45rem;border-radius:.45rem;background:rgba(255,255,255,.07);color:#B9B5C5}
+.leyenda-usos{display:flex;flex-wrap:wrap;gap:.5rem 1.2rem;font-size:.85rem;color:#B9B5C5;margin:0 0 1.2rem}
+.leyenda-usos .l{display:inline-flex;align-items:center;gap:.45rem}
 """
 
 
+def _svg(trazo: str) -> str:
+    return ('<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"'
+            f' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{trazo}</svg>')
+
+
+ICONO_ASISTENTE = ('<span class="uso" title="Lo usa tu asistente">'
+                   + _svg('<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/>') + "</span>")
+ICONO_CAMPANAS = ('<span class="uso" title="Lo usan tus campañas">'
+                  + _svg('<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/>'
+                         '<path d="m21 15-5-5L5 21"/>') + "</span>")
+# Quién usa cada campo (ver secciones()): "ambos", "asistente", "campanas" o "" (ninguno).
+ICONOS = {"ambos": ICONO_ASISTENTE + ICONO_CAMPANAS, "asistente": ICONO_ASISTENTE, "campanas": ICONO_CAMPANAS}
+
+
+def _usos(usa: str) -> str:
+    return f'<span class="usos">{ICONOS[usa]}</span>' if usa else ""
+
+
+LEYENDA = (f'<div class="leyenda-usos"><span class="l">{ICONO_ASISTENTE} Lo usa tu asistente para contestar</span>'
+           f'<span class="l">{ICONO_CAMPANAS} Lo usan tus campañas para crear contenido</span></div>')
+
+
 def _texto(k: str, etiqueta: str, valor: str, n: int, ayuda: str = "", filas: int = 0, req: bool = False,
-           ejemplo: str = "", id_: str = "") -> str:
+           ejemplo: str = "", id_: str = "", usa: str = "ambos") -> str:
     id_ = id_ or f"e-{k}"
     marca = " *" if req else ""
     ph = f' placeholder="{escape(ejemplo)}"' if ejemplo else ""
     campo = (f'<textarea id="{id_}" name="{k}" rows="{filas}" maxlength="{n}"{ph}>{escape(valor)}</textarea>' if filas else
              f'<input type="text" id="{id_}" name="{k}" value="{escape(valor)}" maxlength="{n}"{ph}>')
-    return (f'<div class="campo-o"><label for="{id_}" class="t">{etiqueta}{marca}</label>{campo}'
+    return (f'<div class="campo-o"><label for="{id_}" class="t">{etiqueta}{marca}{_usos(usa)}</label>{campo}'
             + (f'<p class="ay">{ayuda}</p>' if ayuda else "") + "</div>")
 
 
 def _opciones(k: str, etiqueta: str, opciones: list[tuple[str, str]], elegidas, tipo: str = "checkbox",
-              nota: str = "") -> str:
+              nota: str = "", usa: str = "ambos") -> str:
     elegidas = elegidas if isinstance(elegidas, list) else [elegidas]
     chips = "".join(f'<label class="opc"><input type="{tipo}" name="{k}" value="{escape(v)}"'
                     f'{" checked" if v in elegidas else ""}>{escape(n)}</label>' for v, n in opciones)
     nota = f' <i>· {nota}</i>' if nota else ""
-    return (f'<fieldset class="campo-o grupo-o"><legend class="t">{etiqueta}{nota}</legend>'
+    return (f'<fieldset class="campo-o grupo-o"><legend class="t">{etiqueta}{nota}{_usos(usa)}</legend>'
             f'<div class="opcs">{chips}</div></fieldset>')
 
 
@@ -614,9 +639,9 @@ def riel(e: dict, prods: list[dict], actual: int, con_form: bool) -> str:
     y salta (no se pierde lo escrito); si no, un enlace."""
     listos = hechos(e, prods)
     items = []
-    for n, (titulo, bajada, *_ ) in [*PASOS.items(), (RESUMEN, ("Resumen", "Revisa y guarda"))]:
+    for n, (titulo, bajada) in [*((n, PASOS[n]) for n in ORDEN), (RESUMEN, ("Resumen", "Revisa y guarda"))]:
         cls = "on" if n == actual else "ok" if n in listos else ""
-        marca = "★" if n == RESUMEN else "✓" if n in listos and n != actual else str(n)
+        marca = "★" if n == RESUMEN else "✓" if n in listos and n != actual else str(numero(n))
         dentro = f'<span class="n">{marca}</span><span><b>{titulo}</b><small>{bajada}</small></span>'
         actual_ = ' aria-current="step"' if n == actual else ""
         items.append(f'<button class="paso {cls}" form="f-emp" name="accion" value="ir_{n}"{actual_}>{dentro}</button>'
@@ -628,18 +653,24 @@ def riel(e: dict, prods: list[dict], actual: int, con_form: bool) -> str:
             "Se guarda en cada paso. Puedes saltar entre secciones y volver cuando quieras.</div></nav>")
 
 
+def numero(paso: int) -> int:
+    """El número que ve el cliente (su lugar en ORDEN)."""
+    return ORDEN.index(paso) + 1
+
+
 def cabeza_paso(paso: int) -> str:
-    _, _, titulo, texto = PASOS[paso]
-    return (f'<div class="cab-paso"><p class="antetitulo">Paso {paso} de {len(PASOS)}</p><h2>{titulo}</h2>'
-            f"<p>{texto}</p></div>")
+    return (f'<div class="cab-paso"><p class="antetitulo">Paso {numero(paso)} de {len(PASOS)}</p></div>'
+            + LEYENDA)
 
 
 def pie(paso: int, nota: str = "") -> str:
-    siguiente = PASOS[paso + 1][0].lower() if paso + 1 in PASOS else "resumen"
-    atras = (f'<button class="boton secundario" name="accion" value="ir_{paso - 1}">← Anterior</button>'
-             if paso > 1 else "")
+    i = ORDEN.index(paso)
+    siguiente = ORDEN[i + 1] if i + 1 < len(ORDEN) else RESUMEN
+    nombre = PASOS[siguiente][0].lower() if siguiente in PASOS else "resumen"
+    atras = (f'<button class="boton secundario" name="accion" value="ir_{ORDEN[i - 1]}">← Anterior</button>'
+             if i else "")
     return (f'<div class="pie-paso"><span class="nota">{nota}</span><span class="der">{atras}'
-            f'<button class="boton" name="accion" value="ir_{paso + 1}">Siguiente: {siguiente} →</button></span></div>')
+            f'<button class="boton" name="accion" value="ir_{siguiente}">Siguiente: {nombre} →</button></span></div>')
 
 
 def paso_1(e: dict) -> str:
@@ -658,8 +689,6 @@ def paso_1(e: dict) -> str:
                  "Qué haces, cómo lo haces y desde cuándo. Dos o tres frases bastan.", filas=3, req=True)
         + '<div class="dos">' + _texto("zona", "Ciudad o zona donde atiendes", e.get("zona", ""), 160)
         + _texto("sitio_web", "Sitio web", e.get("sitio_web", ""), 200, ejemplo="tusitio.com") + "</div>"
-        + _opciones("caracter", "¿Cómo es tu empresa?", [(k, k) for k in CARACTERES], e.get("caracter", []),
-                    nota=f"elige hasta {MAX_CARACTER}")
         + _opciones("atiende", "¿Cómo atiendes?", ATIENDE, e.get("atiende", []))
         + "</div>" + pie(1, "* Obligatorio. Lo demás lo puedes llenar después.")
     )
@@ -679,7 +708,7 @@ def paso_2(e: dict) -> str:
         + _texto("distinto", "¿Por qué te eligen a ti?", e.get("distinto", ""), 1000, filas=3,
                  ejemplo="Ej.: diseño práctico, a tu presupuesto y sin estrés: nosotros compramos e instalamos.")
         + _texto("competencia", "¿Con quién te comparan?", e.get("competencia", ""), 300,
-                 "Otras marcas o alternativas. Sirve para diferenciarte; nunca se nombran en tus posts.")
+                 "Otras marcas o alternativas. Sirve para diferenciarte; nunca se nombran en tus posts.", usa="campanas")
         + "</div>" + pie(2)
     )
 
@@ -733,12 +762,13 @@ def form_producto(c: Cuenta, p: dict | None) -> str:
         + _texto("descripcion", "Descripción", p.get("descripcion", ""), 800, filas=2, id_="p-descripcion",
                  ejemplo="Qué incluye, para quién es y en cuánto tiempo lo entregas.")
         + f'<div class="campo-o"><span class="t" style="display:block;font-weight:600;font-size:.9rem;margin-bottom:.35rem">'
-        f'Fotos <i style="font-style:normal;font-weight:400;color:var(--gris)">· hasta {MAX_FOTOS_PRODUCTO}</i></span>'
+        f'Fotos <i style="font-style:normal;font-weight:400;color:var(--gris)">· hasta {MAX_FOTOS_PRODUCTO}</i>'
+        f'{_usos("campanas")}</span>'
         f'<div class="fotos-o">{figuras}{subir}</div>'
         '<p class="ay">Se usan como referencia al generar las imágenes de tus campañas. JPG o PNG de hasta 10 MB.</p></div>'
         '<div class="dos">' + _texto("url", "Enlace", p.get("url", ""), 300, "Tu asistente lo manda si le preguntan por este producto.",
-                                     id_="p-url", ejemplo="https://tusitio.com/producto")
-        + '<div class="campo-o">' + _opciones("tipo", "Tipo", TIPOS, p.get("tipo", "producto"), tipo="radio")
+                                     id_="p-url", usa="asistente", ejemplo="https://tusitio.com/producto")
+        + '<div class="campo-o">' + _opciones("tipo", "Tipo", TIPOS, p.get("tipo", "producto"), tipo="radio", usa="")
         + f'<label class="marca-c"><input type="checkbox" name="destacado" value="1"{" checked" if p.get("destacado") else ""}>'
         " Destacado: tus campañas lo proponen primero</label></div></div>"
         f'<div class="acciones-o">{quitar}{cancelar}'
@@ -799,7 +829,7 @@ def paso_5(e: dict, filas_extra: int = 0) -> str:
     ejemplos = panel.EJEMPLOS
     filas = "".join(
         '<div class="par-o">'
-        f'<label for="faq_p_{i}" class="t">Pregunta {i + 1}</label>'
+        f'<label for="faq_p_{i}" class="t">Pregunta {i + 1}{_usos("asistente")}</label>'
         f'<input type="text" id="faq_p_{i}" name="faq_p_{i}" value="{escape(q.get("p", ""))}" maxlength="300"'
         + (f' placeholder="{escape(ejemplos[i][0])}"' if i < len(ejemplos) else "") + ">"
         f'<textarea name="faq_r_{i}" rows="2" maxlength="1000" aria-label="Respuesta {i + 1}"'
@@ -809,7 +839,7 @@ def paso_5(e: dict, filas_extra: int = 0) -> str:
     mas = ('<button class="mini" name="accion" value="mas_faq">+ Agregar otra pregunta</button>'
            if len(pares) < MAX_PREGUNTAS else "")
     return (f'<div class="caja-o"><h3>Preguntas frecuentes <span class="etq-o">{len(_respuestas(e))} con respuesta</span></h3>'
-            '<p class="sub">Tu asistente las contesta tal cual; tus campañas también las usan para ideas.</p>'
+            '<p class="sub">Tu asistente las contesta tal cual.</p>'
             f'<input type="hidden" name="faq_n" value="{len(pares)}">{filas}<div style="margin-top:.8rem">{mas}</div></div>'
             + pie(5))
 
@@ -859,11 +889,10 @@ def ideas(opciones: dict | None, e: dict) -> str:
 
 def resumen(e: dict, prods: list[dict], opciones: dict | None) -> str:
     filas = "".join(f'<div class="res"><b>{PASOS[n][0]}</b><p>{_resumen_de(e, prods, n)}</p>'
-                    f'<button class="mini" name="accion" value="ir_{n}">Editar</button></div>' for n in PASOS)
+                    f'<button class="mini" name="accion" value="ir_{n}">Editar</button></div>' for n in ORDEN)
     falta = "" if lista(e) else '<span class="nota">Te falta lo esencial del paso 1.</span>'
     return (
-        '<div class="cab-paso"><p class="antetitulo">Resumen</p><h2>Así queda tu empresa</h2><p>Revisa cada parte. Si'
-        " algo cambia, entra a editarla: tu asistente y tus campañas se actualizan solos.</p></div>"
+        '<div class="cab-paso"><p class="antetitulo">Resumen</p></div>'
         f'<div class="caja-o">{filas}</div>{ideas(opciones, e)}'
         f'<div class="pie-paso">{falta}<span class="der"><a class="boton secundario" href="/panel">Ir al panel</a>'
         '<button class="boton acento" name="accion" value="terminar">Guardar perfil ✓</button></span></div>'
