@@ -3,12 +3,15 @@
 Usa el Claude Agent SDK con todas las herramientas de Claude Code apagadas
 (nada de Bash ni archivos: lo que escribe un desconocido por DM nunca debe
 poder tocar el servidor). Solo tiene las herramientas de tools.py.
+Las llamadas de un solo turno sin herramientas (casi todo el panel) van directo a la API de
+Claude: no abren un proceso de Claude Code por llamada, que pesa en un servidor de 1 GB.
 """
 import asyncio
 import logging
 from html import escape
 from pathlib import Path
 
+import anthropic
 from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query
 
 from . import catalog, config, limites, tienda, tools
@@ -24,9 +27,51 @@ def workdir() -> Path:
     return Path(cuenta().db_path).parent / "agent-cwd"
 
 
+# US$ por millón de tokens (entrada, salida). Un modelo que no esté aquí se cobra como Sonnet.
+PRECIOS = {"haiku": (0.10, 0.50), "sonnet": (2.0, 10.0), "opus": (4.0, 20.0)}
+ESFUERZOS = {"low", "medium", "high", "xhigh", "max"}
+MAX_TOKENS = 32000  # los planes y prompts de campaña son JSON largos; se lee por streaming
+_api = None
+
+
+def api() -> anthropic.AsyncAnthropic:
+    """Un solo cliente para todo el proceso (toma ANTHROPIC_API_KEY del entorno)."""
+    global _api
+    if _api is None:
+        _api = anthropic.AsyncAnthropic()
+    return _api
+
+
+def costo(model: str, entrada: int, salida: int) -> float:
+    familia = next((f for f in PRECIOS if f in model), "sonnet")
+    precio_entrada, precio_salida = PRECIOS[familia]
+    return (entrada * precio_entrada + salida * precio_salida) / 1_000_000
+
+
+async def run_directo(prompt: str, system: str, model: str) -> str:
+    """Un turno sin herramientas por la API de Claude, sin proceso de Claude Code."""
+    extra = {"output_config": {"effort": cuenta().effort}} if cuenta().effort in ESFUERZOS else {}
+    try:
+        async with asyncio.timeout(config.CLAUDE_TIMEOUT_SECONDS):
+            async with api().messages.stream(model=model, max_tokens=MAX_TOKENS, system=system,
+                                             messages=[{"role": "user", "content": prompt}], **extra) as stream:
+                mensaje = await stream.get_final_message()
+    except TimeoutError:
+        raise RuntimeError(f"Claude no contestó en {config.CLAUDE_TIMEOUT_SECONDS:g} s") from None
+    usado = costo(model, mensaje.usage.input_tokens, mensaje.usage.output_tokens)
+    await limites.add_cost(usado)
+    texto = "".join(b.text for b in mensaje.content if b.type == "text").strip()
+    if mensaje.stop_reason == "refusal" or not texto:
+        raise RuntimeError(f"Claude no devolvió respuesta: {mensaje.stop_reason}")
+    log.info("Claude directo: %s, US$%.4f", mensaje.stop_reason, usado)
+    return texto
+
+
 async def run_claude(
     prompt: str, system: str, mcp=None, allowed=(), max_turns=5, model: str | None = None
 ) -> str:
+    if not mcp and not allowed and max_turns == 1:
+        return await run_directo(prompt, system, model or cuenta().model)
     cwd = workdir()
     cwd.mkdir(parents=True, exist_ok=True)
     options = ClaudeAgentOptions(
