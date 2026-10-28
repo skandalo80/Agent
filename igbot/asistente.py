@@ -613,4 +613,5 @@ form:has(#emojis-nunca:checked) .v-emoji{display:none}form:has(#emojis-seguido:c
 .as-paso>span:last-child{min-width:0}
 .as-paso small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media(max-width:900px){.as-paso{flex:none}}
+.as-pasos{min-height:5.25rem;box-sizing:border-box}
 """

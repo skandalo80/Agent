@@ -34,7 +34,7 @@ def test_pasos_guardan_y_el_asistente_usa_el_perfil(cliente):
     assert "Paso 1 de 5" in r.text and "Café en Puebla" in r.text and "Te precargamos" in r.text
     assert "¿Cómo es tu empresa?" not in r.text and 'class="leyenda-usos"' in r.text
     # Tus clientes va al final: el riel lo numera 5 y el paso 1 sigue a productos.
-    assert "Siguiente: productos y servicios" in r.text and r.text.index("Tus clientes") > r.text.index("Preguntas frecuentes")
+    assert "Siguiente: productos y servicios" in r.text and r.text.index("<b>Tus clientes") > r.text.index("<b>Preguntas")
     assert 'class="lat-item on" href="/panel/empresa" title="Tu empresa"' in r.text  # Configuración la marca
     campos_con_nombre(r.text)
     assert client.portal.call(empresa.de, c) == {}
@@ -74,7 +74,7 @@ def test_pasos_guardan_y_el_asistente_usa_el_perfil(cliente):
     assert "Café Lunar" in Path(c.prompt_path).read_text() and "Elegante y premium" in Path(c.prompt_path).read_text()
 
     r = client.get("/panel/empresa")  # con lo esencial lleno abre el resumen
-    assert ">Resumen</p>" in r.text and "Se preparan cuando guardes" in r.text
+    assert '<div class="hoja-o"><form' in r.text and ">Resumen</p>" in r.text  # el título va dentro de la tarjeta
     assert 'class="antetitulo"' not in r.text.split("<main")[0] and "Café Lunar<span" not in r.text  # sin título arriba
 
 
@@ -209,7 +209,8 @@ def test_opciones_de_campana_al_terminar(cliente, monkeypatch):
     client.portal.call(empresa.generar_opciones, c)  # sin cambios en el perfil no se vuelve a pedir
     assert len(respuestas) == 1
     r = client.get("/panel/empresa?paso=6&aviso=listo")
-    assert "Objetivo 0" in r.text and "Mensaje 5.3" in r.text and "tus campañas usan tu perfil" in r.text
+    assert "tus campañas usan tu perfil" in r.text
+    assert "Tus campañas, a la medida" not in r.text and "Objetivo 0" not in r.text  # se ven al crear la campaña
     # Ya terminado, cambiar un paso vuelve a pedirlas (en segundo plano).
     client.post("/panel/empresa", headers=ORIGEN, data={"paso": "2", "distinto": "Nuevo", "accion": "ir_3"})
     client.portal.call(empresa.esperar_revision, c)
