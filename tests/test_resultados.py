@@ -80,7 +80,8 @@ def test_duracion():
 
 def test_barras_sin_datos_no_truenan():
     svg = resultados.barras([0, 0, 0], ["a", "", "c"], ["1", "2", "3"], descripcion="vacía")
-    assert svg.count("<rect") == 3 and 'aria-label="vacía"' in svg and svg.count("<span>") == 3
+    assert svg.count("<rect") == 3 and 'aria-label="vacía"' in svg and svg.count('class="mh') == 3
+    assert svg.split('class="ejex"')[1].count("<span>") == 3 and "<title>" not in svg
 
 
 @pytest.fixture

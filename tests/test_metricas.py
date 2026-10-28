@@ -107,7 +107,7 @@ def test_resultados_muestra_tarjetas(cliente, monkeypatch):  # noqa: F811
     assert "+14" in html and "7 dejaron de seguirte · neto +7" in html
     assert ">700<" in html and ">63<" in html  # vistas e interacciones (9 × 7)
     assert "7 clics al enlace" in html and "Mujeres" in html and "Guadalajara<b>50" in html
-    assert "25-34 años: 60" in html
+    assert "<b>60</b><small>25-34 años</small>" in html and "<title>" not in html.split("<main")[1]
 
 
 def test_curva_no_se_sale():
