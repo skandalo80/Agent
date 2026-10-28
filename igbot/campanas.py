@@ -1547,7 +1547,6 @@ async def barra(c: Cuenta, camp: dict) -> str:
                 if sin == 1 else "")
                + (f'<button class="boton chico secundario" name="accion" value="aprobar_todas">Aprobar {borradores}'
                   f' con imagen</button>' if borradores else ""))
-    botones += (f'<a class="boton chico secundario" href="{url_de(camp)}/propuesta">Descargar planeación (PDF)</a>')
     return (f'<form method="post" action="{url_de(camp)}" class="barra-cam">'
             f"<p><b>{cuenta}</b> · {len(posts) - sin} con imagen · {aprobados} aprobado{'s' if aprobados != 1 else ''} · tu plan:"
             f" {incluidas + extra} de {c.imagenes_mes} imágenes este mes</p>"
@@ -1620,20 +1619,22 @@ async def pagina_campana(c: Cuenta, camp: dict, aviso: str = "", sel: str = "", 
         p = buscar_post(camp, sel) if sel else None
         modal = await detalle(c, camp, p, quedan_ia) if p else ""
         await guardar(c, camp)  # por si se descartó algún post en Calendario
+    u = url_de(camp)
+    descargas = (f'<a href="{u}/propuesta">Planeación (PDF)</a>'
+                 + (f'<a href="{u}/brief">Brief (PDF)</a>' if camp.get("brief") else ""))
     botones = ('<span class="botones-cab">'
                f'<a class="boton secundario ajuste" href="{BASE}/nueva?editar={camp["id"]}">Editar estrategia</a>'
-               f'<a class="boton secundario ajuste" href="{url_de(camp)}/propuesta">↓ Descargar planeación</a>'
-               + (f'<a class="boton secundario ajuste" href="{url_de(camp)}/brief">↓ Descargar brief</a>'
-                  if camp.get("brief") else "")
-               + f'<a class="boton secundario ajuste" href="{url_de(camp)}?borrar=1">Borrar campaña</a>'
-               + boton_todas(estado(camp, hoy)) + "</span>")
+               f'<details class="menu-desc"><summary class="boton secundario ajuste">↓ Descargar</summary>'
+               f'<div>{descargas}</div></details>'
+               f'<a class="boton ajuste peligro" href="{u}?borrar=1">Borrar campaña</a></span>')
+    volver = f'<a class="volver-cam" href="{BASE}?ver={estado(camp, hoy)}">‹ Volver a campañas</a>'
     return panel.pagina(
         panel.cabecera(salir=True, menu="contenido", cuenta=c, sub="campanas", perfil=await panel.usuario(c),
                        foto=await panel.foto_perfil(c))
         + cabeza(botones, donde=escape(camp["nombre"]))
         + '<div class="oscuro-pag"><main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
-        + await panel.pendiente(c, "campanas") + cuerpo + "</div></main>" + modal + "</div>")
+        + await panel.pendiente(c, "campanas") + volver + cuerpo + "</div></main>" + modal + "</div>")
 
 
 async def pagina_nueva(c: Cuenta, aviso: str = "", form: dict | None = None) -> HTMLResponse:
@@ -1644,15 +1645,6 @@ async def pagina_nueva(c: Cuenta, aviso: str = "", form: dict | None = None) -> 
 
 PESTANAS = {"activa": "Activas", "proxima": "Próximas", "pasada": "Pasadas"}
 COLOR = {"activa": "b-activa", "proxima": "b-proxima", "pasada": "b-pasada"}
-
-
-def se_cruza(camp: dict, otras: list[dict]) -> str:
-    """Con qué otras campañas comparte días, para decirlo en su fila (publicar el mismo día se vale)."""
-    mios = set(rango(camp))
-    cruces = [(x, sorted(mios & set(rango(x)))) for x in otras if x["id"] != camp["id"]]
-    return " ".join(f"Se cruza {len(d)} día{'s' if len(d) != 1 else ''} con «{escape(x['nombre'])}»"
-                    f" ({', '.join(fecha_larga(i) for i in d[:3])}{'…' if len(d) > 3 else ''})."
-                    for x, d in cruces if d)
 
 
 async def numeros_de(c: Cuenta, camp: dict) -> tuple[int, int, float | None]:
@@ -1669,7 +1661,7 @@ def objetivo_corto(camp: dict) -> str:
         "explorar": "Explorar", "repetir": "Repetir lo que funcionó"}.get(camp.get("modo", ""), "")
 
 
-async def tarjeta_campana(c: Cuenta, camp: dict, cual: str, hoy: date, otras: list[dict], marcar: bool | None = None,
+async def tarjeta_campana(c: Cuenta, camp: dict, cual: str, hoy: date, marcar: bool | None = None,
                           completa: bool = True) -> str:
     """Una campaña en la lista: fechas, objetivo, sus números en miniatura y sus botones. En Pasadas, con su
     casilla para el reporte (marcar)."""
@@ -1697,7 +1689,6 @@ async def tarjeta_campana(c: Cuenta, camp: dict, cual: str, hoy: date, otras: li
     casilla = ("" if marcar is None else
                f'<input class="sel" type="checkbox" name="c" value="{camp["id"]}" form="tus-campanas"'
                f' aria-label="Incluir en el reporte"{" checked" if marcar else ""}{"" if publicados else " disabled"}>')
-    cruce = f'<p class="cruce">{c_}</p>' if cual == "proxima" and (c_ := se_cruza(camp, otras)) else ""
     botones = ((f'<a class="boton chico" href="{url_de(camp)}">Abrir</a>' if completa else "")
                + (f'<a class="boton secundario chico" href="{BASE}/reporte?c={camp["id"]}">Reporte PDF</a>'
                   if cual == "pasada" and publicados else "")
@@ -1711,7 +1702,7 @@ async def tarjeta_campana(c: Cuenta, camp: dict, cual: str, hoy: date, otras: li
             f'<div><h3>{escape(camp["nombre"])}</h3><span class="f">{fechas}</span></div>'
             + (f'<div><span class="obj">{escape(obj)}</span></div>' if obj else "")
             + '<div class="mets">' + "".join(f"<div><b>{v}</b><span>{t}</span></div>" for t, v in mets) + "</div>"
-            f'<div class="prog"><i style="width:{avance}%"></i></div>{cruce}<div class="acc">{botones}</div></div>')
+            f'<div class="prog"><i style="width:{avance}%"></i></div><div class="acc">{botones}</div></div>')
 
 
 PERIODOS = {"mes": ("Último mes", 31), "dos": ("Últimos 2 meses", 62), "rango": ("Rango de fechas", 0)}
@@ -1752,7 +1743,7 @@ async def pasadas_html(c: Cuenta, camps: list[dict], q: dict | None = None) -> s
     tarjetas, marcadas = [], 0
     for x in lista[:MAX_PASADAS]:
         marcar = marcadas < informe.MAX_REPORTE
-        tarjeta = await tarjeta_campana(c, completas.get(x["id"], x), "pasada", hoy, [], marcar, x["id"] in completas)
+        tarjeta = await tarjeta_campana(c, completas.get(x["id"], x), "pasada", hoy, marcar, x["id"] in completas)
         if marcar and "disabled" not in tarjeta.split('class="sel"')[-1].split(">")[0]:
             marcadas += 1
         tarjetas.append(tarjeta)
@@ -1786,8 +1777,7 @@ async def pagina_lista(c: Cuenta, ver: str = "", aviso: str = "", q: dict | None
     if ver == "pasada":
         cuerpo = await pasadas_html(c, grupos["pasada"], q)
     elif grupos[ver]:
-        otras = grupos["activa"] + grupos["proxima"]
-        cuerpo = '<div class="camps">' + "".join([await tarjeta_campana(c, x, ver, hoy, otras)
+        cuerpo = '<div class="camps">' + "".join([await tarjeta_campana(c, x, ver, hoy)
                                                   for x in grupos[ver]]) + "</div>"
     else:
         cuerpo = (f'<p class="ayuda">No tienes campañas {PESTANAS[ver].lower()}.</p>'
