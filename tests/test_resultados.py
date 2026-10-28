@@ -189,5 +189,6 @@ def test_community_ve_comentarios_y_publicaciones(cliente, monkeypatch):
     assert "De comentario a mensaje" in html and "PRECIO · 1" in html and "Spam ocultado" in html
     assert "1 publicada" not in html  # las publicaciones van en Instagram
     html = client.get("/panel/resultados").text
-    assert "1 publicada · 1 programada" in html and "https://www.instagram.com/p/X/" in html
+    assert "1 publicada <small>· 1 programada" in html and "https://www.instagram.com/p/X/" in html
+    assert "Instagram aún no da sus números" in html
     assert "De comentario a mensaje" not in html
