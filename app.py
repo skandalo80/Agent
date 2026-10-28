@@ -29,8 +29,8 @@ from fastapi.exception_handlers import http_exception_handler
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
-from igbot import (admin, agent, ajustes, botones, campanas, comentarios, conectar, config, contenido, empresa, limites, panel, reporte, resultados,
-                   semana)
+from igbot import (admin, agent, ajustes, asistente, botones, campanas, comentarios, conectar, config, contenido, empresa,
+                   limites, marca, metricas, nueva_campana, panel, reporte, resultados, semana, sugeridos)
 from igbot.cuenta import Cuenta, cargar, cuenta, de_carpeta, usar
 from igbot.dispatcher import Dispatcher
 from igbot.google import Google
@@ -175,6 +175,14 @@ async def reporte_semanal(c: Cuenta) -> None:
         await reporte.tick(c.store, c.instagram, google)
 
 
+async def sugeridos_del_lunes(c: Cuenta) -> None:
+    await sugeridos.tick(c)  # más opciones de Objetivo y Mensaje para Crear campaña
+
+
+async def metricas_del_dia(c: Cuenta) -> None:
+    await metricas.tick(c)  # seguidores, alcance y vistas de cada día, para Resultados
+
+
 async def cada_cuenta(paso, every: float) -> None:
     """Un solo bucle de fondo por tarea, que pasa por todas las cuentas."""
     while True:
@@ -192,6 +200,8 @@ def fondo() -> list[asyncio.Task]:
         asyncio.create_task(cada_cuenta(renovar_token, 3600)),
         asyncio.create_task(cada_cuenta(publicar, 30)),
         asyncio.create_task(cada_cuenta(reporte_semanal, 600)),
+        asyncio.create_task(cada_cuenta(sugeridos_del_lunes, 600)),
+        asyncio.create_task(cada_cuenta(metricas_del_dia, 600)),
     ]
 
 
@@ -247,9 +257,12 @@ if not config.CLIENTE:
     app.include_router(conectar.router)
     app.include_router(panel.router)
     app.include_router(ajustes.router)
+    app.include_router(asistente.router)
     app.include_router(contenido.router)
     app.include_router(empresa.router)
+    app.include_router(marca.router)
     app.include_router(semana.router)
+    app.include_router(nueva_campana.router)  # antes que campanas: /campanas/nueva no es /campanas/{cid}
     app.include_router(campanas.router)
     app.include_router(resultados.router)
 

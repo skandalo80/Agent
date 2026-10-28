@@ -308,3 +308,37 @@ def test_tocar_un_boton_de_inicio_se_contesta_como_mensaje(monkeypatch):
         while not calls and time.time() < deadline:
             time.sleep(0.05)
     assert calls == [["¿Qué productos manejan?"]]
+
+
+def test_publicar_una_historia_en_la_api(monkeypatch):
+    import httpx
+
+    from igbot.instagram import Instagram
+
+    calls = []
+
+    def answer(request):
+        body = dict(httpx.QueryParams(request.content.decode())) if request.content else {}
+        calls.append((request.method, request.url.path.split("/v23.0/")[1], body))
+        if request.url.path.endswith("/me/media"):
+            return httpx.Response(200, json={"id": "c1"})
+        if request.url.path.endswith("/me/media_publish"):
+            return httpx.Response(200, json={"id": "media9"})
+        if request.url.params.get("fields") == "status_code":
+            return httpx.Response(200, json={"status_code": "FINISHED"})
+        return httpx.Response(200, json={"permalink": "https://www.instagram.com/stories/negocio/9/"})
+
+    async def main():
+        store = Store(":memory:")
+        await store.open()
+        ig = Instagram(store)
+        ig.http = httpx.AsyncClient(transport=httpx.MockTransport(answer))
+        link = await ig.publish_story("https://x/1.jpg")
+        await ig.close()
+        await store.close()
+        return link
+
+    assert run(main()) == "https://www.instagram.com/stories/negocio/9/"
+    posts = [b for m, p, b in calls if m == "POST"]
+    assert posts[0] == {"image_url": "https://x/1.jpg", "media_type": "STORIES"}  # sin caption
+    assert posts[1] == {"creation_id": "c1"}

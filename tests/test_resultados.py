@@ -13,10 +13,12 @@ import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 import app as bot  # noqa: E402
-from igbot import resultados  # noqa: E402
+from igbot import panel, resultados  # noqa: E402
 from igbot.cuenta import cuenta  # noqa: E402
 from test_conectar import setup  # noqa: E402
 from test_cuenta import FakeInstagram  # noqa: E402
+
+ORIGEN = {"Origin": "https://console.skandar.online"}
 
 MX = ZoneInfo("America/Mexico_City")
 
@@ -131,21 +133,37 @@ def test_basico_sin_mensajes_y_con_mensajes(cliente, monkeypatch):
     assert 'class="on">7 días' in client.get("/panel/resultados?dias=999").text
 
 
-def test_inicio_del_panel(cliente):
+def test_inicio_del_panel(cliente, monkeypatch):
     client, c = cliente
-    # Recién conectada: la bienvenida, solo la primera vez (Básico: un solo camino).
-    r = client.get("/panel", follow_redirects=True)
-    assert "Hola, @" in r.text and "Tu plan Asistente virtual" in r.text and "Tu marca" not in r.text
+    lista = {"empresa": False}
+
+    async def empresa_lista(c):
+        return lista["empresa"]
+
+    monkeypatch.setattr(panel, "empresa_lista", empresa_lista)
+    # Recién conectada: primero su Perfil de empresa; mientras no lo llene ni lo omita, ahí se queda.
+    for _ in range(2):
+        r = client.get("/panel", follow_redirects=True)
+        assert "Hola, @" in r.text and "Perfil de empresa" in r.text and 'href="/panel/empresa"' in r.text
+        assert "Omitir por ahora" in r.text and "Tu plan Asistente virtual" not in r.text
+    assert client.post("/panel/bienvenida", data={"accion": "omitir"}).status_code == 403  # sin Origin
+    # Lo omite: paso 2, una sola vez (Básico: un solo camino y seguir explorando).
+    r = client.post("/panel/bienvenida", headers=ORIGEN, data={"accion": "omitir"})
+    assert "¿Por dónde seguimos?" in r.text and "Tu plan Asistente virtual" in r.text and "Tu marca" not in r.text
+    assert "te espera en el menú de tu cuenta" in r.text and "Seguir explorando" in r.text
+    assert "Te falta llenar tu <b>Perfil de empresa</b>" in client.get("/panel/asistente").text
+    lista["empresa"] = True
+    assert "Te falta llenar tu" not in client.get("/panel/asistente").text
     # Después (en pausa y sin mensajes): a configurar su asistente.
     r = client.get("/panel", follow_redirects=False)
     assert r.status_code == 303 and r.headers["location"] == "/panel/asistente"
-    client.post("/panel/estado", headers={"Origin": "https://console.skandar.online"}, data={"activo": "1"})
+    client.post("/panel/estado", headers=ORIGEN, data={"activo": "1"})
     assert client.get("/panel", follow_redirects=False).headers["location"] == "/panel/asistente"  # sin mensajes
     client.portal.call(c.store.add_incoming, "ana", "m1", "hola")
     assert client.get("/panel", follow_redirects=False).headers["location"] == "/panel/resultados"
     html = client.get("/panel").text
-    assert html.index(" title=\"Resultados\"") < html.index(" title=\"Tu asistente\"")  # primero en el menú
-    assert 'href="/panel/asistente" title="Tu asistente"' in html
+    assert html.index(" title=\"Resultados\"") < html.index(" title=\"Conversaciones\"")  # primero en el menú
+    assert 'href="/panel/asistente" title="Conversaciones"' in html
 
 
 def test_community_ve_comentarios_y_publicaciones(cliente, monkeypatch):
@@ -164,6 +182,6 @@ def test_community_ve_comentarios_y_publicaciones(cliente, monkeypatch):
 
     client.portal.call(actividad)
     html = client.get("/panel/resultados").text
-    assert 'href="/panel/contenido" title="Contenido"' in html
+    assert 'href="/panel/contenido" title="Calendario"' in html
     assert "De comentario a mensaje" in html and "PRECIO · 1" in html and "Spam ocultado" in html
     assert "1 publicada · 1 programada" in html and "https://www.instagram.com/p/X/" in html

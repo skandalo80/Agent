@@ -76,9 +76,10 @@ def resumen_de(camp: dict) -> dict:
     """Lo que hace falta de una campaña para su reporte: solo los posts que tuvieron imagen."""
     return {"id": camp.get("id") or int(camp.get("creada", 0) * 1000), "nombre": camp.get("nombre", ""),
             "inicio": camp["inicio"], "fin": fin_de(camp).isoformat(), "semanas": camp.get("semanas", 1),
-            "modo": camp.get("modo", ""),
+            "modo": camp.get("modo", ""), "objetivo": str(camp.get("objetivo") or "").split(":")[0][:60],
             "posts": [{k: p.get(k) for k in ("post_id", "tipo", "formato", "hora", "titulo", "responde", "collage")}
-                      for p in camp.get("posts", []) if p.get("post_id")]}
+                      for p in camp.get("posts", []) if p.get("post_id")],
+            **({"brief": camp["brief"]} if camp.get("brief") else {})}  # el brief se queda para descargarlo
 
 
 async def historial(c: Cuenta) -> list[dict]:
@@ -343,7 +344,8 @@ def poner_logo(doc: Cotizacion, c: Cuenta, marca: dict) -> None:
 class Propuesta(Cotizacion):
     etiqueta = "PROPUESTA DE CAMPAÑA"
 
-    def post(self, n: int, cuando: str, titulo: str, etiquetas: str, texto: str, foto: Path | None, idea: str) -> None:
+    def post(self, n: int, cuando: str, titulo: str, etiquetas: str, texto: str, foto: Path | None, idea: str,
+             sin_foto: str = "IMAGEN PENDIENTE") -> None:
         """Un post: la imagen (o el aviso de que falta) a la izquierda y su texto a la derecha."""
         ancho_foto, alto_foto = 30, 37.5
         if self.get_y() > self.page_break_trigger - alto_foto - 6:
@@ -356,7 +358,7 @@ class Propuesta(Cotizacion):
             self.rect(self.l_margin, y, ancho_foto, alto_foto, style="F", round_corners=True, corner_radius=1.5)
             self.set_xy(self.l_margin + 2.5, y + 3)
             self.font(6.8, bold=True, color=GRIS)
-            self.multi_cell(ancho_foto - 5, 3.4, "IMAGEN PENDIENTE", new_x="LEFT", new_y="NEXT")
+            self.multi_cell(ancho_foto - 5, 3.4, sin_foto, new_x="LEFT", new_y="NEXT")
             self.font(6.8, color=GRIS)
             self.multi_cell(ancho_foto - 5, 3.2, idea[:140] + ("…" if len(idea) > 140 else ""), new_x="LEFT",
                             new_y="NEXT")
@@ -425,6 +427,83 @@ async def propuesta(c: Cuenta, camp: dict, marca: dict, cuenta: str) -> bytes:
     doc.seccion("¿Te gusta? ¿Cambiamos algo?", [
         "Podemos mover cualquier post a otro día u hora, cambiar su formato o su texto, o pedir otra idea.",
         "Las imágenes que dicen «Imagen pendiente» se generan cuando el calendario quede aprobado."])
+    return doc.bytes()
+
+
+class PlanCalendario(Propuesta):
+    etiqueta = "CALENDARIO DE CONTENIDO"
+
+
+async def calendario_pdf(c: Cuenta, titulo: str, ini: date, fin: date, items: list, marca: dict, cuenta: str) -> bytes:
+    """Lo que se ve en Calendario (mes, semana o día, con sus filtros): cada post e historia por día, con su
+    imagen, hora, estado y texto. `items` son calendario.Item."""
+    from .calendario import DIAS_LARGOS, ESTADOS
+    from .campanas import MEDIOS
+
+    periodo = fecha(ini) if ini == fin else f"{fecha(ini)} – {fecha(fin)}"
+    doc = PlanCalendario(f"@{cuenta.lstrip('@')}", periodo, fecha(tools.now().date()), marca.get("acento", ""))
+    doc.alias_nb_pages()
+    poner_logo(doc, c, marca)
+    doc.titulo("Calendario de contenido", titulo)
+    con_fecha = [x for x in items if x.cuando]
+    doc.datos([("Posts", cifra(sum(x.tipo != "historia" for x in con_fecha))),
+               ("Historias", cifra(sum(x.tipo == "historia" for x in con_fecha))),
+               ("Programados", cifra(sum(x.estado == "programado" for x in con_fecha))),
+               ("Publicados", cifra(sum(x.estado == "publicado" for x in con_fecha)))])
+    if not con_fecha:
+        doc.seccion("Nada en estas fechas", ["No hay posts ni historias en este periodo."])
+    dia_actual = None
+    for n, x in enumerate(con_fecha, 1):
+        if x.cuando.date() != dia_actual:
+            dia_actual = x.cuando.date()
+            if doc.get_y() > doc.page_break_trigger - 60:
+                doc.add_page()
+            doc.ln(4)
+            doc.font(12, bold=True, color=NEGRO)
+            doc.cell(doc.epw, 7, f"{DIAS_LARGOS[dia_actual.weekday()].capitalize()} {fecha(dia_actual)}",
+                     new_x="LMARGIN", new_y="NEXT")
+            doc.rule(NEGRO, 0.3)
+        foto = Path(c.media_dir) / f"{x.foto}.jpg" if x.foto else None
+        etiquetas = " · ".join([MEDIOS.get(x.tipo, MEDIOS["post"])[0], ESTADOS[x.estado][0], x.sub])
+        doc.post(n, f"{x.cuando:%H:%M}", x.titulo, etiquetas, x.texto, foto if foto and foto.is_file() else None,
+                 "Publicado desde la app de Instagram." if x.externo and not x.foto else x.idea,
+                 sin_foto="EN INSTAGRAM" if x.externo else "IMAGEN PENDIENTE")
+    return doc.bytes()
+
+
+class Brief(Cotizacion):
+    etiqueta = "BRIEF DE CAMPAÑA"
+
+
+async def brief_pdf(c: Cuenta, camp: dict, marca: dict, cuenta: str) -> bytes:
+    """El brief de la campaña (la idea que eligió y ajustó), para guardarlo o compartirlo con su equipo."""
+    from . import brief  # import tardío: brief importa contenido
+
+    b = camp["brief"]
+    inicio, fin = date.fromisoformat(camp["inicio"]), fin_de(camp)
+    doc = Brief(f"@{cuenta.lstrip('@')}", f"{fecha(inicio)} – {fecha(fin)}", fecha(tools.now().date()),
+                marca.get("acento", ""))
+    doc.alias_nb_pages()
+    poner_logo(doc, c, marca)
+    doc.titulo(f"Brief · {camp['nombre']}", b.get("titulo", ""), b.get("resumen", ""))
+    objetivo = str(camp.get("objetivo") or "").split(":")[0]
+    producto = str(camp.get("producto") or "").split(":")[0].split(". Qué quiere")[0]
+    doc.datos([("Objetivo", objetivo or "—"), ("Posts", cifra(camp.get("n_posts") or len(camp.get("posts", [])))),
+               ("Fechas", f"{fecha(inicio)} – {fecha(fin)}"), ("Producto", producto or "—")])
+    for titulo, clave in (("Insight", "insight"), ("Mensaje clave", "mensaje_clave")):
+        if b.get(clave):
+            doc.seccion(titulo, [b[clave]])
+    if b.get("pilares"):
+        doc.seccion("Pilares", [f"{p['nombre']}: {p.get('detalle', '')}".strip(": ") for p in b["pilares"]])
+    for clave, titulo, _ in brief.CAMPOS_IDEA[2:]:
+        if b.get(clave):
+            doc.seccion(titulo, [b[clave]])
+    visual = [f"{t}: {b[k]}" for k, t, _ in brief.CAMPOS_VISUAL if b.get(k)]
+    if visual:
+        doc.seccion("Dirección visual", visual)
+    if camp.get("visual") or camp.get("estilo"):
+        doc.seccion("Cómo se ve", [x for x in (f"Qué se ve: {camp['visual']}" if camp.get("visual") else "",
+                                               camp.get("estilo", "")) if x], chica=True)
     return doc.bytes()
 
 
@@ -497,4 +576,83 @@ async def pdf(c: Cuenta, camps: list[dict], marca: dict, cuenta: str) -> bytes:
         doc.barras("Por tema", grupos["tema"], nombres["tema"])
         doc.barras("Por formato", grupos["formato"], nombres["formato"])
         doc.barras("Por horario", grupos["franja"], nombres["franja"])
+    return doc.bytes()
+
+
+class ReporteResultados(Cotizacion):
+    etiqueta = "RESULTADOS"
+
+    def por_dia(self, filas: list[tuple[str, ...]], columnas: tuple[str, ...]) -> None:
+        """Tabla de una línea por día: la fecha a la izquierda y los números a la derecha."""
+        anchos = [self.epw * 0.34] + [self.epw * 0.66 / (len(columnas) - 1)] * (len(columnas) - 1)
+
+        def encabezado():
+            self.font(7.5, bold=True, color=GRIS)
+            self.set_char_spacing(0.5)
+            for i, (col, ancho) in enumerate(zip(columnas, anchos)):
+                self.cell(ancho, 6, col.upper(), align="L" if i == 0 else "R")
+            self.set_char_spacing(0)
+            self.ln(6)
+            self.rule(NEGRO, 0.3)
+
+        encabezado()
+        for fila in filas:
+            if self.get_y() > self.page_break_trigger - 9:
+                self.add_page()
+                encabezado()
+            self.ln(1.6)
+            self.font(9.5)
+            for i, (valor, ancho) in enumerate(zip(fila, anchos)):
+                self.cell(ancho, 5, valor, align="L" if i == 0 else "R")
+            self.ln(6.6)
+            self.rule()
+        self.ln(8)
+
+
+async def resultados_pdf(c: Cuenta, titulo: str, d: dict, m: dict, cuenta: str) -> bytes:
+    """Lo que se ve en Resultados para un periodo: números de Instagram, día por día, público y
+    conversaciones. `d` sale de resultados.numeros_de y `m` de metricas.numeros."""
+    from . import contenido, metricas
+    from .resultados import duracion
+
+    def signo(n: float | None) -> str:
+        return "-" if n is None else f"{'+' if n > 0 else ''}{n:.1f}%".replace(".0%", "%")
+
+    marca = await contenido.marca_de(c)
+    doc = ReporteResultados(f"@{cuenta.lstrip('@')}", titulo, fecha(tools.now().date()), marca.get("acento", ""))
+    doc.alias_nb_pages()
+    poner_logo(doc, c, marca)
+    doc.titulo("Resultados", titulo)
+    inter = m["interacciones"]
+    alcance = [v for v in m["alcance_dia"] if v is not None]
+    doc.seccion("Instagram", [])
+    doc.datos([("Seguidores", cifra(m["seguidores"]) if m["seguidores"] is not None else "-"),
+               ("vs. semana pasada", signo(m["semana"])), ("vs. mes pasado", signo(m["mes"])),
+               ("Nuevos", cifra(m["nuevos"])), ("Dejaron de seguir", cifra(m["perdidos"]))])
+    doc.datos([("Alcance al día", cifra(round(sum(alcance) / len(alcance))) if alcance else "-"),
+               ("Vistas", cifra(m["vistas"])), ("Interacciones", cifra(sum(inter.values()))),
+               ("Likes", cifra(inter["likes"])), ("Clics al enlace", cifra(m["clics"]))])
+    dias = [(f, x) for f, x in zip(m["fechas"], m["serie"]) if x]
+    if dias:
+        doc.por_dia([(fecha(f), cifra(x.get("seguidores")) if "seguidores" in x else "-",
+                      f"+{x['nuevos']}" if "nuevos" in x else "-", cifra(x.get("alcance")), cifra(x.get("vistas")))
+                     for f, x in dias], ("Día", "Seguidores", "Nuevos", "Alcance", "Vistas"))
+    p = m["publico"]
+    if p.get("edad") or p.get("genero") or p.get("ciudad"):
+        def top(grupo: dict, nombres: dict | None = None, n: int = 5) -> str:
+            total = sum(grupo.values()) or 1
+            return ", ".join(f"{(nombres or {}).get(k, k.split(',')[0])} {v / total:.0%}"
+                             for k, v in sorted(grupo.items(), key=lambda x: -x[1])[:n])
+        doc.seccion("Tu público", [x for x in (
+            f"Edad: {top(p['edad'])}" if p.get("edad") else "",
+            f"Género: {top(p['genero'], metricas.GENEROS)}" if p.get("genero") else "",
+            f"Ciudades: {top(p['ciudad'])}" if p.get("ciudad") else "") if x])
+    doc.seccion("Conversaciones", [])
+    pct_solas = f"{round(d['resueltas'] / d['escribieron'] * 100)}%" if d.get("escribieron") else "-"
+    doc.datos([("Conversaciones", cifra(d["personas"])), ("Mensajes recibidos", cifra(d["recibidos"])),
+               ("Resueltas solas", pct_solas), ("Respuesta", duracion(d["respuesta"])),
+               ("Fuera de horario", cifra(d["fuera"]))])
+    if "comentarios" in d:
+        doc.datos([("Comentarios", cifra(d["comentarios"])), ("DMs por comentario", cifra(d["dms"])),
+                   ("Respuestas públicas", cifra(d["publicas"])), ("Publicadas", cifra(len(d["publicadas"])))])
     return doc.bytes()

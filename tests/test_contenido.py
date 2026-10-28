@@ -1,9 +1,10 @@
 """Contenido en el panel: marca, crear post, editarlo, aprobarlo y publicarlo."""
 import io
 import json
-import re
 import os
-from datetime import timedelta
+import re
+from functools import partial
+from datetime import datetime, timedelta
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -14,12 +15,13 @@ from fastapi.testclient import TestClient  # noqa: E402
 from PIL import Image  # noqa: E402
 
 import app as bot  # noqa: E402
-from igbot import admin, contenido, imagenes, panel, tools  # noqa: E402
+from igbot import admin, contenido, estilos, imagenes, panel, tools  # noqa: E402
 from igbot.cuenta import usar  # noqa: E402
 from test_conectar import setup  # noqa: E402
 from test_cuenta import FakeInstagram  # noqa: E402
 from test_imagenes import Falso  # noqa: E402
 
+MARCA = "/panel/contenido/marca"
 ORIGEN = {"Origin": "https://console.skandar.online"}
 
 POST = {"titulo": "Cartera Atelier", "subtitulo": "Piel italiana, hecha a mano.", "precio": "Desde $1,290 MXN",
@@ -53,6 +55,17 @@ def png() -> bytes:
     return out.getvalue()
 
 
+class Subida:
+    """Una foto subida (como las de un formulario), para guardarla sin pasar por una página."""
+    async def read(self, n):
+        return png()
+
+
+def crear(client, c, objetivo="marca", **kw) -> int:
+    """Un post como lo arma Campañas (Crear post ya no existe): Claude escribe y se genera la imagen."""
+    return client.portal.call(partial(contenido.generar, c, objetivo, **kw))
+
+
 def test_leer_respuesta_de_claude():
     datos = contenido.leer_respuesta("Aquí va:\n```json\n" + json.dumps(POST) + "\n```")
     assert datos["titulo"] == "Cartera Atelier" and datos["palabra_clave"] == "PRECIO"
@@ -70,7 +83,6 @@ def cliente(monkeypatch, tmp_path):
     monkeypatch.setattr(bot, "Instagram", lambda store: ConPosts())
     monkeypatch.setattr(contenido, "_de_instagram", {})
     monkeypatch.setattr(contenido, "_cursores", {})
-    monkeypatch.setattr(contenido, "_total_instagram", {})
     monkeypatch.setattr(bot, "cuentas", list(bot.cuentas))
     monkeypatch.setattr(bot, "dispatchers", dict(bot.dispatchers))
     monkeypatch.setattr(bot.principal, "ig_account_id", "negocio")
@@ -89,7 +101,7 @@ def cliente(monkeypatch, tmp_path):
         state = parse_qs(urlparse(r.headers["location"]).query)["state"][0]
         client.get(f"/conectar/callback?code=abc&state={state}", follow_redirects=False)
         c = bot.buscar("1784")
-        client.post("/panel/guardar", headers=ORIGEN, data={"accion": "guardar", "prompt": "Vendemos carteras."})
+        client.post("/panel/asistente/paso", headers=ORIGEN, data={"paso": "reglas", "instrucciones": "Vendemos carteras."})
         yield client, c, llamadas, proveedor
 
 
@@ -98,78 +110,155 @@ def test_sin_contenido_en_el_plan(cliente):
     assert c.imagenes_mes == 0
     assert 'title="Contenido"' not in client.get("/panel").text  # el menú solo sale si su plan lo tiene
     assert "Tu plan actual es el Asistente virtual" in client.get("/panel/contenido").text
-    r = client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "marca"})
-    assert "Tu plan actual es el Asistente virtual" in r.text
+    assert client.get("/panel/contenido/nuevo", follow_redirects=False).headers["location"] == "/panel/contenido/campanas"
 
 
 def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     client, c, llamadas, proveedor = cliente
     monkeypatch.setattr(c, "imagenes_mes", 2)
-    assert 'href="/panel/contenido" title="Contenido"' in client.get("/panel/asistente").text
+    assert 'href="/panel/contenido" title="Calendario"' in client.get("/panel/asistente").text
     r = client.get("/panel/contenido")
-    assert "Aún no tienes posts" in r.text and "DESDEAPP" in r.text  # lo de la app sale aunque no haya del panel
-    assert "Este post lleva precio" in client.get("/panel/contenido/nuevo").text
-    assert client.get("/panel/contenido/nuevo").text.count('name="objetivo"') == 5
+    assert 'id="cal"' in r.text and "Próximos posts" not in r.text  # Calendario: solo el calendario
+    r = client.get("/panel/contenido?fecha=2099-01-01&ver=lista")
+    assert "DESDEAPP" in r.text and "Ya publicados" in r.text  # lo de la app sale aunque no haya del panel
 
-    # Tu marca: colores, letra y una foto del producto.
-    marca = {"principal": "1f3a5f", "acento": "#F7D046", "fondo": "#zzz", 
-             "fuente": "Playfair Display", "peso": "700", "estilo": "premium", "plantilla": "banda"}
-    r = client.post("/panel/contenido/marca", headers=ORIGEN, data={**marca, "accion": "vista"})
-    assert "Pulsa Guardar" in r.text and client.portal.call(contenido.marca_de, c) == {}  # vista no guarda
-    r = client.post("/panel/contenido/marca", headers=ORIGEN, data={**marca, "accion": "subir"},
-                    files={"fotos": ("cartera.png", png(), "image/png")})
-    assert "1 foto nueva" in r.text
+    # Tu marca, paso a paso: sin marca abre el paso 1; cada paso guarda y lleva al siguiente.
+    r = client.get("/panel/contenido/marca")
+    assert "Paso 1 de 4" in r.text and '<main class="oscuro-pag">' in r.text and r.text.count('name="estilos"') == 12
+    assert "¿Cómo quieres que se vean los diseños de tu marca?" in r.text and 'class="antetitulo"' not in r.text
+    assert "Sensación: Rebelde · Directo · Impactante" in r.text and "1.º · Estilo principal:" in r.text
+    # Tu marca vive en el menú de perfil (abajo), no en el submenú de Contenido.
+    assert '<a href="/panel/contenido/marca" class="on">Tu marca</a>' in r.text
+    assert 'title="Calendario"><svg' in r.text and r.text.count('href="/panel/contenido/marca"') == 1
+    r = client.post(MARCA, headers=ORIGEN, data={"paso": "1"})
+    assert "Elige al menos un estilo" in r.text and client.portal.call(contenido.marca_de, c) == {}
+    r = client.post(MARCA, headers=ORIGEN, follow_redirects=False,
+                    data={"paso": "1", "estilos": ["brutalista", "editorial", "pop", "retro"], "orden": "editorial,brutalista"})
+    assert r.status_code == 303 and r.headers["location"] == f"{MARCA}?paso=2"
+    assert client.portal.call(contenido.marca_de, c)["estilos"] == ["editorial", "brutalista", "pop"]  # en el orden tocado
+    r = client.get(f"{MARCA}?paso=1")
+    assert "1.º · Estilo principal</span>" in r.text and "3.º · Estilo de apoyo</span>" in r.text
+    # Colores: la paleta recién elegida (sin JavaScript) llena los cuatro; después manda el color que cambió.
+    client.post(MARCA, headers=ORIGEN, data={"paso": "2", "paleta": "azul", "paleta_antes": "", "uso_color": "natural"})
     guardada = client.portal.call(contenido.marca_de, c)
-    assert guardada["principal"] == "#1F3A5F" and guardada["fondo"] == ""
-    assert guardada["fuente"] == "Playfair Display" and len(guardada["fotos"]) == 1
-    # El código del color se puede escribir o pegar; si es válido manda sobre el selector.
-    client.post("/panel/contenido/marca", headers=ORIGEN,
-                data={**marca, "principal_hex": "333d1f", "acento_hex": "nada", "fuente": "DM Sans", "accion": "guardar"})
+    assert (guardada["principal"], guardada["secundario"], guardada["uso_color"]) == ("#16324F", "#3B82C4", "natural")
+    client.post(MARCA, headers=ORIGEN, data={
+        "paso": "2", "paleta": "azul", "paleta_antes": "azul", "uso_color": "natural",
+        "principal": "#16324f", "principal_hex": "1f3a5f", "secundario": "#3b82c4", "secundario_hex": "nada",
+        "acento": "#123456", "acento_hex": "#9ED8CF", "fondo": "#f5f8fb", "fondo_hex": "#F5F8FB"})
     guardada = client.portal.call(contenido.marca_de, c)
-    assert guardada["principal"] == "#333D1F" and guardada["acento"] == "#F7D046" and guardada["fuente"] == "DM Sans"
+    assert (guardada["principal"], guardada["secundario"], guardada["acento"]) == ("#1F3A5F", "#3B82C4", "#123456")
+    r = client.get(f"{MARCA}?paso=2")
+    assert 'name="paleta" value="azul" data-colores' in r.text and "--m-principal:#1F3A5F" in r.text
+    assert 'value="azul" data-colores="#16324F,#3B82C4,#9ED8CF,#F5F8FB">' in r.text  # ya no es la paleta: sin marcar
+    # Tipografía: cada letra trae su grosor.
+    r = client.get(f"{MARCA}?paso=2")
+    assert "¿Cuánto quieres que destaquen los colores de tu marca?" in r.text and "Natural / Sin protagonismo" in r.text
+    assert "Los colores de marca conviven con los colores naturales." in r.text and 'value="natural" checked' in r.text
+    # Las paletas vienen plegadas; cada opción de color lleva su imagen.
+    assert '<details class="mrc-otras"><summary>Elige una paleta</summary>' in r.text
+    assert "url(/panel/static/tarjetas/marca/color-natural.webp)" in r.text
+    # Cuánto destacan los colores: se pueden elegir varios, en el orden en que los toca.
+    client.post(MARCA, headers=ORIGEN, data={
+        "paso": "2", "paleta_antes": "", "uso_color": ["sutil", "natural"], "orden_uso": "natural,sutil",
+        "principal": "#1F3A5F", "secundario": "#3B82C4", "acento": "#123456", "fondo": "#F5F8FB"})
+    guardada = client.portal.call(contenido.marca_de, c)
+    assert (guardada["usos_color"], guardada["uso_color"]) == (["natural", "sutil"], "natural")
+    r = client.get(f"{MARCA}?paso=2")
+    assert 'name="orden_uso" value="natural,sutil"' in r.text and 'value="sutil" checked' in r.text
+    assert 'data-orden="orden_uso" data-campo="uso_color"' in r.text and '<em class="wiz-orden">2</em>' in r.text
+    assert "How much color (the owner accepts several" in contenido.contexto_marca(guardada)
+    client.post(MARCA, headers=ORIGEN, data={
+        "paso": "2", "paleta_antes": "", "uso_color": "natural",
+        "principal": "#1F3A5F", "secundario": "#3B82C4", "acento": "#123456", "fondo": "#F5F8FB"})
+    # Tipografía: la combinación recomendada según el estilo principal (Editorial: Playfair Display + Inter).
+    r = client.get(f"{MARCA}?paso=3")
+    assert "Recomendada para ti" in r.text and "<h3>Playfair Display + Inter</h3>" in r.text
+    assert r.text.count("Tu negocio, más cerca de tus clientes.") == 13 and "<details class=\"mrc-otras\">" in r.text
+    client.post(MARCA, headers=ORIGEN, data={"paso": "3", "usar": "1", "fuente": "Oswald"})
+    guardada = client.portal.call(contenido.marca_de, c)
+    assert (guardada["fuente"], guardada["fuente_texto"]) == ("Playfair Display", "Inter")
+    assert "✓ Es la que usas" in client.get(f"{MARCA}?paso=3").text
+    # Otra letra de la lista: va en los titulares; los textos siguen con la de la combinación.
+    client.post(MARCA, headers=ORIGEN, data={"paso": "3", "fuente": "Oswald"})
+    guardada = client.portal.call(contenido.marca_de, c)
+    assert (guardada["fuente"], guardada["peso"], guardada["fuente_texto"]) == ("Oswald", 700, "Inter")
+    r = client.get(f"{MARCA}?paso=3")  # «Ver otras tipografías» sigue plegado y arriba dice cuál usa
+    assert "<details class=\"mrc-otras\" open>" not in r.text and "Ahora usas Oswald + Inter" in r.text
+    client.post(MARCA, headers=ORIGEN, data={"paso": "3", "fuente": "Playfair Display"})
+    guardada = client.portal.call(contenido.marca_de, c)
+    assert (guardada["fuente"], guardada["peso"]) == ("Playfair Display", 600)
+    # Logotipo (opcional): es el último paso y lleva al resumen.
+    r = client.get(f"{MARCA}?paso=4")
+    assert r.text.count('name="logo_presencia"') == 5 and "Sin logotipo" in r.text and "Paso 4 de 4" in r.text
+    assert "url(/panel/static/tarjetas/marca/logo-sin.webp)" in r.text and "Recursos visuales" not in r.text
+    r = client.post(MARCA, headers=ORIGEN, data={"paso": "4", "logo_presencia": "visible"}, follow_redirects=False,
+                    files={"logo": ("logo.png", png(), "image/png")})
+    assert r.headers["location"] == f"{MARCA}?paso=resumen"
+    guardada = client.portal.call(contenido.marca_de, c)
+    assert guardada["logos_presencia"] == ["visible"] and guardada["pasos"] == ["estilo", "colores", "tipografia", "logotipo"]
+    # Ya configurada, Tu marca abre en el resumen, con Editar en cada parte.
+    r = client.get("/panel/contenido/marca")
+    assert "Así se verá tu contenido" in r.text and r.text.count(">Editar</a>") == 4 and "Completar" not in r.text
+    assert "Colores propios · Natural / Sin protagonismo de marca" in r.text and "Playfair Display + Inter" in r.text
+    assert "Firma visible" in r.text and "Recursos visuales" not in r.text
     assert client.get("/panel/static/fuentes/CormorantGaramond-Bold.ttf").status_code == 200
-    assert "Pantone" not in client.get("/panel/contenido/marca").text
-    token_foto = guardada["fotos"][0]
-    r = client.get("/panel/contenido/muestra.jpg?fuente=Lora&acento=%23000000")
-    assert r.headers["content-type"] == "image/jpeg"
-    assert Image.open(io.BytesIO(r.content)).size == (1080, 1350)
+    # Las fotos del negocio que ya tenía (Tu marca ya no las pide) se conservan y se siguen usando.
+    tokens, _ = client.portal.call(contenido.guardar_fotos, c, [Subida()], 1)
+    guardada = {**guardada, "fotos": tokens}
+    client.portal.call(c.store.set, "marca", json.dumps(guardada))
+    token_foto = tokens[0]
     assert client.get(f"/media/cafe_lunar/{token_foto}.jpg").status_code == 200
+    # La plantilla de inicio ya no se elige en Tu marca (pasa a Crear campaña): se conserva la guardada.
+    client.portal.call(c.store.set, "marca", json.dumps({**guardada, "plantilla": "banda"}))
+    client.post(MARCA, headers=ORIGEN, data={"paso": "3", "fuente": "Playfair Display"})
+    assert client.portal.call(contenido.marca_de, c)["plantilla"] == "banda"
 
-    # Crear post: Claude escribe, Gemini pinta (con la foto real) y queda en borrador.
-    assert client.post("/panel/contenido/nuevo", data={"objetivo": "estrella"}).status_code == 403  # sin Origin
-    r = client.post("/panel/contenido/nuevo", headers=ORIGEN,
-                    data={"objetivo": "estrella", "tema": "La cartera Atelier", "foto_0": token_foto, "con_precio": "1"})
-    assert r.text.index('id="generando"') < r.text.index("#generando{display:none}")
-    assert 'url=/panel/contenido/post/1"' in r.text and r.text.endswith("</html>")
+    # Un post: Claude escribe, el generador pinta (con la foto real) y queda en borrador.
+    assert crear(client, c, "estrella", tema="La cartera Atelier", fotos=[token_foto], con_precio=True) == 1
     prompt, system, model = llamadas[0]
     assert "Vendemos carteras." in prompt and "La cartera Atelier" in prompt and "precio" in prompt
     assert "JSON" in system and model == "claude-sonnet-5-5"
     idea, fotos = proveedor.llamadas[0]
-    assert "leather handbag" in idea and "Dark background" in idea and "Do not include any text" in idea
+    assert "leather handbag" in idea and "High-end editorial magazine" in idea and "Do not include any text" in idea
+    assert "A lighter secondary influence: Brutalist" in idea and "secondary #3B82C4" in idea
+    assert "How much color: Prioritize the scene" in idea and "headlines in Playfair Display, secondary text in Inter" in idea
     assert len(fotos) == 1
     post = client.portal.call(c.store.post, 1)
     assert post["status"] == "borrador" and post["user_id"] == admin.PANEL and "Comenta PRECIO" in post["caption"]
     p = client.portal.call(contenido.pieza, c.store, 1)
     assert (p["plantilla"], p["clave"], p["objetivo"]) == ("banda", "PRECIO", "estrella")
 
-    # Editor: cambiar el texto vuelve a rotular sin gastar imagen.
+    # Editor: la misma ventana que en Campañas, sobre el calendario: imagen con volver a generar y subir, y el prompt.
     r = client.get("/panel/contenido/post/1")
-    assert "Cartera Atelier" in r.text and "Aprobar y programar" in r.text
+    assert 'class="modal-cam"' in r.text and 'class="velo-cam"' in r.text and "Cartera Atelier" in r.text
+    assert 'value="aprobar">Aprobar</button>' in r.text and "Texto que se publica" in r.text
+    assert 'name="titulo"' not in r.text and 'name="plantilla"' not in r.text and 'id="con_precio"' not in r.text
+    assert "data-vista" not in r.text and 'enctype="multipart/form-data"' in r.text
+    assert "↻ Volver a generar imagen" in r.text and 'value="subir">Subir imagen' in r.text
+    assert '<details class="prompt-img"><summary>Prompt de la imagen</summary>' in r.text and "leather handbag" in r.text
+    assert 'type="date" id="dia" name="dia"' in r.text and 'type="time" id="hora" name="hora"' in r.text
+    editado = {"caption": "Nuevo texto #cartera", "clave_0": "precio", "respuesta_0": "¡Listo!", "dm_0": "Cuesta $1,190."}
+    r = client.post("/panel/contenido/post/1", headers=ORIGEN, data={**editado, "accion": "guardar"})
+    assert "Guardado." in r.text and len(proveedor.llamadas) == 1
+    p = client.portal.call(contenido.pieza, c.store, 1)
+    assert (p["titulo"], p["precio"]) == ("Cartera Atelier", "Desde $1,290 MXN")  # el texto de la imagen se queda
+    # Subir foto: su foto en lugar de la generada, con el mismo texto encima y sin usar el cupo.
+    r = client.post("/panel/contenido/post/1", headers=ORIGEN, data={**editado, "accion": "subir"})
+    assert "Elige primero la foto" in r.text
+    r = client.post("/panel/contenido/post/1", headers=ORIGEN, data={**editado, "accion": "subir"},
+                    files={"foto": ("mia.png", png(), "image/png")})
+    assert "ya está tu foto" in r.text and len(proveedor.llamadas) == 1
+    post = client.portal.call(c.store.post, 1)
     token = client.portal.call(c.store.media, post["media_ids"][0])[0]
-    antes = Path(f"data/cafe_lunar/media/{token}.jpg").read_bytes()
-    assert 'id="con_precio"' in r.text and "Cancelar cambios" in r.text
-    assert f'muestra.jpg?m={post["media_ids"][0]}"' in r.text  # otra imagen = otra URL: no sale la vieja del caché
-    r = client.get("/panel/contenido/post/1/muestra.jpg?titulo=Otro&plantilla=minimal&precio=$9&con_precio=1")
-    assert r.headers["content-type"] == "image/jpeg"
-    assert Image.open(io.BytesIO(r.content)).size == (1080, 1350)
-    assert client.get("/panel/contenido/post/99/muestra.jpg").status_code == 404
-    editado = {"plantilla": "marco", "titulo": "Cartera Atelier", "subtitulo": "", "precio": "$1,190 MXN",
-               "con_precio": "1",
-               "caption": "Nuevo texto #cartera", "clave_0": "precio", "respuesta_0": "¡Listo!", "dm_0": "Cuesta $1,190."}
-    r = client.post("/panel/contenido/post/1", headers=ORIGEN, data={**editado, "accion": "actualizar"})
-    assert "texto nuevo" in r.text
-    assert Path(f"data/cafe_lunar/media/{token}.jpg").read_bytes() != antes
-    assert len(proveedor.llamadas) == 1
+    assert Path(f"data/cafe_lunar/media/{token}.base.jpg").is_file()
+    # Volver a generar usa el prompt editado en Avanzado.
+    client.post("/panel/contenido/post/1", headers=ORIGEN,
+                data={**editado, "accion": "otra", "prompt": "A red leather handbag on a stone bench"})
+    assert len(proveedor.llamadas) == 2 and "A red leather handbag on a stone bench" in proveedor.llamadas[-1][0]
+    assert client.portal.call(contenido.pieza, c.store, 1)["imagen"] == "A red leather handbag on a stone bench"
+    post = client.portal.call(c.store.post, 1)
+    token = client.portal.call(c.store.media, post["media_ids"][0])[0]
 
     # Aprobar sin hora no se puede; con hora queda programado.
     r = client.post("/panel/contenido/post/1", headers=ORIGEN, data={**editado, "cuando": "", "accion": "aprobar"})
@@ -180,10 +269,12 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
                     data={**editado, "cuando": hora.strftime("%Y-%m-%dT%H:%M"), "accion": "aprobar"})
     assert "Listo: sale el" in r.text and "Programado" in r.text
     assert "Quitar de programados" in client.get("/panel/contenido/post/1").text
+    # Día y hora por separado (la ventana) dan lo mismo que el campo de antes.
+    client.post("/panel/contenido/post/1", headers=ORIGEN,
+                data={**editado, "dia": hora.strftime("%Y-%m-%d"), "hora": hora.strftime("%H:%M"), "accion": "guardar"})
     post = client.portal.call(c.store.post, 1)
     assert post["status"] == "programada" and post["publish_at"] == hora.timestamp()
     assert post["caption"] == "Nuevo texto #cartera"
-    assert client.portal.call(contenido.pieza, c.store, 1)["precio"] == "$1,190 MXN"
 
     # Varias reglas de palabra clave: se agrega una con "Agregar regla +" y se puede quitar.
     r = client.get("/panel/contenido/post/1")
@@ -220,10 +311,15 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     reglas = client.portal.call(contenido.reglas, c.store)
     assert [(r.post, r.keywords, r.dm, r.public) for r in reglas] == [("ABC123", ["PRECIO"], "Cuesta $1,190.", "¡Listo!"),
                                                                     ("ABC123", ["ENVIO"], "Enviamos.", "")]
-    r = client.get("/panel/contenido")
-    assert "Ya publicados" in r.text and r.text.count("instagram.com/p/ABC123") == 1
+    with usar(c):
+        dia = datetime.fromtimestamp(1.0, tools.tz()).date()
+    r = client.get(f"/panel/contenido?fecha={dia}&ver=lista")
+    assert "Ya publicados" in r.text and r.text.count("instagram.com/p/ABC123") == 1 and "Post suelto" in r.text
+    r = client.get("/panel/contenido?fecha=2099-01-01&ver=lista")
     assert "instagram.com/p/DESDEAPP" in r.text and "Desde Instagram" in r.text
-    assert r.text.index("DESDEAPP") < r.text.index("ABC123")  # el más nuevo primero
+    r = client.post("/panel/contenido/mover", headers=ORIGEN, follow_redirects=False,
+                    data={"ref": "p:1", "dia": "2099-01-01", "suave": "1"})
+    assert r.headers["location"] == "/panel/contenido?error=publicado#cal"  # lo publicado ya no se mueve
     assert "ya no se puede cambiar" in client.post("/panel/contenido/post/1", headers=ORIGEN,
                                                    data={**editado, "accion": "guardar"}).text
 
@@ -231,18 +327,11 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
 def test_pasado_el_cupo_pide_confirmar_la_imagen_extra(cliente, monkeypatch):
     client, c, llamadas, proveedor = cliente
     monkeypatch.setattr(c, "imagenes_mes", 1)
-    client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "marca"})
+    crear(client, c)
     assert len(proveedor.llamadas) == 1
-
-    r = client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "historia", "tema": "Cómo empezamos"})
-    assert "Generar por US$0.25" in r.text and "Cómo empezamos" in r.text
-    assert len(proveedor.llamadas) == 1 and len(llamadas) == 1  # ni Claude ni Gemini antes de aceptar
-
-    r = client.post("/panel/contenido/nuevo", headers=ORIGEN,
-                    data={"objetivo": "historia", "tema": "Cómo empezamos", "extra": "1", "accion": "generar"})
-    assert "post/2" in r.text and len(proveedor.llamadas) == 2
+    assert client.portal.call(contenido.falta_cupo, c, False) == "extra"  # se acabó el cupo: hay que confirmar
+    assert crear(client, c, "historia", tema="Cómo empezamos", extra=True) == 2 and len(proveedor.llamadas) == 2
     assert client.portal.call(imagenes.usadas, c.store) == (1, 1)
-    assert "1 imágenes extra este mes" in client.get("/panel/contenido").text
 
     # Otra imagen para un post también pide confirmar.
     r = client.post("/panel/contenido/post/2", headers=ORIGEN, data={"titulo": "Cómo empezamos", "accion": "otra"})
@@ -253,8 +342,8 @@ def test_si_falla_la_imagen_se_avisa_y_no_queda_post(cliente, monkeypatch):
     client, c, llamadas, _ = cliente
     monkeypatch.setattr(c, "imagenes_mes", 3)
     monkeypatch.setattr(imagenes, "proveedor", Falso(imagenes.ErrorImagen("Esa idea no se pudo ilustrar.")))
-    r = client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "explicar"})
-    assert "Esa idea no se pudo ilustrar." in r.text and "post/" not in r.text
+    with pytest.raises(imagenes.ErrorImagen, match="Esa idea no se pudo ilustrar."):
+        crear(client, c, "explicar")
     assert client.portal.call(c.store.posts, ("borrador",), None, admin.PANEL) == []
     assert client.portal.call(imagenes.usadas, c.store) == (0, 0)
 
@@ -262,7 +351,7 @@ def test_si_falla_la_imagen_se_avisa_y_no_queda_post(cliente, monkeypatch):
 def test_sin_precio_no_lleva_precio(cliente, monkeypatch):
     client, c, llamadas, _ = cliente
     monkeypatch.setattr(c, "imagenes_mes", 3)
-    client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "marca"})
+    crear(client, c)
     assert "<con_precio>no</con_precio>" in llamadas[0][0]
     assert client.portal.call(contenido.pieza, c.store, 1)["precio"] == ""
     datos = {"plantilla": "editorial", "titulo": "Hola", "precio": "$5", "caption": "x", "accion": "guardar"}
@@ -279,40 +368,32 @@ def test_si_instagram_falla_la_pagina_sale(cliente, monkeypatch):
 
     monkeypatch.setattr(c.instagram, "media_count", falla)
     monkeypatch.setattr(c.instagram, "media_page", falla)
-    r = client.get("/panel/contenido")
-    assert r.status_code == 200 and "Aún no tienes posts" in r.text
+    r = client.get("/panel/contenido?ver=lista")
+    assert r.status_code == 200 and "Nada en estas fechas" in r.text
 
 
-def test_ya_publicados_de_10_en_10(cliente, monkeypatch):
-    """Solo se pide a Instagram la página que se ve; para saltar lejos avanza pidiendo solo ids."""
+def test_publicados_de_instagram_solo_del_rango(cliente, monkeypatch):
+    """De Instagram se piden páginas de 10 solo hasta pasar el inicio de las fechas que se ven."""
     client, c, *_ = cliente
     monkeypatch.setattr(c, "imagenes_mes", 3)
     todos = [{"id": str(i), "caption": f"Post {i:02d}", "permalink": f"https://www.instagram.com/p/P{i:02d}/",
-              "timestamp": f"2026-01-{31 - i // 2:02d}T{10 + i % 2}:00:00+0000"} for i in range(35)]
+              "timestamp": f"2026-01-{31 - i // 2:02d}T{18 + i % 2}:00:00+0000"} for i in range(35)]
     pedidos = []
-
-    async def media_count():
-        return len(todos)
 
     async def media_page(limit, after="", fields=""):
         pedidos.append((limit, after, fields))
         i = int(after or 0)
         return todos[i:i + limit], str(i + limit) if i + limit < len(todos) else ""
 
-    monkeypatch.setattr(c.instagram, "media_count", media_count)
     monkeypatch.setattr(c.instagram, "media_page", media_page)
-    r = client.get("/panel/contenido")
-    assert r.text.count("Desde Instagram") == 10 and "Post 00" in r.text and "Post 10" not in r.text
-    assert 'href="/panel/contenido?p=4#publicados"' in r.text and '<span class="resumen">35</span>' in r.text
-    pedidos.clear()
-    r = client.get("/panel/contenido?p=4")
-    assert r.text.count("Desde Instagram") == 5 and "Post 30" in r.text and "Post 29" not in r.text
-    # Desde la página 2 (su cursor ya se conocía): ids sin fotos hasta llegar, luego solo 10.
-    assert pedidos == [(20, "10", "id"), (10, "30", "")]
-    pedidos.clear()
-    assert "Post 30" in client.get("/panel/contenido?p=4").text and pedidos == []  # ya estaba
-    assert "Post 20" in client.get("/panel/contenido?p=3").text and pedidos == [(10, "10", "id"), (10, "20", "")]
-    assert "Post 30" in client.get("/panel/contenido?p=99").text  # se queda en la última
+    r = client.get("/panel/contenido?vista=dia&fecha=2026-01-30&ver=lista")
+    assert r.text.count("Desde Instagram") == 2 and "Post 02" in r.text and "Post 04" not in r.text
+    assert pedidos == [(10, "", "")]  # la primera página ya llega antes del 30
+    r = client.get("/panel/contenido?fecha=2026-01-01&ver=lista")
+    assert r.text.count("· Desde Instagram") == 35
+    assert pedidos == [(10, "", ""), (10, "10", ""), (10, "20", ""), (10, "30", "")]
+    r = client.get("/panel/contenido?fecha=2026-01-01&ver=lista&q=post+3")
+    assert r.text.count("· Desde Instagram") == 5  # Post 30 a 34
 
 
 def test_script_y_fuentes(cliente):
@@ -328,15 +409,18 @@ def test_chats_en_pausa(cliente):
     client, c, *_ = cliente
     import time
     r = client.get("/panel/asistente")
-    assert "Conversaciones recientes" in r.text and "Aún no te escribe nadie" in r.text
-    assert "Contestados hoy" in r.text and "Mensajes restantes" in r.text and "Gasto de hoy" not in r.text
+    assert '<div class="inbox" id="chats" data-vivo="/panel/vivo?' in r.text and "Aún no te escribe nadie" in r.text
+    assert "Contestados hoy" not in r.text and "Mensajes restantes" not in r.text  # sin tarjetas de números
     client.portal.call(c.store.pause, "ana", time.time() + 3600)
-    r = client.get("/panel/asistente?ver=pausa")
-    assert "@ana" in r.text and "vuelve a contestar solo en 1 h" in r.text and "Reactivar" in r.text
-    assert 'href="https://ig.me/m/ana"' in r.text and "En pausa (1)" in r.text
+    r = client.get("/panel/asistente?ver=todas")
+    assert "@ana" in r.text and "Lo atiendes tú · 1 h" in r.text and "Todas<b" in r.text
+    r = client.get("/panel/asistente?chat=ana")
+    assert 'class="inbox abierto"' in r.text and 'href="https://ig.me/m/ana"' in r.text
+    assert "Lo atiendes tú: tu asistente no le contesta en las próximas 1 h" in r.text
+    assert '<button name="accion" value="tomar" aria-pressed="true" disabled>Tú</button>' in r.text
     assert client.post("/panel/pausas", data={"usuario": "ana", "accion": "reactivar"}).status_code == 403  # sin Origin
-    r = client.post("/panel/pausas", headers=ORIGEN, data={"usuario": "ana", "accion": "extender"})
-    assert "sigue en pausa 12 h más" in r.text
+    r = client.post("/panel/pausas", headers=ORIGEN, data={"usuario": "ana", "accion": "extender", "chat": "ana"})
+    assert "sigue en pausa 12 h más" in r.text and 'class="inbox abierto"' in r.text  # sigue en el chat
     assert client.portal.call(c.store.paused_until, "ana") > time.time() + 11 * 3600
     r = client.post("/panel/pausas", headers=ORIGEN, data={"usuario": "ana", "accion": "reactivar"})
     assert "vuelve a contestarle a @ana" in r.text and client.portal.call(c.store.paused_until, "ana") == 0
@@ -344,26 +428,91 @@ def test_chats_en_pausa(cliente):
                                                   data={"usuario": "beto", "accion": "reactivar"}).text
 
 
-def test_conversaciones_recientes_y_tomar_un_chat(cliente):
+def test_conversaciones_y_tomar_un_chat(cliente):
     client, c, *_ = cliente
     store = c.store
     client.portal.call(store.add_incoming, "beto", "m1", "¿Tienen lugar mañana?")
     ids = [i for i, _ in client.portal.call(store.pending, "beto")]
     client.portal.call(store.mark_answered, "beto", ids, "Sí, a las 5.")
     client.portal.call(store.add_incoming, "caro", "m2", "Hola, ¿precios?")
+    # Sin filtro abre Sin contestar, porque hay uno.
     r = client.get("/panel/asistente")
-    assert "@beto" in r.text and "«¿Tienen lugar mañana?»" in r.text and "Asistente" in r.text
-    assert "@caro" in r.text and "Sin contestar" in r.text and r.text.index("@caro") < r.text.index("@beto")
-    assert "Tomar este chat" in r.text and "Sin contestar (1)" in r.text
-    assert '<b>1</b><small>en 1 chat</small>' in r.text and "Mensajes restantes</span><b>999</b>" in r.text  # PLAN=basico: 1,000
-    r = client.get("/panel/asistente?ver=sin")
-    assert "@caro" in r.text and "@beto" not in r.text
+    assert 'class="on" aria-current="page">Sin contestar<b class="">1</b>' in r.text
+    assert "@caro" in r.text and "Hola, ¿precios?" in r.text and "@beto" not in r.text
+    r = client.get("/panel/asistente?ver=todas")
+    assert "@beto" in r.text and "Asistente: Sí, a las 5." in r.text
+    assert r.text.index("@caro") < r.text.index("@beto")
+    assert 'href="/panel/asistente?ver=todas&amp;chat=beto#chats"' in r.text
+    # El chat abierto: los mensajes en orden y el interruptor en Asistente.
+    r = client.get("/panel/asistente?ver=todas&chat=beto")
+    assert 'class="burbuja de-cliente">¿Tienen lugar mañana?' in r.text and 'de-bot">Sí, a las 5.' in r.text
+    assert r.text.index("¿Tienen lugar mañana?</div>") < r.text.index("Sí, a las 5.</div>")
+    assert '<button name="accion" value="reactivar" aria-pressed="true" disabled>Asistente</button>' in r.text
+    assert 'action="/panel/responder#chats"' in r.text and 'href="/panel/asistente?ver=todas#chats">‹ Tus chats' in r.text
 
-    r = client.post("/panel/pausas", headers=ORIGEN, data={"usuario": "beto", "accion": "tomar"})
-    assert "el asistente no le contesta a @beto en 12 h" in r.text and "En pausa · tú" in r.text
+    r = client.post("/panel/pausas", headers=ORIGEN, data={"usuario": "beto", "accion": "tomar", "chat": "beto"})
+    assert "el asistente no le contesta a @beto en 12 h" in r.text and "Lo atiendes tú" in r.text
     assert client.portal.call(store.paused_until, "beto") > 0
     assert "No encontramos ese chat" in client.post("/panel/pausas", headers=ORIGEN,
                                                     data={"usuario": "nadie", "accion": "tomar"}).text
+    # Un chat que no es de la cuenta no se abre.
+    r = client.get("/panel/asistente?chat=nadie")
+    assert 'class="inbox abierto"' not in r.text and "Elige una conversación" in r.text
+
+
+def test_conversaciones_en_vivo(cliente, monkeypatch):
+    import json as json_
+    client, c, *_ = cliente
+    store = c.store
+    monkeypatch.setattr(panel, "VIVO_SEGUNDOS", 0.5)
+    client.portal.call(store.add_incoming, "caro", "m2", "Hola, ¿precios?")
+    r = client.get("/panel/asistente?ver=todas&chat=caro")
+    visto = store.cambios
+    assert f'data-vivo="/panel/vivo?ver=todas&amp;chat=caro&amp;v={visto}"' in r.text
+    # Sin cambios desde la página: la conexión solo dice cada cuánto reconectar y se cierra sola.
+    r = client.get(f"/panel/vivo?ver=todas&chat=caro&v={visto}")
+    assert r.headers["content-type"].startswith("text/event-stream") and r.text == "retry: 2000\n\n"
+    # Llega otro mensaje: manda la lista y el chat ya armados, con su número de cambio.
+    client.portal.call(store.add_incoming, "caro", "m3", "¿Y envíos?")
+    assert store.cambios == visto + 1
+    r = client.get("/panel/vivo?ver=todas&chat=caro", headers={"Last-Event-ID": str(visto)})
+    evento = r.text.split("\n\n")[1].split("\n")
+    assert evento[0] == f"id: {visto + 1}"
+    datos = json_.loads(evento[1][len("data: "):])
+    assert "¿Y envíos?" in datos["hilo"] and 'class="burbuja de-cliente">¿Y envíos?' in datos["hilo"]
+    assert "@caro" in datos["lista"] and "Todas<b" in datos["lista"] and 'type="search"' not in datos["lista"]
+    # Contestar, la respuesta del bot y tomar o soltar un chat también avisan.
+    for paso in (lambda: store.mark_answered("caro", [], "Claro."), lambda: store.pause("caro", 9e9),
+                 lambda: store.unpause("caro"), lambda: store.add_owner_message("caro", None, "Yo te ayudo")):
+        antes = store.cambios
+        client.portal.call(paso)
+        assert store.cambios == antes + 1
+    # Sin sesión no hay nada que mandar.
+    client.cookies.clear()
+    assert client.get("/panel/vivo").status_code == 204
+
+
+def test_contestar_desde_el_panel(cliente):
+    import time
+    client, c, *_ = cliente
+    store = c.store
+    client.portal.call(store.add_incoming, "caro", "m2", "Hola, ¿precios?")
+    assert client.post("/panel/responder", data={"usuario": "caro", "texto": "Hola"}).status_code == 403  # sin Origin
+    r = client.post("/panel/responder", headers=ORIGEN, data={"usuario": "caro", "texto": "  "})
+    assert "Escribe tu respuesta" in r.text and c.instagram.sent == []
+    r = client.post("/panel/responder", headers=ORIGEN,
+                    data={"usuario": "caro", "texto": "Te paso la lista ahora.", "ver": "todas"})
+    assert c.instagram.sent == [("caro", "Te paso la lista ahora.")]
+    assert "Enviado." in r.text and 'class="burbuja de-ti">Te paso la lista ahora.' in r.text
+    assert client.portal.call(store.paused_until, "caro") > time.time() + 11 * 3600  # el asistente se calla
+    assert "No encontramos ese chat" in client.post("/panel/responder", headers=ORIGEN,
+                                                    data={"usuario": "nadie", "texto": "x"}).text
+    # Pasadas 24 h desde su último mensaje, Instagram ya no deja: ni caja ni envío.
+    client.portal.call(store.db.execute, "UPDATE messages SET created_at = created_at - 90000 WHERE role = 'user'")
+    r = client.get("/panel/asistente?chat=caro")
+    assert "Instagram solo deja contestar dentro de las 24 horas" in r.text and 'action="/panel/responder#chats"' not in r.text
+    r = client.post("/panel/responder", headers=ORIGEN, data={"usuario": "caro", "texto": "¿Sigues ahí?"})
+    assert "Ya pasaron 24 horas" in r.text and len(c.instagram.sent) == 1
 
 
 def test_chats_de_10_en_10_con_buscador(cliente):
@@ -372,20 +521,20 @@ def test_chats_de_10_en_10_con_buscador(cliente):
         client.portal.call(c.store.add_incoming, f"u{i:02d}", f"m{i}", f"Hola, pregunta {i:02d}")
     client.portal.call(c.store.set, "username:u05", "@lupita.flores")
     r = client.get("/panel/asistente")
-    assert r.text.count('class="fila"') == 10 and "23 chats · página 1 de 3" in r.text
-    assert '<span class="on" aria-current="page">1</span>' in r.text and 'href="/panel/asistente?p=2#chats"' in r.text
+    assert r.text.count('class="conv') == 10 and "Sin contestar<b" in r.text
+    assert '<span class="on" aria-current="page">1</span>' in r.text and 'href="/panel/asistente?ver=sin&amp;p=2#chats"' in r.text
     assert '<span class="apagada" aria-hidden="true">‹</span>' in r.text and 'aria-label="Siguiente"' in r.text
     r = client.get("/panel/asistente?p=3")
-    assert r.text.count('class="fila"') == 3 and "pregunta 00" in r.text and "pregunta 22" not in r.text
-    assert client.get("/panel/asistente?p=99").text.count('class="fila"') == 3  # se queda en la última
-    # El filtro se mantiene al cambiar de página y al buscar.
-    r = client.get("/panel/asistente?ver=sin&p=2")
-    assert "23 chats · página 2 de 3" in r.text and 'href="/panel/asistente?ver=sin&amp;p=3#chats"' in r.text
+    assert r.text.count('class="conv') == 3 and "pregunta 00" in r.text and "pregunta 22" not in r.text
+    assert client.get("/panel/asistente?p=99").text.count('class="conv') == 3  # se queda en la última
+    # El filtro se mantiene al cambiar de página y al buscar; el buscador se manda solo (data-vivo).
+    r = client.get("/panel/asistente?ver=todas&p=2")
+    assert 'href="/panel/asistente?ver=todas&amp;p=3#chats"' in r.text
     r = client.get("/panel/asistente?q=lupita")
-    assert r.text.count('class="fila"') == 1 and "ig.me/m/u05" in r.text and 'class="paginas"' not in r.text
-    assert 'value="lupita"' in r.text and ">Borrar</a>" in r.text
+    assert r.text.count('class="conv') == 1 and "chat=u05" in r.text and 'class="paginas"' not in r.text
+    assert 'value="lupita"' in r.text and "data-vivo" in r.text and "1 chat</p>" in r.text
     r = client.get("/panel/asistente?ver=sin&q=pregunta+1")
-    assert r.text.count('class="fila"') == 10 and '<input type="hidden" name="ver" value="sin">' in r.text
+    assert r.text.count('class="conv') == 10 and '<input type="hidden" name="ver" value="sin">' in r.text
     assert "No encontramos chats con «zzz»" in client.get("/panel/asistente?q=zzz").text
 
 
@@ -417,63 +566,40 @@ def con_mensajes(cliente, monkeypatch):
     return client, c, llamadas, proveedor
 
 
-def test_comentarios_y_dms(con_mensajes):
+def test_lo_que_mas_preguntan(con_mensajes):
+    """Los temas de DMs y comentarios los usa Campañas; sus páginas viejas llevan a Campañas."""
+    from igbot import semana
     client, c, llamadas, _ = con_mensajes
-    r = client.get("/panel/contenido/ideas")
-    assert "Horario de fin de semana" in r.text and "4 personas" in r.text and "De 2 mensajes" in r.text
-    assert 'href="/panel/contenido/ideas" class="on"' in r.text
+    datos = client.portal.call(semana.temas, c)
+    assert datos["temas"][0]["tema"] == "Horario de fin de semana" and datos["mensajes"] == 2
+    assert datos["elogios"] == ["Les encanta la atención"]
     prompt, system, model = llamadas[0]
     assert "(DM, persona 1) Hola, ¿abren el sábado?" in prompt and "(comentario, persona 2)" in prompt
     assert model == "claude-haiku-5-5"
-    client.get("/panel/contenido/ideas")
+    client.portal.call(semana.temas, c)
     assert len(llamadas) == 1  # una vez al día
-    from igbot import semana
-    assert client.portal.call(semana.temas, c)["elogios"] == ["Les encanta la atención"]
-    r = client.get("/panel/contenido/nuevo?objetivo=explicar&tema=Post+con+el+horario+del+s%C3%A1bado")
-    assert "Post con el horario del sábado</textarea>" in r.text and 'value="explicar" checked' in r.text
-
-
-def test_esta_semana(con_mensajes, monkeypatch):
-    client, c, llamadas, proveedor = con_mensajes
-    r = client.get("/panel/contenido/semana")
-    assert "Tu semana en un clic" in r.text and "Armar mi semana · usa 3 imágenes" in r.text
-    r = client.post("/panel/contenido/semana", headers=ORIGEN, data={"accion": "armar"})
-    assert "Post 3 de 3" in r.text and 'url=/panel/contenido/semana"' in r.text
-    assert len(proveedor.llamadas) == 3
-    r = client.get("/panel/contenido/semana")
-    assert r.text.count('class="propuesta"') == 3 and "Te preguntaron 4 veces." in r.text
-    assert "0 de 3 aprobadas" in r.text and "Proponer 3 más" in r.text
-    posts = client.portal.call(c.store.posts, ("borrador",), None, admin.PANEL)
-    fechas = sorted(p["publish_at"] for p in posts)
-    assert fechas[1] - fechas[0] == 2 * 86400
-    r = client.post("/panel/contenido/semana", headers=ORIGEN, data={"aprobar": str(posts[0]["id"])})
-    assert "Listo: sale el" in r.text and "1 de 3 aprobadas" in r.text
-    assert client.portal.call(c.store.post, posts[0]["id"])["status"] == "programada"
-    assert "ya no está en borrador" in client.post("/panel/contenido/semana", headers=ORIGEN,
-                                                   data={"aprobar": str(posts[0]["id"])}).text
-
-    # Sin cupo para 3 más, pide confirmar las extra antes de gastar.
-    monkeypatch.setattr(c, "imagenes_mes", 4)
-    r = client.post("/panel/contenido/semana", headers=ORIGEN, data={"accion": "armar"})
-    assert "Te queda 1 imagen de tu plan" in r.text and len(proveedor.llamadas) == 3
+    for vieja in ("ideas", "semana", "nuevo"):
+        r = client.get(f"/panel/contenido/{vieja}", follow_redirects=False)
+        assert r.headers["location"] == "/panel/contenido/campanas"
+    menu = client.get("/panel/contenido").text
+    assert "Esta semana" not in menu and "Contenido sugerido" not in menu and "Crear post" not in menu
+    assert 'href="/panel/contenido/campanas/nueva">+ Nueva campaña' in menu
 
 
 def test_diseno_libre_con_el_estilo_de_sus_fotos(cliente, monkeypatch):
     client, c, llamadas, proveedor = cliente
     monkeypatch.setattr(c, "imagenes_mes", 5)
-    marca = {"principal": "#111111", "acento": "#E8590C", "fondo": "#000000", "fuente": "Inter", "peso": "700",
-             "estilo": "premium", "plantilla": "editorial", "modo": "libre", "fotos_estilo": "1",
-             "estilo_propio": "Fondos oscuros, minimalista, el celular como protagonista."}
-    r = client.post("/panel/contenido/marca", headers=ORIGEN, data={**marca, "accion": "subir"},
-                    files={"fotos": ("post.png", png(), "image/png")})
-    guardada = client.portal.call(contenido.marca_de, c)
-    assert guardada["modo"] == "libre" and guardada["fotos_estilo"] is True and "celular" in guardada["estilo_propio"]
-    assert 'name="modo" value="libre" checked' in r.text
+    # Fotos del negocio guardadas antes en Tu marca (ya no se piden ahí, pero se conservan y guían el estilo).
+    tokens, _ = client.portal.call(contenido.guardar_fotos, c, [Subida()], 1)
+    guardada = {"fotos": tokens, "fotos_estilo": True}
+    # El modo y "Describe tu estilo" se guardaban en Tu marca; ahora pasan a Crear campaña y se conservan.
+    client.portal.call(c.store.set, "marca", json.dumps({
+        **guardada, "principal": "#111111", "acento": "#E8590C", "fondo": "#000000", "fuente": "Inter", "peso": 700,
+        "estilo": "premium", "plantilla": "editorial", "modo": "libre",
+        "estilo_propio": "Fondos oscuros, minimalista, el celular como protagonista."}))
 
-    r = client.get("/panel/contenido/nuevo")
-    assert 'name="como" value="marca" checked><b>Con mi diseño libre' in r.text and "celular como protagonista" in r.text
-    client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "marca"})
-    assert "<estilo_de_la_marca>Fondos oscuros" in llamadas[-1][0]
+    crear(client, c)
+    assert "<estilo_de_la_marca>Estilo visual: Fondos oscuros" in llamadas[-1][0] and "acento #E8590C" in llamadas[-1][0]
     prompt, fotos = proveedor.llamadas[-1]
     assert 'Headline (largest): "Cartera Atelier"' in prompt and "#E8590C" in prompt
     assert "celular como protagonista" in prompt and "brand's own photos" in prompt and len(fotos) == 1
@@ -485,15 +611,14 @@ def test_diseno_libre_con_el_estilo_de_sus_fotos(cliente, monkeypatch):
     assert not Path(f"data/cafe_lunar/media/{token}.base.jpg").exists()
 
     r = client.get("/panel/contenido/post/1")
-    assert "Rehacer el diseño" in r.text and "data-vista" not in r.text and 'name="plantilla"' not in r.text
-    r = client.post("/panel/contenido/post/1", headers=ORIGEN,
-                    data={"titulo": "Otro título", "caption": "x", "accion": "guardar"})
+    assert "↻ Volver a generar imagen" in r.text and "data-vista" not in r.text and 'name="plantilla"' not in r.text
+    r = client.post("/panel/contenido/post/1", headers=ORIGEN, data={"caption": "x", "accion": "guardar"})
     assert "Guardado." in r.text and client.portal.call(contenido.pieza, c.store, 1)["plantilla"] == "libre"
-    client.post("/panel/contenido/post/1", headers=ORIGEN, data={"titulo": "Otro título", "caption": "x", "accion": "otra"})
-    assert 'Headline (largest): "Otro título"' in proveedor.llamadas[-1][0]
+    client.post("/panel/contenido/post/1", headers=ORIGEN, data={"caption": "x", "accion": "otra"})
+    assert 'Headline (largest): "Cartera Atelier"' in proveedor.llamadas[-1][0]
 
     # Con plantilla en este post, aunque la marca diga libre.
-    client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "marca", "modo": "plantilla"})
+    crear(client, c, modo="plantilla")
     assert client.portal.call(contenido.pieza, c.store, 2)["plantilla"] == "editorial"
     assert "Do not include any text" in proveedor.llamadas[-1][0]
 
@@ -501,31 +626,63 @@ def test_diseno_libre_con_el_estilo_de_sus_fotos(cliente, monkeypatch):
 def test_el_estilo_depende_del_modo_del_post(cliente, monkeypatch):
     client, c, llamadas, proveedor = cliente
     monkeypatch.setattr(c, "imagenes_mes", 5)
-    base = {"principal": "#111111", "acento": "#E8590C", "fondo": "#000000", "fuente": "Inter", "peso": "700",
-            "estilo": "limpio", "estilo_propio": "Fondos oscuros y detalles en naranja.", "accion": "guardar"}
-    # Ya no hay casilla: con plantilla mandan los estilos de la lista; en libre, su descripción.
-    r = client.post("/panel/contenido/marca", headers=ORIGEN, data=base)
-    assert 'name="propio"' not in r.text and 'class="si-libre"' in r.text
-    client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "marca", "modo": "plantilla"})
-    assert "Studio photography" in proveedor.llamadas[-1][0] and "naranja" not in proveedor.llamadas[-1][0]
-    assert "<estilo_de_la_marca>" not in llamadas[-1][0]
+    # Una marca guardada con el formulario de antes: su estilo "limpio" ahora es "Minimalista".
+    client.portal.call(c.store.set, "marca", json.dumps({
+        "principal": "#111111", "acento": "#E8590C", "fondo": "#000000", "fuente": "Inter", "peso": 700,
+        "estilo": "limpio", "estilo_propio": "Fondos oscuros y detalles en naranja."}))
+    # Con plantilla mandan los estilos de la lista; en libre, su descripción.
+    crear(client, c, modo="plantilla")
+    assert "Minimalist premium" in proveedor.llamadas[-1][0] and "naranja" not in proveedor.llamadas[-1][0]
+    assert "Estilo visual: Minimalista." in llamadas[-1][0] and "naranja" not in llamadas[-1][0]
 
-    client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "marca", "modo": "libre"})
-    assert "naranja" in proveedor.llamadas[-1][0] and "Studio photography" not in proveedor.llamadas[-1][0]
-    assert "<estilo_de_la_marca>" in llamadas[-1][0]
-    # La vista previa en libre no usa la foto de ejemplo de un estilo de la lista.
-    assert client.get("/panel/contenido/muestra.jpg?modo=libre").status_code == 200
+    crear(client, c, modo="libre")
+    assert "naranja" in proveedor.llamadas[-1][0] and "Minimalist premium" not in proveedor.llamadas[-1][0]
+    assert "Estilo visual: Fondos oscuros y detalles en naranja." in llamadas[-1][0]
 
 
-def test_orden_de_tu_marca_y_miniaturas(cliente, monkeypatch):
+def test_tu_marca_menu_de_pasos_y_marca_de_antes(cliente, monkeypatch):
     client, c, *_ = cliente
     monkeypatch.setattr(c, "imagenes_mes", 5)
-    r = client.get("/panel/contenido/marca")
-    orden = [r.text.index(t) for t in ("Identidad", "<h2>Colores", "<h2>Tipografía", "Fotos y estilo",
-                                        "Cómo se arman tus posts", "Vista previa")]
-    assert orden == sorted(orden)
-    assert 'data-plantilla="marco"' in r.text and 'data-plantilla="banda"' in r.text
-    assert "plantilla=marco" in r.text and client.get("/panel/contenido/muestra.jpg?plantilla=banda").status_code == 200
+    r = client.get(f"{MARCA}?paso=3")
+    # El menú de pasos: cada uno es un enlace; el actual marcado y el resumen al final.
+    assert all(f'href="{MARCA}?paso={i}"' in r.text for i in (1, 2, 3, 4, "resumen"))
+    assert f'href="{MARCA}?paso=5"' not in r.text
+    assert f'href="{MARCA}?paso=3" class="actual"' in r.text and "Paso 3 de 4" in r.text
+    assert r.text.count('name="fuente"') == 12 and "font-family:'Oswald';font-weight:700" in r.text
+    assert f'href="{MARCA}?paso=2">← Anterior' in r.text
+    # Las tarjetas usan su imagen de static/tarjetas/marca (los 9 estilos la tienen); sin imagen, su color.
+    from igbot import marca as tu_marca
+    r = client.get(f"{MARCA}?paso=1")
+    assert all(f"url(/panel/static/tarjetas/marca/{k}.webp)" in r.text for k in estilos.ESTILOS)
+    assert tu_marca.imagen_tarjeta("sin-imagen", "#123456") == '<span class="wiz-img" style="--fondo:#123456"></span>'
+    assert client.get("/panel/static/tarjetas/marca/editorial.webp").status_code == 200
+    assert client.get("/panel/static/tarjetas/otra/editorial.webp").status_code == 404
+    assert client.get("/panel/static/tarjetas/marca/..%2Fpanel.js").status_code == 404
+    # Una marca guardada con el formulario de antes cuenta como lista y abre en el resumen; lo que falta dice Completar.
+    client.portal.call(c.store.set, "marca", json.dumps({"principal": "#111111", "acento": "#E8590C", "fondo": "#F7F5F1",
+                                                         "fuente": "Lora", "peso": 700, "estilo": "premium"}))
+    assert client.portal.call(panel.marca_lista, c)
+    r = client.get(MARCA)
+    assert "Así se verá tu contenido" in r.text and "<b>Lujo sobrio</b><small>Estilo principal" in r.text
+    assert r.text.count(">Completar</a>") == 1
+    assert 'name="estilos" value="lujo" checked' in client.get(f"{MARCA}?paso=1").text
+    # Sin colores no está lista: abre en el primer paso que falta.
+    # Los estilos de la versión anterior pasan a los nuevos (urbano y geométrico: brutalista y pop gráfico).
+    client.portal.call(c.store.set, "marca", json.dumps({"estilos": ["urbano", "geometrico", "minimal"]}))
+    assert 'name="orden" value="brutalista,pop,minimalista"' in client.get(f"{MARCA}?paso=1").text
+    assert not client.portal.call(panel.marca_lista, c)
+    assert "Paso 2 de 4" in client.get(MARCA).text
+
+    # «Oscuro» y «Alto contraste» de versiones anteriores son ahora Natural.
+    assert contenido.uso_color({"uso_color": "oscuro"}) == "natural" and contenido.uso_color({"uso_color": "contraste"}) == "natural" and contenido.uso_color({}) == ""
+    # «No estoy seguro, recomiéndame uno»: marca tres según el giro de Perfil de empresa, sin guardar.
+    r = client.post(MARCA, headers=ORIGEN, data={"paso": "1", "accion": "recomendar"})
+    assert "Te recomendamos Minimalista, Editorial y Fotográfico documental (llena el giro" in r.text
+    client.portal.call(c.store.set, "empresa", json.dumps({"giro": "Tecnología y software"}))
+    r = client.post(MARCA, headers=ORIGEN, data={"paso": "1", "accion": "recomendar"})
+    assert "Te recomendamos Neofuturista, Cristalino y Minimalista para un negocio de tecnología y software" in r.text
+    assert 'name="orden" value="neofuturista,cristalino,minimalista"' in r.text
+    assert client.portal.call(contenido.marca_de, c)["estilos"] == ["urbano", "geometrico", "minimal"]
 
 
 def test_insights_de_un_post(cliente, monkeypatch):
@@ -537,7 +694,7 @@ def test_insights_de_un_post(cliente, monkeypatch):
         pedidos.append(media_id)
         return {"reach": 1520, "views": 2100, "likes": 87, "comments": 9, "saved": 14, "shares": 6}
     monkeypatch.setattr(c.instagram, "media_insights", insights, raising=False)
-    r = client.get("/panel/contenido")
+    r = client.get("/panel/contenido?fecha=2099-01-01&ver=lista")
     assert 'href="/panel/contenido/insights/1"' in r.text
     r = client.get("/panel/contenido/insights/1")
     assert "Alcance" in r.text and "1,520" in r.text and "Guardados" in r.text and pedidos == ["1"]
@@ -556,7 +713,7 @@ def test_ajustes_y_conexion(cliente, monkeypatch):
     from igbot.cuenta import usar
     client, c, *_ = cliente
     ajustes._revision.clear()
-    assert 'name="pausa" value="12" checked' in client.get("/panel/asistente/configura").text
+    assert 'name="pausa" value="12" checked' in client.get("/panel/asistente/configura?paso=equipo").text
     r = client.get("/panel/asistente")
     assert 'id="ajustes"' not in r.text  # Horario y avisos va en Configura
     # Conexión va en el menú lateral (con su semáforo) y abre su propia vista.
@@ -564,11 +721,11 @@ def test_ajustes_y_conexion(cliente, monkeypatch):
     assert "Recibiendo mensajes" not in r.text and 'id="conexion"' not in r.text
     r = client.get("/panel/conexion")
     assert "Recibiendo mensajes" in r.text and 'id="ajustes"' not in r.text and "Gasto de hoy" not in r.text
-    assert '<a href="/panel/conexion" class="on">' in r.text and "compacta delgada" in r.text
+    assert '<a href="/panel/conexion" class="on">' in r.text
     assert "Volver a tus conversaciones" not in r.text
     assert client.get("/panel/asistente?vista=conexion", follow_redirects=False).headers["location"] == "/panel/conexion"
     # Ya no está en el submenú de Tu asistente: vive en el menú de tu cuenta, abajo.
-    assert "Tu cuenta · Conexión" in r.text and 'class="lat-item on"' not in r.text
+    assert 'class="lat-item on"' not in r.text
     assert r.text.index('href="/panel/conexion"') > r.text.index('class="perfil"')
     assert client.get("/panel/asistente/conexion", follow_redirects=False).headers["location"] == "/panel/conexion"
     # Una dirección que no existe: página 404 con el menú, no el JSON de FastAPI.
@@ -596,11 +753,15 @@ def test_ajustes_y_conexion(cliente, monkeypatch):
     assert c.human_pause_hours == 24 and c.business_hours == "10:00-19:30" and c.owner_email == "ana@cafe.mx"
     assert c.fuera_horario == "" and c.business_days == [1, 2, 3, 4, 5, 6]
 
-    # El Guardar de abajo de Configura guarda también Horario y avisos (va en el mismo formulario).
-    r = client.get("/panel/asistente/configura")
-    assert "Guardar ajustes" not in r.text and r.text.index('id="ajustes"') < r.text.index('class="acciones guardar-todo"')
-    r = client.post("/panel/guardar", headers=ORIGEN, data={**datos, "pausa": "48", "accion": "guardar"})
+    # El paso Tu equipo de Configura guarda Horario y avisos junto con qué decir si piden una persona.
+    r = client.get("/panel/asistente/configura?paso=equipo")
+    assert "Guardar ajustes" not in r.text and r.text.index('name="humano"') < r.text.index('name="pausa"')
+    r = client.post("/panel/asistente/paso", headers=ORIGEN,
+                    data={**datos, "pausa": "48", "paso": "equipo", "humano": "Te escribe Ana."},
+                    follow_redirects=False)
+    assert r.headers["location"] == "/panel/asistente/configura?paso=resumen&ok=1"
     assert c.human_pause_hours == 48 and c.business_hours == "10:00-19:30"
+    assert "Te escribe Ana." in Path(c.prompt_path).read_text()
 
 
 def test_conexion_avisa_si_falta_el_permiso_de_estadisticas(cliente, monkeypatch):
@@ -620,67 +781,70 @@ def test_conexion_avisa_si_falta_el_permiso_de_estadisticas(cliente, monkeypatch
 def test_bienvenida_con_contenido_y_lo_que_falta(cliente, monkeypatch):
     client, c, *_ = cliente
     monkeypatch.setattr(c, "imagenes_mes", 5)
+
+    async def con_empresa(c):
+        return True
+
+    monkeypatch.setattr(panel, "empresa_lista", con_empresa)  # ya llenó su Perfil de empresa
     r = client.get("/panel")
     assert "Configurar tu asistente" in r.text and "Configurar tu marca" in r.text and "Tu plan Asistente virtual" not in r.text
     assert client.get("/panel", follow_redirects=False).headers["location"] != "/panel/bienvenida"  # solo una vez
     client.portal.call(c.store.set, "perfil", "")
     client.portal.call(c.store.set, "asistente_listo", "0")
-    assert "Te falta configurar <b>Tu asistente</b>" in client.get("/panel/contenido/nuevo").text
-    client.post("/panel/guardar", headers=ORIGEN, data={"negocio": "Café", "accion": "guardar", "prompt": "Hola"})
+    assert "Te falta configurar <b>Tu asistente</b>" in client.get("/panel/contenido").text
+    client.post("/panel/asistente/paso", headers=ORIGEN, data={"paso": "personalidad", "personalidad": "cercano"})
     assert "Te falta configurar <b>Tu marca</b>" in client.get("/panel/asistente").text
     assert "Te falta configurar <b>Tu marca</b>" in client.get("/panel/contenido").text
     assert "Te falta configurar" not in client.get("/panel/contenido/marca").text  # ya está ahí
-    client.post("/panel/contenido/marca", headers=ORIGEN, data={"principal": "#111111", "accion": "guardar"})
+    client.post(MARCA, headers=ORIGEN, data={"paso": "1", "estilos": "minimalista"})
+    assert "Te falta configurar <b>Tu marca</b>" in client.get("/panel/asistente").text  # faltan los colores
+    client.post(MARCA, headers=ORIGEN, data={"paso": "2", "paleta": "mono"})
     assert "Te falta configurar" not in client.get("/panel/asistente").text
     assert "Te falta configurar" not in client.get("/panel/contenido").text
 
 
-def test_resumen_del_plan_arriba(cliente, monkeypatch):
+def test_encabezados_sin_titulo_ni_numeros(cliente, monkeypatch):
+    """Arriba solo van los botones: ni antetítulo, ni título, ni bajada, ni las tarjetas de números."""
     client, c, *_ = cliente
     monkeypatch.setattr(c, "imagenes_mes", 40)
     monkeypatch.setattr(c, "posts_mes", 12)
     monkeypatch.setattr(c, "mensajes_mes", 1000)
     r = client.get("/panel/contenido")
-    assert "Posts restantes" in r.text and "de 12 este mes" in r.text and "de 40 este mes" in r.text
-    # Las secciones van en el menú lateral; los números solo en Calendario (el inicio de Contenido).
-    assert '<nav class="pestanas">' not in r.text and 'class="lat-sub"' in r.text
-    marca = client.get("/panel/contenido/marca").text
-    assert "Posts restantes" not in marca and "compacta delgada" in marca and "Contenido · Tu marca" in marca
+    assert "+ Nueva campaña" in r.text and 'class="titulo-fila sin-ante"' in r.text
+    assert "Posts restantes" not in r.text and 'class="hoy kpis"' not in r.text
+    assert '<nav class="pestanas">' not in r.text
+    for ruta in ("/panel/contenido", "/panel/contenido/marca", "/panel/contenido/campanas",
+                 "/panel/contenido/campanas/nueva", "/panel/asistente", "/panel/asistente/configura",
+                 "/panel/probar", "/panel/conexion", "/panel/empresa", "/panel/resultados"):
+        texto = client.get(ruta).text
+        assert 'class="antetitulo"' not in texto.split("<main")[0] and "<h1>" not in texto and 'class="bajada"' not in texto, ruta
     r = client.get("/panel/asistente")
-    assert "Mensajes restantes" in r.text and "de 1,000 este mes" in r.text and "Gasto de hoy" not in r.text
-    # Sin tope en su plan, sale solo el conteo del mes.
-    monkeypatch.setattr(c, "mensajes_mes", 0)
-    assert "Mensajes este mes" in client.get("/panel/asistente").text
+    assert "Mensajes restantes" not in r.text and 'class="hoy kpis"' not in r.text and 'class="estado-mini"' in r.text
 
 
 def test_crear_post_con_ajustes_solo_para_ese_post(cliente, monkeypatch):
     client, c, llamadas, proveedor = cliente
     monkeypatch.setattr(c, "imagenes_mes", 5)
-    client.post("/panel/contenido/marca", headers=ORIGEN,
-                data={"principal": "#111111", "acento": "#E8590C", "fondo": "#000000", "fuente": "Inter", "peso": "700",
-                      "estilo": "limpio", "plantilla": "editorial", "modo": "plantilla", "accion": "guardar"})
-    r = client.get("/panel/contenido/nuevo")
-    assert "Con mi plantilla" in r.text and "Con otra plantilla" in r.text and "Diseño libre solo para este post" in r.text
-
-    # Otra plantilla: banda, otro acento y estilo premium; la marca no cambia.
-    client.post("/panel/contenido/nuevo", headers=ORIGEN,
-                data={"objetivo": "marca", "como": "plantilla", "plantilla": "banda", "acento": "#2255AA",
-                      "estilo": "premium", "fuente": "Lora", "principal": "#111111", "fondo": "#000000"})
+    client.portal.call(c.store.set, "marca", json.dumps({
+        "principal": "#111111", "acento": "#E8590C", "fondo": "#000000", "fuente": "Inter", "peso": 700,
+        "estilos": ["minimal"], "plantilla": "editorial", "modo": "plantilla"}))
+    # Otra plantilla: banda, otro acento y estilo lujo; la marca no cambia.
+    crear(client, c, ajustes={"plantilla": "banda", "acento": "#2255AA", "estilo": "lujo", "fuente": "Lora",
+                              "principal": "#111111", "fondo": "#000000"})
     p = client.portal.call(contenido.pieza, c.store, 1)
     assert p["plantilla"] == "banda" and p["marca"]["acento"] == "#2255AA" and p["marca"]["fuente"] == "Lora"
-    assert "Dark background" in proveedor.llamadas[-1][0]  # el estilo premium
+    assert "Quiet luxury" in proveedor.llamadas[-1][0]  # el estilo de este post
     marca = client.portal.call(contenido.marca_de, c)
     assert marca["acento"] == "#E8590C" and marca["plantilla"] == "editorial"
     assert client.portal.call(contenido.marca_post, c, p)["acento"] == "#2255AA"
 
     # Otro diseño libre, con su propia descripción.
-    client.post("/panel/contenido/nuevo", headers=ORIGEN,
-                data={"objetivo": "marca", "como": "libre", "estilo_propio": "Estilo revista, fondo blanco."})
+    crear(client, c, modo="libre", ajustes={"estilo_propio": "Estilo revista, fondo blanco."})
     p = client.portal.call(contenido.pieza, c.store, 2)
     assert p["plantilla"] == "libre" and "Estilo revista" in proveedor.llamadas[-1][0]
 
     # Con mi plantilla: lo de la marca, sin ajustes guardados.
-    client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "marca", "como": "marca"})
+    crear(client, c)
     p = client.portal.call(contenido.pieza, c.store, 3)
     assert p["plantilla"] == "editorial" and "marca" not in p
 
@@ -690,72 +854,32 @@ def test_configura_tu_asistente_en_su_propia_pagina(cliente):
     # Conversaciones y el formulario van en direcciones distintas.
     r = client.get("/panel/asistente")
     assert 'id="chats"' in r.text and 'id="configura"' not in r.text and "Configurar tu asistente" not in r.text
-    assert '<a href="/panel/asistente" class="on">Conversaciones' in r.text
+    assert 'class="lat-item on" href="/panel/asistente" title="Conversaciones"' in r.text
     r = client.get("/panel/asistente/configura")
-    assert 'id="configura"' in r.text and 'id="chats"' not in r.text and "Tu asistente · Configura" in r.text
-    assert '<a href="/panel/asistente/configura" class="on">Configura tu asistente' in r.text
+    assert 'class="asis"' in r.text and 'id="chats"' not in r.text 
+    assert 'class="lat-item on" href="/panel/asistente/configura" title="Configura tu asistente"' in r.text
     # Sin configurar: las conversaciones invitan a configurarlo.
     client.portal.call(c.store.set, "asistente_listo", "0")
     client.portal.call(c.store.set, "perfil", "")
     assert 'href="/panel/asistente/configura">Configurar tu asistente' in client.get("/panel/asistente").text
 
 
-def test_subir_fotos_solo_para_un_post(cliente, monkeypatch):
-    client, c, llamadas, proveedor = cliente
+def test_un_token_inventado_no_lee_otro_archivo(cliente, monkeypatch):
+    client, c, *_ = cliente
     monkeypatch.setattr(c, "imagenes_mes", 5)
-    r = client.get("/panel/contenido/nuevo")
-    assert 'name="fotos_post"' in r.text and 'enctype="multipart/form-data"' in r.text
-    client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "producto"},
-                files={"fotos_post": ("bolsa.png", png(), "image/png")})
-    p = client.portal.call(contenido.pieza, c.store, 1)
-    assert len(p["fotos"]) == 1 and len(proveedor.llamadas[-1][1]) == 1
-    assert client.portal.call(contenido.marca_de, c).get("fotos", []) == []  # Tu marca no cambia
-    # Un token inventado no sirve para leer otro archivo.
-    client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "producto", "foto_0": "../../.env"})
-    assert client.portal.call(contenido.pieza, c.store, 2)["fotos"] == []
+    crear(client, c, "estrella", fotos=["../../.env"])
+    assert client.portal.call(contenido.pieza, c.store, 1)["fotos"] == []
 
 
-def test_ideas_para_el_tema_con_tope_diario(cliente, monkeypatch):
+def test_precio_escrito_por_el_dueno(cliente, monkeypatch):
     client, c, llamadas, _ = cliente
     monkeypatch.setattr(c, "imagenes_mes", 2)
-
-    async def fake_claude(prompt, system, mcp=None, allowed=(), max_turns=5, model=None):
-        llamadas.append((prompt, system, model))
-        return "Carrusel con los tres paquetes, su precio y lo que incluye cada uno."
-
-    monkeypatch.setattr(bot.agent, "run_claude", fake_claude)
-    assert "Te quedan 3 de 3 hoy" in client.get("/panel/contenido/nuevo").text
-    r = client.post("/panel/contenido/nuevo", headers=ORIGEN,
-                    data={"objetivo": "estrella", "tema": "comparar <paquetes>", "accion": "ampliar"})
-    assert "Carrusel con los tres paquetes" in r.text and "Te quedan 2 de 3 hoy" in r.text
-    assert "<idea>comparar &lt;paquetes&gt;</idea>" in llamadas[-1][0]  # lo del cliente va escapado
-    client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "estrella", "accion": "sugerir"})
-    assert "<idea>" not in llamadas[-1][0]
-    client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "estrella", "accion": "sugerir"})
-    n = len(llamadas)
-    r = client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "estrella", "accion": "sugerir"})
-    assert "Ya usaste las ideas de hoy" in r.text and len(llamadas) == n  # ya no se llama a Claude
-    assert client.portal.call(c.store.posts, ("borrador",)) == []  # las ideas no crean posts ni usan imagen
-
-
-def test_precio_escrito_y_fotos_para_ver_antes_de_generar(cliente, monkeypatch):
-    client, c, llamadas, _ = cliente
-    monkeypatch.setattr(c, "imagenes_mes", 2)
-    r = client.post("/panel/contenido/nuevo", headers=ORIGEN, data={"objetivo": "marca", "accion": "subir_fotos"},
-                    files={"fotos_post": ("bolsa.png", png(), "image/png")})
-    assert "tus fotos ya están marcadas" in r.text and "Fotos solo para este post" in r.text
-    assert r.text.count('checked><img') == 1 and not llamadas[1:]  # se ve y queda marcada; no se generó nada
-    token = re.search(r'name="foto_0" value="([^"]+)"', r.text).group(1)
-    assert token not in client.portal.call(contenido.marca_de, c).get("fotos", [])  # no va a su marca
-
-    client.post("/panel/contenido/nuevo", headers=ORIGEN,
-                data={"objetivo": "marca", "con_precio": "1", "precio": "Desde $990 MXN", "foto_0": token})
+    crear(client, c, con_precio=True, precio="Desde $990 MXN")
     assert "<precio_del_dueño>Desde $990 MXN</precio_del_dueño>" in llamadas[-1][0]
-    p = client.portal.call(contenido.pieza, c.store, 1)
-    assert p["precio"] == "Desde $990 MXN" and p["fotos"] == [token]
+    assert client.portal.call(contenido.pieza, c.store, 1)["precio"] == "Desde $990 MXN"
 
 
-def test_filtros_abiertas_y_pidieron_una_persona(cliente):
+def test_filtro_pidieron_una_persona(cliente):
     import time
     client, c, *_ = cliente
     store = c.store
@@ -767,13 +891,15 @@ def test_filtros_abiertas_y_pidieron_una_persona(cliente):
     client.portal.call(store.pause, "dani", time.time() + 3600)  # este lo tomó el dueño
 
     r = client.get("/panel/asistente")
-    assert "Abiertas (1)" in r.text and "Pidieron una persona (1)" in r.text and "En pausa (2)" in r.text
-    assert '<div class="tarjeta" id="chats">' in r.text  # una sola tarjeta: no se pliega
+    assert "Sin contestar<b" in r.text and "Pidieron una persona<b" in r.text and 'Todas<b class="gris">3</b>' in r.text
+    assert "Abiertas" not in r.text and "En pausa" not in r.text
     r = client.get("/panel/asistente?ver=persona")
-    assert "@caro" in r.text and "Pidió una persona" in r.text and "Motivo: Quiere negociar el precio" in r.text
-    assert "@beto" not in r.text and "@dani" not in r.text and "Reactivar" in r.text
-    r = client.get("/panel/asistente?ver=abiertas")
-    assert "@beto" in r.text and "@caro" not in r.text and "@dani" not in r.text
+    assert "@caro" in r.text and "Pidió hablar con una persona" in r.text
+    assert "@beto" not in r.text and "@dani" not in r.text
+    r = client.get("/panel/asistente?ver=persona&chat=caro")
+    assert "<b>Pidió hablar con una persona.</b> Motivo: Quiere negociar el precio." in r.text
+    r = client.get("/panel/asistente?ver=abiertas")  # enlace viejo: cae en Sin contestar
+    assert "@beto" in r.text and "@caro" not in r.text
 
 
 def test_menu_js_antes_de_pintar(cliente):
@@ -785,40 +911,50 @@ def test_menu_js_antes_de_pintar(cliente):
     assert r.status_code == 200 and "menu-plegado" in r.text
 
 
-def test_identidad_de_marca(cliente, monkeypatch):
+def test_identidad_de_marca_y_logo(cliente, monkeypatch):
     client, c, *_ = cliente
     monkeypatch.setattr(c, "imagenes_mes", 5)
-    r = client.post("/panel/contenido/marca", headers=ORIGEN, data={
-        "nombre": "  Café   Lunar ", "frase": "Café de especialidad.",
-        "caracter": ["Cercana", "Premium", "Natural", "Clásica", "Otro"], "accion": "guardar"})
-    assert r.status_code == 200
+    # Nombre, frase y carácter ya no se piden en Tu marca (pasan a Perfil de empresa), pero lo guardado se conserva.
+    client.portal.call(c.store.set, "marca", json.dumps({"nombre": "Café Lunar", "frase": "Café de especialidad.",
+                                                         "caracter": ["Cercana", "Premium", "Natural"]}))
+    r = client.post(MARCA, headers=ORIGEN, data={"paso": "1", "estilos": "claymorfismo"})
     marca = client.portal.call(contenido.marca_de, c)
-    assert marca["nombre"] == "Café Lunar" and marca["caracter"] == ["Cercana", "Premium", "Natural"]
-    assert 'data-espejo="nombre">Café Lunar<' in r.text and 'data-espejo="frase">Café de especialidad.<' in r.text
+    assert marca["nombre"] == "Café Lunar" and marca["estilos"] == ["claymorfismo"]
+    assert 'name="nombre"' not in client.get(f"{MARCA}?paso=1").text
     negocio = client.portal.call(contenido.negocio_de, c)
     assert "Nombre de la marca: Café Lunar" in negocio and "Carácter: Cercana, Premium, Natural" in negocio
-    # Logo: se sube, sale en la vista previa y se puede quitar.
-    png = io.BytesIO()
-    Image.new("RGB", (64, 64), "#123456").save(png, "PNG")
-    r = client.post("/panel/contenido/marca", headers=ORIGEN, data={"nombre": "Café Lunar", "accion": "guardar"},
-                    files={"logo": ("logo.png", png.getvalue(), "image/png")})
-    assert "Listo: guardamos tu logo." in r.text and 'alt="Tu logo"' in r.text
+    # Logo: se sube en el paso 4, sale en sus tarjetas y se puede quitar.
+    png_ = io.BytesIO()
+    Image.new("RGB", (64, 64), "#123456").save(png_, "PNG")
+    client.post(MARCA, headers=ORIGEN, data={"paso": "4", "logo_presencia": ["discreta", "siempre"], "orden_logo": "siempre"},
+                files={"logo": ("logo.png", png_.getvalue(), "image/png")})
     logo = client.portal.call(contenido.marca_de, c)["logo"]
     assert contenido.archivo(c, logo).is_file()
+    r = client.get(f"{MARCA}?paso=4")
+    assert 'alt="Tu logo"' in r.text and f'src="/media/{c.media_slug}/{logo}.jpg?v=' in r.text
+    assert 'name="logo_presencia" value="siempre" checked' in r.text and 'name="orden_logo" value="siempre,discreta"' in r.text
+    assert "Siempre presente + Firma discreta" in client.get(f"{MARCA}?paso=resumen").text
     # También sale en el círculo de tu cuenta, abajo en el menú lateral, en todas las páginas.
     assert f'<img class="lat-avatar" src="/media/{c.media_slug}/{logo}.jpg?v=' in client.get("/panel/asistente").text
-    r = client.post("/panel/contenido/marca", headers=ORIGEN, data={"accion": "quitar_logo"})
+    r = client.post(MARCA, headers=ORIGEN, data={"paso": "4", "accion": "quitar_logo"})
     assert "quitamos tu logo" in r.text and not contenido.archivo(c, logo).is_file()
     assert '<img class="lat-avatar"' not in r.text and '<span class="lat-avatar">' in r.text
 
 
-def test_menu_lateral_despliega_secciones(cliente, monkeypatch):
+def test_menu_lateral_sin_grupos(cliente, monkeypatch):
     client, c, *_ = cliente
     monkeypatch.setattr(c, "imagenes_mes", 5)
     r = client.get("/panel/asistente").text
-    # Las dos secciones traen su submenú; el de la sección en la que estás sale abierto.
-    assert 'data-sub="asistente" aria-expanded="true"' in r and 'data-sub="contenido" aria-expanded="false"' in r
-    assert '<div class="lat-sub" id="sub-asistente">' in r and '<div class="lat-sub cerrado" id="sub-contenido">' in r
+    # Cada sección es un renglón con su ícono, como Resultados; sin Tu asistente ni Contenido como grupos.
+    nav = r.split('<nav class="lat-nav">')[1].split("</nav>")[0]
+    titulos = ["Resultados", "Conversaciones", "Configura tu asistente", "Probar tu asistente", "Campañas", "Calendario"]
+    assert [nav.index(f'title="{t}"') for t in titulos] == sorted(nav.index(f'title="{t}"') for t in titulos)
+    assert nav.count("<svg") == 6 and "lat-sub" not in nav and "data-sub" not in nav
+    assert 'title="Tu asistente"' not in nav and 'title="Contenido"' not in nav
+    assert nav.count('class="lat-item on"') == 1 and 'class="lat-item on" href="/panel/asistente"' in nav
+    # Sin contenido en el plan, no salen Campañas ni Calendario.
+    monkeypatch.setattr(c, "imagenes_mes", 0)
+    assert 'title="Campañas"' not in client.get("/panel/asistente").text
 
 
 def test_posicionamiento_sale_de_configura_y_llega_a_los_posts(cliente, monkeypatch):
@@ -842,10 +978,70 @@ def test_posicionamiento_sale_de_configura_y_llega_a_los_posts(cliente, monkeypa
     assert "- Con quién lo comparan (no la nombres en los posts): Marcas de Asia" in negocio
     client.portal.call(posicionamiento.actualizar, c, perfil)  # sin cambios en Configura no se vuelve a pedir
     assert len(llamadas) == 1
-    # Guardar Configura lo manda a calcular (en segundo plano).
-    programados = []
-    monkeypatch.setattr(posicionamiento, "programar", lambda cuenta, datos: programados.append(datos["negocio"]))
-    client.post("/panel/guardar", headers=ORIGEN, data={"accion": "guardar", "negocio": "Bolsos", "prompt": ""})
-    assert programados == ["Bolsos"]
     # Ya no vive en Tu marca.
     assert "lo que te hace distinto" not in client.get("/panel/contenido/marca").text
+
+
+def test_personalidad_sin_imagenes_y_con_toque_personal(cliente):
+    client, c, *_ = cliente
+    r = client.get("/panel/asistente/configura?paso=personalidad")
+    assert "<img" not in r.text.split('class="as-tarjetas"')[1].split("</fieldset>")[0]
+    assert "Comprensivo" not in r.text and "Ideal para:" in r.text and 'name="toque"' in r.text
+    assert 'name="toque_on" value="1">' in r.text  # plegado mientras no escriba nada
+    r = client.post("/panel/asistente/paso", headers=ORIGEN, follow_redirects=False,
+                    data={"paso": "personalidad", "personalidad": "empatico", "toque": "Que explique <todo> con calma."})
+    assert r.status_code == 303
+    perfil = client.portal.call(panel.perfil, c)
+    assert perfil["toque"] == "Que explique <todo> con calma." and perfil["personalidad"] == "empatico"
+    prompt = Path(c.prompt_path).read_text()
+    assert "<como_quiere_que_hables>\nQue explique &lt;todo&gt; con calma.\n</como_quiere_que_hables>" in prompt
+
+
+def test_reglas_opcionales_plegadas_y_casilla_vacia_las_borra(cliente):
+    client, c, *_ = cliente
+    r = client.get("/panel/asistente/configura?paso=reglas")
+    assert 'name="no_hacer_on" value="1">' in r.text and 'name="pasar_equipo_on"' in r.text
+    assert 'name="instrucciones_on" value="1" checked>' in r.text  # ya trae "Vendemos carteras."
+    datos = {"paso": "reglas", "opcionales": "1", "no_hacer": "No hablar de precios.", "no_hacer_on": "1",
+             "pasar_equipo": "Esto no se guarda", "instrucciones": "Vendemos carteras."}
+    client.post("/panel/asistente/paso", headers=ORIGEN, data=datos)
+    perfil = client.portal.call(panel.perfil, c)
+    assert perfil["no_hacer"] == "No hablar de precios." and perfil["pasar_equipo"] == "" and perfil["instrucciones"] == ""
+
+
+def test_menu_de_tu_cuenta_en_tres_grupos(cliente, monkeypatch):
+    client, c, *_ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 5)
+    menu = client.get("/panel/contenido").text.split('class="perfil-menu"')[1].split("</details>")[0]
+    orden = [menu.index(t) for t in ("Conectado como", "Información de empresa", "Tu marca", 'class="sep"',
+                                     "Conexión", "Ver mi Instagram", "Salir")]
+    assert orden == sorted(orden)
+
+
+def test_nombre_ia_y_transferir_si_esta_enojado(cliente):
+    client, c, *_ = cliente
+    r = client.get("/panel/asistente/configura?paso=reglas")
+    assert 'name="r_ia"' in r.text and 'name="r_enojado"' in r.text
+    assert 'name="msg_enojado_on" value="1">' in r.text  # plegado mientras no escriba nada
+    client.post("/panel/asistente/paso", headers=ORIGEN, data={
+        "paso": "personalidad", "personalidad": "cercano", "nombre_asistente": "  Sofía <b> ", "opcionales": "1"})
+    client.post("/panel/asistente/paso", headers=ORIGEN, data={
+        "paso": "reglas", "opcionales": "1", "r_ia": "1", "r_enojado": "1", "msg_enojado_on": "1",
+        "msg_enojado": "Entiendo tu molestia, te paso con alguien."})
+    prompt = Path(c.prompt_path).read_text()
+    assert "Te llamas Sofía &lt;b&gt;;" in prompt and "asistente virtual con inteligencia artificial" in prompt
+    assert "usa pasar_a_humano" in prompt and "<mensaje_al_transferir>\nEntiendo tu molestia" in prompt
+    r = client.get("/panel/asistente/configura?paso=resumen")
+    assert "Se llama Sofía" in r.text and "Pasa a tu equipo si nota al cliente enojado" in r.text
+    # Con la regla apagada el mensaje no va al prompt.
+    client.post("/panel/asistente/paso", headers=ORIGEN, data={
+        "paso": "reglas", "opcionales": "1", "msg_enojado_on": "1", "msg_enojado": "Entiendo tu molestia."})
+    prompt = Path(c.prompt_path).read_text()
+    assert "mensaje_al_transferir" not in prompt and "inteligencia artificial" not in prompt
+
+
+def test_la_plataforma_se_llama_skandar(cliente):
+    client, *_ = cliente
+    r = client.get("/panel/asistente").text
+    assert "<title>Tu asistente · Skandar</title>" in r and '<span class="txt">Skandar</span>' in r
+    assert "Agentes IA" not in r and 'class="logo"' not in r

@@ -182,7 +182,10 @@ async def publish_post(store: Store, instagram: Instagram, post: dict) -> tuple[
         for media_id in post["media_ids"]:
             await save_photo(store, instagram, media_id)
             urls.append(public_url((await store.media(media_id))[0]))
-        link = await instagram.publish(urls, post["caption"])
+        if post.get("tipo") == "historia":
+            link = await instagram.publish_story(urls[0])
+        else:
+            link = await instagram.publish(urls, post["caption"])
     except Exception as e:
         log.exception("No se pudo publicar la publicación %s", post["id"])
         await store.set_post(post["id"], "fallida", error=str(e)[:500])

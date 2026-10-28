@@ -1,4 +1,4 @@
-// Vista previa al momento en el panel: Tu marca y el editor de posts.
+// Vista previa al momento en el panel (el editor de posts) y ayudas de Tu marca.
 // Sin este archivo el panel funciona igual, con los botones "Ver cómo queda" y "Actualizar imagen".
 document.documentElement.classList.add("js");
 
@@ -108,36 +108,8 @@ document.addEventListener("click", (e) => {
   document.querySelectorAll("details.perfil[open]").forEach((d) => { if (!d.contains(e.target)) d.open = false; });
 });
 
-// Tu marca: el nombre, la frase y el color principal se ven al momento en la vista previa del perfil.
-document.querySelectorAll("form[data-vista]").forEach((form) => {
-  form.addEventListener("input", (e) => {
-    const t = e.target;
-    form.querySelectorAll('[data-espejo="' + t.name + '"]').forEach((el) => { el.textContent = t.value; });
-    if (t.name === "principal") form.querySelectorAll('[data-fondo="principal"]').forEach((el) => { el.style.background = t.value; });
-    if (t.name === "nombre" && t.value.trim()) form.querySelectorAll("[data-inicial]").forEach((el) => { el.textContent = t.value.trim()[0].toUpperCase(); });
-  });
-});
-
-// Menú lateral: Tu asistente y Contenido despliegan sus opciones en vez de cambiar de página.
-// Si el menú está plegado (solo íconos), primero se abre.
-document.querySelectorAll(".lat-item[data-sub]").forEach((item) => {
-  item.addEventListener("click", (e) => {
-    const sub = document.getElementById("sub-" + item.dataset.sub);
-    if (!sub) return;
-    e.preventDefault();
-    if (raiz.classList.contains("menu-plegado") && matchMedia("(min-width: 901px)").matches) {
-      raiz.classList.add("menu-anima");
-      raiz.classList.remove("menu-plegado");
-      try { localStorage.setItem("menu:plegado", "0"); } catch (err) { /* sin almacenamiento */ }
-      sub.classList.remove("cerrado");
-    } else {
-      sub.classList.toggle("cerrado");
-    }
-    item.setAttribute("aria-expanded", sub.classList.contains("cerrado") ? "false" : "true");
-  });
-});
-
-// Campañas: arrastrar un post a otro día (si ahí hay uno, se intercambian). Sin esto, el día se cambia en el panel del post.
+// Campañas: arrastrar un post a otro día. Soltado sobre otro post, se intercambian; en el espacio libre del día,
+// se quedan los dos (hasta 2 por día). Sin esto, el día se cambia en el panel del post.
 (() => {
   const dias = document.querySelectorAll(".dia-cam[data-dia]");
   if (!dias.length) return;
@@ -166,15 +138,25 @@ document.querySelectorAll(".lat-item[data-sub]").forEach((item) => {
     d.addEventListener("drop", (e) => {
       e.preventDefault();
       d.classList.remove("sobre");
-      if (!arrastrado || arrastrado.closest(".dia-cam") === d) return;
+      if (!arrastrado) return;
       const origen = arrastrado.closest(".dia-cam");
-      const otro = d.querySelector(".post-cam");
+      const tocado = e.target.closest(".post-cam");
+      const otro = tocado && tocado !== arrastrado ? tocado : null;
+      const juntar = !otro;
+      if (origen === d && juntar) return;
+      if (juntar && d.querySelectorAll(".post-cam").length >= 2) return;
       // Si el de ese día ya se publicó, el servidor no deja: se recarga y dice por qué. Un día de fuera estira la
       // campaña: también se recarga, para ver el rango nuevo.
       const suave = (!otro || otro.hasAttribute("data-k")) && !d.classList.contains("fuera");
       if (suave) {  // se mueve aquí mismo y el servidor contesta 204: la página no se recarga
-        if (otro) origen.append(otro);
-        d.append(arrastrado);
+        if (otro) {  // cada uno toma el lugar del otro
+          const marca = document.createComment("");
+          otro.replaceWith(marca);
+          arrastrado.replaceWith(otro);
+          marca.replaceWith(arrastrado);
+        } else {
+          d.append(arrastrado);
+        }
         d.classList.remove("libre");
         if (!origen.querySelector(".post-cam") && !origen.hasAttribute("data-publica")) origen.classList.add("libre");
         [arrastrado, otro].forEach((x) => {
@@ -188,7 +170,8 @@ document.querySelectorAll(".lat-item[data-sub]").forEach((item) => {
       const f = document.createElement("form");
       f.method = "post";
       f.action = d.closest("[data-camp]").dataset.camp;
-      for (const [n, v] of Object.entries({accion: "mover", k: arrastrado.dataset.k, dia: d.dataset.dia, suave: suave ? "1" : ""})) {
+      for (const [n, v] of Object.entries({accion: "mover", k: arrastrado.dataset.k, dia: d.dataset.dia, con: otro ? otro.dataset.k || "" : "",
+        juntar: juntar ? "1" : "", suave: suave ? "1" : ""})) {
         const i = document.createElement("input");
         i.type = "hidden"; i.name = n; i.value = v;
         f.append(i);
@@ -199,42 +182,63 @@ document.querySelectorAll(".lat-item[data-sub]").forEach((item) => {
   });
 })();
 
-// Campañas, paso 1: el resumen (posts, temas, formatos, imágenes) cambia con lo que se marca.
+// Calendario: arrastrar un post (borrador o programado) a otro día; en Semana y Día, también a otra hora (con sus
+// mismos minutos). La tarjeta se mueve aquí mismo y el servidor contesta 204; si no se puede (ya pasó, ya salió),
+// la página se recarga y dice por qué. Sin esto, el día y la hora se cambian en el editor del post.
 (() => {
-  const form = document.querySelector(".form-cam");
-  const resumen = form && form.querySelector(".resumen-exp");
-  if (!resumen) return;
-  const PUBLICAR = {"lun-sab": [0, 1, 2, 3, 4, 5], diario: [0, 1, 2, 3, 4, 5, 6], "lun-vie": [0, 1, 2, 3, 4], lmv: [0, 2, 4]};
-  const poner = (r, texto) => { resumen.querySelector(`[data-r="${r}"]`).textContent = texto; };
-  const veces = (n, de) => {
-    if (!de) return "";
-    const menos = Math.floor(n / de), mas = Math.ceil(n / de);
-    if (menos === mas) return `${menos} ${menos === 1 ? "vez" : "veces"} cada uno`;
-    return `${menos} o ${mas} veces cada uno`;
-  };
-  const actualizar = () => {
-    const semanas = Number(form.semanas.value) || 1;
-    const publica = form.publicar.options[form.publicar.selectedIndex];
-    const dias = PUBLICAR[form.publicar.value] || PUBLICAR["lun-sab"];
-    const [a, m, d] = (form.inicio.value || "").split("-").map(Number);
-    let n = 0;
-    if (a) for (let i = 0; i < 7 * semanas; i++) {
-      const dia = new Date(a, m - 1, d + i);
-      if (dias.includes((dia.getDay() + 6) % 7)) n++;
-    }
-    const temas = form.querySelectorAll("[data-tema]:checked").length;
-    const formatos = [...form.querySelectorAll("[data-formato]:checked")];
-    const costo = formatos.reduce((t, f) => t + Number(f.dataset.costo), 0);
-    poner("posts", `${n} posts`);
-    poner("cuando", `${semanas} semana${semanas > 1 ? "s" : ""}, ${publica.text.toLowerCase()}`);
-    poner("temas", `${temas} tema${temas === 1 ? "" : "s"}`);
-    poner("temas-x", veces(n, temas));
-    poner("formatos", `${formatos.length} formato${formatos.length === 1 ? "" : "s"}`);
-    poner("formatos-x", veces(n, formatos.length));
-    poner("imagenes", `~${formatos.length ? Math.round(n * costo / formatos.length) : 0} imágenes`);
-  };
-  form.addEventListener("input", actualizar);
-  form.addEventListener("change", actualizar);
+  const cal = document.getElementById("cal");
+  if (!cal || !cal.querySelector("[data-mover]")) return;
+  const celdas = cal.querySelectorAll("[data-dia]");
+  let arrastrado = null;
+  cal.querySelectorAll("[data-mover]").forEach((t) => {
+    t.addEventListener("dragstart", (e) => {
+      arrastrado = t;
+      t.classList.add("arrastrando");
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", t.dataset.mover);
+    });
+    t.addEventListener("dragend", () => {
+      t.classList.remove("arrastrando");
+      celdas.forEach((c) => c.classList.remove("sobre"));
+      arrastrado = null;
+    });
+  });
+  celdas.forEach((c) => {
+    c.addEventListener("dragover", (e) => {
+      if (!arrastrado) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      c.classList.add("sobre");
+    });
+    c.addEventListener("dragleave", () => c.classList.remove("sobre"));
+    c.addEventListener("drop", (e) => {
+      e.preventDefault();
+      c.classList.remove("sobre");
+      const t = arrastrado;
+      if (!t || t.closest("[data-dia]") === c) return;
+      const mas = c.querySelector(".ev-mas");
+      if (mas) c.insertBefore(t, mas); else c.append(t);
+      const hora = t.querySelector("small");
+      if (c.dataset.h && hora) {  // "19:30 · Post" → "21:30 · Post"
+        hora.firstChild.textContent = hora.firstChild.textContent.replace(/^\d{2}/, c.dataset.h.padStart(2, "0"));
+      }
+      t.classList.remove("movido");
+      void t.offsetWidth;  // para que la animación corra otra vez si se vuelve a mover
+      t.classList.add("movido");
+      // Un formulario y no fetch: la CSP del panel (default-src 'none') bloquea fetch.
+      const f = document.createElement("form");
+      f.method = "post";
+      f.action = "/panel/contenido/mover";
+      for (const [n, v] of Object.entries({ref: t.dataset.mover, dia: c.dataset.dia, h: c.dataset.h || "",
+        volver: cal.dataset.volver, suave: "1"})) {
+        const i = document.createElement("input");
+        i.type = "hidden"; i.name = n; i.value = v;
+        f.append(i);
+      }
+      document.body.append(f);
+      f.submit();
+    });
+  });
 })();
 
 // Botones que piden confirmar (p. ej. Descartar post): sin el sí, no se manda el formulario.
@@ -249,3 +253,130 @@ document.querySelectorAll('input[type="datetime-local"], input[type="date"], inp
     try { i.showPicker(); } catch { /* navegadores sin showPicker: queda como siempre */ }
   });
 });
+
+// Conversaciones: el buscador busca solo al dejar de escribir medio segundo (recarga la página con
+// la búsqueda; sin fetch). Al volver, el cursor sigue en el buscador para seguir escribiendo.
+document.querySelectorAll("form[data-vivo]").forEach((form) => {
+  const campo = form.querySelector('input[type="search"]');
+  let espera;
+  try {
+    if (sessionStorage.getItem("chats:buscando") === "1") {
+      sessionStorage.removeItem("chats:buscando");
+      campo.focus();
+      campo.setSelectionRange(campo.value.length, campo.value.length);
+    }
+  } catch { /* sin almacenamiento: solo no regresa el cursor */ }
+  campo.addEventListener("input", () => {
+    clearTimeout(espera);
+    espera = setTimeout(() => {
+      try { sessionStorage.setItem("chats:buscando", "1"); } catch { /* sin almacenamiento */ }
+      form.requestSubmit();
+    }, 500);
+  });
+});
+
+// Tu marca: los estilos se numeran en el orden en que los tocas (hasta 3, con su papel: principal, secundario
+// y de apoyo; "orden" lo lleva al servidor),
+// elegir una paleta llena los cuatro colores, el código y el selector de cada color van iguales y las
+// muestras de "¿Cuánto color?" usan los colores de la página. Sin esto, se guarda igual (en el orden de la página).
+document.querySelectorAll("form[data-marca]").forEach((form) => {
+  // Tarjetas que se eligen en orden (estilos, uso del color, logo): el número dice cuál va primero.
+  form.querySelectorAll("[data-orden]").forEach((ops) => {
+    const orden = form.querySelector('input[name="' + ops.dataset.orden + '"]');
+    if (!orden) return;
+    const campo = ops.dataset.campo;
+    const max = +ops.dataset.max || 3;
+    const roles = (ops.dataset.roles || "").split(",");
+    let elegidos = orden.value ? orden.value.split(",") : [];
+    const pintar = () => {
+      orden.value = elegidos.join(",");
+      ops.querySelectorAll("label.wiz-op").forEach((op) => {
+        const caja = op.querySelector("input");
+        const n = elegidos.indexOf(caja.value) + 1;
+        const em = op.querySelector(".wiz-orden");
+        if (em) {
+          em.hidden = !n;
+          em.textContent = n || "";
+        }
+        const rol = op.querySelector(".mrc-rol");
+        if (rol) {
+          rol.hidden = !n;
+          rol.textContent = n ? n + ".º · " + (roles[n - 1] || "") : "";
+        }
+        op.classList.toggle("apagada", !n && elegidos.length >= max);
+      });
+    };
+    ops.addEventListener("change", (e) => {
+      const caja = e.target;
+      if (caja.name !== campo) return;
+      elegidos = elegidos.filter((k) => k !== caja.value);
+      if (caja.checked) {
+        if (elegidos.length >= max) caja.checked = false;
+        else elegidos.push(caja.value);
+      }
+      pintar();
+    });
+  });
+  const poner = (campo, valor) => {
+    const color = form.querySelector('input[type=color][name="' + campo + '"]');
+    const hex = form.querySelector('[data-hex="' + campo + '"]');
+    if (color) color.value = valor.toLowerCase();
+    if (hex) hex.value = valor.toUpperCase();
+    form.style.setProperty("--m-" + campo, valor);
+  };
+  form.addEventListener("input", (e) => {
+    const t = e.target;
+    if (t.type === "color") poner(t.name, t.value);
+    if (t.dataset.hex) {
+      const v = t.value.trim().replace(/^#?/, "#");
+      if (/^#[0-9a-f]{6}$/i.test(v)) poner(t.dataset.hex, v);
+    }
+    // Un color cambiado a mano ya no es la paleta sugerida.
+    if (t.type === "color" || t.dataset.hex) form.querySelectorAll('input[name="paleta"]').forEach((r) => { r.checked = false; });
+  });
+  form.addEventListener("change", (e) => {
+    const t = e.target;
+    if (t.name !== "paleta" || !t.dataset.colores) return;
+    const campos = ["principal", "secundario", "acento", "fondo"];
+    t.dataset.colores.split(",").forEach((c, i) => poner(campos[i], c));
+    // Los colores ya van en sus campos: el servidor guarda esos (y respeta si luego ajustas uno).
+    const antes = form.querySelector('input[name="paleta_antes"]');
+    if (antes) antes.value = t.value;
+  });
+});
+
+// Calendario: los filtros se aplican al cambiarlos (sin JS, con el botón Filtrar).
+document.querySelectorAll(".cal-filtros select").forEach((s) => {
+  s.addEventListener("change", () => s.form.submit());
+});
+
+// Conversaciones en vivo: cuando llega o sale un mensaje, el servidor manda la lista y el chat abierto
+// ya armados (EventSource a /panel/vivo, sin fetch) y aquí solo se cambian. Lo que llevas escrito en
+// la respuesta se queda. Sin esto, la página funciona igual: recargando.
+document.querySelectorAll(".inbox[data-vivo]").forEach((inbox) => {
+  if (!window.EventSource) return;
+  const fuente = new EventSource(inbox.dataset.vivo);
+  fuente.addEventListener("message", (e) => {
+    let p;
+    try { p = JSON.parse(e.data); } catch { return; }
+    const lista = inbox.querySelector(".lista-vivo");
+    if (lista && p.lista) lista.innerHTML = p.lista;
+    const hilo = inbox.querySelector(".hilo");
+    if (!hilo || !p.hilo || !inbox.classList.contains("abierto")) return;
+    const caja = hilo.querySelector("textarea");
+    const texto = caja ? caja.value : "";
+    const foco = caja && document.activeElement === caja;
+    const desde = caja ? caja.selectionStart : 0;
+    const hasta = caja ? caja.selectionEnd : 0;
+    hilo.outerHTML = p.hilo;
+    const nueva = inbox.querySelector(".hilo textarea");
+    if (nueva && texto) nueva.value = texto;
+    if (nueva && foco) { nueva.focus(); nueva.setSelectionRange(desde, hasta); }
+  });
+});
+
+// Después de enviar una respuesta desde Conversaciones, el cursor vuelve a la caja para seguir escribiendo.
+if (location.pathname === "/panel/responder") {
+  const caja = document.querySelector(".inbox .responder textarea");
+  if (caja) caja.focus();
+}

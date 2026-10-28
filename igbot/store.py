@@ -7,6 +7,7 @@ La tabla `messages` también funciona como cola: un DM entra como `pending` y
 pasa a `done` cuando el bot lo contestó. Así, si el proceso se reinicia, los
 mensajes sin contestar no se pierden.
 """
+import asyncio
 import json
 import time
 from datetime import datetime
@@ -118,7 +119,8 @@ CREATE TABLE IF NOT EXISTS posts (
     status      TEXT NOT NULL,             -- borrador | programada | publicando | publicada | fallida | cancelada
     permalink   TEXT NOT NULL DEFAULT '',
     error       TEXT NOT NULL DEFAULT '',
-    created_at  REAL NOT NULL
+    created_at  REAL NOT NULL,
+    tipo        TEXT NOT NULL DEFAULT 'post' -- post | historia
 );
 
 -- Cosas que pasaron en las conversaciones, para el reporte semanal
@@ -151,6 +153,13 @@ CREATE TABLE IF NOT EXISTS conexiones (
     slug       TEXT                        -- su carpeta en clientes/ si se dio de alta sola
 );
 
+-- Foto diaria de la cuenta de Instagram (seguidores, alcance, vistas...), para Resultados.
+-- Una fila por día (fecha local AAAA-MM-DD); `datos` es JSON y se completa por partes.
+CREATE TABLE IF NOT EXISTS metricas_dia (
+    dia   TEXT PRIMARY KEY,
+    datos TEXT NOT NULL DEFAULT '{}'
+);
+
 CREATE TABLE IF NOT EXISTS kv (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -162,6 +171,29 @@ class Store:
     def __init__(self, path: str):
         self.path = path
         self.db: aiosqlite.Connection | None = None
+        # Cuántas veces cambiaron los chats desde que arrancó el proceso, y quién espera el siguiente
+        # cambio (los paneles abiertos de esta cuenta, ver panel /vivo). Solo en memoria.
+        self.cambios = 0
+        self._esperando: set[asyncio.Event] = set()
+
+    def avisar(self) -> None:
+        """Un chat cambió (mensaje nuevo, respuesta o pausa): despierta a los paneles abiertos."""
+        self.cambios += 1
+        for e in self._esperando:
+            e.set()
+
+    async def esperar_cambio(self, visto: int, segundos: float) -> None:
+        """Vuelve en cuanto `cambios` deja de ser `visto`, o a los `segundos`."""
+        if self.cambios != visto:
+            return
+        e = asyncio.Event()
+        self._esperando.add(e)
+        try:
+            await asyncio.wait_for(e.wait(), segundos)
+        except TimeoutError:
+            pass
+        finally:
+            self._esperando.discard(e)
 
     async def open(self) -> None:
         if self.path != ":memory:":
@@ -173,6 +205,10 @@ class Store:
         cur = await self.db.execute("PRAGMA table_info(conexiones)")
         if "slug" not in {row[1] for row in await cur.fetchall()}:
             await self.db.execute("ALTER TABLE conexiones ADD COLUMN slug TEXT")
+        # Bases de antes de las historias: todo lo que había era post.
+        cur = await self.db.execute("PRAGMA table_info(posts)")
+        if "tipo" not in {row[1] for row in await cur.fetchall()}:
+            await self.db.execute("ALTER TABLE posts ADD COLUMN tipo TEXT NOT NULL DEFAULT 'post'")
         await self.db.commit()
 
     async def close(self) -> None:
@@ -189,6 +225,8 @@ class Store:
             (user_id, text, mid, time.time()),
         )
         await self.db.commit()
+        if cur.rowcount == 1:
+            self.avisar()
         return cur.rowcount == 1
 
     async def pending_users(self) -> list[str]:
@@ -215,6 +253,7 @@ class Store:
             (user_id, reply, time.time()),
         )
         await self.db.commit()
+        self.avisar()
 
     async def bot_replies_since(self, user_id: str, since: float) -> int:
         """Respuestas del bot (no las que el dueño escribió a mano, que llevan mid)."""
@@ -231,7 +270,7 @@ class Store:
         await self.db.execute(f"UPDATE messages SET status = 'done' WHERE id IN ({marks})", ids)
         await self.db.commit()
 
-    async def add_owner_message(self, user_id: str, mid: str, text: str) -> None:
+    async def add_owner_message(self, user_id: str, mid: str | None, text: str) -> None:
         """Guarda lo que contestó el dueño a mano, para que el bot lo vea después."""
         await self.db.execute(
             "INSERT OR IGNORE INTO messages (user_id, role, text, mid, created_at)"
@@ -239,6 +278,7 @@ class Store:
             (user_id, f"{MANUAL} {text}", mid, time.time()),
         )
         await self.db.commit()
+        self.avisar()
 
     async def add_bot_message(self, user_id: str, text: str) -> None:
         """Guarda un mensaje que el bot mandó por su cuenta (p. ej. por un comentario)."""
@@ -247,6 +287,7 @@ class Store:
             (user_id, text, time.time()),
         )
         await self.db.commit()
+        self.avisar()
 
     async def add_comment(self, comment_id: str, user_id: str, media_id: str, text: str) -> bool:
         """Anota un comentario. False si ya se había procesado (Meta reintenta)."""
@@ -415,6 +456,7 @@ class Store:
             (user_id, until),
         )
         await self.db.commit()
+        self.avisar()
 
     async def paused_until(self, user_id: str) -> float:
         cur = await self.db.execute("SELECT until FROM paused WHERE user_id = ?", (user_id,))
@@ -489,6 +531,21 @@ class Store:
             f" FROM c WHERE {donde} ORDER BY id DESC LIMIT :limit OFFSET :offset", args)
         return list(await cur.fetchall()), cuantos, total
 
+    async def chat_messages(self, user_id: str, limit: int) -> tuple[list[tuple[str, str, float]], bool]:
+        """Los últimos `limit` mensajes de un chat, del más viejo al más nuevo: (rol, texto, hora).
+        También dice si hay más viejos (para "Ver mensajes anteriores")."""
+        cur = await self.db.execute(
+            "SELECT role, text, created_at FROM messages WHERE user_id = ? ORDER BY id DESC LIMIT ?",
+            (user_id, limit + 1))
+        filas = list(await cur.fetchall())
+        return list(reversed(filas[:limit])), len(filas) > limit
+
+    async def last_message_from(self, user_id: str) -> float:
+        """Hora del último mensaje del cliente en ese chat (0 si nunca escribió)."""
+        cur = await self.db.execute(
+            "SELECT MAX(created_at) FROM messages WHERE user_id = ? AND role = 'user'", (user_id,))
+        return (await cur.fetchone())[0] or 0.0
+
     async def last_client_message(self) -> float:
         cur = await self.db.execute(
             "SELECT MAX(created_at) FROM messages WHERE role = 'user' AND user_id NOT LIKE 'admin:%'")
@@ -514,6 +571,7 @@ class Store:
     async def unpause(self, user_id: str) -> None:
         await self.db.execute("DELETE FROM paused WHERE user_id = ?", (user_id,))
         await self.db.commit()
+        self.avisar()
 
     # --- publicaciones de los administradores ---
 
@@ -534,16 +592,18 @@ class Store:
         await self.db.execute("UPDATE media SET note = ? WHERE id = ?", (note, media_id))
         await self.db.commit()
 
-    async def add_post(self, user_id: str, media_ids: list[int], caption: str, publish_at: float) -> int:
+    async def add_post(self, user_id: str, media_ids: list[int], caption: str, publish_at: float,
+                       tipo: str = "post") -> int:
+        """Un borrador; `tipo` es "post" (feed) o "historia"."""
         cur = await self.db.execute(
-            "INSERT INTO posts (user_id, media_ids, caption, publish_at, status, created_at)"
-            " VALUES (?, ?, ?, ?, 'borrador', ?)",
-            (user_id, ",".join(map(str, media_ids)), caption, publish_at, time.time()),
+            "INSERT INTO posts (user_id, media_ids, caption, publish_at, status, created_at, tipo)"
+            " VALUES (?, ?, ?, ?, 'borrador', ?, ?)",
+            (user_id, ",".join(map(str, media_ids)), caption, publish_at, time.time(), tipo),
         )
         await self.db.commit()
         return cur.lastrowid
 
-    POST_FIELDS = "id, user_id, media_ids, caption, publish_at, status, permalink, error, created_at"
+    POST_FIELDS = "id, user_id, media_ids, caption, publish_at, status, permalink, error, created_at, tipo"
 
     def _post(self, row) -> dict | None:
         if not row:
@@ -773,6 +833,24 @@ class Store:
             "SELECT correo FROM solicitudes WHERE usuario = ? ORDER BY created_at DESC LIMIT 1", (usuario,))
         row = await cur.fetchone()
         return row[0] if row else ""
+
+    # --- métricas diarias de Instagram ---
+
+    async def metricas(self, desde: str) -> dict[str, dict]:
+        """Los días guardados desde `desde` (AAAA-MM-DD), del más viejo al más nuevo."""
+        cur = await self.db.execute("SELECT dia, datos FROM metricas_dia WHERE dia >= ? ORDER BY dia", (desde,))
+        return {dia: json.loads(datos) for dia, datos in await cur.fetchall()}
+
+    async def guardar_metricas(self, dia: str, valores: dict) -> None:
+        """Suma `valores` a lo que ya tenía ese día (lo que no viene se queda como estaba)."""
+        cur = await self.db.execute("SELECT datos FROM metricas_dia WHERE dia = ?", (dia,))
+        row = await cur.fetchone()
+        datos = {**(json.loads(row[0]) if row else {}), **valores}
+        await self.db.execute(
+            "INSERT INTO metricas_dia (dia, datos) VALUES (?, ?)"
+            " ON CONFLICT (dia) DO UPDATE SET datos = excluded.datos",
+            (dia, json.dumps(datos)))
+        await self.db.commit()
 
     # --- valores sueltos (token de Instagram, etc.) ---
 

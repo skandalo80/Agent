@@ -24,17 +24,40 @@ assert LUNES.weekday() == 0
 LINEA = re.compile(r"^- (\d{4}-\d{2}-\d{2}) .*\| formato: (.+)$", re.M)
 
 
+CONCEPTO = {"titulo": "Idea", "resumen": "El latte de temporada sale del tueste de esta semana.",
+            "pilar_fuerte": "lo que te hace distinto", "insight": "Quien trabaja cerca toma café de cadena por prisa.",
+            "mensaje_clave": "Un latte hecho con café que tostamos esta semana.",
+            "pilares": [{"nombre": "El tueste del lunes", "detalle": "Granos frescos de la casa."},
+                        {"nombre": "Para llevar", "detalle": "Listo en tres minutos."}],
+            "arco": "Semana 1 presenta; semana 2 empuja la compra.", "direccion_visual": "Luz de mañana, barra de madera.",
+            "no_decir": "Nada de descuentos que no estén en tu perfil."}
+
+
 def claude_de_campana(llamadas):
     async def fake(prompt, system, mcp=None, allowed=(), max_turns=5, model=None):
         llamadas.append((prompt, system))
-        if "Armas una campaña" in system:
+        if "director creativo" in system:  # el plan de cada post, por su número
+            n = len(re.findall(r"^\d+\. ", prompt.split("<posts>")[-1], re.M))
+            return json.dumps({"plan": [{"n": i + 1, "objetivo": f"Objetivo {i + 1}", "angulo": f"Ángulo {i + 1}",
+                                         "titular": f"Titular {i + 1}", "cta": "Escríbenos", "distinto": "Otra escena",
+                                         "foto": {"funcion": "Mostrar el café", "protagonista": f"Protagonista {i + 1}",
+                                                  "escenario": f"Escenario {i + 1}", "accion": "sirve un café",
+                                                  "encuadre": "plano medio", "luz": "luz de ventana",
+                                                  "estilo": "Minimalista", "color": "Sutil"}} for i in range(n)]})
+        if "estratega de contenido" in system:  # el brief: tres ideas de campaña
+            return json.dumps({"conceptos": [{**CONCEPTO, "titulo": f"Idea {i + 1}"} for i in range(3)]})
+        if "Armas una campaña" in system or "ya tiene su brief" in system:
             return json.dumps({"posts": [
                 {"dia": d, "titulo": f"Post {i + 1}", "subtitulo": "", "caption": f"Texto {i + 1} #cafe",
-                 "idea": "" if formato == "Solo texto" else f"Foto {i + 1}",
+                 "idea": "" if formato.split(" | ")[0] == "Solo texto" else f"Foto {i + 1}",
+                 "prompt": "" if formato.split(" | ")[0] == "Solo texto" else f"Photo {i + 1}",
                  "responde": "Horario de fin de semana" if i == 0 and "<lo_que_preguntan>" in prompt else ""}
-                for i, (d, formato) in enumerate(LINEA.findall(prompt))]})
+                for i, (d, formato) in enumerate(LINEA.findall(prompt.split("<posts>")[-1]))]})
         if "otra versión" in system:
-            return json.dumps({"titulo": "Otra idea", "subtitulo": "", "caption": "Texto nuevo", "idea": "Foto nueva"})
+            foto = {"protagonista": "Una barista", "escenario": "la barra", "accion": "muele café",
+                    "estilo": "Minimalista"} if "<estilos_disponibles>" in prompt else None
+            return json.dumps({"titulo": "Otra idea", "subtitulo": "", "caption": "Texto nuevo",
+                               "idea": "" if foto else "Foto nueva", "foto": foto})
         return "{}"
     return fake
 
@@ -58,6 +81,16 @@ def cuando_sale(client, c, dia, hora):
     return calcular()
 
 
+def listo(client, c):
+    """Perfil de empresa y Tu marca llenos: sin ellos, Crear campaña pide completarlos primero."""
+    client.portal.call(c.store.set, "empresa", json.dumps({"nombre": "Café Lunar", "giro": "Restaurante o cafetería",
+                                                           "descripcion": "Café de especialidad"}))
+    marca = json.loads(client.portal.call(c.store.get, "marca") or "{}")
+    marca.setdefault("estilo", "calido")
+    marca["pasos"] = sorted({*marca.get("pasos", []), "estilo", "colores"})  # lo mínimo de Tu marca (marca.lista)
+    client.portal.call(c.store.set, "marca", json.dumps(marca))
+
+
 def datos_campana(**cambios):
     datos = {"accion": "proponer", "nombre": "Otoño", "inicio": LUNES.isoformat(), "semanas": "1",
              "publicar": "lmv", "tema": "Latte <b>de calabaza</b>", "t_dato": "1", "t_producto": "1",
@@ -74,15 +107,12 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
     monkeypatch.setattr(bot.agent, "run_claude", claude_de_campana(llamadas))
 
     r = client.get("/panel/contenido/campanas")
-    assert 'href="/panel/contenido/campanas" class="on">Campañas' in r.text
-    assert "Temas que quieres probar" in r.text and "No usa imágenes" in r.text
-    assert 'value="repetir" disabled' in r.text and "Te faltan 12 posts con resultados" in r.text
-    assert "Sube 2 fotos en Tu marca" in r.text and 'name="f_collage" value="1" disabled' in r.text
-    assert 'option value="3" selected' in r.text  # 3 semanas de inicio
+    assert 'class="lat-item on" href="/panel/contenido/campanas" title="Campañas"' in r.text
+    assert "Necesitamos conocer tu negocio" in r.text and "Completar tu empresa" in r.text  # sin empresa ni marca
 
     # Con un solo tema no se puede: vuelve con lo que marcó.
     r = client.post("/panel/contenido/campanas", headers=ORIGEN, data=datos_campana(t_producto=""))
-    assert "Elige de 2 a 6 temas." in r.text and 'name="t_dato" value="1" checked' in r.text
+    assert "Elige de 2 a 6 temas." in r.text
     assert not llamadas
 
     # Lunes, miércoles y viernes de una semana; dos temas, tres formatos, dos horarios.
@@ -102,7 +132,10 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
     r = client.get(u)
     assert "Otoño" in r.text and r.text.count("sin imagen") == 3 and 'draggable="true"' in r.text
     assert f'data-dia="{lun}" data-publica>' in r.text and 'data-dia="2099-01-06">' in r.text  # martes no publica
-    assert "Se prueba:" in r.text and "3 formatos" in r.text and "Solo texto" in r.text
+    assert "Se prueba:" in r.text and "3 formatos" in r.text
+    # Las tarjetas dicen si es post o historia, sin el tema ni el formato en gris.
+    assert '<span class="medio-cam m-post">Post</span>' in r.text and '<span class="fmt-cam">' not in r.text
+    assert "Arma tu campaña" not in r.text and "↓ Descargar planeación" in r.text  # sin los tres pasos arriba
     assert "Generar las 3 que faltan · usa 2" in r.text  # el de solo texto no usa cupo
 
     # Arrastrar el del lunes al miércoles: se intercambian.
@@ -124,7 +157,7 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
 
     # El panel del post: cambiar hora, formato y texto; otra idea.
     r = client.get(f"{u}?post=3")
-    assert 'id="detalle"' in r.text and "Texto 3 #cafe" in r.text and 'name="formato"' in r.text
+    assert 'id="detalle"' in r.text and "Texto 3 #cafe" in r.text and 'name="formato"' not in r.text
     client.post(u, headers=ORIGEN,
                 data={"accion": "guardar", "k": "3", "dia": vie, "hora": "10:30", "formato": "texto",
                       "titulo": "El espresso tiene menos cafeína", "subtitulo": "Que un americano",
@@ -133,7 +166,7 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
     assert (p3["hora"], p3["formato"], p3["subtitulo"], p3["caption"]) == ("10:30", "texto", "Que un americano",
                                                                           "Texto editado")
     r = client.get(f"{u}?post=3")
-    assert "Generar imagen · no usa imágenes" in r.text and 'name="idea"' not in r.text
+    assert "Generar no usa tu cupo" in r.text and 'name="idea"' not in r.text
     client.post(u, headers=ORIGEN, data={"accion": "otra", "k": "2"})
     assert campanas.buscar_post(leer(client, c), "2")["titulo"] == "Otra idea"
 
@@ -149,23 +182,31 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
     assert client.portal.call(contenido.imagenes.usadas, c.store) == (0, 0)
     # "Otra imagen" va junto a la imagen (envía el mismo form) y no entre los botones de abajo, junto a Aprobar.
     r = client.get(f"{u}?post=3")
-    assert 'form="f-cam" name="accion" value="generar"' in r.text and "↻ Otra imagen" in r.text
-    assert r.text.index("↻ Otra imagen") < r.text.index('id="f-cam"') < r.text.index('value="aprobar"')
+    assert 'name="accion" value="generar">↻ Volver a generar imagen' in r.text and 'class="modal-cam"' in r.text
+    assert r.text.index("↻ Volver a generar imagen") < r.text.index('value="aprobar"')
+    assert "Abrir en el editor" not in r.text
     if os.environ.get("GUARDAR_HTML"):
         open(os.environ["GUARDAR_HTML"], "w").write(r.text)
     r = client.post(u, headers=ORIGEN, data={"accion": "aprobar", "k": "3"})
     assert "Listo: sale el" in r.text
     assert client.portal.call(c.store.post, post["id"])["status"] == "programada"
 
-    # En el editor, una pieza fija guarda su texto y hora sin pedir título ni rotular de nuevo.
-    r = client.get(f"/panel/contenido/post/{post['id']}")
-    assert "viene de tu campaña" in r.text and "data-vista" not in r.text
-    p3 = campanas.buscar_post(leer(client, c), "3")
-    assert f"{campanas.tema_de(p3['tipo'])[0]} · Solo texto</p>" in r.text  # tema y formato bajo la foto
+    # El post de campaña se edita en su ventana de la campaña: el editor manda ahí.
+    r = client.get(f"/panel/contenido/post/{post['id']}", follow_redirects=False)
+    assert r.headers["location"] == f"{u}?post=3#detalle"
     r = client.post(f"/panel/contenido/post/{post['id']}", headers=ORIGEN,
                     data={"accion": "guardar", "caption": "Desde el editor", "cuando": "2099-01-09T10:30"})
     assert "El título no puede quedar vacío" not in r.text
     assert client.portal.call(c.store.post, post["id"])["caption"] == "Desde el editor"
+    assert campanas.buscar_post(leer(client, c), "3")["caption"] == "Desde el editor"
+    # Volver a generar desde el editor: la campaña la arma de nuevo y se quedan el texto y la hora del editor.
+    antes = client.portal.call(c.store.post, post["id"])
+    r = client.post(f"/panel/contenido/post/{post['id']}", headers=ORIGEN,
+                    data={"accion": "otra", "caption": "Desde el editor", "cuando": "2099-01-09T10:30"})
+    ahora = client.portal.call(c.store.post, post["id"])
+    assert "Generando otra imagen" in r.text and ahora["media_ids"] != antes["media_ids"]
+    assert (ahora["caption"], ahora["publish_at"]) == ("Desde el editor", antes["publish_at"])
+    assert client.portal.call(contenido.imagenes.usadas, c.store) == (0, 0)
 
     # Moverlo después cambia también el post programado.
     client.post(u, headers=ORIGEN, data={"accion": "mover", "k": "3", "dia": lun})
@@ -185,12 +226,13 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
     assert all(p["post_id"] for p in camp["posts"])
     assert client.portal.call(contenido.imagenes.usadas, c.store)[0] == sum(campanas.costo(p) for p in pendientes)
     r = client.post(u, headers=ORIGEN, data={"accion": "aprobar_todas"})
-    assert "2 posts programados" in r.text
+    assert "3 posts programados" in r.text  # con su imagen nueva, el de solo texto volvió a borrador
 
     # Con la imagen hecha, la idea se queda para irla puliendo: "Otra imagen" usa la nueva.
     foto = next(p for p in camp["posts"] if p["formato"] in ("foto", "titular"))
     r = client.get(f"{u}?post={foto['k']}")
-    assert 'name="idea"' in r.text and "sale con tu idea nueva" in r.text
+    assert 'name="idea"' in r.text and "Puedes editarlo antes de generar" in r.text
+    assert '<details class="prompt-img"><summary>Prompt de la imagen</summary>' in r.text  # con imagen: cerrado
     client.post(u, headers=ORIGEN,
                 data={"accion": "generar", "k": str(foto["k"]), "idea": "Laptop en un escritorio de madera"})
     assert campanas.buscar_post(leer(client, c), foto["k"])["idea"] == "Laptop en un escritorio de madera"
@@ -210,6 +252,13 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
     r = client.get(f"{u}?post={foto['k']}")
     assert 'name="con_marca" value="1"> Usar Tu marca como contexto' in r.text
 
+    # Si llega por el editor del post (formulario de antes), el prompt editado también se usa.
+    pid = campanas.buscar_post(leer(client, c), foto["k"])["post_id"]
+    client.post(f"/panel/contenido/post/{pid}", headers=ORIGEN,
+                data={"accion": "otra", "caption": "x", "prompt": "A ceramic mug on a marble table"})
+    assert "A ceramic mug on a marble table" in proveedor.llamadas[-1][0]
+    assert campanas.buscar_post(leer(client, c), foto["k"])["idea"] == "A ceramic mug on a marble table"
+
     # Proponer de nuevo deja los que tienen imagen; una campaña nueva empieza en blanco y la otra sigue ahí.
     con_imagen = {p["k"] for p in leer(client, c)["posts"] if p["post_id"]}
     r = client.post(u, headers=ORIGEN, data=datos_campana(nombre="Otoño 2"))
@@ -219,6 +268,22 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
     camp = leer(client, c)
     assert camp["nombre"] == "Navidad" and not any(p["post_id"] for p in camp["posts"]) and campanas.url_de(camp) != u
     assert len(client.portal.call(campanas.todas_las, c)) == 2
+
+    # Borrar la de Otoño: primero pide confirmar; luego sus posts con imagen salen de Calendario.
+    r = client.get(u)
+    assert f'href="{u}?borrar=1">Borrar campaña</a>' in r.text
+    assert f'href="{u}?borrar=lista" title="Borrar campaña"' in client.get(BASE + "?ver=proxima").text
+    assert f'href="{BASE}">Cancelar' in client.get(f"{u}?borrar=lista").text  # desde la lista, vuelve a la lista
+    r = client.get(f"{u}?borrar=1")
+    assert "¿Borrar la campaña Otoño 2?" in r.text and 'value="borrar"' in r.text
+    assert len(client.portal.call(campanas.todas_las, c)) == 2  # ver la confirmación no borra
+    ids = [p["post_id"] for x in client.portal.call(campanas.todas_las, c) if campanas.url_de(x) == u
+           for p in x["posts"] if p["post_id"]]
+    r = client.post(u, headers=ORIGEN, data={"accion": "borrar"})
+    assert "Borraste la campaña Otoño 2 y se quitaron" in r.text
+    assert [x["nombre"] for x in client.portal.call(campanas.todas_las, c)] == ["Navidad"]
+    assert ids and all(client.portal.call(c.store.post, i)["status"] == "cancelada" for i in ids)
+    assert client.get(u, follow_redirects=False).status_code == 303
 
 
 def test_lo_que_preguntan_tus_clientes(cliente, monkeypatch):
@@ -234,7 +299,7 @@ def test_lo_que_preguntan_tus_clientes(cliente, monkeypatch):
                 "elogios": ["El latte está buenísimo"], "mensajes": 30}
 
     monkeypatch.setattr(campanas.semana, "temas", temas)
-    assert 'name="clientes" value="1" checked' in client.get("/panel/contenido/campanas").text
+    listo(client, c)
     client.post("/panel/contenido/campanas", headers=ORIGEN, data=datos_campana(clientes="1"))
     prompt = llamadas[-1][0]
     assert "<lo_que_preguntan>" in prompt and "Horario de fin de semana (9 personas)" in prompt
@@ -283,7 +348,9 @@ def test_collage_con_fotos_de_tu_marca(cliente, monkeypatch):
         contenido.archivo(c, token).write_bytes(foto(color))
         tokens.append(token)
     client.portal.call(c.store.set, "marca", json.dumps({"fotos": tokens}))
-    assert 'name="f_collage" value="1" checked' in client.get("/panel/contenido/campanas").text
+    listo(client, c)
+    r = client.get(f"{BASE}/nueva?paso=4")
+    assert 'value="collage"' in r.text and 'value="collage" disabled' not in r.text
 
     client.post("/panel/contenido/campanas", headers=ORIGEN,
                 data=datos_campana(f_titular="", f_texto="", f_foto="", f_collage="1"))
@@ -384,8 +451,12 @@ def test_tus_campanas_y_reporte(cliente, monkeypatch):
     assert len(pasadas[0]["posts"]) == 3
     r = client.get(BASE)
     assert 'class="on">Pasadas<small>2</small>' in r.text
-    assert "Otoño" in r.text and "Navidad" in r.text and f'value="{pasadas[0]["id"]}" checked' in r.text
-    assert "Aún sin posts publicados" in r.text and f'href="{BASE}/{pasadas[0]["id"]}">Ver' in r.text
+    assert "Otoño" in r.text and "Navidad" in r.text and f'value="{pasadas[0]["id"]}" form="tus-campanas" aria-label="Incluir en el reporte" checked' in r.text
+    assert f'href="{BASE}/{pasadas[0]["id"]}">Abrir' in r.text and '<div class="camp apagada">' in r.text  # Navidad
+    assert ">12.5%</b><span>Interacción" in r.text and ">200</b><span>Alcance" in r.text  # sus números en miniatura
+    # El filtro de Pasadas: un rango donde no terminó ninguna.
+    r = client.get(f"{BASE}?ver=pasada&periodo=rango&desde=2000-01-01&hasta=2000-02-01")
+    assert "No hay campañas que hayan terminado en esas fechas." in r.text and 'value="rango" checked' in r.text
 
     def filas():
         with usar(c):
@@ -414,9 +485,10 @@ def test_tasa_de_interaccion():
 
 
 def test_clases_sin_choque():
-    """Cada clase de CSS de Campañas se define en un solo bloque (fila-cam es la del formulario)."""
+    """Cada clase de CSS de Campañas se define en un solo bloque."""
     from igbot import panel
-    assert len(re.findall(r"^\.fila-cam\{", panel.ESTILO, re.M)) == 1 and ".hist-cam{" in panel.ESTILO
+    for clase in ("fila-cam", "camp", "modal-cam", "wiz"):
+        assert len(re.findall(rf"^\.{clase}\{{", panel.ESTILO, re.M)) == 1, clase
 
 
 def test_repetir_reparte_con_la_mezcla():
@@ -486,10 +558,7 @@ def test_repetir_lo_que_funciono(cliente, monkeypatch):
 
     monkeypatch.setattr(c.instagram, "media_insights", media_insights, raising=False)
 
-    r = client.get(f"{BASE}/nueva")
-    assert 'name="modo" value="repetir">' in r.text and "Lo que funcionó en tus campañas" in r.text
-    assert "Señal media · 12 posts con resultados" in r.text and "8.0% · 6 posts" in r.text
-    assert 'name="mezcla" value="equilibrado" checked' in r.text and "tus 12 posts anteriores" in r.text
+    listo(client, c)
 
     client.post("/panel/contenido/campanas", headers=ORIGEN,
                 data={**datos_campana(semanas="2", publicar="lun-sab", clientes="1"), "modo": "repetir",
@@ -504,7 +573,7 @@ def test_repetir_lo_que_funciono(cliente, monkeypatch):
     assert sum(1 for p in camp["posts"] if p["responde"]) == 3  # 12 posts: máximo 1 de cada 4
     r = client.get(url(client, c))
     assert "Repite:</span>" in r.text and "Sigue probando" in r.text and 'class="rol-cam rep">Repite' in r.text
-    assert "con lo que mejor le funcionó" in r.text
+    assert 'class="antetitulo"' not in r.text and 'class="bajada"' not in r.text
 
     # Sin resultados suficientes no se puede repetir aunque lo pidan.
     client.portal.call(c.store.set, "campanas_pasadas", "[]")
@@ -602,7 +671,7 @@ def test_varias_campanas(cliente, monkeypatch):
     monkeypatch.setattr(campanas.tools, "now", lambda: hoy)
     client.post(BASE, headers=ORIGEN, data=datos_campana(nombre="Febrero", inicio="2099-01-12"))
     r = client.get(BASE)
-    assert 'class="on">Activas<small>2</small>' in r.text and "día 3 de 14" in r.text and "6 sin imagen" in r.text
+    assert 'class="on">Activas<small>2</small>' in r.text and "día 3 de 14" in r.text and "<b>0 de 6</b>" in r.text
     r = client.get(f"{BASE}?ver=proxima")
     assert "Febrero" in r.text and "Se cruza 7 días con «Invierno»" in r.text and "empieza en 5 días" in r.text
 
@@ -631,18 +700,94 @@ def test_varias_campanas(cliente, monkeypatch):
     assert "Ese día no es de la campaña." in client.post(u, headers=ORIGEN, data={"accion": "mover", "k": str(k),
                                                                                   "dia": "2098-12-01"}).text
 
-    # Contenido › Calendario: el mes con la barra de cada campaña, el cruce y un cuadro por post.
+    # Contenido › Calendario: cada post en su día, con el color de su estado y su campaña.
     client.post(u, headers=ORIGEN, data={"accion": "generar", "k": str(k)})
-    r = client.get("/panel/contenido?mes=2099-01")
-    assert "Enero 2099" in r.text and f'href="{u}" title="Invierno &lt;b&gt;">Invierno &lt;b&gt;</a>' in r.text
-    assert "2 campañas" in r.text and 'class="mini-mes vacia"' in r.text and "?mes=2099-02#mes" in r.text
     post_id = campanas.buscar_post(invierno(), k)["post_id"]
-    assert f'class="mini-mes" href="/panel/contenido/post/{post_id}"><img' in r.text
-    assert "b-activa" in r.text and "b-proxima" in r.text
+    r = client.get("/panel/contenido?mes=2099-01")
+    assert "Enero de 2099" in r.text and 'class="cal-mes"' in r.text and "fecha=2099-02-01" in r.text
+    # Con miniatura, el título arriba y abajo la hora y si es post o historia; la campaña, en el título flotante.
+    assert f'class="ev e-borrador con-img" href="/panel/contenido/post/{post_id}"' in r.text
+    assert f'href="{u}?post=' in r.text and " · Invierno &lt;b&gt; · Borrador" in r.text  # las propuestas sin imagen
+    assert '<span class="m-post">Post</span></small>' in r.text
+    assert "Próximos posts" not in r.text and "Ya publicados" not in r.text  # sin listas debajo
+    r = client.get("/panel/contenido?vista=semana&fecha=2099-01-05")
+    assert "5 al 11 de enero de 2099" in r.text and 'class="cal-horas" style="--dias:7"' in r.text
+    assert " · Invierno &lt;b&gt; · Borrador" in r.text
+    r = client.get("/panel/contenido?vista=dia&fecha=2099-01-05&ver=lista")
+    assert "Lunes 5 de enero" in r.text and "Borradores" in r.text and "Próximos posts" not in r.text
+    r = client.get("/panel/contenido?fecha=2099-01-05&estado=publicado")
+    assert 'e-borrador" href' not in r.text and 'class="ev e-publicado con-img" href="https://www.instagram.com/p/DESDEAPP/"' in r.text
 
-    # En el editor del post se sabe de qué campaña viene.
+    # Descargar: el periodo que se ve, en PDF.
+    r = client.get("/panel/contenido?vista=semana&fecha=2099-01-05")
+    assert 'href="/panel/contenido/descargar?vista=semana&amp;fecha=2099-01-05"' in r.text
+    r = client.get("/panel/contenido/descargar?vista=semana&fecha=2099-01-05")
+    assert r.content.startswith(b"%PDF") and r.headers["content-type"] == "application/pdf"
+    assert 'filename="calendario-2099-01-05-al-2099-01-11.pdf"' in r.headers["content-disposition"]
+    r = client.get("/panel/contenido/descargar?vista=mes&fecha=2099-01-17")
+    assert 'filename="calendario-2099-01-01-al-2099-01-31.pdf"' in r.headers["content-disposition"]
+    r = client.get("/panel/contenido/descargar?vista=dia&fecha=2099-01-05&estado=publicado")
+    assert 'filename="calendario-2099-01-05.pdf"' in r.headers["content-disposition"] and r.content.startswith(b"%PDF")
+
+    # Arrastrar en el calendario: el post con imagen pasa a otro día con su misma hora, y en Semana/Día a otra hora.
+    assert f'draggable="true" data-mover="p:{post_id}"' in client.get("/panel/contenido?mes=2099-01").text
+    assert 'DESDEAPP/" target="_blank" rel="noopener" draggable' not in r.text  # lo publicado no se arrastra
+    antes = campanas.buscar_post(invierno(), k)
+    mover = "/panel/contenido/mover"
+    r = client.post(mover, headers=ORIGEN, follow_redirects=False,
+                    data={"ref": f"p:{post_id}", "dia": "2099-01-20", "suave": "1"})
+    assert r.status_code == 204
     p = campanas.buscar_post(invierno(), k)
-    assert f"{campanas.tema_de(p['tipo'])[0]} · {campanas.FORMATOS[p['formato']][0]}</p>" in client.get(
-        f"/panel/contenido/post/{post_id}").text
+    assert p["dia"] == "2099-01-20" and p["hora"] == antes["hora"]
+    post = client.portal.call(c.store.post, post_id)
+    assert post["publish_at"] == cuando_sale(client, c, "2099-01-20", antes["hora"])
+    r = client.post(mover, headers=ORIGEN, follow_redirects=False,
+                    data={"ref": f"p:{post_id}", "dia": "2099-01-21", "h": "8", "suave": "1"})
+    assert r.status_code == 204 and campanas.buscar_post(invierno(), k)["hora"] == "08" + antes["hora"][2:]
+    # Una propuesta sin imagen se mueve en su campaña.
+    otra = next(x for x in invierno()["posts"] if not x.get("post_id"))
+    r = client.post(mover, headers=ORIGEN, follow_redirects=False,
+                    data={"ref": f"c:{invierno()['id']}:{otra['k']}", "dia": "2099-01-22", "h": "20", "suave": "1"})
+    assert r.status_code == 204 and campanas.buscar_post(invierno(), otra["k"])["dia"] == "2099-01-22"
+    # A un día que ya pasó no: vuelve al calendario y dice por qué (con un código, no con el texto).
+    r = client.post(mover, headers=ORIGEN, follow_redirects=False,
+                    data={"ref": f"p:{post_id}", "dia": "2020-01-01", "suave": "1", "volver": "/panel/contenido?vista=semana#cal"})
+    assert r.headers["location"] == "/panel/contenido?vista=semana&error=pasado#cal"
+    assert "Elige un día y una hora que no hayan pasado." in client.get(r.headers["location"]).text
+    r = client.post(mover, headers=ORIGEN, follow_redirects=False,
+                    data={"ref": "p:999", "dia": "2099-01-20", "volver": "https://otro.sitio/"})
+    assert r.headers["location"] == "/panel/contenido?error=no#cal"  # nunca a otro sitio
+    assert client.post(mover, data={"ref": f"p:{post_id}", "dia": "2099-01-25"}).status_code == 403  # sin Origin
+    client.post(mover, headers=ORIGEN, data={"ref": f"p:{post_id}", "dia": "2099-01-05", "h": antes["hora"][:2]})
+
+    # El editor del post abre su ventana en la campaña de la que viene.
+    p = campanas.buscar_post(invierno(), k)
+    r = client.get(f"/panel/contenido/post/{post_id}")
+    assert 'class="modal-cam"' in r.text and f'?post={p["k"]}' in str(r.url)
+    assert 'class="etq-cam' not in r.text.split('id="detalle"')[1]  # sin etiquetas de tema ni formato
     # Un id que no existe vuelve a la lista.
     assert client.get(f"{BASE}/123", follow_redirects=False).headers["location"] == BASE
+
+
+def test_la_campana_se_escribe_con_la_empresa_la_marca_y_sus_parametros(cliente, monkeypatch):
+    client, c, *_ = cliente
+    llamadas = []
+    import app as bot
+    monkeypatch.setattr(bot.agent, "run_claude", claude_de_campana(llamadas))
+
+    async def empresa_texto(cuenta):
+        return "- Descripción: Café de especialidad en Puebla\n- Latte de calabaza: desde 75 MXN"
+    monkeypatch.setattr(contenido, "empresa_texto", empresa_texto)
+    client.portal.call(c.store.set, "marca", json.dumps({"estilo": "calido", "acento": "#E8590C"}))
+    camp = {**campanas.del_form(datos_campana()), "id": "x", "creada": 1, "posts": [],
+            "objetivo": "Vender más <lattes>", "producto": "Latte de calabaza", "visual": "Personas",
+            "estilo": "Poco texto"}
+    client.portal.call(campanas.proponer, c, camp)
+    prompt, sistema = llamadas[-1]
+    negocio = prompt.split("</negocio>")[0]
+    assert negocio.index("Perfil de la empresa") < negocio.index("Lo que sabe su asistente")
+    assert "- Descripción: Café de especialidad en Puebla" in negocio and "desde 75 MXN" in negocio
+    assert "nunca como objetos de arcilla" in prompt and "\nEstilo visual: Artesanal." in prompt and "acento #E8590C" in prompt
+    assert "<objetivo>Vender más &lt;lattes&gt;</objetivo>" in prompt and "<producto>Latte de calabaza</producto>" in prompt
+    assert "<lo_que_se_ve>Personas</lo_que_se_ve>" in prompt and "<estilo_de_campana>Poco texto</estilo_de_campana>" in prompt
+    assert "de 120 a 180 palabras" in sistema and "nunca algo genérico del ramo" in sistema
