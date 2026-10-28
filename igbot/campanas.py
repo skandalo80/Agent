@@ -1689,7 +1689,6 @@ async def pagina_nueva(c: Cuenta, aviso: str = "", form: dict | None = None) -> 
 
 
 PESTANAS = {"activa": "Activas", "proxima": "Próximas", "pasada": "Pasadas"}
-COLOR = {"activa": "b-activa", "proxima": "b-proxima", "pasada": "b-pasada"}
 
 
 async def numeros_de(c: Cuenta, camp: dict) -> tuple[int, int, float | None]:
@@ -1743,7 +1742,7 @@ async def tarjeta_campana(c: Cuenta, camp: dict, cual: str, hoy: date, marcar: b
     tacho = (f'<a class="borrar{" con-sel" if casilla else ""}" href="{url_de(camp)}?borrar=lista"'
               f' title="Borrar campaña" aria-label="Borrar campaña">{PAPELERA}</a>' if completa else "")
     return (f'<div class="camp{"" if publicados or cual != "pasada" else " apagada"}">'
-            f'<span class="barra-c {COLOR[cual]}"></span>{casilla}{tacho}'
+            f'{casilla}{tacho}'
             f'<div><h3>{escape(camp["nombre"])}</h3><span class="f">{fechas}</span></div>'
             + (f'<div><span class="obj">{escape(obj)}</span></div>' if obj else "")
             + '<div class="mets">' + "".join(f"<div><b>{v}</b><span>{t}</span></div>" for t, v in mets) + "</div>"
