@@ -142,3 +142,34 @@ def test_barra_del_periodo_y_descarga(cliente, monkeypatch):  # noqa: F811
     assert r.status_code == 200 and "resultados-conversaciones-" in r.headers["content-disposition"]
     html = client.get("/panel/resultados?ver=conversaciones").text
     assert "Mensajes: se actualizan cada 10 minutos" in html and "Seguidores vs." not in html
+
+
+def test_publicaciones_con_numeros(cliente, monkeypatch):  # noqa: F811
+    import time
+
+    from igbot import informe
+    client, c = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 4)
+    numeros = {"m1": {"reach": 200, "views": 400, "likes": 10, "comments": 2, "saved": 4, "shares": 4},
+               "m2": {"reach": 100, "views": 150, "likes": 3, "comments": 0, "saved": 1, "shares": 0}}
+
+    async def insights(c, media_id):
+        return numeros.get(media_id)
+
+    monkeypatch.setattr(informe, "numeros", insights)
+    monkeypatch.setattr(informe, "_insights", {})
+
+    async def publicar():
+        for n, (texto, media) in enumerate((("Post flojo", "m2"), ("Post bueno", "m1"), ("Post nuevo", ""))):
+            post = await c.store.add_post("panel", [], texto, time.time() - 3600 * (n + 1))
+            link = f"https://www.instagram.com/p/{n}/"
+            await c.store.set_post(post, "publicada", permalink=link)
+            if media:
+                await c.store.set(f"media_de:{link}", media)
+
+    client.portal.call(publicar)
+    html = client.get("/panel/resultados").text
+    assert "3 publicadas" in html and "Tu mejor post" in html
+    assert html.index("Post bueno") < html.index("Post flojo") < html.index("Post nuevo")  # de mejor a peor
+    assert "10%" in html and "4%" in html and "Interacción promedio: 7.0%" in html
+    assert html.count("Instagram aún no da sus números") == 1
