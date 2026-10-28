@@ -53,8 +53,7 @@ MAX_PREGUNTAS_DIA = 30
 MAX_CORREOS_DIA = 3
 MAX_TURNOS = 16
 MAX_MENSAJE = 500
-SALUDO = ("Hola, soy Skandi. Pregúntame cómo usar el panel, tu asistente o tus campañas."
-          " Si prefieres hablar con alguien del equipo, dímelo.")
+SALUDO = "Hola, soy Skandi. ¿Cómo te puedo ayudar?"
 
 # Por cuenta (su slug; "" la principal): [[rol, texto], ...] y un aviso que se muestra una vez.
 _charlas: dict[str, list[list[str]]] = {}

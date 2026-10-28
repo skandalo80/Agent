@@ -61,6 +61,7 @@ def test_skandi_contesta_y_pasa_a_soporte(monkeypatch, tmp_path):
 
         # El botón sale en las páginas con menú, con la ventana cerrada (abre con #skandi).
         r = client.get("/panel/resultados")
+        assert "Hola, soy Skandi. ¿Cómo te puedo ayudar?" in r.text
         assert 'class="sk-boton" href="#skandi"' in r.text and 'id="skandi"' in r.text
         campos_con_nombre(r.text)
 
