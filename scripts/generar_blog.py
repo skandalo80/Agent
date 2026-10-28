@@ -186,7 +186,7 @@ PIE = """</main>
     </div>
   </div>
 </footer>
-<script src="/sitio.js?v=2026-10-28c"></script>
+<script src="/sitio.js?v=2026-10-28d"></script>
 </body>
 </html>
 """

@@ -1,6 +1,6 @@
 // Visitas sin cookies (Cloudflare Web Analytics; ver /privacidad). Sin token no se carga nada.
 // El token no es secreto: queda a la vista en la página, como en cualquier sitio que lo usa.
-var CF_TOKEN = '';
+var CF_TOKEN = 'd38f0c5816d940d79a84401453be0a6f';
 if (CF_TOKEN) {
   var beacon = document.createElement('script');
   beacon.defer = true;
