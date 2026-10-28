@@ -448,27 +448,37 @@ async def generar(c: Cuenta, objetivo: str = "", tema: str = "", fotos: list[str
 
 
 def generando(c: Cuenta, trabajo, volver: str, mensaje: str) -> StreamingResponse:
-    """Sin JavaScript: primero la página con "generando…" y, al terminar, el salto al editor."""
+    """Sin JavaScript: primero la página con "generando…" y, al terminar, el salto al editor. Un doble
+    clic o recargar no lo repite (panel.empezar_trabajo)."""
+    clave = f"{mensaje} {volver}"
+    libre = panel.empezar_trabajo(c, clave)
 
     async def partes():
-        yield (panel.PRINCIPIO + await panel.menu_de(c, "contenido")
-               + '<main><div class="contenedor"><div class="tarjeta" id="generando"><div class="generando">'
-               '<div class="escribiendo"><span></span><span></span><span></span></div>'
-               f"<div><h2>{escape(mensaje)}</h2>"
-               '<p class="ayuda">Tarda alrededor de medio minuto. No cierres esta página.</p></div></div></div>')
         try:
-            post_id = await trabajo()
-        except imagenes.ErrorImagen as e:
-            yield ('<style>#generando{display:none}</style>'
-                   f'<div class="aviso">{escape(str(e))}</div>'
-                   f'<div class="acciones"><a class="boton" href="{volver}">Volver</a></div></div></main>' + panel.FINAL)
-            return
-        except Exception:
-            log.exception("No se pudo generar el post de %s", c.slug)
-            yield ('<style>#generando{display:none}</style>'
-                   '<div class="aviso">No se pudo generar esta vez. No se usó tu cupo; intenta de nuevo en un momento.</div>'
-                   f'<div class="acciones"><a class="boton" href="{volver}">Volver</a></div></div></main>' + panel.FINAL)
-            return
+            menu = panel.PRINCIPIO + await panel.menu_de(c, "contenido") + '<main><div class="contenedor">'
+            if not libre:
+                yield menu + panel.ya_en_curso(volver)
+                return
+            yield (menu + '<div class="tarjeta" id="generando"><div class="generando">'
+                   '<div class="escribiendo"><span></span><span></span><span></span></div>'
+                   f"<div><h2>{escape(mensaje)}</h2>"
+                   '<p class="ayuda">Tarda alrededor de medio minuto. No cierres esta página.</p></div></div></div>')
+            try:
+                post_id = await trabajo()
+            except imagenes.ErrorImagen as e:
+                yield ('<style>#generando{display:none}</style>'
+                       f'<div class="aviso">{escape(str(e))}</div>'
+                       f'<div class="acciones"><a class="boton" href="{volver}">Volver</a></div></div></main>' + panel.FINAL)
+                return
+            except Exception:
+                log.exception("No se pudo generar el post de %s", c.slug)
+                yield ('<style>#generando{display:none}</style>'
+                       '<div class="aviso">No se pudo generar esta vez. No se usó tu cupo; intenta de nuevo en un momento.</div>'
+                       f'<div class="acciones"><a class="boton" href="{volver}">Volver</a></div></div></main>' + panel.FINAL)
+                return
+        finally:
+            if libre:
+                panel.terminar_trabajo(c, clave)
         destino = f"/panel/contenido/post/{post_id}"
         yield ('<style>#generando{display:none}</style>'
                f'<meta http-equiv="refresh" content="0;url={destino}">'
@@ -712,7 +722,10 @@ async def editor(c: Cuenta, post_id: int, aviso: str = "", confirmar: bool = Fal
         if not editable:
             derecha = (f'<div class="campo"><label>Texto que se publica</label>'
                        f'<p style="white-space:pre-wrap;margin:0">{escape(post["caption"])}</p></div>'
-                       + (f'<div class="aviso">Instagram respondió: {escape(post["error"][:300])}</div>' if post["error"] else ""))
+                       + (f'<div class="aviso">Instagram no aceptó esta publicación. Revisa la imagen y el texto, y vuelve a'
+                          ' programarla; si se repite, pregúntale a Ayuda.'
+                          f'<details><summary>Detalle técnico</summary>{escape(post["error"][:300])}</details></div>'
+                          if post["error"] else ""))
             izquierda = imagen
             botones = ((f'<a class="boton chico" href="{escape(post["permalink"])}" target="_blank" rel="noopener">Ver en Instagram</a>'
                         if post["permalink"] else "")

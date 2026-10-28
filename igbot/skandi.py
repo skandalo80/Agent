@@ -67,7 +67,7 @@ ICONO = ('<svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor" ar
          '<circle cx="16" cy="11.5" r="1.3" fill="var(--tinta,#141518)"/></svg>')
 
 CSS = """
-.sk-boton{position:fixed;right:1.5rem;bottom:1.5rem;z-index:15;width:3.75rem;height:3.75rem;display:grid;place-items:center;background:var(--acento);color:#F5F5F4;border-radius:50%;text-decoration:none;box-shadow:0 10px 24px rgba(12,11,16,.45),inset 2px 2px 0 rgba(255,255,255,.25),inset -3px -4px 8px rgba(0,0,0,.12);transition:transform .15s}
+.sk-boton{position:fixed;right:calc(1.5rem + env(safe-area-inset-right,0px));bottom:calc(1.5rem + env(safe-area-inset-bottom,0px));z-index:15;width:3.75rem;height:3.75rem;display:grid;place-items:center;background:var(--acento);color:#F5F5F4;border-radius:50%;text-decoration:none;box-shadow:0 10px 24px rgba(12,11,16,.45),inset 2px 2px 0 rgba(255,255,255,.25),inset -3px -4px 8px rgba(0,0,0,.12);transition:transform .15s}
 .sk-boton:hover{transform:scale(1.06)}
 .skandi{display:none;position:fixed;right:1.25rem;bottom:1.25rem;z-index:50;width:min(23rem,calc(100vw - 2rem));height:min(34rem,calc(100dvh - 2.5rem));flex-direction:column;background:#1F2024;color:#F5F5F4;border-radius:1.6rem;box-shadow:10px 14px 28px rgba(12,11,16,.55),inset 2px 2px 0 rgba(255,255,255,.07);overflow:hidden}
 html:not(.js) .skandi:target,.skandi.abierta{display:flex}
@@ -89,8 +89,8 @@ html:not(.js) .skandi:target~.sk-boton,.skandi.abierta~.sk-boton{display:none}
 .sk-escribir input[type=text]:focus{outline:2px solid var(--acento);outline-offset:1px;border-color:transparent}
 .sk-escribir button{font:inherit;font-weight:700;background:var(--acento);color:var(--tinta);border:0;border-radius:.9rem;padding:.6rem .95rem;cursor:pointer}
 .sk-escribir button:disabled{opacity:.6;cursor:wait}
-@media(max-width:600px){.sk-boton{right:1rem;bottom:1rem;width:3.4rem;height:3.4rem}
-.skandi{right:.5rem;bottom:.5rem;width:calc(100vw - 1rem);height:calc(100dvh - 1rem)}}
+@media(max-width:600px){.sk-boton{right:calc(1rem + env(safe-area-inset-right,0px));bottom:calc(1rem + env(safe-area-inset-bottom,0px));width:3.4rem;height:3.4rem}
+.skandi{right:.5rem;bottom:calc(.5rem + env(safe-area-inset-bottom,0px));width:calc(100vw - 1rem);height:calc(100dvh - 1rem - env(safe-area-inset-bottom,0px))}}
 @media print{.sk-boton,.skandi{display:none!important}}
 """
 

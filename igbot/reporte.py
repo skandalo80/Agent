@@ -37,11 +37,11 @@ async def topics(store: Store, since: float, until: float) -> str:
     rows = await store.client_messages(since, until)
     if not rows:
         return ""
-    from .agent import run_claude  # import tardío: agent importa el SDK
+    from .agent import dato, run_claude  # import tardío: agent importa el SDK
 
     people: dict[str, int] = {}
     listing = "\n".join(
-        f"- (persona {people.setdefault(u, len(people) + 1)}) {t[:200]}" for u, t in reversed(rows)
+        f"- (persona {people.setdefault(u, len(people) + 1)}) {dato(t[:200])}" for u, t in reversed(rows)
     )
     try:
         return await run_claude(f"<mensajes>\n{listing}\n</mensajes>", TOPICS_SYSTEM, max_turns=1,
