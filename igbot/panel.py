@@ -1323,6 +1323,13 @@ COMUN = AJUSTES + """
 .avance-pasos{position:absolute;left:1.3rem;right:1.3rem;bottom:.45rem;height:.3rem;border-radius:999px;background:#2E3035;overflow:hidden;box-shadow:inset 2px 2px 4px rgba(0,0,0,.4)}
 .avance-pasos i{display:block;height:100%;border-radius:999px;background:var(--neon)}
 .wiz-pasos .sep{display:none}
+/* Cada paso de la barra: mismo relleno, círculo y letras en las cuatro páginas (tamaños en ajustes.css). */
+:is(.as-pasos,.riel,.wiz-pasos) :is(.as-paso,.paso,a,.wiz-paso){display:flex;align-items:center;align-self:flex-start;gap:var(--paso-hueco);padding:var(--paso-pad);line-height:1.2;color:var(--t-color);font-size:var(--t-paso);font-weight:400}
+:is(.as-paso.on,.riel .paso.on,.wiz-pasos a.actual,.wiz-pasos .wiz-paso.actual){background:var(--paso-activo)}
+:is(.as-paso:not(.on),.riel .paso:not(.on),.wiz-pasos a:not(.actual),.wiz-pasos .wiz-paso:not(.actual)):hover{background:rgba(255,255,255,.04)}
+:is(.as-paso b,.riel .paso b,.wiz-pasos a>span,.wiz-pasos .wiz-paso){font-size:var(--t-paso);font-weight:var(--peso-paso);color:var(--t-color);line-height:1.2}
+:is(.as-pasos,.riel,.wiz-pasos) :is(.as-paso,.paso,a,.wiz-paso) small{display:block;margin:.1rem 0 0;font-size:var(--t-paso-sub);font-weight:400;color:var(--texto2);line-height:1.3}
+:is(.as-pasos .as-n,.riel .paso .n,.wiz-pasos a>b,.wiz-pasos .wiz-paso>b){width:var(--paso-circulo);height:var(--paso-circulo);font-size:var(--t-paso-num);font-weight:700}
 @media(max-width:900px){:is(.as-resumen,.wiz-resumen,.resumen-tarjetas){grid-template-columns:1fr}.avance-pasos{display:none}}
 """
 
