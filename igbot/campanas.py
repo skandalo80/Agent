@@ -1547,7 +1547,6 @@ async def barra(c: Cuenta, camp: dict) -> str:
                 if sin == 1 else "")
                + (f'<button class="boton chico secundario" name="accion" value="aprobar_todas">Aprobar {borradores}'
                   f' con imagen</button>' if borradores else ""))
-    botones += (f'<a class="boton chico secundario" href="{url_de(camp)}/propuesta">Descargar planeación (PDF)</a>')
     return (f'<form method="post" action="{url_de(camp)}" class="barra-cam">'
             f"<p><b>{cuenta}</b> · {len(posts) - sin} con imagen · {aprobados} aprobado{'s' if aprobados != 1 else ''} · tu plan:"
             f" {incluidas + extra} de {c.imagenes_mes} imágenes este mes</p>"
@@ -1620,20 +1619,22 @@ async def pagina_campana(c: Cuenta, camp: dict, aviso: str = "", sel: str = "", 
         p = buscar_post(camp, sel) if sel else None
         modal = await detalle(c, camp, p, quedan_ia) if p else ""
         await guardar(c, camp)  # por si se descartó algún post en Calendario
+    u = url_de(camp)
+    descargas = (f'<a href="{u}/propuesta">Planeación (PDF)</a>'
+                 + (f'<a href="{u}/brief">Brief (PDF)</a>' if camp.get("brief") else ""))
     botones = ('<span class="botones-cab">'
                f'<a class="boton secundario ajuste" href="{BASE}/nueva?editar={camp["id"]}">Editar estrategia</a>'
-               f'<a class="boton secundario ajuste" href="{url_de(camp)}/propuesta">↓ Descargar planeación</a>'
-               + (f'<a class="boton secundario ajuste" href="{url_de(camp)}/brief">↓ Descargar brief</a>'
-                  if camp.get("brief") else "")
-               + f'<a class="boton secundario ajuste" href="{url_de(camp)}?borrar=1">Borrar campaña</a>'
-               + boton_todas(estado(camp, hoy)) + "</span>")
+               f'<details class="menu-desc"><summary class="boton secundario ajuste">↓ Descargar</summary>'
+               f'<div>{descargas}</div></details>'
+               f'<a class="boton ajuste peligro" href="{u}?borrar=1">Borrar campaña</a></span>')
+    volver = f'<a class="volver-cam" href="{BASE}?ver={estado(camp, hoy)}">‹ Volver a campañas</a>'
     return panel.pagina(
         panel.cabecera(salir=True, menu="contenido", cuenta=c, sub="campanas", perfil=await panel.usuario(c),
                        foto=await panel.foto_perfil(c))
         + cabeza(botones, donde=escape(camp["nombre"]))
         + '<div class="oscuro-pag"><main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
-        + await panel.pendiente(c, "campanas") + cuerpo + "</div></main>" + modal + "</div>")
+        + await panel.pendiente(c, "campanas") + volver + cuerpo + "</div></main>" + modal + "</div>")
 
 
 async def pagina_nueva(c: Cuenta, aviso: str = "", form: dict | None = None) -> HTMLResponse:

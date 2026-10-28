@@ -321,7 +321,7 @@ def test_el_brief_se_guarda_y_se_descarga(cliente, monkeypatch):
     u = campanas.url_de(camp)
     r = client.get(u)
     assert "Brief: Idea 3" in r.text and "Nadie explica de dónde viene su café" in r.text
-    assert f'href="{u}/brief">↓ Descargar brief' in r.text
+    assert f'href="{u}/brief">Brief (PDF)' in r.text
     r = client.get(f"{u}/brief")
     assert r.headers["content-type"] == "application/pdf" and r.content.startswith(b"%PDF")
     assert 'filename="brief-oto' in r.headers["content-disposition"]
