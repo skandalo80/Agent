@@ -391,7 +391,7 @@ async def pagina_marca(c: Cuenta, paso: str, marca: dict | None = None, aviso: s
     # El aviso de lo que falta va dentro del paso, para que los pasos queden a la altura de las demás páginas.
     falta = await panel.pendiente(c, "marca")
     cuerpo = f'<div class="wiz mrc">{menu_pasos(actual, hechos_)}<div class="wiz-main">{falta}{contenido}</div></div>'
-    # Tu marca es de la cuenta (menú de perfil, abajo), no una sección de Contenido.
+    # Tu marca es de la cuenta (Configuración, abajo en el menú), no una sección de Contenido.
     return panel.pagina(
         await panel.menu_de(c, "cuenta", sub="marca")
         + panel.encabezado("Tu cuenta · Tu marca")

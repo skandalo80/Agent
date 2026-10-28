@@ -1,6 +1,6 @@
 """Perfil de empresa: lo que el asistente y el contenido saben del negocio.
 
-console.skandar.online/panel/empresa, desde el menú de perfil (abajo a la izquierda).
+console.skandar.online/panel/empresa, desde Configuración (abajo en el menú lateral).
 Es un proceso corto de cinco pasos y un resumen: sencillo por fuera, con los datos
 bien separados por dentro. Cada paso se guarda al pasar al siguiente (o al saltar a
 otro desde el riel de la izquierda), así que no se pierde nada a medias.

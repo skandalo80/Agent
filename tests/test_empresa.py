@@ -35,7 +35,7 @@ def test_pasos_guardan_y_el_asistente_usa_el_perfil(cliente):
     assert "¿Cómo es tu empresa?" not in r.text and 'class="leyenda-usos"' in r.text
     # Tus clientes va al final: el riel lo numera 5 y el paso 1 sigue a productos.
     assert "Siguiente: productos y servicios" in r.text and r.text.index("Tus clientes") > r.text.index("Preguntas frecuentes")
-    assert 'href="/panel/empresa" class="on"' in r.text  # el menú de perfil la marca
+    assert 'class="lat-item on" href="/panel/empresa" title="Tu empresa"' in r.text  # Configuración la marca
     campos_con_nombre(r.text)
     assert client.portal.call(empresa.de, c) == {}
     assert not client.portal.call(empresa.empresa_lista, c)
