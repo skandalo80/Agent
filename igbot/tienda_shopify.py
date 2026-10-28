@@ -7,15 +7,17 @@ cliente autoriza a la app de Skandar en su tienda (OAuth de Shopify) y con ese p
    ese momento qué hay de un producto (variantes, cantidad y sucursales).
 2. Enlaces con el código del chat: cada enlace a la tienda que manda el asistente lleva ?sk=<código>
    (etiquetar), así un pedido hecho desde ese enlace se sabe de qué chat vino.
-3. Ventas: cada 15 minutos se leen los pedidos nuevos (sincronizar). La página con la que la persona
-   entró a la tienda dice de qué chat (sk) y de qué anuncio (utm_content={{ad.id}} en Ads Manager)
-   vino; el pedido se guarda en la tabla `ventas` con su monto y sale en Conversaciones.
+3. Ventas: al conectar, la tienda queda suscrita a los avisos de pedidos (orders/create y
+   orders/cancelled): Shopify nos manda cada pedido al momento, sin procesos que pregunten cada rato.
+   La página con la que la persona entró a la tienda (landing_site) dice de qué chat (sk) y de qué
+   anuncio (utm_content={{ad.id}} en Ads Manager) vino; el pedido se guarda en la tabla `ventas` con su
+   monto y sale en Conversaciones. Si lo cancelan, se quita.
 
 Permisos: read_products, read_inventory, read_locations y read_orders. No se leen datos del comprador
 (nombre, correo, dirección): solo montos, productos y de dónde llegó.
 
 kv "shopify_conexion": {"tienda": "x.myshopify.com", "token", "nombre", "dominios", "fecha",
-"pedidos_desde", "leido", "sin_permiso"}. Sin SHOPIFY_API_KEY en .env nada de esto sale en el panel.
+"sin_ventas"}. Sin SHOPIFY_API_KEY en .env nada de esto sale en el panel.
 """
 import base64
 import hashlib
@@ -25,7 +27,7 @@ import logging
 import re
 import secrets
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 from html import escape
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
@@ -48,9 +50,6 @@ TIENDA = re.compile(r"^[a-z0-9][a-z0-9-]{0,60}\.myshopify\.com$")
 STATE_COOKIE = "shopify_state"
 STATE_TTL = 900
 PARAMETRO = "sk"  # el del código del chat en los enlaces
-CADA = 900  # segundos entre lecturas de pedidos
-DIAS_ATRAS = 7  # al conectar, los pedidos de la última semana
-MAX_PEDIDOS = 100  # por lectura
 _transporte: httpx.AsyncBaseTransport | None = None  # las pruebas ponen uno falso
 
 
@@ -191,8 +190,10 @@ async def pagina(c: Cuenta, aviso: str = "", error: str = ""):
                   f" · desde el {desde}</p>"
                   "<ul class=\"lista-shopify\"><li>Tu asistente revisa tu inventario cuando le preguntan si hay algo.</li>"
                   "<li>Los enlaces a tu tienda que manda tu asistente llevan el código de su chat.</li>"
-                  "<li>Leemos tus pedidos cada 15 minutos: si vienen de un chat o de un anuncio, salen en"
+                  "<li>Cuando alguien compra desde un chat o un anuncio, Shopify nos avisa y la venta sale en"
                   " Conversaciones con su monto.</li></ul>"
+                  + ('<p class="aviso">No pudimos activar el aviso de ventas. Desconecta y vuelve a conectar tu tienda.</p>'
+                     if con.get("sin_ventas") else "") +
                   '<p class="ayuda">Para saber de qué anuncio vino cada pedido, en Ads Manager, en cada anuncio que'
                   ' lleva a tu tienda, escribe en "Parámetros de URL": <code>utm_source=meta&amp;utm_content={{ad.id}}</code></p>'
                   '<form method="post" action="/panel/shopify/desconectar" class="acciones">'
@@ -204,11 +205,16 @@ async def pagina(c: Cuenta, aviso: str = "", error: str = ""):
                   " leemos: no cambiamos nada de tu tienda ni vemos los datos de tus compradores.</p>"
                   + (f'<p class="aviso">{escape(error)}</p>' if error else "")
                   + '<form method="post" action="/panel/shopify/conectar">'
-                  '<label for="tienda">La dirección de tu tienda</label>'
+                  + (f'<details class="otra-tienda"><summary>Tu tienda: {escape(sitio_web)} · cambiar</summary>'
+                     if sitio_web and not error else "")
+                  + '<label for="tienda">La dirección de tu tienda</label>'
                   '<p class="ayuda">Tu dominio (mitienda.com) o tu dirección .myshopify.com.</p>'
                   f'<input id="tienda" name="tienda" required maxlength="200" value="{escape(sitio_web)}"'
                   ' placeholder="mitienda.com" autocomplete="off">'
-                  '<div class="acciones"><button class="boton">Conectar tu Shopify</button></div></form></div>')
+                  + ("</details>" if sitio_web and not error else "")
+                  + '<div class="acciones"><button class="boton">Conectar tu Shopify</button></div>'
+                  '<p class="ayuda">Te llevamos a tu Shopify para que des el permiso; al aceptar vuelves aquí.</p>'
+                  "</form></div>")
     aviso_html = f'<div class="aviso">{escape(AVISOS[aviso])}</div>' if aviso in AVISOS else ""
     return panel.pagina(
         await panel.menu_de(c, "cuenta", sub="conexion")
@@ -251,9 +257,13 @@ async def callback(request: Request):
         return _volver("fallo")
     try:
         token, permisos = await cambiar_codigo(tienda, p["code"])
-        con = {"tienda": tienda, "token": token, "permisos": permisos, "fecha": int(time.time()),
-               "pedidos_desde": time.time() - DIAS_ATRAS * 86400}
+        con = {"tienda": tienda, "token": token, "permisos": permisos, "fecha": int(time.time())}
         shop = (await consultar(con, DATOS_TIENDA)).get("shop") or {}
+        try:
+            con["sin_ventas"] = not await suscribir(con)
+        except Exception:
+            log.exception("No se pudo suscribir a los pedidos de %s", tienda)
+            con["sin_ventas"] = True
     except Exception:
         log.exception("No se pudo conectar la tienda %s", tienda)
         return _volver("fallo")
@@ -286,20 +296,27 @@ async def desconectar(request: Request):
 
 @webhooks.post("/webhooks/{tema}")
 async def aviso(request: Request, tema: str):
-    """customers-data-request, customers-redact y shop-redact. No guardamos datos de compradores; al
+    """Los pedidos (orders-create, orders-cancelled) y los avisos obligatorios de privacidad
+    (customers-data-request, customers-redact y shop-redact). No guardamos datos de compradores; al
     borrar la tienda (shop-redact, 48 h después de quitar la app) se olvida su conexión."""
     cuerpo = await request.body()
     firma = request.headers.get("x-shopify-hmac-sha256", "")
     esperada = base64.b64encode(hmac.new(config.SHOPIFY_API_SECRET.encode(), cuerpo, hashlib.sha256).digest()).decode()
     if not enabled() or not hmac.compare_digest(firma, esperada):
         raise HTTPException(status_code=401)
-    if tema == "shop-redact":
-        tienda = str(json.loads(cuerpo or b"{}").get("shop_domain", "")).lower()
-        for c in cuentas():
-            with usar(c):
-                if (await conexion(c)).get("tienda") == tienda:
-                    await guardar(c, {})
-                    log.info("Shopify pidió borrar la tienda %s: se olvidó su conexión", tienda)
+    datos = json.loads(cuerpo or b"{}")
+    tienda = str(request.headers.get("x-shopify-shop-domain") or datos.get("shop_domain") or "").lower()
+    for c in cuentas():
+        with usar(c):
+            if not tienda or (await conexion(c)).get("tienda") != tienda:
+                continue
+            if tema == "shop-redact":
+                await guardar(c, {})
+                log.info("Shopify pidió borrar la tienda %s: se olvidó su conexión", tienda)
+            elif tema == "orders-create" and await pedido_nuevo(c, datos):
+                log.info("Tienda %s: venta nueva de un chat o un anuncio", tienda)
+            elif tema == "orders-cancelled":
+                await c.store.borrar_venta("shopify", str(datos.get("id", "")))
     return Response(status_code=200)
 
 
@@ -394,14 +411,27 @@ async def etiquetar(c: Cuenta, user_id: str, texto: str) -> str:
     return "".join(piezas) + texto[ultimo:]
 
 
-# --- 3. ventas: los pedidos nuevos ---
+# --- 3. ventas: Shopify nos avisa de cada pedido ---
 
-PEDIDOS = """query($q: String!, $n: Int!) { orders(first: $n, query: $q, sortKey: CREATED_AT) { nodes {
-  id name createdAt cancelledAt
-  currentTotalPriceSet { shopMoney { amount currencyCode } }
-  lineItems(first: 10) { nodes { title quantity } }
-  customerJourneySummary { firstVisit { landingPage utmParameters { content } }
-    lastVisit { landingPage utmParameters { content } } } } } }"""
+# Al conectar, la tienda queda suscrita a estos avisos: cada pedido llega al momento a
+# /shopify/webhooks/<tema>, sin que tengamos que ir a preguntar.
+TEMAS = {"ORDERS_CREATE": "orders-create", "ORDERS_CANCELLED": "orders-cancelled"}
+SUSCRIBIR = """mutation($topic: WebhookSubscriptionTopic!, $uri: String!) {
+  webhookSubscriptionCreate(topic: $topic, webhookSubscription: {uri: $uri, format: JSON}) {
+    userErrors { message } } }"""
+
+
+async def suscribir(con: dict) -> bool:
+    """Pide a la tienda que nos avise de sus pedidos. False si no se pudo."""
+    todo = True
+    for topic, tema in TEMAS.items():
+        datos = await consultar(con, SUSCRIBIR, {"topic": topic, "uri": f"{config.PUBLIC_URL}/shopify/webhooks/{tema}"})
+        errores = (datos.get("webhookSubscriptionCreate") or {}).get("userErrors") or []
+        # "ya existe" (al volver a conectar) no es un error.
+        if [e for e in errores if "taken" not in str(e.get("message", "")).lower()]:
+            log.warning("Shopify no aceptó el aviso %s de %s: %s", topic, con.get("tienda"), errores)
+            todo = False
+    return todo
 
 
 def _de_pagina(pagina: str) -> tuple[str, str]:
@@ -410,54 +440,23 @@ def _de_pagina(pagina: str) -> tuple[str, str]:
     return q.get(PARAMETRO, "")[:20], re.sub(r"\D", "", q.get("utm_content", ""))[:30]
 
 
-async def sincronizar(c: Cuenta) -> int:
-    """Guarda los pedidos nuevos que vienen de un chat o de un anuncio. Devuelve cuántos guardó."""
-    con = await conexion(c)
-    if not con or time.time() - con.get("leido", 0) < CADA - 5:
-        return 0
-    desde = datetime.fromtimestamp(con.get("pedidos_desde", time.time()), timezone.utc)
+async def pedido_nuevo(c: Cuenta, p: dict) -> bool:
+    """Guarda el pedido si vino de un chat o de un anuncio (la página con la que entró a la tienda).
+    False si no es nuestro o ya estaba."""
+    codigo, anuncio = _de_pagina(p.get("landing_site") or "")
+    user_id = await c.store.usuario_de_codigo(codigo) if codigo else ""
+    if not anuncio and user_id:
+        anuncio = (await c.store.anuncios_de([user_id])).get(user_id, {}).get("ad_id", "")
+    if not (user_id or anuncio) or p.get("cancelled_at"):
+        return False  # ni de un chat ni de un anuncio: no es nuestro
     try:
-        pedidos = ((await consultar(con, PEDIDOS, {"q": f"created_at:>='{desde:%Y-%m-%dT%H:%M:%SZ}'",
-                                                   "n": MAX_PEDIDOS})).get("orders") or {}).get("nodes") or []
-    except SinPermiso:
-        log.warning("La tienda %s ya no da permiso; se deja de leer", con.get("tienda"))
-        await guardar(c, {**con, "leido": time.time(), "sin_permiso": True})
-        return 0
-    guardados, ultimo = 0, con.get("pedidos_desde", 0)
-    for p in pedidos:
-        creado = datetime.fromisoformat(p["createdAt"].replace("Z", "+00:00")).timestamp()
-        ultimo = max(ultimo, creado)
-        if p.get("cancelledAt"):
-            continue
-        viaje = p.get("customerJourneySummary") or {}
-        codigo, anuncio = "", ""
-        for visita in (viaje.get("lastVisit"), viaje.get("firstVisit")):
-            visita = visita or {}
-            k, a = _de_pagina(visita.get("landingPage", ""))
-            a = a or re.sub(r"\D", "", str((visita.get("utmParameters") or {}).get("content") or ""))[:30]
-            codigo, anuncio = codigo or k, anuncio or a
-        user_id = await c.store.usuario_de_codigo(codigo) if codigo else ""
-        if not anuncio and user_id:
-            anuncio = (await c.store.anuncios_de([user_id])).get(user_id, {}).get("ad_id", "")
-        if not (user_id or anuncio):
-            continue  # ni de un chat ni de un anuncio: no es nuestro
-        dinero = (p.get("currentTotalPriceSet") or {}).get("shopMoney") or {}
-        productos = [f"{x.get('quantity', 1)} × {x.get('title', '')}" for x in (p.get("lineItems") or {}).get("nodes") or []]
-        if await c.store.add_venta("shopify", p["id"], user_id, anuncio, float(dinero.get("amount") or 0),
-                                   dinero.get("currencyCode", ""), {"folio": p.get("name", ""), "productos": productos},
-                                   creado):
-            guardados += 1
-    # Lo de hace un minuto se vuelve a pedir la próxima vez (pedidos que aún se estaban creando).
-    con.pop("sin_permiso", None)
-    await guardar(c, {**con, "leido": time.time(), "pedidos_desde": max(con.get("pedidos_desde", 0), ultimo - 60)})
-    if guardados:
-        log.info("Tienda %s: %d ventas nuevas de chats o anuncios", con["tienda"], guardados)
-    return guardados
-
-
-async def tick(c: Cuenta) -> None:
-    if enabled():
-        await sincronizar(c)
+        creado = datetime.fromisoformat(str(p.get("created_at"))).timestamp()
+    except ValueError:
+        creado = time.time()
+    productos = [f"{x.get('quantity', 1)} × {x.get('title', '')}" for x in p.get("line_items") or []][:10]
+    return await c.store.add_venta("shopify", str(p.get("id", "")), user_id, anuncio, float(p.get("total_price") or 0),
+                                   str(p.get("currency", "")), {"folio": p.get("name", ""), "productos": productos},
+                                   creado)
 
 
 def monto(v: float, moneda: str) -> str:

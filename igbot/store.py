@@ -1040,6 +1040,10 @@ class Store:
         await self.db.commit()
         return bool(cur.rowcount)
 
+    async def borrar_venta(self, origen: str, externo: str) -> None:
+        await self.db.execute("DELETE FROM ventas WHERE origen = ? AND externo = ?", (origen, externo))
+        await self.db.commit()
+
     async def ventas_de(self, user_id: str) -> list[dict]:
         cur = await self.db.execute(
             "SELECT origen, externo, ad_id, monto, moneda, detalle, created_at FROM ventas WHERE user_id = ?"

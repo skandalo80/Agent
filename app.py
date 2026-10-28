@@ -189,10 +189,6 @@ async def metricas_del_dia(c: Cuenta) -> None:
     await metricas.tick(c)  # seguidores, alcance y vistas de cada día, para Resultados
 
 
-async def pedidos_de_shopify(c: Cuenta) -> None:
-    await tienda_shopify.tick(c)  # ventas de su tienda que vienen de un chat o de un anuncio
-
-
 async def cada_cuenta(paso, every: float) -> None:
     """Un solo bucle de fondo por tarea, que pasa por todas las cuentas."""
     while True:
@@ -212,7 +208,6 @@ def fondo() -> list[asyncio.Task]:
         asyncio.create_task(cada_cuenta(reporte_semanal, 600)),
         asyncio.create_task(cada_cuenta(sugeridos_del_lunes, 600)),
         asyncio.create_task(cada_cuenta(metricas_del_dia, 600)),
-        asyncio.create_task(cada_cuenta(pedidos_de_shopify, 300)),
     ]
 
 

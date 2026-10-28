@@ -172,15 +172,15 @@ async def conexion(c: Cuenta) -> tuple[str, str]:
     if tienda_shopify.enabled():
         tienda = await tienda_shopify.conexion(c)
         ir = '<a class="boton secundario chico" href="/panel/shopify">{}</a>'
-        if tienda.get("sin_permiso"):
-            fila("aviso", "Tienda Shopify", f"{escape(tienda.get('nombre') or tienda.get('tienda', ''))} · falta el permiso"
-                 " de pedidos: vuelve a conectarla", ir.format("Volver a conectar"))
+        if tienda.get("sin_ventas"):
+            fila("aviso", "Tienda Shopify", f"{escape(tienda.get('nombre') or tienda.get('tienda', ''))} · no se activó"
+                 " el aviso de ventas: vuelve a conectarla", ir.format("Ver"))
         elif tienda.get("token"):
             fila("ok", "Tienda Shopify", f"{escape(tienda.get('nombre') or tienda.get('tienda', ''))} · inventario y ventas",
                  ir.format("Ver"))
         else:  # no es un problema: no colorea el botón Conexión
             fila("no", "Tienda Shopify", "Sin conectar: tu asistente vería el inventario y tú, qué ventas dejan tus chats",
-                 ir.format("Conectar"))
+                 ir.format("Conectar tu Shopify"))
     if not c.slug:
         with usar(c):
             gasto = await limites.spent_today(c.store)

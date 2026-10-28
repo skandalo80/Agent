@@ -20,12 +20,18 @@ cliente = test_contenido.cliente
 SECRETO = "shpss_prueba"
 
 
-def pedido(i, pagina="", utm="", monto="450.00", cancelado=None):
-    visita = {"landingPage": pagina, "utmParameters": {"content": utm} if utm else None}
-    return {"id": f"gid://shopify/Order/{i}", "name": f"#10{i}", "createdAt": "2026-10-28T12:00:0%dZ" % i,
-            "cancelledAt": cancelado, "currentTotalPriceSet": {"shopMoney": {"amount": monto, "currencyCode": "MXN"}},
-            "lineItems": {"nodes": [{"title": "Bolsa Luna", "quantity": 1}]},
-            "customerJourneySummary": {"firstVisit": None, "lastVisit": visita}}
+def pedido(i, pagina="", monto="450.00", cancelado=None):
+    """Un pedido como lo manda Shopify en el aviso orders/create."""
+    return {"id": 5000 + i, "name": f"#10{i}", "created_at": "2026-10-28T12:00:00-06:00", "cancelled_at": cancelado,
+            "landing_site": pagina, "total_price": monto, "currency": "MXN",
+            "line_items": [{"title": "Bolsa Luna", "quantity": 1}], "customer": {"email": "no@se.guarda"}}
+
+
+def firmado(client, tema, datos, tienda="lunar.myshopify.com", firma=None):
+    cuerpo = json.dumps(datos).encode()
+    firma = firma or base64.b64encode(hmac.new(SECRETO.encode(), cuerpo, hashlib.sha256).digest()).decode()
+    return client.post(f"/shopify/webhooks/{tema}", content=cuerpo,
+                       headers={"X-Shopify-Hmac-Sha256": firma, "X-Shopify-Shop-Domain": tienda})
 
 
 @pytest.fixture
@@ -34,7 +40,7 @@ def shopify(cliente, monkeypatch):
     monkeypatch.setattr(config, "SHOPIFY_API_KEY", "llave")
     monkeypatch.setattr(config, "SHOPIFY_API_SECRET", SECRETO)
     monkeypatch.setattr(config, "PUBLIC_URL", "https://console.skandar.online")
-    tienda = {"pedidos": [], "consultas": []}
+    tienda = {"avisos": [], "consultas": []}
 
     def manejar(request: httpx.Request) -> httpx.Response:
         assert request.url.host == "lunar.myshopify.com"
@@ -47,8 +53,9 @@ def shopify(cliente, monkeypatch):
         if "shop {" in cuerpo["query"]:
             return httpx.Response(200, json={"data": {"shop": {"name": "Café Lunar", "myshopifyDomain": "lunar.myshopify.com",
                                                                 "primaryDomain": {"host": "www.cafelunar.mx"}}}})
-        if "orders(" in cuerpo["query"]:
-            return httpx.Response(200, json={"data": {"orders": {"nodes": tienda["pedidos"]}}})
+        if "webhookSubscriptionCreate" in cuerpo["query"]:
+            tienda["avisos"].append((cuerpo["variables"]["topic"], cuerpo["variables"]["uri"]))
+            return httpx.Response(200, json={"data": {"webhookSubscriptionCreate": {"userErrors": []}}})
         return httpx.Response(200, json={"data": {"products": {"nodes": [
             {"title": "Bolsa Luna", "status": "ACTIVE", "onlineStoreUrl": "https://cafelunar.mx/products/bolsa",
              "tracksInventory": True, "variants": {"nodes": [
@@ -86,6 +93,8 @@ def test_sin_llaves_no_sale(cliente):
 def test_conectar_y_desconectar(shopify):
     client, c, *_ = shopify
     assert "Tienda Shopify</b><span>Sin conectar" in client.get("/panel/conexion").text
+    r = client.get("/panel/shopify")
+    assert "<button class=\"boton\">Conectar tu Shopify</button>" in r.text and "Te llevamos a tu Shopify" in r.text
     assert client.post("/panel/shopify/conectar", data={"tienda": "lunar.myshopify.com"}).status_code == 403  # sin Origin
     assert "Escribe la dirección de tu tienda" in client.post("/panel/shopify/conectar", headers=ORIGEN,
                                                               data={"tienda": "lunar"}).text
@@ -144,25 +153,25 @@ def test_enlaces_con_codigo_del_chat(shopify):
 def test_ventas_de_chats_y_anuncios(shopify):
     client, c, _, _, tienda = shopify
     conectar(client)
+    # Al conectar, la tienda queda suscrita a sus pedidos: nada pregunta cada rato.
+    assert tienda["avisos"] == [
+        ("ORDERS_CREATE", "https://console.skandar.online/shopify/webhooks/orders-create"),
+        ("ORDERS_CANCELLED", "https://console.skandar.online/shopify/webhooks/orders-cancelled")]
+    assert not client.portal.call(ts.conexion, c)["sin_ventas"]
     ana = client.portal.call(c.store.codigo_chat, "ana")
     client.portal.call(c.store.guardar_anuncio, "ana", "120211", "Bolsas de otoño", "")
-    tienda["pedidos"] = [
-        pedido(1, f"/products/bolsa?sk={ana}"),                        # de un chat que llegó por un anuncio
-        pedido(2, "/?utm_source=meta&utm_content=120299", monto="99.50"),  # de un anuncio a la tienda
-        pedido(3, "/products/bolsa"),                                  # ni chat ni anuncio: no se guarda
-        pedido(4, f"/?sk={ana}", cancelado="2026-10-28T13:00:00Z"),    # cancelado
-        pedido(5, utm="120300"),
-    ]
-    assert client.portal.call(ts.sincronizar, c) == 3
+    assert firmado(client, "orders-create", pedido(1, f"/products/bolsa?sk={ana}")).status_code == 200
+    firmado(client, "orders-create", pedido(1, f"/products/bolsa?sk={ana}"))  # reintento de Shopify
+    firmado(client, "orders-create", pedido(2, "/?utm_source=meta&utm_content=120299", monto="99.50"))
+    firmado(client, "orders-create", pedido(3, "/products/bolsa"))  # ni chat ni anuncio: no se guarda
+    firmado(client, "orders-create", pedido(4, f"/?sk={ana}"), tienda="otra.myshopify.com")  # otra tienda
+    assert firmado(client, "orders-create", pedido(5, f"/?sk={ana}"), firma="malo").status_code == 401
     ventas = client.portal.call(c.store.ventas_de, "ana")
-    assert [(v["externo"], v["ad_id"], v["monto"]) for v in ventas] == [("gid://shopify/Order/1", "120211", 450.0)]
+    assert [(v["externo"], v["ad_id"], v["monto"]) for v in ventas] == [("5001", "120211", 450.0)]
     assert ventas[0]["detalle"] == {"folio": "#101", "productos": ["1 × Bolsa Luna"]}
-    # Se lee de nuevo solo después de 15 minutos, y un pedido no se guarda dos veces.
-    assert client.portal.call(ts.sincronizar, c) == 0
-    con = client.portal.call(ts.conexion, c)
-    client.portal.call(ts.guardar, c, {**con, "leido": 0})
-    assert client.portal.call(ts.sincronizar, c) == 0
-    assert tienda["consultas"][-1]["variables"]["q"].startswith("created_at:>='2026-10-28T11:59")
+    assert client.portal.call(c.store.ventas_de, "")[0]["ad_id"] == "120299"  # de un anuncio, sin chat
+    firmado(client, "orders-cancelled", pedido(1, cancelado="2026-10-28T13:00:00-06:00"))
+    assert client.portal.call(c.store.ventas_de, "ana") == []
 
 
 def test_anuncio_y_compra_en_conversaciones(shopify):
@@ -190,13 +199,9 @@ def test_anuncio_y_compra_en_conversaciones(shopify):
 def test_avisos_de_privacidad(shopify):
     client, c, *_ = shopify
     conectar(client)
-    cuerpo = json.dumps({"shop_domain": "lunar.myshopify.com"}).encode()
-    firma = base64.b64encode(hmac.new(SECRETO.encode(), cuerpo, hashlib.sha256).digest()).decode()
-    assert client.post("/shopify/webhooks/shop-redact", content=cuerpo,
-                       headers={"X-Shopify-Hmac-Sha256": "malo"}).status_code == 401
-    assert client.post("/shopify/webhooks/customers-redact", content=cuerpo,
-                       headers={"X-Shopify-Hmac-Sha256": firma}).status_code == 200
+    datos = {"shop_domain": "lunar.myshopify.com"}
+    assert firmado(client, "shop-redact", datos, firma="malo").status_code == 401
+    assert firmado(client, "customers-redact", datos).status_code == 200
     assert client.portal.call(ts.conexion, c)["token"]
-    assert client.post("/shopify/webhooks/shop-redact", content=cuerpo,
-                       headers={"X-Shopify-Hmac-Sha256": firma}).status_code == 200
+    assert firmado(client, "shop-redact", datos).status_code == 200
     assert client.portal.call(ts.conexion, c) == {}
