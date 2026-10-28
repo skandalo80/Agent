@@ -264,7 +264,7 @@ async def posts_con_numeros(c: Cuenta, publicadas: list[dict]) -> list[dict]:
         if post["id"] not in ids:
             return None
         async with turno:
-            return await informe.numeros(c, ids[post["id"]])
+            return await informe.numeros(c, ids[post["id"]], post["publish_at"])
 
     datos = await asyncio.gather(*(leer(p) for p in posts))
     salida = []

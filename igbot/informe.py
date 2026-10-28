@@ -35,9 +35,9 @@ ACCIONES = ("likes", "comments", "saved", "shares")
 MADURO = 3 * 86400  # publicado hace al menos esto para contar en "qué funcionó"
 MAX_HISTORIAL = 30
 MAX_REPORTE = 6  # campañas por PDF
-CACHE_SEG = 3600
+CACHE_SEG = 3600  # un post de menos de MADURO (aún junta interacciones) se pide otra vez después de esto
 PAGINAS_BUSQUEDA = 4  # páginas de 50 de "me/media" para hallar posts viejos sin id guardado
-_insights: dict[tuple[str, str], tuple[float, dict | None]] = {}
+DIAS_REFRESCO = 30  # metricas.py refresca cada día las estadísticas de los posts de estos últimos días
 
 CONCLUSIONES = """Eres analista de redes sociales. Lees los resultados de unas campañas de Instagram y escribes 3 conclusiones cortas para el dueño del negocio, en español y de tú.
 - Usa solo los números de <datos> (la tasa es la tasa de interacción por alcance, en %); no inventes cifras ni causas que no se vean ahí.
@@ -132,18 +132,38 @@ async def ids_de_instagram(c: Cuenta, posts: list[dict]) -> dict[int, str]:
     return ids
 
 
-async def numeros(c: Cuenta, media_id: str) -> dict | None:
-    """Los Insights de un post, o None si Instagram no los dio (p. ej. falta el permiso)."""
-    clave = (c.slug, media_id)
-    if (guardado := _insights.get(clave)) and guardado[0] > time.time() - CACHE_SEG:
-        return guardado[1]
+async def pedir_numeros(c: Cuenta, media_id: str) -> dict | None:
+    """Le pregunta a Instagram los Insights de un post y los guarda (None si no los dio, p. ej. falta el permiso)."""
     try:
         datos = await c.instagram.media_insights(media_id)
     except Exception as e:
         log.warning("Sin insights de %s para %s: %s", media_id, c.slug, e)
         datos = None
-    _insights[clave] = (time.time(), datos)
+    await c.store.guardar_insights_post(media_id, datos, time.time())
     return datos
+
+
+async def numeros(c: Cuenta, media_id: str, publicado: float | None = None) -> dict | None:
+    """Los Insights de un post, de la base. Solo se le pregunta a Instagram si nunca se pidieron, o si tienen más
+    de CACHE_SEG y el post es reciente (`publicado` hace menos de MADURO, o no se sabe) o no se tenían; los demás
+    los refresca metricas.py una vez al día."""
+    guardado = await c.store.insights_post(media_id)
+    if guardado:
+        datos, leido = guardado
+        reciente = publicado is None or time.time() - publicado < MADURO
+        if leido > time.time() - CACHE_SEG or (datos is not None and not reciente):
+            return datos
+    return await pedir_numeros(c, media_id)
+
+
+async def refrescar_numeros(c: Cuenta) -> int:
+    """Las estadísticas de los posts publicados en los últimos DIAS_REFRESCO días (lo llama metricas.py cada día).
+    Devuelve cuántos se pidieron."""
+    posts = await c.store.posts(("publicada",), desde=time.time() - DIAS_REFRESCO * 86400)
+    ids = await ids_de_instagram(c, posts)
+    for media_id in ids.values():
+        await pedir_numeros(c, media_id)
+    return len(ids)
 
 
 async def filas(c: Cuenta, camps: list[dict]) -> list[dict]:
@@ -159,7 +179,7 @@ async def filas(c: Cuenta, camps: list[dict]) -> list[dict]:
         if post["id"] not in ids:
             return None
         async with turno:
-            return await numeros(c, ids[post["id"]])
+            return await numeros(c, ids[post["id"]], post["publish_at"])
 
     datos = await asyncio.gather(*(leer(post) for *_, post in publicados))
     ahora = time.time()

@@ -160,6 +160,15 @@ CREATE TABLE IF NOT EXISTS metricas_dia (
     datos TEXT NOT NULL DEFAULT '{}'
 );
 
+-- Estadísticas de cada post publicado (alcance, likes...), como las dio Instagram la última vez que se
+-- pidieron. Las refresca metricas.py cada día (posts de los últimos 30 días); `datos` es JSON o null si
+-- Instagram no las dio. Así Campañas, Pasadas y Resultados no le preguntan a Instagram al abrirse.
+CREATE TABLE IF NOT EXISTS insights_post (
+    media_id TEXT PRIMARY KEY,
+    datos    TEXT,
+    leido    REAL NOT NULL
+);
+
 -- Chats con Skandi (la ayuda del panel y de la web), en la base de la cuenta principal.
 -- origen: "panel" o "web"; quien: la carpeta de la cuenta (panel) o la cookie del visitante (web).
 CREATE TABLE IF NOT EXISTS skandi_chats (
@@ -886,6 +895,21 @@ class Store:
             "INSERT INTO metricas_dia (dia, datos) VALUES (?, ?)"
             " ON CONFLICT (dia) DO UPDATE SET datos = excluded.datos",
             (dia, json.dumps(datos)))
+        await self.db.commit()
+
+    # --- estadísticas de cada post ---
+
+    async def insights_post(self, media_id: str) -> tuple[dict | None, float] | None:
+        """(estadísticas o None si Instagram no las dio, cuándo se leyeron), o None si nunca se pidieron."""
+        cur = await self.db.execute("SELECT datos, leido FROM insights_post WHERE media_id = ?", (media_id,))
+        row = await cur.fetchone()
+        return (json.loads(row[0]) if row[0] else None, row[1]) if row else None
+
+    async def guardar_insights_post(self, media_id: str, datos: dict | None, leido: float) -> None:
+        await self.db.execute(
+            "INSERT INTO insights_post (media_id, datos, leido) VALUES (?, ?, ?)"
+            " ON CONFLICT (media_id) DO UPDATE SET datos = excluded.datos, leido = excluded.leido",
+            (media_id, json.dumps(datos) if datos is not None else None, leido))
         await self.db.commit()
 
     # --- chats con Skandi ---
