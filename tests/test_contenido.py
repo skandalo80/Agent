@@ -418,8 +418,8 @@ def test_chats_en_pausa(cliente):
     assert '<div class="inbox" id="chats" data-vivo="/panel/vivo?' in r.text and "Aún no te escribe nadie" in r.text
     assert "Contestados hoy" not in r.text and "Mensajes restantes" not in r.text  # sin tarjetas de números
     client.portal.call(c.store.pause, "ana", time.time() + 3600)
-    r = client.get("/panel/asistente?ver=todas")
-    assert "@ana" in r.text and "Lo atiendes tú · 1 h" in r.text and "Todas<b" in r.text
+    r = client.get("/panel/asistente?ver=tuyas")
+    assert "@ana" in r.text and "Lo tomaste tú</span>Lo atiendes tú · 1 h" in r.text and "Todas<b" in r.text
     r = client.get("/panel/asistente?chat=ana")
     assert 'class="inbox abierto"' in r.text and 'href="https://ig.me/m/ana"' in r.text
     assert "Lo atiendes tú: tu asistente no le contesta en las próximas 1 h" in r.text
@@ -441,20 +441,25 @@ def test_conversaciones_y_tomar_un_chat(cliente):
     ids = [i for i, _ in client.portal.call(store.pending, "beto")]
     client.portal.call(store.mark_answered, "beto", ids, "Sí, a las 5.")
     client.portal.call(store.add_incoming, "caro", "m2", "Hola, ¿precios?")
-    # Sin filtro abre Sin contestar, porque hay uno.
+    # Nada te espera a ti: abre Tu asistente, En curso (los dos escribieron hoy).
     r = client.get("/panel/asistente")
-    assert 'class="on" aria-current="page">Sin contestar<b class="">1</b>' in r.text
-    assert "@caro" in r.text and "Hola, ¿precios?" in r.text and "@beto" not in r.text
-    r = client.get("/panel/asistente?ver=todas")
-    assert "@beto" in r.text and "Asistente: Sí, a las 5." in r.text
-    assert r.text.index("@caro") < r.text.index("@beto")
-    assert 'href="/panel/asistente?ver=todas&amp;chat=beto#chats"' in r.text
+    assert '<a href="/panel/asistente?ver=curso#chats" class="on" aria-current="true">Tu asistente</a>' in r.text
+    assert 'class="on" aria-current="page">En curso<b class="gris">2</b>' in r.text
+    assert "@caro" in r.text and "Hola, ¿precios?" in r.text and "Asistente: Sí, a las 5." in r.text
+    assert r.text.index("@caro") < r.text.index("@beto") and "Nuevos" not in r.text
+    # Si el asistente no le contestó a caro en 2 minutos, pasa a Para revisar y la página abre ahí.
+    client.portal.call(store.db.execute, "UPDATE messages SET created_at = created_at - 200 WHERE user_id = 'caro'")
+    r = client.get("/panel/asistente")
+    assert 'class="on" aria-current="page">Para revisar<b class="">1</b>' in r.text
+    assert "@caro" in r.text and "@beto" not in r.text and "Para revisar: no tuvo respuesta" in r.text
+    r = client.get("/panel/asistente?ver=bot")
+    assert "@beto" in r.text and 'href="/panel/asistente?ver=bot&amp;chat=beto#chats"' in r.text
     # El chat abierto: los mensajes en orden y el interruptor en Asistente.
-    r = client.get("/panel/asistente?ver=todas&chat=beto")
+    r = client.get("/panel/asistente?ver=bot&chat=beto")
     assert 'class="burbuja de-cliente">¿Tienen lugar mañana?' in r.text and 'de-bot">Sí, a las 5.' in r.text
     assert r.text.index("¿Tienen lugar mañana?</div>") < r.text.index("Sí, a las 5.</div>")
     assert '<button name="accion" value="reactivar" aria-pressed="true" disabled>Asistente</button>' in r.text
-    assert 'action="/panel/responder#chats"' in r.text and 'href="/panel/asistente?ver=todas#chats">‹ Tus chats' in r.text
+    assert 'action="/panel/responder#chats"' in r.text and 'href="/panel/asistente?ver=bot#chats">‹ Tus chats' in r.text
 
     r = client.post("/panel/pausas", headers=ORIGEN, data={"usuario": "beto", "accion": "tomar", "chat": "beto"})
     assert "el asistente no le contesta a @beto en 12 h" in r.text and "Lo atiendes tú" in r.text
@@ -472,16 +477,16 @@ def test_conversaciones_en_vivo(cliente, monkeypatch):
     store = c.store
     monkeypatch.setattr(panel, "VIVO_SEGUNDOS", 0.5)
     client.portal.call(store.add_incoming, "caro", "m2", "Hola, ¿precios?")
-    r = client.get("/panel/asistente?ver=todas&chat=caro")
+    r = client.get("/panel/asistente?ver=bot&chat=caro")
     visto = store.cambios
-    assert f'data-vivo="/panel/vivo?ver=todas&amp;chat=caro&amp;v={visto}"' in r.text
+    assert f'data-vivo="/panel/vivo?ver=bot&amp;chat=caro&amp;v={visto}"' in r.text
     # Sin cambios desde la página: la conexión solo dice cada cuánto reconectar y se cierra sola.
-    r = client.get(f"/panel/vivo?ver=todas&chat=caro&v={visto}")
+    r = client.get(f"/panel/vivo?ver=bot&chat=caro&v={visto}")
     assert r.headers["content-type"].startswith("text/event-stream") and r.text == "retry: 2000\n\n"
     # Llega otro mensaje: manda la lista y el chat ya armados, con su número de cambio.
     client.portal.call(store.add_incoming, "caro", "m3", "¿Y envíos?")
     assert store.cambios == visto + 1
-    r = client.get("/panel/vivo?ver=todas&chat=caro", headers={"Last-Event-ID": str(visto)})
+    r = client.get("/panel/vivo?ver=bot&chat=caro", headers={"Last-Event-ID": str(visto)})
     evento = r.text.split("\n\n")[1].split("\n")
     assert evento[0] == f"id: {visto + 1}"
     datos = json_.loads(evento[1][len("data: "):])
@@ -527,20 +532,20 @@ def test_chats_de_10_en_10_con_buscador(cliente):
         client.portal.call(c.store.add_incoming, f"u{i:02d}", f"m{i}", f"Hola, pregunta {i:02d}")
     client.portal.call(c.store.set, "username:u05", "@lupita.flores")
     r = client.get("/panel/asistente")
-    assert r.text.count('class="conv') == 10 and "Sin contestar<b" in r.text
-    assert '<span class="on" aria-current="page">1</span>' in r.text and 'href="/panel/asistente?ver=sin&amp;p=2#chats"' in r.text
+    assert r.text.count('class="conv') == 10 and "En curso<b" in r.text
+    assert '<span class="on" aria-current="page">1</span>' in r.text and 'href="/panel/asistente?ver=curso&amp;p=2#chats"' in r.text
     assert '<span class="apagada" aria-hidden="true">‹</span>' in r.text and 'aria-label="Siguiente"' in r.text
     r = client.get("/panel/asistente?p=3")
     assert r.text.count('class="conv') == 3 and "pregunta 00" in r.text and "pregunta 22" not in r.text
     assert client.get("/panel/asistente?p=99").text.count('class="conv') == 3  # se queda en la última
     # El filtro se mantiene al cambiar de página y al buscar; el buscador se manda solo (data-vivo).
-    r = client.get("/panel/asistente?ver=todas&p=2")
-    assert 'href="/panel/asistente?ver=todas&amp;p=3#chats"' in r.text
+    r = client.get("/panel/asistente?ver=bot&p=2")
+    assert 'href="/panel/asistente?ver=bot&amp;p=3#chats"' in r.text
     r = client.get("/panel/asistente?q=lupita")
     assert r.text.count('class="conv') == 1 and "chat=u05" in r.text and 'class="paginas"' not in r.text
     assert 'value="lupita"' in r.text and "data-vivo" in r.text and "1 chat</p>" in r.text
-    r = client.get("/panel/asistente?ver=sin&q=pregunta+1")
-    assert r.text.count('class="conv') == 10 and '<input type="hidden" name="ver" value="sin">' in r.text
+    r = client.get("/panel/asistente?ver=bot&q=pregunta+1")
+    assert r.text.count('class="conv') == 10 and '<input type="hidden" name="ver" value="bot">' in r.text
     assert "No encontramos chats con «zzz»" in client.get("/panel/asistente?q=zzz").text
 
 
@@ -885,27 +890,56 @@ def test_precio_escrito_por_el_dueno(cliente, monkeypatch):
     assert client.portal.call(contenido.pieza, c.store, 1)["precio"] == "Desde $990 MXN"
 
 
-def test_filtro_pidieron_una_persona(cliente):
+def test_lado_tu_nuevos_sin_contestar_y_razon(cliente):
     import time
     client, c, *_ = cliente
     store = c.store
-    client.portal.call(store.add_incoming, "beto", "m1", "¿Tienen lugar mañana?")
-    client.portal.call(store.add_incoming, "caro", "m2", "Quiero hablar con alguien")
-    # El asistente pasó a caro con una persona (pasar_a_humano): pausa + evento con el motivo.
-    client.portal.call(store.pause, "caro", time.time() + 12 * 3600)
-    client.portal.call(store.add_event, "caro", "humano", {"motivo": "Quiere negociar el precio"})
-    client.portal.call(store.pause, "dani", time.time() + 3600)  # este lo tomó el dueño
+    p = client.portal.call
+    p(store.add_incoming, "beto", "m1", "¿Tienen lugar mañana?")
+    p(store.add_incoming, "caro", "m2", "Esto es una burla, nadie me contesta")
+    # El asistente pasó a caro con una persona (pasar_a_humano): evento con la razón + pausa.
+    p(store.add_event, "caro", "humano", {"motivo": "Está molesta por la espera", "razon": "molesto"})
+    p(store.pause, "caro", time.time() + 12 * 3600)
+    p(store.add_incoming, "dani", "m3", "¿Sigues ahí?")
+    p(store.pause, "dani", time.time() + 3600)  # este lo tomó el dueño y el cliente escribió último
+    p(store.add_event, "eli", "humano", {"motivo": "Quiere hablar con alguien"})  # evento viejo, sin razón
+    p(store.pause, "eli", time.time() + 3600)
+    p(store.add_owner_message, "eli", None, "Hola, aquí estoy")  # ya le contestaste: deja de ser nuevo
 
+    # Algo te espera: abre "Tú" con el número de pendientes, en Nuevos; el menú lleva el punto amarillo.
     r = client.get("/panel/asistente")
-    assert "Sin contestar<b" in r.text and "Pidieron una persona<b" in r.text and 'Todas<b class="gris">3</b>' in r.text
-    assert "Abiertas" not in r.text and "En pausa" not in r.text
-    r = client.get("/panel/asistente?ver=persona")
-    assert "@caro" in r.text and "Pidió hablar con una persona" in r.text
-    assert "@beto" not in r.text and "@dani" not in r.text
-    r = client.get("/panel/asistente?ver=persona&chat=caro")
-    assert "<b>Pidió hablar con una persona.</b> Motivo: Quiere negociar el precio." in r.text
-    r = client.get("/panel/asistente?ver=abiertas")  # enlace viejo: cae en Sin contestar
-    assert "@beto" in r.text and "@caro" not in r.text
+    assert '<a href="/panel/asistente?ver=nuevos#chats" class="on" aria-current="true">Tú<b>2</b></a>' in r.text
+    assert 'aria-current="page">Nuevos<b class="">1</b>' in r.text and 'Sin contestar<b class="">1</b>' in r.text
+    assert 'Todas<b class="gris">3</b>' in r.text and "En curso" not in r.text
+    assert '<span class="punto-menu" title="Tienes chats por contestar"></span>' in r.text
+    assert "@caro" in r.text and '<span class="razon molesto">Molesto</span>Nuevo · 12 h' in r.text and "@dani" not in r.text
+    r = client.get("/panel/asistente?ver=sin")
+    assert '<span class="razon">Lo tomaste tú</span>Sin contestar · 1 h' in r.text and "@caro" not in r.text
+    r = client.get("/panel/asistente?ver=tuyas")
+    assert '<span class="razon">Te lo pasó el asistente</span>Lo atiendes tú · 1 h' in r.text and "@beto" not in r.text
+    r = client.get("/panel/asistente?ver=nuevos&chat=caro")
+    assert "<b>Te lo pasó el asistente: Molesto.</b> Motivo: Está molesta por la espera." in r.text
+    # Del lado del asistente solo queda beto; un enlace viejo (ver=persona) cae en la vista de siempre.
+    assert "@beto" in client.get("/panel/asistente?ver=curso").text
+    assert 'aria-current="page">Nuevos' in client.get("/panel/asistente?ver=persona").text
+    # Contestas a caro y a dani: ya no hay pendientes ni punto en el menú (en ninguna página).
+    p(store.add_owner_message, "caro", None, "Perdón por la espera")
+    p(store.add_owner_message, "dani", None, "Sí, aquí sigo")
+    r = client.get("/panel/contenido")
+    assert '<span class="punto-menu"' not in r.text and "Tienes chats por contestar" not in r.text
+
+
+def test_pasar_a_humano_guarda_la_razon(cliente):
+    from igbot import tools as t
+    client, c, *_ = cliente
+    [pasar] = t.human_tools(c.store, None, "caro")
+    assert t.HUMANO_SCHEMA["properties"]["razon"]["enum"] == list(t.RAZONES)
+    with panel.usar(c):
+        client.portal.call(pasar.handler, {"razon": "precio", "motivo": "Quiere 20% de descuento"})
+        client.portal.call(pasar.handler, {"razon": "inventada", "motivo": "x"})  # lo que no está en la lista: otro
+    eventos = client.portal.call(c.store.events, "humano", 0, 9e9)
+    assert [d["razon"] for _, d, _ in eventos] == ["precio", "otro"]
+    assert client.portal.call(c.store.paused_until, "caro") > 0
 
 
 def test_menu_js_antes_de_pintar(cliente):

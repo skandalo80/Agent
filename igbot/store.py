@@ -499,51 +499,72 @@ class Store:
         )
         return list(await cur.fetchall())
 
-    async def chats_page(self, now: float, abiertas_desde: float, humano_desde: float, ver: str,
-                         buscar: str, limit: int, offset: int) -> tuple[list[tuple], dict[str, int], int]:
-        """Una página de chats con clientes, filtrada y buscada en la base: solo se cargan los
-        `limit` que se ven. Cada fila: (usuario, hora, rol y texto del último mensaje, último
-        mensaje del cliente, pausa hasta, estado). También da cuántos hay por estado (sin la
-        búsqueda) y cuántos cumplen filtro y búsqueda, para las páginas.
-        Estados: "persona" (en pausa porque el asistente lo pasó contigo), "pausa", "sin"
-        (el último mensaje es del cliente), "tu" (contestaste tú) y "asistente"."""
-        base = (
+    def _chats(self, now: float, humano_desde: float, revisar_antes: float, aviso_limite: str) -> tuple[str, dict]:
+        """El WITH que da cada chat con clientes y su estado, para la bandeja de Conversaciones.
+        Del lado "Tú" (el chat está en pausa: lo atiende una persona):
+          "nuevo"  el asistente te lo pasó (pasar_a_humano) y aún no le contestas a mano;
+          "tu_sin" el último mensaje es del cliente;  "tu" lo demás.
+        Del lado del asistente: "revisar" (el cliente escribió hace rato y no hubo respuesta, o tocó el
+        límite del plan) y "asistente"."""
+        sql = (
             "WITH ult AS (SELECT user_id, MAX(id) AS id FROM messages WHERE user_id NOT LIKE 'admin:%'"
             " GROUP BY user_id"
             # Los que están en pausa salen aunque no tengan mensajes guardados.
             " UNION ALL SELECT user_id, 0 FROM paused WHERE until > :now"
             " AND user_id NOT IN (SELECT user_id FROM messages)),"
-            " c AS (SELECT u.user_id, u.id, COALESCE(m.created_at, 0) AS t, COALESCE(m.role, 'user') AS role,"
+            " b AS (SELECT u.user_id, u.id, COALESCE(m.created_at, 0) AS t, COALESCE(m.role, '') AS role,"
             " COALESCE(m.text, '') AS text, p.until AS hasta,"
-            " CASE WHEN p.until IS NOT NULL THEN CASE WHEN EXISTS (SELECT 1 FROM events e"
-            " WHERE e.kind = 'humano' AND e.user_id = u.user_id AND e.created_at >= :humano)"
-            " THEN 'persona' ELSE 'pausa' END WHEN role = 'user' THEN 'sin'"
-            " WHEN substr(text, 1, length(:manual)) = :manual THEN 'tu' ELSE 'asistente' END AS est"
+            " (SELECT MAX(e.created_at) FROM events e WHERE e.kind = 'humano' AND e.user_id = u.user_id"
+            " AND e.created_at >= :humano) AS paso"
             " FROM ult u LEFT JOIN messages m ON m.id = u.id"
-            " LEFT JOIN paused p ON p.user_id = u.user_id AND p.until > :now) ")
-        filtros = {"": "1", "pausa": "est IN ('pausa', 'persona')",
-                   "abiertas": "est NOT IN ('pausa', 'persona') AND t >= :abiertas"}
-        donde = filtros.get(ver, "est = :ver")
-        args = {"now": now, "humano": humano_desde, "manual": MANUAL, "abiertas": abiertas_desde, "ver": ver,
-                "limit": limit, "offset": offset}
+            " LEFT JOIN paused p ON p.user_id = u.user_id AND p.until > :now),"
+            " c AS (SELECT *, CASE WHEN hasta IS NOT NULL THEN CASE"
+            " WHEN paso IS NOT NULL AND NOT EXISTS (SELECT 1 FROM messages x WHERE x.user_id = b.user_id"
+            " AND x.role = 'assistant' AND substr(x.text, 1, length(:manual)) = :manual AND x.created_at > paso)"
+            " THEN 'nuevo' WHEN role = 'user' THEN 'tu_sin' ELSE 'tu' END"
+            " WHEN (role = 'user' AND t < :revisar) OR text = :limite THEN 'revisar' ELSE 'asistente' END AS est"
+            " FROM b) ")
+        return sql, {"now": now, "humano": humano_desde, "manual": MANUAL, "revisar": revisar_antes,
+                     "limite": aviso_limite}
+
+    # Cuántos hay en cada pestaña de Conversaciones (sin la búsqueda).
+    _CUANTOS = ("SELECT SUM(est = 'nuevo'), SUM(est = 'tu_sin'), SUM(est IN ('nuevo', 'tu_sin', 'tu')),"
+                " SUM(est IN ('asistente', 'revisar') AND t >= :curso), SUM(est = 'revisar'),"
+                " SUM(est IN ('asistente', 'revisar')) FROM c")
+    FILTROS_CHATS = {"nuevos": "est = 'nuevo'", "sin": "est = 'tu_sin'", "tuyas": "est IN ('nuevo', 'tu_sin', 'tu')",
+                     "curso": "est IN ('asistente', 'revisar') AND t >= :curso", "revisar": "est = 'revisar'",
+                     "bot": "est IN ('asistente', 'revisar')"}
+
+    async def chats_page(self, now: float, curso_desde: float, humano_desde: float, revisar_antes: float,
+                         aviso_limite: str, ver: str, buscar: str, limit: int,
+                         offset: int) -> tuple[list[tuple], dict[str, int], int]:
+        """Una página de chats con clientes, filtrada (FILTROS_CHATS) y buscada en la base: solo se
+        cargan los `limit` que se ven. Cada fila: (usuario, hora, rol y texto del último mensaje,
+        pausa hasta, estado, cuándo te lo pasó el asistente). También da cuántos hay por pestaña (sin
+        la búsqueda) y cuántos cumplen filtro y búsqueda, para las páginas."""
+        base, args = self._chats(now, humano_desde, revisar_antes, aviso_limite)
+        args |= {"curso": curso_desde, "limit": limit, "offset": offset}
+        donde = self.FILTROS_CHATS[ver]
         if buscar:
             # En el @usuario ya conocido o en cualquier mensaje del chat.
             args["b"] = "%" + buscar.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
             donde += (" AND (user_id IN (SELECT substr(key, 10) FROM kv WHERE key LIKE 'username:%'"
                       " AND value LIKE :b ESCAPE '\\') OR user_id IN (SELECT user_id FROM messages"
                       " WHERE text LIKE :b ESCAPE '\\'))")
-        cur = await self.db.execute(
-            base + "SELECT COUNT(*), SUM(est IN ('pausa', 'persona')), SUM(est = 'persona'), SUM(est = 'sin'),"
-            " SUM(est NOT IN ('pausa', 'persona') AND t >= :abiertas) FROM c", args)
-        todos, pausa, persona, sin, abiertas = (n or 0 for n in await cur.fetchone())
-        cuantos = {"": todos, "abiertas": abiertas, "persona": persona, "pausa": pausa, "sin": sin}
+        cur = await self.db.execute(base + self._CUANTOS, args)
+        cuantos = dict(zip(self.FILTROS_CHATS, (n or 0 for n in await cur.fetchone())))
         cur = await self.db.execute(base + f"SELECT COUNT(*) FROM c WHERE {donde}", args)
         total = (await cur.fetchone())[0]
         cur = await self.db.execute(
-            base + "SELECT user_id, t, role, text, COALESCE((SELECT x.text FROM messages x WHERE"
-            " x.user_id = c.user_id AND x.role = 'user' ORDER BY x.id DESC LIMIT 1), ''), hasta, est"
-            f" FROM c WHERE {donde} ORDER BY id DESC LIMIT :limit OFFSET :offset", args)
+            base + f"SELECT user_id, t, role, text, hasta, est, paso FROM c WHERE {donde}"
+            " ORDER BY id DESC LIMIT :limit OFFSET :offset", args)
         return list(await cur.fetchall()), cuantos, total
+
+    async def pendientes_tuyos(self, now: float, humano_desde: float) -> int:
+        """Chats del lado "Tú" que esperan tu respuesta (nuevos y sin contestar), para el punto del menú."""
+        base, args = self._chats(now, humano_desde, 0, "")
+        cur = await self.db.execute(base + "SELECT COUNT(*) FROM c WHERE est IN ('nuevo', 'tu_sin')", args)
+        return (await cur.fetchone())[0]
 
     async def chat_messages(self, user_id: str, limit: int) -> tuple[list[tuple[str, str, float]], bool]:
         """Los últimos `limit` mensajes de un chat, del más viejo al más nuevo: (rol, texto, hora).
