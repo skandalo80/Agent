@@ -772,9 +772,8 @@ def bloqueo(hay_empresa: bool, hay_marca: bool) -> str:
 async def pagina(c: Cuenta, paso: int, aviso: str = "", b: dict | None = None):
     hay_empresa, hay_marca = await lista_para_empezar(c)
     b = b or await leer(c)
-    hero = '<span class="listo-cam"><i></i>Tu empresa y tu marca ya están listas</span>'
     if not (hay_empresa and hay_marca):
-        cuerpo, hero = bloqueo(hay_empresa, hay_marca), ""
+        cuerpo = bloqueo(hay_empresa, hay_marca)
     else:
         objetivos, mensajes = await opciones(c, b["objetivo"])
         prods = await productos(c)
@@ -813,7 +812,7 @@ async def pagina(c: Cuenta, paso: int, aviso: str = "", b: dict | None = None):
     editar = bool(b.get("cid"))
     return panel.pagina(
         await panel.menu_de(c, "contenido", sub="campanas")
-        + campanas.cabeza(f'<div class="der-cam">{hero}{campanas.boton_todas()}</div>', "", "Editar estrategia" if editar else "Nueva campaña")
+        + campanas.cabeza("", "", "Editar estrategia" if editar else "Nueva campaña")
         + '<div class="oscuro-pag"><main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
         + cuerpo + "</div></main></div>")
@@ -975,7 +974,7 @@ async def pagina_rapida(c: Cuenta, aviso: str = "", b: dict | None = None):
         cuerpo = pagina_rapida_html(b, objetivos)
     return panel.pagina(
         await panel.menu_de(c, "contenido", sub="campanas")
-        + campanas.cabeza(f'<div class="der-cam">{campanas.boton_todas()}</div>', "", "Crear con IA")
+        + campanas.cabeza("", "", "Crear con IA")
         + '<div class="oscuro-pag"><main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
         + cuerpo + "</div></main></div>")
