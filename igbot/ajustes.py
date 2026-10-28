@@ -168,6 +168,19 @@ async def conexion(c: Cuenta) -> tuple[str, str]:
         fila("ok", "Permisos de Instagram", "Mensajes, comentarios, publicar" + (" y estadísticas" if estadisticas else ""))
     if not c.slug and c.google_tools and config.GOOGLE_REFRESH_TOKEN:
         fila("ok", "Google (agenda y correo)", f"Conectado como {escape(config.MAIL_FROM)}")
+    from . import tienda_shopify
+    if tienda_shopify.enabled():
+        tienda = await tienda_shopify.conexion(c)
+        ir = '<a class="boton secundario chico" href="/panel/shopify">{}</a>'
+        if tienda.get("sin_permiso"):
+            fila("aviso", "Tienda Shopify", f"{escape(tienda.get('nombre') or tienda.get('tienda', ''))} · falta el permiso"
+                 " de pedidos: vuelve a conectarla", ir.format("Volver a conectar"))
+        elif tienda.get("token"):
+            fila("ok", "Tienda Shopify", f"{escape(tienda.get('nombre') or tienda.get('tienda', ''))} · inventario y ventas",
+                 ir.format("Ver"))
+        else:  # no es un problema: no colorea el botón Conexión
+            fila("no", "Tienda Shopify", "Sin conectar: tu asistente vería el inventario y tú, qué ventas dejan tus chats",
+                 ir.format("Conectar"))
     if not c.slug:
         with usar(c):
             gasto = await limites.spent_today(c.store)

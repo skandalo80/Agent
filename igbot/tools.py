@@ -589,10 +589,12 @@ def human_tools(store: Store, google: Google | None, user_id: str, state: dict |
 
 
 def build(
-    store: Store, google: Google | None, user_id: str, state: dict, instagram: Instagram | None = None
+    store: Store, google: Google | None, user_id: str, state: dict, instagram: Instagram | None = None,
+    extra: list | None = None,
 ):
-    """Servidor MCP con las herramientas de este usuario y la lista de permitidas."""
-    tools = memory_tools(store, user_id) + human_tools(store, google, user_id, state, instagram)
+    """Servidor MCP con las herramientas de este usuario y la lista de permitidas.
+    `extra`: las de sus conexiones (p. ej. el inventario de su Shopify)."""
+    tools = memory_tools(store, user_id) + human_tools(store, google, user_id, state, instagram) + (extra or [])
     # Agenda, correo y cotizaciones usan tu Google: solo en las cuentas que lo tienen.
     if google and cuenta().google_tools:
         tools += workspace_tools(store, google, user_id, state)

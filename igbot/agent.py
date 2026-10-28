@@ -14,7 +14,7 @@ from pathlib import Path
 import anthropic
 from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query
 
-from . import catalog, config, limites, tienda, tools
+from . import catalog, config, limites, tienda, tienda_shopify, tools
 from .cuenta import cuenta
 from .google import Google
 from .instagram import Instagram
@@ -167,7 +167,9 @@ async def reply(
     """Devuelve (respuesta, si alguna herramienta hizo algo fuera del chat)."""
     system = system_prompt()
     state: dict = {}
-    server, allowed = tools.build(store, google, user_id, state, instagram)
+    # Con su Shopify conectado, el asistente revisa el inventario en vivo.
+    extra = tienda_shopify.herramientas(cuenta()) if (await tienda_shopify.conexion(cuenta())).get("token") else []
+    server, allowed = tools.build(store, google, user_id, state, instagram, extra)
     prompt = await build_prompt(store, user_id, new_messages)
     text = await run_claude(prompt, system, {"bot": server}, allowed, max_turns=10)
     return text, state.get("acted", False)

@@ -604,7 +604,7 @@ input[type=file]{font:inherit;font-size:.9rem;margin-top:.75rem;max-width:100%}
 label.check input[type=email]{flex:1;max-width:22rem;margin:0}
 .si-fijo{display:none;margin-top:.75rem}form:has(input[name=fuera][value=fijo]:checked) .si-fijo{display:block}
 .semaforo{width:.65rem;height:.65rem;border-radius:50%;flex:none;margin:0 .4rem;background:#C6FA2C}
-.semaforo.sem-aviso{background:#ff9f0a}.semaforo.sem-mal{background:#ff453a}
+.semaforo.sem-aviso{background:#ff9f0a}.semaforo.sem-mal{background:#ff453a}.semaforo.sem-no{background:var(--linea-oscura)}
 .caminos{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem}
 .camino{background:var(--blanco);border-radius:1.5rem;padding:2rem;display:flex;flex-direction:column;border:2px solid transparent}
 .camino h2{margin:.25rem 0 .5rem}.camino ul{margin:1rem 0 1.5rem;padding:0;list-style:none;color:#E4E4E2}
