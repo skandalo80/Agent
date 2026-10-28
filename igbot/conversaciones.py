@@ -1,8 +1,8 @@
 """Tu asistente > Conversaciones: la bandeja de DMs del panel.
 
 A la izquierda, los chats de 10 en 10 con buscador, arriba quién los atiende (Tú: Nuevos, Sin
-contestar y Todas, con la razón por la que te los pasó el asistente; Tu asistente: En curso, Para
-revisar y Todas); a la derecha, el chat abierto con el interruptor
+contestar y Todas, con la razón por la que te los pasó el asistente o por la que no pudo contestar;
+Tu asistente: En curso y Todas); a la derecha, el chat abierto con el interruptor
 Asistente / Tú y la caja para contestar desde aquí. Solo DMs: los comentarios no salen.
 Todo es HTML que arma el servidor; el buscador se manda solo mientras escribes con
 panel.js (sin fetch: recarga la página), y sin JS se busca con Enter.
@@ -27,11 +27,10 @@ MAX_RESPUESTA = 1000
 VENTANA = 24 * 3600
 # Arriba, quién atiende: "Tú" (el chat está en pausa) o "Tu asistente"; debajo, sus pestañas.
 # Sin `ver` se abre "Tú" si algo espera tu respuesta; si no, "Tu asistente".
-FILTROS = {"nuevos": "Nuevos", "sin": "Sin contestar", "tuyas": "Todas",
-           "curso": "En curso", "revisar": "Para revisar", "bot": "Todas"}
-LADO = {"nuevos": "tu", "sin": "tu", "tuyas": "tu", "curso": "bot", "revisar": "bot", "bot": "bot"}
-AVISAN = {"nuevos", "sin", "revisar"}  # las pestañas cuyo número sale en naranja
-# Un mensaje del cliente sin respuesta del asistente después de esto pasa a "Para revisar".
+FILTROS = {"nuevos": "Nuevos", "sin": "Sin contestar", "tuyas": "Todas", "curso": "En curso", "bot": "Todas"}
+LADO = {"nuevos": "tu", "sin": "tu", "tuyas": "tu", "curso": "bot", "bot": "bot"}
+AVISAN = {"nuevos", "sin"}  # las pestañas cuyo número sale en naranja
+# Un mensaje del cliente sin respuesta del asistente después de esto pasa a "Tú", en Sin contestar.
 SIN_RESPUESTA = 120
 
 
@@ -39,7 +38,7 @@ def primero(cuantos: dict, lado: str) -> str:
     """La pestaña con la que abre un lado: la primera que pide atención y tiene algo; si no, En curso / Todas."""
     if lado == "tu":
         return "nuevos" if cuantos["nuevos"] else "sin" if cuantos["sin"] else "tuyas"
-    return "revisar" if cuantos["revisar"] else "curso" if cuantos["curso"] else "bot"
+    return "curso" if cuantos["curso"] else "bot"
 DIAS = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"]
 MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
 MESES_LARGOS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre",
@@ -200,6 +199,7 @@ async def partes(c: Cuenta, ver: str = "", buscar: str = "", hoja: int = 1, chat
     conv = []
     for (u, t, rol, texto, hasta, est, paso), nombre in zip(filas, nombres):
         nombre = nombre if nombre.startswith("@") else "Cliente de Instagram"
+        limite = texto == LIMIT_NOTICE
         if rol == "assistant":
             manual = texto.startswith(MANUAL)
             texto = ("Tú: " + texto[len(MANUAL):].strip()) if manual else "Asistente: " + texto
@@ -210,9 +210,11 @@ async def partes(c: Cuenta, ver: str = "", buscar: str = "", hoja: int = 1, chat
                         f'{RAZONES.get(razon, "Te lo pasó el asistente") if paso else "Lo tomaste tú"}</span>')
             quien = {"nuevo": "Nuevo", "tu_sin": "Sin contestar"}.get(est, "Lo atiendes tú")
             quien += f" · {max(1, round((hasta - ahora) / 3600))} h"
+        elif est == "revisar":
+            etiqueta = f'<span class="razon">{"Límite del plan" if limite else "El asistente no respondió"}</span>'
+            quien = "Sin contestar"
         else:
-            etiqueta = ""
-            quien = "Para revisar: no tuvo respuesta" if est == "revisar" else "Asistente"
+            etiqueta, quien = "", "Asistente"
         aviso = est in ("nuevo", "tu_sin", "revisar")
         conv.append(
             f'<a class="conv{" sin" if aviso else ""}{" on" if u == chat else ""}"'
@@ -235,7 +237,6 @@ async def partes(c: Cuenta, ver: str = "", buscar: str = "", hoja: int = 1, chat
              "sin": "Ninguno: ya contestaste todos los chats que atiendes tú.",
              "tuyas": "Ninguno: tu asistente está atendiendo todos tus chats.",
              "curso": "Nadie ha escrito en las últimas 24 horas.",
-             "revisar": "Nada que revisar: tu asistente contestó todo.",
              "bot": "Aún no te escribe nadie. Aquí vas a ver tus chats en cuanto lleguen."}[ver]
     if buscar:
         vacio = f"No encontramos chats con «{escape(buscar)}»."

@@ -447,11 +447,15 @@ def test_conversaciones_y_tomar_un_chat(cliente):
     assert 'class="on" aria-current="page">En curso<b class="gris">2</b>' in r.text
     assert "@caro" in r.text and "Hola, ¿precios?" in r.text and "Asistente: Sí, a las 5." in r.text
     assert r.text.index("@caro") < r.text.index("@beto") and "Nuevos" not in r.text
-    # Si el asistente no le contestó a caro en 2 minutos, pasa a Para revisar y la página abre ahí.
+    # Si el asistente no le contestó a caro en 2 minutos, pasa a "Tú", Sin contestar, con su etiqueta.
     client.portal.call(store.db.execute, "UPDATE messages SET created_at = created_at - 200 WHERE user_id = 'caro'")
     r = client.get("/panel/asistente")
-    assert 'class="on" aria-current="page">Para revisar<b class="">1</b>' in r.text
-    assert "@caro" in r.text and "@beto" not in r.text and "Para revisar: no tuvo respuesta" in r.text
+    assert 'class="on" aria-current="true">Tú<b>1</b></a>' in r.text and "Para revisar" not in r.text
+    assert 'class="on" aria-current="page">Sin contestar<b class="">1</b>' in r.text
+    assert '<span class="razon">El asistente no respondió</span>Sin contestar' in r.text and "@beto" not in r.text
+    assert '<span class="punto-menu"' in r.text
+    r = client.get("/panel/asistente?ver=curso")
+    assert 'En curso<b class="gris">1</b>' in r.text and "@caro" not in r.text
     r = client.get("/panel/asistente?ver=bot")
     assert "@beto" in r.text and 'href="/panel/asistente?ver=bot&amp;chat=beto#chats"' in r.text
     # El chat abierto: los mensajes en orden y el interruptor en Asistente.
