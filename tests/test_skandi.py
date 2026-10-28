@@ -94,9 +94,9 @@ def test_skandi_contesta_y_pasa_a_soporte(monkeypatch, tmp_path):
         # Límite diario: la tercera pasa, la cuarta ya no llama a Claude.
         respuestas.append("Listo.")
         client.post("/panel/ayuda", headers=ORIGEN, data={"mensaje": "otra"})
-        client.post("/panel/ayuda", headers=ORIGEN, data={"mensaje": "una más"})
+        r = client.post("/panel/ayuda", headers=ORIGEN, data={"mensaje": "una más"})
         assert len(vistos) == 3
-        assert "límite de preguntas de hoy" in client.get("/panel/resultados").text
+        assert "límite de preguntas de hoy" in r.text  # el aviso sale en la página a la que regresa
 
 
 def test_skandi_en_la_web(monkeypatch, tmp_path):
