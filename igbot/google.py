@@ -5,6 +5,7 @@ sola vez con scripts/google_auth.py, y solo con los permisos de SCOPES.
 """
 import asyncio
 import base64
+import mimetypes
 import uuid
 from urllib.parse import quote
 from email.message import EmailMessage
@@ -94,7 +95,7 @@ class Google:
     ) -> None:
         """Envía desde tu Gmail. `sender` debe ser tu dirección (o un alias suyo).
 
-        `attachments`: lista de (nombre, bytes) de PDFs.
+        `attachments`: lista de (nombre, bytes); el tipo sale de la extensión (PDF, ZIP).
         """
         msg = EmailMessage()
         if sender:
@@ -105,7 +106,9 @@ class Google:
         msg["Subject"] = subject
         msg.set_content(body)
         for filename, data in attachments:
-            msg.add_attachment(data, maintype="application", subtype="pdf", filename=filename)
+            tipo = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+            maintype, subtype = tipo.split("/", 1)
+            msg.add_attachment(data, maintype=maintype, subtype=subtype, filename=filename)
         raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
         await self._call("POST", f"{GMAIL}/users/me/messages/send", json={"raw": raw})
 
