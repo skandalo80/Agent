@@ -1024,6 +1024,13 @@ img.mrc-logo-mini{background:#fff}
 .wiz-bloque .opc{font-weight:400;color:var(--gris)}
 .prod-cam:has(input[name=accion][value=promo]:checked) .wiz-si.promo{display:grid}
 .formatos-cam:has(input[name=formatos][value=titular]:checked) .wiz-si.titular{display:block}
+.refs-cam{display:grid;grid-template-columns:repeat(auto-fill,minmax(6.5rem,1fr));gap:.6rem;margin:.2rem 0 .8rem}
+.ref-cam{position:relative;display:block;aspect-ratio:1/1;border-radius:12px;overflow:hidden;cursor:pointer;border:2px solid transparent}
+.ref-cam img{width:100%;height:100%;object-fit:cover;display:block}
+.ref-cam input{position:absolute;top:.45rem;left:.45rem;width:1.1rem;height:1.1rem;margin:0;accent-color:var(--acento)}
+.ref-cam:has(input:checked){border-color:var(--acento)}
+.subir-ref{display:inline-flex;align-items:center;gap:.6rem;font-weight:600;cursor:pointer}
+.subir-ref input{font:inherit;font-size:.85rem;color:var(--gris)}
 .wiz-abre{display:flex;align-items:center;gap:.65rem;margin:0;cursor:pointer;font-weight:600;font-size:1rem}
 .wiz-abre input{width:1.15rem;height:1.15rem;margin:0;accent-color:var(--acento)}
 .wiz-bloque:has(>.wiz-abre input:checked)>.wiz-si.abre{display:block}
