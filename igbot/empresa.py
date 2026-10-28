@@ -649,9 +649,10 @@ main.emp{color:var(--claro);padding-bottom:4rem}
 .cab-paso .antetitulo{font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;font-weight:600}
 @media(max-width:560px){.hoja-o{padding:1.4rem 1.1rem}}
 /* Llenar con el sitio web: el botón bajo el campo y la página de sugerencias. */
-.llenar-web{display:flex;align-items:center;flex-wrap:wrap;gap:.35rem .7rem;margin-top:.5rem}.llenar-web .ay{margin:0}
-.emp .boton.mini-boton{padding:var(--boton-mini-pad);font-size:var(--t-boton-mini);line-height:1.2}
-.campo-o:has(input[name=sitio_web]:placeholder-shown) .llenar-web{display:none}
+.h3-der{display:inline-flex;align-items:center;gap:.6rem;flex-wrap:wrap;justify-content:flex-end}
+.emp .boton.mini-boton{padding:var(--boton-mini-pad);font-size:var(--t-boton-mini);line-height:1.2;font-weight:600;white-space:nowrap;display:inline-flex;align-items:center;gap:.35rem;background:transparent;color:var(--acento);border:1px solid var(--acento);box-shadow:none}
+.emp .boton.mini-boton:hover{background:rgba(255,138,61,.1)}
+.caja-o:has(input[name=sitio_web]:placeholder-shown) .llenar-web{display:none}
 .sug{display:grid;grid-template-columns:auto 1fr;gap:.35rem .8rem;padding:1rem 0;border-top:1px solid #2E3035}
 .sug:first-of-type{border-top:0;padding-top:0}
 .sug>input{accent-color:var(--acento);width:1.1rem;height:1.1rem;margin:.15rem 0 0}
@@ -679,6 +680,9 @@ ICONO_CAMPANAS = ('<span class="uso" title="Lo usan tus campañas">'
                          '<path d="m21 15-5-5L5 21"/>') + "</span>")
 # Quién usa cada campo (ver secciones()): "ambos", "asistente", "campanas" o "" (ninguno).
 ICONOS = {"ambos": ICONO_ASISTENTE + ICONO_CAMPANAS, "asistente": ICONO_ASISTENTE, "campanas": ICONO_CAMPANAS}
+
+
+ICONO_CHISPA = _svg('<path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.7 1.8 1.8.7-1.8.7L19 20l-.7-1.8-1.8-.7 1.8-.7z"/>')
 
 
 def _usos(usa: str) -> str:
@@ -750,20 +754,20 @@ def pie(paso: int, nota: str = "") -> str:
 
 
 # Bajo el campo del sitio web; se ve en cuanto hay una dirección escrita (CSS, sin JavaScript).
-LLENAR_WEB = ('<div class="llenar-web"><button class="boton mini-boton" name="accion" value="llenar_web">'
-              "Llenar con mi sitio web</button><p class=\"ay\">Te mostramos lo que encontramos"
-              " para que elijas qué usar.</p></div>")
+LLENAR_WEB = ('<span class="h3-der"><button class="boton mini-boton llenar-web" name="accion" value="llenar_web"'
+              ' title="Leemos tu sitio y te mostramos lo que encontramos para que elijas qué usar">'
+              + ICONO_CHISPA + "Llenar con mi sitio web</button>")
 
 
 def paso_1(e: dict) -> str:
     giros = "".join(f'<option value="{escape(g)}"{" selected" if g == e.get("giro") else ""}>{escape(g)}</option>' for g in GIROS + [OTRO])
     elige = "" if e.get("giro") else '<option value="" selected disabled>Elige una opción</option>'
     return (
-        '<div class="caja-o"><h3>Información general <span class="etq-o esencial">Esencial</span></h3>'
+        f'<div class="caja-o"><h3>Información general {LLENAR_WEB}<span class="etq-o esencial">Esencial</span></span></h3>'
         '<p class="sub">La base para que todo hable de tu negocio y no de uno genérico.</p>'
         '<div class="dos">' + _texto("nombre", "Nombre de tu empresa", e.get("nombre", ""), 80, req=True)
-        + _texto("sitio_web", "Sitio web", e.get("sitio_web", ""), 200, ejemplo="tusitio.com")[:-6] + LLENAR_WEB
-        + "</div></div>"
+        + _texto("sitio_web", "Sitio web", e.get("sitio_web", ""), 200, ejemplo="tusitio.com")
+        + "</div>"
         + _texto("frase", "Tu empresa en una frase", e.get("frase", ""), 160,
                  "La que dirías si solo tuvieras cinco segundos.", ejemplo="Ej.: Espacios pequeños, hogares cálidos.")
         + _texto("descripcion", "Describe tu negocio en tus palabras", e.get("descripcion", ""), 1500,
