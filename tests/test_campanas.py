@@ -667,9 +667,25 @@ def test_varias_campanas(cliente, monkeypatch):
     hoy = datetime(2099, 1, 7, 12, tzinfo=campanas.tools.tz())
     monkeypatch.setattr(campanas.tools, "now", lambda: hoy)
     client.post(BASE, headers=ORIGEN, data=datos_campana(nombre="Febrero", inicio="2099-01-12"))
+
+    from igbot.admin import PANEL
+
+    async def con_estado(estados):  # dos posts de Invierno con imagen (uno en borrador y otro programado) o sin ella
+        x = await campanas.leer(c, inv["id"])
+        for p, estado in zip(sorted(x["posts"], key=lambda p: (p["dia"], p["hora"]))[1:3], estados):
+            if estado:
+                p["post_id"] = await c.store.add_post(PANEL, [], "t", 1)
+                await c.store.set_post(p["post_id"], estado)
+            else:
+                p["post_id"] = None
+        await campanas.guardar(c, x)
+
+    client.portal.call(con_estado, ("borrador", "programada"))
     r = client.get(BASE)
+    assert '<small><i class="e-bor"></i>Borrador</small>' in r.text and '<small><i class="e-prog"></i>Programado</small>' in r.text
     assert 'class="on">Activas<small>2</small>' in r.text and "día 3 de 14" in r.text and "<b>0 de 6</b>" in r.text
-    assert "Próximos posts" in r.text and "<b>Post 5</b><span>Mié 14</span>" in r.text and "6 sin imagen" in r.text  # a lo ancho
+    assert "Próximos posts" in r.text and "<b>Post 5</b><span>Mié 14</span>" in r.text and "4 sin imagen" in r.text and "1 en borrador" in r.text  # a lo ancho
+    client.portal.call(con_estado, (None, None))
     r = client.get(f"{BASE}?ver=proxima")
     assert "Febrero" in r.text and "Se cruza" not in r.text and "empieza en 5 días" in r.text
 

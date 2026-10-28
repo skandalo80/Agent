@@ -1793,12 +1793,12 @@ async def tarjeta_campana(c: Cuenta, camp: dict, cual: str, hoy: date, marcar: b
                + (f'<a class="boton secundario chico" href="{url_de(camp)}/brief">Brief</a>' if camp.get("brief") else ""))
     tacho = (f'<a class="borrar{" con-sel" if casilla else ""}" href="{url_de(camp)}?borrar=lista"'
               f' title="Borrar campaña" aria-label="Borrar campaña">{PAPELERA}</a>' if completa else "")
-    puntos = "".join(f'<span><i class="{clase}"></i>{v} {t}</span>' for (t, clase), v in
-                     ((("publicados", "e-pub"), estados.get("publicados", 0)),
-                      (("programados", "e-prog"), estados.get("programados", 0)),
-                      (("en borrador", "e-bor"), estados.get("borradores", 0)),
-                      (("sin imagen", "e-sin"), estados.get("sin", 0)),
-                      (("no salieron", "e-fallo"), estados.get("fallidos", 0))) if v)
+    puntos = "".join(f'<span><i class="{clase}"></i>{v} {uno if v == 1 else varios}</span>' for (uno, varios, clase), v in
+                     ((("publicado", "publicados", "e-pub"), estados.get("publicados", 0)),
+                      (("programado", "programados", "e-prog"), estados.get("programados", 0)),
+                      (("en borrador", "en borrador", "e-bor"), estados.get("borradores", 0)),
+                      (("sin imagen", "sin imagen", "e-sin"), estados.get("sin", 0)),
+                      (("no salió", "no salieron", "e-fallo"), estados.get("fallidos", 0))) if v)
     if cual == "pasada":
         medio = ("Lo que mejor funcionó", "".join(mini_mejor(c, f) for f in renglones[:4])
                  or '<p class="nada">Ningún post de esta campaña se publicó.</p>')
@@ -1841,6 +1841,10 @@ def mini_mejor(c: Cuenta, f: dict) -> str:
             f'<span>{informe.pct(f["tasa"]) + " de interacción" if f["tasa"] is not None else "sin números aún"}</span></div>')
 
 
+ESTADO_MINI = {"borrador": ("e-bor", "Borrador"), "programada": ("e-prog", "Programado"),  # junto a la hora
+               "fallida": ("e-fallo", "No salió")}
+
+
 async def proximos(c: Cuenta, camp: dict, hoy: date, cuantos_: int = 4) -> str:
     """Los siguientes posts que salen (de hoy en adelante, sin los ya publicados), con su miniatura, día y hora."""
     posts = await c.store.posts_by_id([p["post_id"] for p in camp["posts"] if p.get("post_id")])
@@ -1854,9 +1858,11 @@ async def proximos(c: Cuenta, camp: dict, hoy: date, cuantos_: int = 4) -> str:
         post = posts.get(p.get("post_id"))
         media = await c.store.media(post["media_ids"][0]) if post and post.get("media_ids") else None
         d = date.fromisoformat(p["dia"])
+        clase, nombre = ESTADO_MINI.get(post["status"] if post else "", ("", ""))
         piezas.append(f'<a class="pp" href="{url_de(camp)}?post={p["k"]}#detalle">{mini_img(c, media[0] if media else "")}'
                       f'<b>{escape(p["titulo"])}</b><span>{DIAS[d.weekday()]} {d.day}</span>'
-                      f'<em>{escape(p.get("hora") or "")}</em></a>')
+                      f'<span class="hora-est"><em>{escape(p.get("hora") or "")}</em>'
+                      + (f'<small><i class="{clase}"></i>{nombre}</small>' if nombre else "") + "</span></a>")
     return f'<div class="prox">{"".join(piezas)}</div>'
 
 
