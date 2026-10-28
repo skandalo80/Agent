@@ -100,7 +100,7 @@ def test_el_asistente_de_punta_a_punta(cliente, monkeypatch):
     assert "Revisa tu campaña antes de generarla" in r.text and "Latte de calabaza · Promoción con descuento 20 %" in r.text
     assert r.text.count("Editar</button>") == 7 and "Crear el brief" in r.text
     assert "Consejos e ideas útiles · Historias y situaciones cotidianas" in r.text
-    assert 'class="cruce"' in r.text and "Con 6 posts cubrimos" in r.text
+    assert 'class="cruce"' not in r.text  # Qué se ve está oculto: no hay cruce que mostrar
 
     # Sin brief no se escriben posts: vuelve al resumen.
     r = client.post(URL, headers=ORIGEN, data={"paso": "8", "accion": "proponer"}, follow_redirects=False)
@@ -130,7 +130,7 @@ def test_el_asistente_de_punta_a_punta(cliente, monkeypatch):
     assert "director creativo" in plan_sistema and "6. 2099-" in plan_prompt and "Concepto: Idea 2." in plan_prompt
     assert "| plan: objetivo: Objetivo 1; ángulo: Ángulo 1; titular: Titular 1" in prompt
     camp = leer(client, c)
-    assert camp["brief"]["titulo"] == "Idea 2" and all(p["ve"] == "productos" for p in camp["posts"])
+    assert camp["brief"]["titulo"] == "Idea 2" and not any(p.get("ve") for p in camp["posts"])
     assert all(p["plan"]["cta"] == "Escríbenos" for p in camp["posts"])
     assert camp["temas"] == ["ensena", "historias"]  # los enfoques que eligió
     assert {p["tipo"] for p in camp["posts"]} <= {"ensena", "historias"}
@@ -342,9 +342,12 @@ def test_el_plan_va_en_tandas_y_pide_otra_vez_lo_que_falta(monkeypatch):
     import asyncio
     from igbot import agent
 
-    llamadas, falla = [], {"una": True}
+    llamadas, revisiones, falla = [], [], {"una": True}
 
     async def fake(prompt, system, mcp=None, allowed=(), max_turns=5, model=None):
+        if "coherencia" in system:  # la revisión marca el post 2 de los que tienen foto
+            revisiones.append(prompt)
+            return json.dumps({"revisar": [{"n": 2, "motivo": "La imagen no muestra el asistente"}]})
         llamadas.append(prompt)
         n = len(re.findall(r"^\d+\. ", prompt.split("<posts>")[-1], re.M))
         if falla.pop("una", False):  # la primera respuesta llega cortada: JSON inválido
@@ -357,10 +360,14 @@ def test_el_plan_va_en_tandas_y_pide_otra_vez_lo_que_falta(monkeypatch):
               for i in range(23)]
     asyncio.run(campanas.planear("<brief>b</brief>\n", {"nombre": "X", "inicio": "2099-01-01"}, fichas))
     assert all(f["plan"]["foto"]["protagonista"] for f in fichas)
-    assert len(llamadas) == 4  # 10 + 10 + 3, y otra vez los 10 de la tanda que falló
+    assert len(llamadas) == 5  # 10 + 10 + 3, otra vez los 10 de la tanda que falló y el post que no cuadró
     assert "<ya_planeados>" not in llamadas[1]  # la primera tanda no salió: no hay nada planeado
     assert llamadas[2].count("| plan: ") == 10  # la tercera ve lo que ya planeó la segunda
     assert "10. 2099-01-10" in llamadas[3] and llamadas[3].count("| plan: ") == 13
+    assert len(revisiones) == 1 and revisiones[0].count("| imagen: ") == 23
+    assert "<corregir>" in llamadas[4] and "motivo: La imagen no muestra el asistente" in llamadas[4]
+    assert "1. 2099-01-02" in llamadas[4].split("<posts>")[-1]  # el segundo post, planeado otra vez
+    assert brief.leer_revision({"revisar": [{"n": 9, "motivo": "x"}, {"n": "a"}, {"n": 1, "motivo": " y "}]}, 3) == {0: "y"}
 
 
 def test_limite_de_propuestas_al_dia(cliente, monkeypatch):
