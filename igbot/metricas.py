@@ -32,6 +32,7 @@ HORA = 6
 DIAS_ATRAS = 7
 CLAVE_INTENTO = "metricas_intento"
 CLAVE_PUBLICO = "metricas_publico"
+CLAVE_HORA = "metricas_hora"  # cuándo fue el último guardado (para "actualizado hoy a las 6:00")
 
 # nombre en Instagram -> nombre guardado
 METRICAS = {
@@ -122,6 +123,7 @@ async def tick(c: Cuenta) -> None:
             return
         await c.store.set(CLAVE_INTENTO, hoy.isoformat())  # antes de llamar: un intento al día
         await guardar(c, hoy)
+        await c.store.set(CLAVE_HORA, str(ahora.timestamp()))
         log.info("Métricas del %s guardadas para %s", hoy, c.slug or "la principal")
 
 
@@ -139,19 +141,24 @@ def seguidores_en(dias: dict[str, dict], dia: date) -> int | None:
     return dias[max(previos)]["seguidores"] if previos else None
 
 
-async def numeros(c: Cuenta, rango_dias: int) -> dict:
+async def numeros(c: Cuenta, rango_dias: int, fin: date | None = None) -> dict:
+    """Los `rango_dias` que terminan en `fin` (hoy si no viene). Hoy no tiene insights aún: las líneas
+    llegan hasta ayer; los seguidores son los del último día guardado hasta `fin`."""
     hoy = datetime.now(ZoneInfo(c.timezone)).date()
-    dias = await c.store.metricas((hoy - timedelta(days=max(rango_dias, 30) + 1)).isoformat())
-    fechas = [hoy - timedelta(days=i) for i in range(rango_dias, 0, -1)]  # sin hoy: aún no termina
+    fin = min(fin or hoy, hoy)
+    ultimo = min(fin, hoy - timedelta(days=1))
+    dias = await c.store.metricas((fin - timedelta(days=max(rango_dias, 30) + 1)).isoformat())
+    dias = {k: v for k, v in dias.items() if k <= fin.isoformat()}
+    fechas = [ultimo - timedelta(days=i) for i in range(rango_dias - 1, -1, -1)]  # días completos
     serie = [dias.get(f.isoformat(), {}) for f in fechas]
     con_seguidores = [d for d in dias if "seguidores" in dias[d]]
-    actual = dias[max(con_seguidores)]["seguidores"] if con_seguidores else None
+    actual = seguidores_en(dias, fin)
     suma = lambda k: sum(d.get(k, 0) for d in serie)  # noqa: E731
     return {
         "fechas": fechas, "serie": serie, "hay": bool(dias),
         "seguidores": actual,
-        "semana": cambio(actual, seguidores_en(dias, hoy - timedelta(days=7))),
-        "mes": cambio(actual, seguidores_en(dias, hoy - timedelta(days=30))),
+        "semana": cambio(actual, seguidores_en(dias, fin - timedelta(days=7))),
+        "mes": cambio(actual, seguidores_en(dias, fin - timedelta(days=30))),
         "desde": min(con_seguidores) if con_seguidores else None,
         "nuevos": suma("nuevos"), "perdidos": suma("perdidos"),
         "vistas": suma("vistas"), "clics": suma("clics"),
@@ -209,7 +216,7 @@ def linea(valores: list[int | None], fechas: list[date], nombre: str) -> str:
         f'{escape(f"{tools.DAYS[f.weekday()]} {f:%d/%m}: " + ("sin dato" if v is None else f"{cifra(v)} {nombre}"))}'
         "</title></rect>"
         for i, (f, v) in enumerate(zip(fechas, valores)))
-    cada = 1 if len(fechas) <= 7 else 7
+    cada = 1 if len(fechas) <= 7 else 7 if len(fechas) <= 30 else 15
     eje = "".join(f"<span>{f:%d/%m}</span>" if (len(fechas) - 1 - i) % cada == 0 else "<span></span>"
                   for i, f in enumerate(fechas))
     return (f'<div class="met-graf"><div class="met-escala"><span>{cifra(tope)}</span><span>{cifra(bajo)}</span></div>'
@@ -261,7 +268,7 @@ def seccion(d: dict) -> str:
                  f'<span>{pct(d["mes"]) or "—"} vs. mes pasado</span></div>')
     desde = (f'<p class="ayuda chica">Guardando desde el {date.fromisoformat(d["desde"]):%d/%m/%Y}.</p>'
              if d["desde"] and (d["semana"] is None or d["mes"] is None) else "")
-    grande = tarjeta("Seguidores", f'<div class="met-grande">{cifra(d["seguidores"] or 0)}</div>{variacion}{desde}',
+    grande = tarjeta("Seguidores", f'<div class="met-grande">{"—" if d["seguidores"] is None else cifra(d["seguidores"])}</div>{variacion}{desde}',
                      clase="t4")
     neto = d["nuevos"] - d["perdidos"]
     nuevos = tarjeta("Seguidores nuevos", linea([x.get("nuevos") for x in serie], fechas, "nuevos")

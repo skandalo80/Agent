@@ -18,12 +18,12 @@ bot no deja JavaScript; sus estilos están en panel.ESTILO); el detalle de cada 
 """
 import time
 from collections import Counter
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from html import escape
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from . import metricas, panel
 from .comentarios import SPAM
@@ -31,9 +31,9 @@ from .cuenta import Cuenta
 
 router = APIRouter(prefix="/panel/resultados")
 
-RANGOS = {"7": "7 días", "30": "30 días"}
+RANGOS = {"7": "7 días", "30": "30 días", "90": "90 días"}
 CACHE_SEGUNDOS = 600
-_cache: dict[tuple[str, str], tuple[float, dict]] = {}
+_cache: dict[tuple, tuple[float, dict]] = {}
 
 DIAS = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"]
 
@@ -122,12 +122,14 @@ async def conversaciones(filas, c: Cuenta, inicio: datetime, dias: int) -> dict:
     }
 
 
-async def calcular(c: Cuenta, rango: str) -> dict:
+async def calcular(c: Cuenta, rango: str, fin: date | None = None) -> dict:
+    """Los `rango` días que terminan en `fin` (hoy si no viene), contando ese día."""
     zona = ZoneInfo(c.timezone)
     dias = int(rango)
     ahora = datetime.now(zona)
-    inicio = ahora.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=dias - 1)
-    since, until = inicio.timestamp(), ahora.timestamp()
+    fin = min(fin or ahora.date(), ahora.date())
+    inicio = datetime(fin.year, fin.month, fin.day, tzinfo=zona) - timedelta(days=dias - 1)
+    since, until = inicio.timestamp(), min(ahora.timestamp(), (inicio + timedelta(days=dias)).timestamp())
     store = c.store
     numeros = await store.week_stats(since, until)
     conv = await conversaciones(store.message_times(since, until), c, inicio, dias)
@@ -153,12 +155,12 @@ async def calcular(c: Cuenta, rango: str) -> dict:
     return datos
 
 
-async def numeros_de(c: Cuenta, rango: str) -> dict:
-    clave = (c.slug, rango)
+async def numeros_de(c: Cuenta, rango: str, fin: date | None = None) -> dict:
+    clave = (c.slug, rango, fin)
     guardado = _cache.get(clave)
     if guardado and guardado[0] > time.time():
         return guardado[1]
-    datos = await calcular(c, rango)
+    datos = await calcular(c, rango, fin)
     _cache[clave] = (time.time() + CACHE_SEGUNDOS, datos)
     return datos
 
@@ -200,8 +202,9 @@ def por_dia(d: dict) -> str:
     fechas = [d["inicio"] + timedelta(days=i) for i in range(d["dias"])]
     if d["dias"] <= 7:
         etiquetas = [DIAS[f.weekday()] for f in fechas]
-    else:  # una de cada cinco, contando hacia atrás desde hoy
-        etiquetas = [f"{f:%d/%m}" if (d["dias"] - 1 - i) % 5 == 0 else "" for i, f in enumerate(fechas)]
+    else:  # una de cada cinco (de cada quince en 90 días), contando hacia atrás desde el último
+        cada = 5 if d["dias"] <= 30 else 15
+        etiquetas = [f"{f:%d/%m}" if (d["dias"] - 1 - i) % cada == 0 else "" for i, f in enumerate(fechas)]
     detalles = [f"{DIAS[f.weekday()]} {f:%d/%m}: {plural(v, 'mensaje')}" for f, v in zip(fechas, d["por_dia"])]
     pico = max(range(d["dias"]), key=lambda i: d["por_dia"][i])
     resumen = (f'Promedio: {sum(d["por_dia"]) / d["dias"]:.0f} al día · el día con más fue el'
@@ -251,14 +254,59 @@ def seccion_contenido(d: dict) -> str:
     )
 
 
-async def pagina(c: Cuenta, rango: str) -> HTMLResponse:
-    d = await numeros_de(c, rango)
-    pestanas = "".join(f'<a href="/panel/resultados?dias={k}"{panel.ACTIVA if k == rango else ""}>{nombre}</a>'
-                       for k, nombre in RANGOS.items())
+def titulo_periodo(ini: date, fin: date) -> str:
+    from .calendario import MESES
+    if ini.year != fin.year:
+        return f"{ini.day} de {MESES[ini.month - 1]} de {ini.year} al {fin.day} de {MESES[fin.month - 1]} de {fin.year}"
+    if ini.month == fin.month:
+        return f"{ini.day} al {fin.day} de {MESES[fin.month - 1]} de {fin.year}"
+    return f"{ini.day} de {MESES[ini.month - 1]} al {fin.day} de {MESES[fin.month - 1]} de {fin.year}"
+
+
+def enlace(rango: str, fin: date, hoy: date, base: str = "/panel/resultados") -> str:
+    return f"{base}?dias={rango}" + (f"&fin={fin.isoformat()}" if fin < hoy else "")
+
+
+async def barra(c: Cuenta, rango: str, fin: date, hoy: date) -> str:
+    """La barra de arriba, como la de Calendario: el periodo con ‹ › y Hoy, 7/30/90 días, cuándo se
+    actualizaron los números y la descarga en PDF."""
+    dias = int(rango)
+    ini = fin - timedelta(days=dias - 1)
+    antes = enlace(rango, fin - timedelta(days=dias), hoy)
+    siguiente = (f'<a href="{enlace(rango, min(fin + timedelta(days=dias), hoy), hoy)}" aria-label="Siguiente">›</a>'
+                 if fin < hoy else '<span class="off" aria-hidden="true">›</span>')
+    rangos = "".join(f'<a href="{enlace(k, fin, hoy)}"{panel.ACTIVA if k == rango else ""}>{nombre}</a>'
+                     for k, nombre in RANGOS.items())
+    guardado = await c.store.get(metricas.CLAVE_HORA)
+    if guardado:
+        cuando = datetime.fromtimestamp(float(guardado), ZoneInfo(c.timezone))
+        dia = "hoy" if cuando.date() == hoy else "ayer" if cuando.date() == hoy - timedelta(days=1) else f"el {cuando:%d/%m}"
+        instagram = f"Instagram: actualizado {dia} a las {cuando:%H:%M}"
+    else:
+        instagram = "Instagram: el primer guardado es mañana a las 6:00"
+    return (
+        '<div class="tarjeta cal res-barra"><div class="cal-cab">'
+        f'<h2>{titulo_periodo(ini, fin)}</h2><div class="cal-nav">'
+        f'<a href="{antes}" aria-label="Anterior">‹</a>{siguiente}'
+        f'<a class="hoy-b" href="{enlace(rango, hoy, hoy)}">Hoy</a></div>'
+        f'<div class="cal-sw modo">{rangos}</div></div>'
+        '<div class="cal-filtros res-info">'
+        f'<span><i class="punto"></i>{instagram}</span>'
+        '<span>Mensajes: cada 10 minutos</span>'
+        f'<span class="res-comp">Seguidores comparados con 7 y 30 días antes del {fin:%d/%m}</span>'
+        f'<a class="boton secundario chico cal-bajar" href="{enlace(rango, fin, hoy, "/panel/resultados/descargar")}"'
+        ' title="Este periodo, en PDF">↓ Descargar</a></div></div>'
+    )
+
+
+async def pagina(c: Cuenta, rango: str, fin: date | None = None) -> HTMLResponse:
+    hoy = datetime.now(ZoneInfo(c.timezone)).date()
+    fin = min(fin or hoy, hoy)
+    d = await numeros_de(c, rango, fin)
     if d["recibidos"]:
         pct = round(d["resueltas"] / d["escribieron"] * 100) if d["escribieron"] else 0
         numeros = (
-            '<div class="hoy kpis">'
+            '<div class="hoy kpis res-kpis">'
             + kpi("Conversaciones", d["personas"], plural(d["nuevas"], "nueva"))
             + kpi("Mensajes recibidos", d["recibidos"], plural(d["respuestas_bot"], "respuesta"))
             + kpi("Resueltas solas", f"{pct}%", f'{d["resueltas"]} de {d["escribieron"]} sin ayuda')
@@ -266,30 +314,53 @@ async def pagina(c: Cuenta, rango: str) -> HTMLResponse:
             + kpi("Fuera de horario", d["fuera"], plural(d["fuera"], "respuesta"))
             + "</div>")
         cuerpo = (
-            '<div class="tarjeta"><span class="num">Por día</span><h2>Mensajes recibidos</h2>'
+            numeros
+            + '<div class="tarjeta"><span class="num">Por día</span><h2>Mensajes recibidos</h2>'
             f"{por_dia(d)}</div>"
             '<div class="tarjeta"><span class="num">Por hora</span><h2>A qué hora te escriben</h2>'
             f"{por_hora(d, c)}"
             '<div class="leyenda"><span><i></i>Dentro de tu horario</span><span><i class="fuera"></i>Fuera de tu horario</span></div></div>'
         )
     else:
-        numeros = ""
         cuerpo = ('<div class="tarjeta"><h2>Aún no hay mensajes en este periodo</h2>'
                   '<p class="ayuda">Cuando tu asistente esté encendido y te escriban, aquí verás lo que hizo por ti.</p>'
                   '<div class="acciones"><a class="boton" href="/panel/asistente">Ir a tu asistente</a></div></div>')
     if c.imagenes_mes > 0:
         cuerpo += seccion_contenido(d)
-    cuerpo = metricas.seccion(await metricas.numeros(c, int(rango))) + cuerpo
+    cuerpo = (await barra(c, rango, fin, hoy) + metricas.seccion(await metricas.numeros(c, int(rango), fin))
+              + cuerpo)
     return panel.pagina(
         panel.cabecera(salir=True, menu="resultados", cuenta=c, perfil=await panel.usuario(c), foto=await panel.foto_perfil(c))
-        + panel.encabezado("Resultados", extra=f'<nav class="pestanas">{pestanas}</nav>{numeros}')
-        + f'<main><div class="contenedor">{cuerpo}'
-        '<p class="nota">Los números se actualizan cada 10 minutos.</p></div></main>'
+        + f'<main><div class="contenedor res">{cuerpo}</div></main>'
     )
 
 
+def leer_fin(texto: str) -> date | None:
+    try:
+        return date.fromisoformat(texto)
+    except ValueError:
+        return None
+
+
 @router.get("")
-async def ver(request: Request, dias: str = "7"):
+async def ver(request: Request, dias: str = "7", fin: str = ""):
     if not (c := panel.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
-    return await pagina(c, dias if dias in RANGOS else "7")
+    return await pagina(c, dias if dias in RANGOS else "7", leer_fin(fin))
+
+
+@router.get("/descargar")
+async def descargar(request: Request, dias: str = "7", fin: str = ""):
+    """El periodo que se ve en Resultados, en PDF."""
+    if not (c := panel.cuenta_de_sesion(request)):
+        return RedirectResponse("/panel", status_code=303)
+    from . import informe
+    rango = dias if dias in RANGOS else "7"
+    hoy = datetime.now(ZoneInfo(c.timezone)).date()
+    fin_ = min(leer_fin(fin) or hoy, hoy)
+    ini = fin_ - timedelta(days=int(rango) - 1)
+    d = await numeros_de(c, rango, fin_)
+    m = await metricas.numeros(c, int(rango), fin_)
+    pdf = await informe.resultados_pdf(c, titulo_periodo(ini, fin_), d, m, await panel.usuario(c))
+    return Response(pdf, media_type="application/pdf", headers={
+        "Content-Disposition": f'attachment; filename="resultados-{ini.isoformat()}-al-{fin_.isoformat()}.pdf"'})

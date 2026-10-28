@@ -1199,6 +1199,13 @@ input[type=text],input[type=search],textarea,select,.inbox input[type=search],.e
 .met .grafica{height:11rem}
 @media(max-width:1100px){.met-c.t3,.met-c.t4{grid-column:span 6}}
 @media(max-width:700px){.met{grid-template-columns:1fr}.met-c,.met-c.t3,.met-c.t4,.met-c.ancho{grid-column:1/-1}}
+/* Resultados: la barra del periodo (misma que Calendario) y los datos de abajo. */
+.res-barra{padding:1.25rem 1.5rem}.res-barra .cal-filtros{margin:1rem 0 0;color:var(--gris);font-size:.85rem;gap:.5rem 1.5rem}
+.res-info .punto{display:inline-block;width:.5rem;height:.5rem;border-radius:50%;background:var(--neon);margin-right:.45rem;vertical-align:.1rem}
+.res-info .cal-bajar{margin-left:auto}
+.cal-nav .off{display:grid;place-items:center;min-width:2.1rem;height:2.1rem;border-radius:.7rem;background:#25232F;color:#6A6678;font-weight:600}
+.res-kpis{margin-bottom:1rem}
+@media(max-width:700px){.res-barra .cal-sw.modo{margin-left:0}.res-info .cal-bajar{margin-left:0}}
 """
 
 

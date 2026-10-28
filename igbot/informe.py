@@ -577,3 +577,82 @@ async def pdf(c: Cuenta, camps: list[dict], marca: dict, cuenta: str) -> bytes:
         doc.barras("Por formato", grupos["formato"], nombres["formato"])
         doc.barras("Por horario", grupos["franja"], nombres["franja"])
     return doc.bytes()
+
+
+class ReporteResultados(Cotizacion):
+    etiqueta = "RESULTADOS"
+
+    def por_dia(self, filas: list[tuple[str, ...]], columnas: tuple[str, ...]) -> None:
+        """Tabla de una línea por día: la fecha a la izquierda y los números a la derecha."""
+        anchos = [self.epw * 0.34] + [self.epw * 0.66 / (len(columnas) - 1)] * (len(columnas) - 1)
+
+        def encabezado():
+            self.font(7.5, bold=True, color=GRIS)
+            self.set_char_spacing(0.5)
+            for i, (col, ancho) in enumerate(zip(columnas, anchos)):
+                self.cell(ancho, 6, col.upper(), align="L" if i == 0 else "R")
+            self.set_char_spacing(0)
+            self.ln(6)
+            self.rule(NEGRO, 0.3)
+
+        encabezado()
+        for fila in filas:
+            if self.get_y() > self.page_break_trigger - 9:
+                self.add_page()
+                encabezado()
+            self.ln(1.6)
+            self.font(9.5)
+            for i, (valor, ancho) in enumerate(zip(fila, anchos)):
+                self.cell(ancho, 5, valor, align="L" if i == 0 else "R")
+            self.ln(6.6)
+            self.rule()
+        self.ln(8)
+
+
+async def resultados_pdf(c: Cuenta, titulo: str, d: dict, m: dict, cuenta: str) -> bytes:
+    """Lo que se ve en Resultados para un periodo: números de Instagram, día por día, público y
+    conversaciones. `d` sale de resultados.numeros_de y `m` de metricas.numeros."""
+    from . import contenido, metricas
+    from .resultados import duracion
+
+    def signo(n: float | None) -> str:
+        return "-" if n is None else f"{'+' if n > 0 else ''}{n:.1f}%".replace(".0%", "%")
+
+    marca = await contenido.marca_de(c)
+    doc = ReporteResultados(f"@{cuenta.lstrip('@')}", titulo, fecha(tools.now().date()), marca.get("acento", ""))
+    doc.alias_nb_pages()
+    poner_logo(doc, c, marca)
+    doc.titulo("Resultados", titulo)
+    inter = m["interacciones"]
+    alcance = [v for v in m["alcance_dia"] if v is not None]
+    doc.seccion("Instagram", [])
+    doc.datos([("Seguidores", cifra(m["seguidores"]) if m["seguidores"] is not None else "-"),
+               ("vs. semana pasada", signo(m["semana"])), ("vs. mes pasado", signo(m["mes"])),
+               ("Nuevos", cifra(m["nuevos"])), ("Dejaron de seguir", cifra(m["perdidos"]))])
+    doc.datos([("Alcance al día", cifra(round(sum(alcance) / len(alcance))) if alcance else "-"),
+               ("Vistas", cifra(m["vistas"])), ("Interacciones", cifra(sum(inter.values()))),
+               ("Likes", cifra(inter["likes"])), ("Clics al enlace", cifra(m["clics"]))])
+    dias = [(f, x) for f, x in zip(m["fechas"], m["serie"]) if x]
+    if dias:
+        doc.por_dia([(fecha(f), cifra(x.get("seguidores")) if "seguidores" in x else "-",
+                      f"+{x['nuevos']}" if "nuevos" in x else "-", cifra(x.get("alcance")), cifra(x.get("vistas")))
+                     for f, x in dias], ("Día", "Seguidores", "Nuevos", "Alcance", "Vistas"))
+    p = m["publico"]
+    if p.get("edad") or p.get("genero") or p.get("ciudad"):
+        def top(grupo: dict, nombres: dict | None = None, n: int = 5) -> str:
+            total = sum(grupo.values()) or 1
+            return ", ".join(f"{(nombres or {}).get(k, k.split(',')[0])} {v / total:.0%}"
+                             for k, v in sorted(grupo.items(), key=lambda x: -x[1])[:n])
+        doc.seccion("Tu público", [x for x in (
+            f"Edad: {top(p['edad'])}" if p.get("edad") else "",
+            f"Género: {top(p['genero'], metricas.GENEROS)}" if p.get("genero") else "",
+            f"Ciudades: {top(p['ciudad'])}" if p.get("ciudad") else "") if x])
+    doc.seccion("Conversaciones", [])
+    pct_solas = f"{round(d['resueltas'] / d['escribieron'] * 100)}%" if d.get("escribieron") else "-"
+    doc.datos([("Conversaciones", cifra(d["personas"])), ("Mensajes recibidos", cifra(d["recibidos"])),
+               ("Resueltas solas", pct_solas), ("Respuesta", duracion(d["respuesta"])),
+               ("Fuera de horario", cifra(d["fuera"]))])
+    if "comentarios" in d:
+        doc.datos([("Comentarios", cifra(d["comentarios"])), ("DMs por comentario", cifra(d["dms"])),
+                   ("Respuestas públicas", cifra(d["publicas"])), ("Publicadas", cifra(len(d["publicadas"])))])
+    return doc.bytes()

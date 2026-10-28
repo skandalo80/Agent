@@ -115,3 +115,25 @@ def test_curva_no_se_sale():
     numeros = [float(n) for parte in camino.replace("M", " ").replace("C", " ").split() for n in parte.split(",")]
     assert all(0 <= y <= 100 for y in numeros[1::2])
     assert "sin datos" in metricas.linea([None, None], [date(2026, 1, 1), date(2026, 1, 2)], "x")
+
+
+def test_barra_del_periodo_y_descarga(cliente, monkeypatch):  # noqa: F811
+    client, c = cliente
+    hoy = datetime.now(ZoneInfo(c.timezone)).date()
+    html = client.get("/panel/resultados?dias=30").text
+    assert 'class="tarjeta cal res-barra"' in html and 'class="on">30 días' in html and "90 días" in html
+    assert 'aria-label="Siguiente"' not in html  # en el periodo de hoy no hay ›
+    assert "el primer guardado es mañana" in html
+    atras = (hoy - timedelta(days=30)).isoformat()
+    assert f'href="/panel/resultados?dias=30&fin={atras}"' in html
+
+    client.portal.call(c.store.guardar_metricas, (hoy - timedelta(days=40)).isoformat(),
+                       {"seguidores": 90, "alcance": 50, "nuevos": 4, "vistas": 70})
+    client.portal.call(c.store.set, metricas.CLAVE_HORA, str(datetime.now(ZoneInfo(c.timezone)).timestamp()))
+    html = client.get(f"/panel/resultados?dias=30&fin={atras}").text
+    assert 'aria-label="Siguiente"' in html and "actualizado hoy a las" in html and ">90<" in html
+    assert client.get("/panel/resultados?dias=7&fin=nada").status_code == 200
+
+    r = client.get(f"/panel/resultados/descargar?dias=30&fin={atras}")
+    assert r.status_code == 200 and r.content.startswith(b"%PDF")
+    assert f"resultados-{(hoy - timedelta(days=59)).isoformat()}-al-{atras}.pdf" in r.headers["content-disposition"]
