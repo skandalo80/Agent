@@ -37,6 +37,13 @@
   --peso-paso: 600;            /* grosor del nombre del paso */
   --paso-activo: #2E3035;      /* fondo del paso en el que estás */
 
+  /* Pie de cada paso de las tres páginas de Configuración: ← Anterior, Aplicar y Siguiente */
+  --pie-arriba: 2rem;          /* espacio entre la última tarjeta y la línea del pie */
+  --pie-linea: 1.25rem;        /* espacio entre la línea y los botones */
+  --pie-hueco: .6rem;          /* espacio entre botones */
+  --boton-pad: .7rem 1.4rem;   /* relleno de cada botón del pie (arriba y abajo, lados) */
+  --t-boton: .95rem;           /* letra de los botones del pie */
+
   /* Conversaciones */
   --punto-chat: .6rem;         /* punto lima de no leído en cada chat, debajo de la hora */
 }

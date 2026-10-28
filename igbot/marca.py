@@ -184,10 +184,11 @@ def cabeza(i: int) -> str:
             f'<p class="baj">{bajada}</p></div>')
 
 
-def pie(i: int, siguiente: str = "Guardar y continuar →") -> str:
-    anterior = f'<a class="boton secundario" href="{BASE}?paso={i - 1}">← Anterior</a> ' if i > 1 else ""
-    return (f'<div class="wiz-pie"><span>Puedes cambiarlo cuando quieras.</span><span class="mrc-botones">{anterior}'
-            f'<button class="boton mrc-sigue" name="accion" value="guardar">{siguiente}</button></span></div>')
+def pie(i: int) -> str:
+    anterior = f'<a class="boton secundario" href="{BASE}?paso={i - 1}">← Anterior</a>' if i > 1 else ""
+    nombre = PASOS[i][1].lower() if i < len(PASOS) else "resumen"
+    return panel.pie_config(anterior, f'<button class="boton mrc-sigue" name="accion" value="guardar">'
+                                      f"Siguiente: {nombre} →</button>", "Puedes cambiarlo cuando quieras.")
 
 
 def paso_estilo(marca: dict) -> str:
@@ -386,9 +387,7 @@ async def pagina_marca(c: Cuenta, paso: str, marca: dict | None = None, aviso: s
                      # Enter en un campo de texto guarda y sigue (el primer botón del formulario).
                      '<button class="oculto" name="accion" value="guardar" tabindex="-1" aria-hidden="true">Guardar</button>'
                      + cabeza(i) + hacer()
-                     # Ya completa (entró a cambiar algo desde el resumen): guarda y vuelve al resumen.
-                     + pie(i, "Guardar cambios" if completa(marca) else
-                           "Ver resumen →" if i == len(PASOS) else "Guardar y continuar →") + "</form>")
+                     + pie(i) + "</form>")
     # El aviso de lo que falta va dentro del paso, para que los pasos queden a la altura de las demás páginas.
     falta = await panel.pendiente(c, "marca")
     cuerpo = f'<div class="wiz mrc">{menu_pasos(actual, hechos_)}<div class="wiz-main">{falta}{contenido}</div></div>'
@@ -468,8 +467,7 @@ async def guardar_marca(request: Request):
         por = (f"para un negocio de {giro.lower()}" if giro in RECOMENDADOS else
                "(llena el giro en tu Perfil de empresa para una recomendación a tu medida)")
         return await pagina_marca(c, "1", {**antes, "estilos": elegidos},
-                                  f"Te recomendamos {nombres} {por}. Cámbialos si quieres y pulsa"
-                                  f" {'Guardar cambios' if completa(antes) else 'Guardar y continuar'}.")
+                                  f"Te recomendamos {nombres} {por}. Cámbialos si quieres y pulsa Aplicar.")
     datos, aviso = guardar_paso(f, antes, paso)
     if aviso:
         return await pagina_marca(c, str(i), aviso=aviso)
@@ -490,8 +488,8 @@ async def guardar_marca(request: Request):
 
     await c.store.set("marca", json.dumps(datos, ensure_ascii=False))
     log.info("@%s guardó Tu marca: %s", await panel.usuario(c), paso)
-    if accion != "guardar" or aviso:  # subió o quitó el logo: se queda en el paso para verlo
+    if accion == "aplicar" and not aviso:
+        aviso = "Cambios aplicados."
+    if accion != "guardar" or aviso:  # Aplicar, o subió o quitó el logo: se queda en el paso para verlo
         return await pagina_marca(c, str(i), datos, aviso)
-    if completa(antes):
-        return RedirectResponse(f"{BASE}?paso={RESUMEN}&guardado=1", status_code=303)
     return RedirectResponse(f"{BASE}?paso={i + 1 if i < len(PASOS) else RESUMEN}", status_code=303)

@@ -159,6 +159,13 @@ def test_cliente_se_conecta_configura_y_enciende(monkeypatch, tmp_path):
                         data={"paso": "personalidad", "personalidad": "cercano"})
         assert r.headers["location"] == "/panel/asistente/configura?paso=escribe&ok=1"
         assert "Cafetería en Puebla" in Path(c.prompt_path).read_text()
+        # Aplicar guarda y se queda en el paso.
+        r = client.post("/panel/asistente/paso", headers=ORIGEN, follow_redirects=False,
+                        data={"paso": "personalidad", "personalidad": "cercano", "accion": "aplicar"})
+        assert r.headers["location"] == "/panel/asistente/configura?paso=personalidad&ok=aplicado"
+        r = client.get(r.headers["location"]).text
+        assert "Cambios aplicados." in r and 'value="aplicar">Aplicar</button>' in r
+        assert ">Siguiente: cómo escribe →</button>" in r
         client.post("/panel/asistente/paso", headers=ORIGEN, data={"paso": "personalidad", "personalidad": "premium"})
         r = client.get("/panel/asistente/configura?paso=escribe")
         assert 'id="trato-usted" name="trato" value="usted" checked' in r.text and "Así sonaría" in r.text

@@ -110,6 +110,7 @@ AVISOS = {
     "tope": f"Tu catálogo ya tiene {MAX_PRODUCTOS} productos: quita uno para agregar otro.",
     "sin_nombre": "Ponle nombre a tu producto para agregarlo.",
     "listo": "Guardado. En unos segundos tu asistente y tus campañas usan tu perfil.",
+    "aplicado": "Cambios aplicados.",
 }
 
 
@@ -722,8 +723,8 @@ def pie(paso: int, nota: str = "") -> str:
     nombre = PASOS[siguiente][0].lower() if siguiente in PASOS else "resumen"
     atras = (f'<button class="boton secundario" name="accion" value="ir_{ORDEN[i - 1]}">← Anterior</button>'
              if i else "")
-    return (f'<div class="pie-paso"><span class="nota">{nota}</span><span class="der">{atras}'
-            f'<button class="boton" name="accion" value="ir_{siguiente}">Siguiente: {nombre} →</button></span></div>')
+    return panel.pie_config(atras, f'<button class="boton" name="accion" value="ir_{siguiente}">Siguiente: {nombre} →</button>',
+                            nota)
 
 
 def paso_1(e: dict) -> str:
@@ -958,7 +959,7 @@ async def pagina(c: Cuenta, paso: int, e: dict | None = None, aviso: str = "", e
     avisos = "".join(f'<div class="aviso">{escape(x)}</div>' for x in (nota, aviso) if x)
     if not guardado and paso != RESUMEN and not aviso and not nota:
         avisos = ('<div class="aviso">Te precargamos lo que ya escribiste en tu asistente y en Tu marca.'
-                  " Revísalo y pulsa Siguiente para guardarlo.</div>" if e else "")
+                  " Revísalo y pulsa Aplicar o Siguiente para guardarlo.</div>" if e else "")
     return panel.pagina(
         f"<style>{ESTILO}{panel.COMUN}</style>"
         + await panel.menu_de(c, "cuenta", sub="empresa")
@@ -1022,6 +1023,8 @@ async def guardar(request: Request):
         if c.slug and await c.store.get("bienvenida") != "1":  # cuenta nueva: sigue al paso 2 de la bienvenida
             return RedirectResponse("/panel/bienvenida", status_code=303)
         return RedirectResponse("/panel/empresa?paso=6&aviso=listo", status_code=303)
+    if accion == "aplicar":  # guarda y se queda en el paso
+        return RedirectResponse(f"/panel/empresa?paso={paso}&aviso=aplicado", status_code=303)
     destino = _paso(accion[3:]) if accion.startswith("ir_") else 0
     return RedirectResponse(f"/panel/empresa?paso={destino or paso}", status_code=303)
 

@@ -223,11 +223,11 @@ def _cabeza(paso: str, titulo: str, bajada: str) -> str:
     return f'<p class="as-num">{antes}</p><h2 class="as-h">{titulo}</h2><p class="as-baj">{bajada}</p>'
 
 
-def _pie(paso: str, siguiente: str = "Siguiente") -> str:
+def _pie(paso: str) -> str:
     i = ORDEN.index(paso)
-    atras = f'<a class="boton secundario" href="{_href(ORDEN[i - 1])}">Atrás</a>' if i else "<span></span>"
-    return (f'<div class="as-pie">{atras}<button class="boton" name="accion" value="siguiente">'
-            f"{siguiente}</button></div>")
+    atras = f'<a class="boton secundario" href="{_href(ORDEN[i - 1])}">← Anterior</a>' if i else ""
+    nombre = PASOS[i + 1][1].lower() if i + 1 < len(ORDEN) else "resumen"
+    return panel.pie_config(atras, f'<button class="boton" name="accion" value="siguiente">Siguiente: {nombre} →</button>')
 
 
 def _radios(nombre: str, opciones: dict, actual: str, pregunta: str, ayuda: str) -> str:
@@ -335,7 +335,7 @@ def _equipo(c: Cuenta, perfil: dict) -> str:
             + '<div class="as-caja">' + panel.caja("humano", "Cuando alguien pide hablar con una persona, ¿qué le dice?",
                                                    ayuda, perfil.get("humano", ""), filas)
             + "</div>" + f'<div class="as-caja">{ajustes.campos(c)}</div>'
-            + _pie("equipo", "Siguiente: ver resumen"))
+            + _pie("equipo"))
 
 
 async def _resumen(c: Cuenta, perfil: dict) -> str:
@@ -442,7 +442,7 @@ async def ver(request: Request):
     if not (c := panel.cuenta_de_sesion(request)):
         return panel.entrar()
     q = request.query_params
-    return await pagina(c, q.get("paso", ""), aviso="Guardado." if q.get("ok") == "1" else "")
+    return await pagina(c, q.get("paso", ""), aviso={"1": "Guardado.", "aplicado": "Cambios aplicados."}.get(q.get("ok", ""), ""))
 
 
 def _texto(f: dict, campo: str, maximo: int) -> str:
@@ -505,6 +505,8 @@ async def guardar(request: Request):
     c.prompt_destino().write_text(prompt, encoding="utf-8")
     await c.store.set("asistente_listo", "1")
     log.info("@%s guardó %s de su asistente desde el panel", nombre, paso)
+    if f.get("accion") == "aplicar":  # guarda y se queda en el paso
+        return RedirectResponse(f"{_href(paso)}&ok=aplicado", status_code=303)
     siguiente = ORDEN[ORDEN.index(paso) + 1] if paso != ORDEN[-1] else "resumen"
     return RedirectResponse(f"{_href(siguiente)}&ok=1", status_code=303)
 

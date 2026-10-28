@@ -203,11 +203,13 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     assert "Colores propios · Natural / Sin protagonismo de marca" in r.text and "Playfair Display + Inter" in r.text
     assert "Firma visible" in r.text and "Recursos visuales" not in r.text
     assert '<a class="boton secundario" href="/panel/contenido/campanas/nueva">Crear una campaña</a>' in r.text
-    # Ya completa: entrar a cambiar algo guarda y vuelve al resumen (no al paso siguiente ni a Crear campaña).
-    assert ">Guardar cambios</button>" in client.get(f"{MARCA}?paso=3").text
+    # Cada paso: Aplicar guarda y se queda en el paso; Siguiente guarda y avanza.
+    r = client.get(f"{MARCA}?paso=3").text
+    assert 'value="aplicar">Aplicar</button>' in r and ">Siguiente: logotipo →</button>" in r
+    r = client.post(MARCA, headers=ORIGEN, data={"paso": "3", "usar": "1", "accion": "aplicar"}, follow_redirects=False)
+    assert r.status_code == 200 and "Cambios aplicados." in r.text and "Paso 3 de 4" in r.text
     r = client.post(MARCA, headers=ORIGEN, data={"paso": "3", "usar": "1"}, follow_redirects=False)
-    assert r.headers["location"] == f"{MARCA}?paso=resumen&guardado=1"
-    assert "Guardamos tus cambios." in client.get(r.headers["location"]).text
+    assert r.headers["location"] == f"{MARCA}?paso=4"
     assert client.get("/panel/static/fuentes/CormorantGaramond-Bold.ttf").status_code == 200
     # Las fotos del negocio que ya tenía (Tu marca ya no las pide) se conservan y se siguen usando.
     tokens, _ = client.portal.call(contenido.guardar_fotos, c, [Subida()], 1)
