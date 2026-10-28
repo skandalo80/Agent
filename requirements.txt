@@ -1,7 +1,7 @@
 fastapi==0.115.12
 uvicorn[standard]==0.34.2
 httpx==0.28.1
-python-dotenv==1.1.0
+python-dotenv==1.2.4
 aiosqlite==0.22.1
 claude-agent-sdk==0.2.165
 anthropic==1.13.0
