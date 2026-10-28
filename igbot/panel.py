@@ -303,6 +303,9 @@ html.menu-anima .lateral{transition:width .18s ease}html.menu-anima body:has(>.l
 .lat-cabeza{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:0 .35rem .9rem;border-bottom:1px solid #34363B;margin-bottom:.9rem}
 .lateral .marca{display:flex;align-items:center;gap:.6rem;color:var(--claro);overflow:hidden;line-height:1.15}
 .lateral .marca{font-size:1.3rem;font-weight:600;letter-spacing:-.02em;padding:.35rem 0}
+/* El logo (web/logo-skandar.svg y logo-sk.svg): completo con el menú abierto, solo Sk plegado. */
+.marca img{display:block;width:auto}.logo-largo{height:1.75rem}header .logo-largo{height:1.45rem}.marca .logo-corto{display:none;height:1.6rem}
+html.menu-plegado .lateral .logo-largo{display:none}html.menu-plegado .lateral .logo-corto{display:block}
 .plegar,.cerrar{flex:none;background:none;border:0;color:var(--gris);cursor:pointer;padding:.3rem;border-radius:.5rem;display:grid;place-items:center;text-decoration:none;font-size:1.5rem;line-height:1}
 .plegar:hover,.cerrar:hover{color:var(--claro);background:#2E3035}
 .cerrar{display:none}
@@ -351,6 +354,7 @@ header.movil{display:flex;align-items:center;gap:.9rem;height:3.25rem;padding:0 
 .hamburguesa{display:flex;flex-direction:column;gap:4px;padding:.4rem}.hamburguesa span{width:20px;height:2px;background:var(--claro);border-radius:2px}
 .lateral,html.menu-plegado .lateral{width:17rem;inset:.75rem auto .75rem .75rem;transform:translateX(calc(-100% - 1rem));transition:transform .2s ease}
 html.menu-plegado .lateral .txt{display:inline}html.menu-plegado .lat-cabeza{flex-direction:row}
+html.menu-plegado .lateral .logo-largo{display:block}html.menu-plegado .lateral .logo-corto{display:none}
 html.menu-plegado .perfil-menu{left:0;right:0;bottom:calc(100% + .4rem);width:auto}
 .lateral:target,html.menu-abierto .lateral{transform:none}
 .lateral:target~.velo,html.menu-abierto .velo{display:block;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:20}
@@ -433,7 +437,7 @@ textarea.prompt{font:14px/1.5 ui-monospace,Menlo,monospace;min-height:20rem}
 header form{display:flex;margin:0}
 .menu a,.marca{white-space:nowrap}
 .marca{margin-right:1rem}
-@media(max-width:560px){header .marca{font-size:0}header .marca::after{content:"Skandar";font-size:.95rem}.menu{gap:.75rem;margin-right:.75rem;font-size:.8rem}.kpis{grid-template-columns:1fr 1fr}.kpi{padding:1rem}.kpi b{font-size:1.6rem}header:has(.menu) .marca{display:none}header:has(.menu) .menu{margin-left:0}}
+@media(max-width:560px){.menu{gap:.75rem;margin-right:.75rem;font-size:.8rem}.kpis{grid-template-columns:1fr 1fr}.kpi{padding:1rem}.kpi b{font-size:1.6rem}header:has(.menu) .marca{display:none}header:has(.menu) .menu{margin-left:0}}
 .menu{display:flex;gap:1.25rem;font-size:.85rem;margin-left:auto;margin-right:1.5rem}
 .menu a{color:var(--gris);text-decoration:none}
 .menu a.on,.menu a:hover{color:var(--claro)}
@@ -1366,7 +1370,7 @@ def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None, 
     # Con sesión, el logo lleva al inicio del panel; sin sesión, a la página principal.
     inicio_marca = "/panel" if salir else config.SITE_URL
     if not menu:
-        return (f'<header><div class="contenedor"><a class="marca" href="{inicio_marca}">Skandar</a>'
+        return (f'<header><div class="contenedor"><a class="marca" href="{inicio_marca}"><img class="logo-largo" src="/logo-skandar.svg" alt="Skandar" width="132" height="36"></a>'
                 f"{boton}</div></header>")
     activa = sub if any(k == sub for k, *_ in MENU) else POR_GRUPO.get(menu, "")
     secciones = []
@@ -1380,9 +1384,10 @@ def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None, 
     return (
         '<header class="movil"><a class="hamburguesa" href="#lateral" aria-label="Abrir menú">'
         '<span></span><span></span><span></span></a>'
-        '<a class="marca" href="/panel">Skandar</a></header>'
+        '<a class="marca" href="/panel"><img class="logo-largo" src="/logo-skandar.svg" alt="Skandar" width="132" height="36"></a></header>'
         '<aside class="lateral" id="lateral"><div class="lat-cabeza">'
-        '<a class="marca" href="/panel"><span class="txt">Skandar</span></a>'
+        # El logo completo con el menú abierto; plegado, solo el ícono Sk.
+        '<a class="marca" href="/panel"><img class="logo-largo" src="/logo-skandar.svg" alt="Skandar" width="132" height="36"><img class="logo-corto" src="/logo-sk.svg" alt="Skandar" width="48" height="36"></a>'
         f'<button class="plegar" type="button" data-plegar aria-label="Plegar o fijar el menú" title="Plegar o fijar">'
         f'{ICONOS["plegar"]}</button><a class="cerrar" href="#" aria-label="Cerrar menú">×</a></div>'
         f'<nav class="lat-nav">{"".join(secciones)}</nav>'
