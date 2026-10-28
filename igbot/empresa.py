@@ -82,6 +82,20 @@ PASOS = {
     5: ("Preguntas frecuentes", "Lo que más te preguntan"),
 }
 ORDEN = [1, 3, 4, 5, 2]
+# Título y bajada de cada paso, como en Tu asistente y Tu marca.
+TITULOS = {
+    1: ("Empecemos por tu empresa",
+        "Cuéntanos quién eres y qué haces. No necesitas escribirlo perfecto: tu asistente y tus campañas lo usan tal cual."),
+    2: ("Tus clientes y lo que te hace distinto",
+        "Con esto tus campañas le hablan a la persona correcta y tu asistente sabe qué destacar."),
+    3: ("Tus productos y servicios",
+        "Agrega lo que vendes. Tu asistente lo usa para contestar precios y mandar el enlace; tus campañas, para"
+        " promocionarlo con sus fotos."),
+    4: ("Cómo te compran",
+        "Lo práctico: cuándo y dónde atiendes, cómo te pagan y tus políticas. Tu asistente no inventa nada de esto."),
+    5: ("Lo que más te preguntan",
+        "Escribe las preguntas que más te hacen y cómo las contestas. Las vacías no se usan."),
+}
 CORTOS = {3: "Productos", 5: "Preguntas"}  # en la barra de pasos, para que quepan en una línea
 RESUMEN = 6
 
@@ -663,8 +677,9 @@ def numero(paso: int) -> int:
 
 
 def cabeza_paso(paso: int) -> str:
-    return (f'<div class="cab-paso"><p class="antetitulo">Paso {numero(paso)} de {len(PASOS)}</p></div>'
-            + LEYENDA)
+    titulo, bajada = TITULOS[paso]
+    return (f'<div class="cab-paso"><p class="antetitulo">Paso {numero(paso)} de {len(PASOS)}</p><h2>{titulo}</h2>'
+            f"<p>{bajada}</p></div>" + LEYENDA)
 
 
 def pie(paso: int, nota: str = "") -> str:
