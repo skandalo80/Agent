@@ -1,4 +1,5 @@
 """Perfil de empresa: pasos, catálogo, prompt del asistente y opciones de campaña."""
+import asyncio
 import json
 import os
 from pathlib import Path
@@ -282,3 +283,40 @@ def test_iconos_de_quien_usa_cada_campo_y_caracter_guardado(cliente):
     assert "Lo usan tus campañas" in p3.split("Fotos <i", 1)[1].split('class="fotos-o"', 1)[0]
     p5 = client.get("/panel/empresa?paso=5").text
     assert iconos(p5, "Pregunta 1").count('class="uso"') == 1 and "Lo usa tu asistente" in iconos(p5, "Pregunta 1")
+
+
+def test_una_sola_revision_al_recorrer_los_pasos(cliente, monkeypatch):
+    """Guardar varios pasos seguidos lanza una revisión, cuando deja de guardar; Terminar no espera; y si lo que lee
+    el asistente no cambió, no se le pregunta a la IA."""
+    client, c, *_ = cliente
+    revisiones = []
+
+    async def revisar(c, texto):
+        revisiones.append(texto)
+        return ""
+
+    monkeypatch.setattr(panel, "revisar_instrucciones", revisar)
+    monkeypatch.setattr(empresa, "ESPERA_REVISION", 0.3)
+    client.post("/panel/empresa", headers=ORIGEN, data=PASO_1)
+    client.post("/panel/empresa", headers=ORIGEN, data={"paso": "4", "horarios": "Diario 8 a 22", "accion": "ir_5"})
+    assert not revisiones and client.portal.call(empresa.revision_pendiente, c)  # todavía está guardando
+    client.portal.call(empresa.esperar_revision, c)
+    assert len(revisiones) == 1 and "Diario 8 a 22" in revisiones[0]
+    assert not client.portal.call(empresa.revision_pendiente, c)
+
+    monkeypatch.setattr(empresa, "ESPERA_REVISION", 3600)
+    client.post("/panel/empresa", headers=ORIGEN, data={"paso": "4", "horarios": "Diario 9 a 21", "accion": "terminar"})
+    for _ in range(50):  # Terminar revisa sin esperar la hora
+        if not empresa._revisiones.get(c.slug):
+            break
+        client.portal.call(asyncio.sleep, 0.05)
+    assert len(revisiones) == 2 and "Diario 9 a 21" in Path(c.prompt_path).read_text()
+
+    client.post("/panel/empresa", headers=ORIGEN, data={"paso": "4", "horarios": "Diario 9 a 21", "pagos": ["tarjeta"],
+                                                        "accion": "terminar"})
+    client.portal.call(empresa.esperar_revision, c)
+    assert len(revisiones) == 3  # los pagos sí llegan al asistente
+    e = client.portal.call(empresa.de, c)
+    client.portal.call(c.store.set, empresa.CLAVE, json.dumps({**e, "actualizado": 1}))
+    client.portal.call(empresa.revisar_y_aplicar, c)
+    assert len(revisiones) == 3  # cambió algo que el asistente no lee: no se revisa

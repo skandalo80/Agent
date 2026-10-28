@@ -371,6 +371,9 @@ def test_lo_que_escribe_el_dueno_se_revisa_y_las_reglas_base_mandan(monkeypatch,
         assert len(vistos) == n  # elegir de una lista no necesita revisión
         r = client.post("/panel/asistente/paso", headers=ORIGEN, data={"paso": "reglas", "instrucciones": "Sé breve."})
         assert "Guardado" in r.text and "Sé breve." in Path(c.prompt_path).read_text()
+        n = len(vistos)
+        client.post("/panel/asistente/paso", headers=ORIGEN, data={"paso": "reglas", "instrucciones": "Sé breve."})
+        assert len(vistos) == n  # sin cambios no se vuelve a revisar
 
         # Las reglas base van al final de todo prompt y nadie las edita desde el panel.
         with bot.usar(c):

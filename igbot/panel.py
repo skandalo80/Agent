@@ -1433,9 +1433,9 @@ async def pasos_iniciales(c: Cuenta) -> list[tuple[str, str, bool]]:
              ("Pruébalo como cliente", "/panel/probar#ultimo", await c.store.get("probo") == "1"),
              ("Enciende tu asistente", "/panel/asistente", await activo(c))]
     if c.imagenes_mes > 0:
-        from .campanas import todas_las  # campanas importa este módulo
+        from .campanas import hay_campanas  # campanas importa este módulo
         pasos += [("Define tu marca", "/panel/contenido/marca", await marca_lista(c)),
-                  ("Crea tu primera campaña", "/panel/contenido/campanas", bool(await todas_las(c)))]
+                  ("Crea tu primera campaña", "/panel/contenido/campanas", await hay_campanas(c))]
     return pasos
 
 
