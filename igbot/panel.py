@@ -1376,7 +1376,10 @@ def tarjeta_pasos(pasos: list[tuple[str, str, bool]]) -> str:
 
 
 async def menu_de(c: Cuenta, menu: str, sub: str = "", luces: dict[str, str] | None = None) -> str:
-    """El menú lateral de una página con sesión: con su @usuario, su logo y los pasos iniciales."""
+    """El menú lateral de una página con sesión: con su @usuario, su logo y los pasos iniciales.
+    Conversaciones lleva un punto amarillo si hay chats del lado "Tú" esperando tu respuesta."""
+    if await c.store.pendientes_tuyos(time.time(), time.time() - c.human_pause_hours * 3600 - 60):
+        luces = {**(luces or {}), "chats": "pendiente"}
     return cabecera(salir=True, menu=menu, cuenta=c, sub=sub, perfil=await usuario(c), foto=await foto_perfil(c),
                     luces=luces, pasos=await pasos_iniciales(c))
 
@@ -1404,8 +1407,11 @@ def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None, 
         if grupo == "contenido" and cuenta is not None and cuenta.imagenes_mes <= 0:
             continue
         luz = f' <span class="semaforo sem-{(luces or {})[k]}"></span>' if k in (luces or {}) else ""
+        # "pendiente": un punto en la esquina del ícono, que también se ve con el menú plegado.
+        punto = '<span class="punto-menu" title="Tienes chats por contestar"></span>' if luz and "sem-pendiente" in luz else ""
+        luz = "" if punto else luz
         secciones.append(f'<a class="lat-item{" on" if k == activa else ""}" href="{href}" title="{nombre}">'
-                         f'{ICONOS[k]}<span class="txt">{nombre}{luz}</span></a>')
+                         f'{ICONOS[k]}{punto}<span class="txt">{nombre}{luz}</span></a>')
     # Sin JavaScript también abre en el celular: la hamburguesa apunta a #lateral (:target).
     return (
         '<header class="movil"><a class="hamburguesa" href="#lateral" aria-label="Abrir menú">'
@@ -1911,7 +1917,7 @@ async def vivo(request: Request):
                 await asyncio.sleep(0.3)  # un DM y la respuesta del bot seguidos van juntos
                 visto = c.store.cambios
                 p = await conversaciones.partes(c, q.get("ver", ""), q.get("q", ""), hoja, q.get("chat", "")[:64], n)
-                yield f"id: {visto}\ndata: {json.dumps({'lista': p['lista'], 'hilo': p['hilo']})}\n\n"
+                yield f"id: {visto}\ndata: {json.dumps({'lista': p['lista'], 'hilo': p['hilo'], 'punto': p['pendientes'] > 0})}\n\n"
         finally:
             _vivos -= 1
     return StreamingResponse(flujo(), media_type="text/event-stream",
