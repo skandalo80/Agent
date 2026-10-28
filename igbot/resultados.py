@@ -181,18 +181,22 @@ def duracion(segundos: float | None) -> str:
 def barras(valores: list[int], etiquetas: list[str], detalles: list[str], clases: list[str] | None = None,
            descripcion: str = "") -> str:
     """Gráfica de barras: SVG estirado al ancho y, abajo, las `etiquetas` en HTML (así se leen
-    igual en el celular). `detalles` sale al pasar el cursor por cada barra."""
+    igual en el celular). `detalles` ("valor: lo que es" o "cuándo: valor") sale al pasar el cursor,
+    en una etiqueta sobre la barra."""
     ancho, alto = 100 * len(valores), 100
     tope = max(valores) or 1
     partes = [f'<line class="eje" x1="0" x2="{ancho}" y1="{alto}" y2="{alto}" vector-effect="non-scaling-stroke"/>']
+    columnas = []
     for i, (v, detalle) in enumerate(zip(valores, detalles)):
         h = max(round(v / tope * alto, 1), 1)
         clase = f"b {clases[i]}" if clases else "b"
-        partes.append(f'<rect class="{clase}" x="{i * 100 + 15}" y="{alto - h}" width="70" height="{h}">'
-                      f"<title>{escape(detalle)}</title></rect>")
+        partes.append(f'<rect class="{clase}" x="{i * 100 + 15}" y="{alto - h}" width="70" height="{h}"/>')
+        cuando, _, valor = detalle.partition(": ")
+        columnas.append((alto - h, f"<b>{escape(valor or cuando)}</b>", escape(cuando if valor else "")))
     eje = "".join(f"<span>{escape(e)}</span>" for e in etiquetas)
-    return (f'<svg class="grafica" viewBox="0 0 {ancho} {alto}" preserveAspectRatio="none" role="img"'
-            f' aria-label="{escape(descripcion)}">{"".join(partes)}</svg><div class="ejex">{eje}</div>')
+    return (f'<div class="met-graf barras"><svg class="grafica" viewBox="0 0 {ancho} {alto}" preserveAspectRatio="none"'
+            f' role="img" aria-label="{escape(descripcion)}">{"".join(partes)}</svg>'
+            f'{metricas.puntos_hover(columnas)}</div><div class="ejex">{eje}</div>')
 
 
 def plural(n: int, palabra: str) -> str:

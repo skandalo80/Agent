@@ -1208,7 +1208,6 @@ input[type=text],input[type=search],textarea,select,.inbox input[type=search],.e
 .met-eje{padding-left:2rem}
 .met-linea .guia{stroke:var(--linea-clara)}.met-linea .area{fill:rgba(255,138,61,.12)}
 .met-linea .trazo{fill:none;stroke:var(--acento);stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}
-.met-linea .zona{fill:transparent}.met-linea .zona:hover{fill:rgba(255,255,255,.05)}
 .met-dona{display:flex;align-items:center;justify-content:center;gap:1.75rem;flex-wrap:wrap;margin:auto 0}
 .met-dona .aro{position:relative;width:11rem;height:11rem}
 .met-dona svg{width:100%;height:100%;transform:rotate(-90deg)}
@@ -1270,6 +1269,23 @@ h1,h2,h3{text-wrap:balance}
 @media(max-width:700px){.pp-grid{grid-template-columns:1fr 1fr;gap:.6rem}.pp-grid .pp-cuerpo{padding:.75rem}.pp-grid .pp-nums{grid-template-columns:1fr 1fr}.pp-grid .pp-texto{display:none}.pp-grid .pp-tasa small{display:none}.pp-grid .pp-nums span{font-size:.68rem}.pp-tasa{flex-wrap:wrap}.res-posts .met-cab{flex-direction:column;gap:.2rem}.pp.mejor{flex-direction:column}.pp.mejor .pp-foto{width:100%}.pp.mejor .pp-nums{grid-template-columns:repeat(3,1fr)}}
 /* Configuración (asistente, marca y empresa): la barra de pasos mide lo mismo en las tres páginas. */
 .wiz.mrc>.wiz-pasos{min-height:5.25rem;box-sizing:border-box}
+/* Gráficas de Resultados: al pasar el cursor, un puntito sobre la línea (o la barra) y la etiqueta
+   con el valor dentro de la gráfica. Columnas HTML encima del SVG (metricas.puntos_hover). */
+.met-graf.barras{position:relative}
+.met-hover{position:absolute;inset:0 0 0 2rem;display:flex}
+.met-graf.barras .met-hover{left:0}
+.mh{flex:1;position:relative;cursor:default}
+.mh::before{content:"";position:absolute;left:50%;top:var(--y);bottom:0;border-left:1px dashed rgba(247,245,250,.22);opacity:0;transition:opacity .12s}
+.mh i{position:absolute;left:50%;top:var(--y);width:.75rem;height:.75rem;margin:-.375rem 0 0 -.375rem;border-radius:50%;background:var(--acento);box-shadow:0 0 0 3px #302D3A,0 0 0 5px rgba(243,154,54,.35);opacity:0;transition:opacity .12s}
+.mh span{position:absolute;left:50%;top:var(--y);z-index:3;transform:translate(-50%,calc(-100% - .8rem));background:#1E1C26;border:1px solid rgba(243,154,54,.35);border-radius:.7rem;padding:.4rem .7rem;white-space:nowrap;font-size:.8rem;line-height:1.3;color:var(--negro);opacity:0;pointer-events:none;box-shadow:0 8px 20px rgba(0,0,0,.35);transition:opacity .12s}
+.mh span b{font-weight:800;color:var(--naranja-t)}
+.mh span small{display:block;color:var(--gris);font-size:.72rem}
+.mh.izq span{left:0;transform:translate(0,calc(-100% - .8rem))}.mh.der span{left:auto;right:0;transform:translate(0,calc(-100% - .8rem))}
+.mh.abajo span{transform:translate(-50%,.8rem)}.mh.izq.abajo span,.mh.der.abajo span{transform:translate(0,.8rem)}
+.met-graf.barras .mh.abajo span,.met-graf.barras .mh.izq.abajo span{left:50%;right:auto;transform:translate(1rem,-.3rem)}
+.met-graf.barras .mh.der.abajo span{transform:translate(calc(-100% - 1rem),-.3rem)}
+.mh:hover::before,.mh:hover i,.mh:hover span{opacity:1}
+.met-graf.barras .mh::before{display:none}
 """
 
 
