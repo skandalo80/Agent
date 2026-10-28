@@ -9,6 +9,7 @@ Se guarda en la tabla kv de la cuenta:
 - "empresa": los campos de los pasos 1, 2, 4 y 5 (ver CAMPOS) y "terminado".
 - "productos": el catálogo, una lista de {id, nombre, descripcion, precio, moneda,
   desde, imagenes, url, tipo, destacado}; las fotos van en data/<slug>/media.
+- "shopify_lista": los productos leídos de su tienda Shopify mientras elige cuáles importar (shopify.py).
 - "empresa_sugerencias": lo que se leyó del sitio web del cliente (sitio.py), para que elija qué usar.
 - "campana_opciones": lo que se ofrece al crear una campaña, escrito por Claude para
   esta empresa: los objetivos (qué conseguir) y, dentro de cada uno, sus mensajes (qué
@@ -31,7 +32,7 @@ from html import escape
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from . import config, contenido, panel, posicionamiento, sitio
+from . import config, contenido, panel, posicionamiento, shopify, sitio
 from .cuenta import Cuenta, usar
 
 log = logging.getLogger("igbot.empresa")
@@ -113,6 +114,7 @@ AVISOS = {
     "listo": "Guardado. En unos segundos tu asistente y tus campañas usan tu perfil.",
     "aplicado": "Cambios aplicados.",
     "web": "Listo: agregamos lo que elegiste de tu sitio. Revísalo en cada paso.",
+    "shopify": "Listo: agregamos a tu catálogo los productos que elegiste de tu tienda.",
 }
 
 
@@ -220,6 +222,8 @@ def secciones(e: dict, prods: list[dict], para_contenido: bool) -> list[tuple[st
             linea += f": {precio}"
         if desc := p.get("descripcion", "").strip():
             linea += f". {desc}"
+        if opciones := p.get("opciones"):
+            linea += f" Opciones: {', '.join(opciones)}."
         if p.get("url") and not para_contenido:
             linea += f" Enlace: {p['url']}"
         catalogo.append(linea)
@@ -653,6 +657,11 @@ main.emp{color:var(--claro);padding-bottom:4rem}
 .sug .t{margin:0}.sug .dato{grid-column:2;display:grid;gap:.4rem}
 .sug .ahora{font-size:.8rem;color:var(--gris);margin:0}
 .sug:has(>input:not(:checked)) .dato{opacity:.55}
+.shop{display:grid;grid-template-columns:auto 1fr auto;gap:.2rem .8rem;align-items:center;padding:.75rem 0;border-top:1px solid #2E3035}
+.shop:first-of-type{border-top:0;padding-top:0}
+.shop>input{accent-color:var(--acento);width:1.1rem;height:1.1rem;margin:0}
+.shop label{font-weight:600}.shop small{grid-column:2;color:var(--gris);font-size:.8rem}
+.shop .precio{font-weight:600;white-space:nowrap}.shop.ya{opacity:.55}
 .leidas{font-size:.8rem;color:var(--gris);margin:1rem 0 0;word-break:break-all}
 """
 
@@ -853,6 +862,13 @@ def form_producto(c: Cuenta, p: dict | None) -> str:
     return f'<div class="nuevo-o" id="editar"><h3 style="margin:0 0 1rem">Editar {escape(p.get("nombre", ""))}</h3>{cuerpo}</div>'
 
 
+TRAER_SHOPIFY = (
+    '<form class="caja-o" method="post" action="/panel/empresa/shopify"><h3>¿Tu tienda está en Shopify?</h3>'
+    '<p class="sub">Traemos tu catálogo desde tu sitio, con precios, opciones y fotos. Tú eliges qué productos'
+    " agregar.</p>"
+    '<button class="boton chico" name="accion" value="leer">Traer mis productos de Shopify</button></form>')
+
+
 def paso_3(c: Cuenta, e: dict, prods: list[dict], editando: dict | None) -> str:
     filas = "".join(fila_producto(c, p) for p in prods) or (
         '<p class="vacio-o">Aún no tienes productos. Agrega el primero: con su foto y su precio tu asistente'
@@ -866,7 +882,8 @@ def paso_3(c: Cuenta, e: dict, prods: list[dict], editando: dict | None) -> str:
         '<p class="sub">Marca como destacado lo que más quieres vender: las campañas lo proponen primero.'
         + (f" Tienes {destacados} destacado{'s' if destacados != 1 else ''}." if destacados else "")
         + f"</p>{filas}{form}</div>"
-        '<form id="f-emp" method="post" action="/panel/empresa"><input type="hidden" name="paso" value="3">'
+        + (TRAER_SHOPIFY if e.get("sitio_web") and len(prods) < MAX_PRODUCTOS else "")
+        + '<form id="f-emp" method="post" action="/panel/empresa"><input type="hidden" name="paso" value="3">'
         '<div class="caja-o"><h3>Otros precios o notas</h3><p class="sub">Paquetes, promociones vigentes o lo que no'
         " cabe en el catálogo. Lo que no pongas aquí ni en tus productos, el asistente no lo inventa.</p>"
         + _texto("precios", "Notas de precios", e.get("precios", ""), 2000, filas=3,
@@ -1080,6 +1097,7 @@ async def guardar_producto(request: Request):
         "moneda": f.get("moneda") if f.get("moneda") in MONEDAS else "MXN",
         "desde": f.get("desde") == "1",
         "imagenes": list((actual or {}).get("imagenes", [])),
+        "opciones": list((actual or {}).get("opciones", [])),  # las de Shopify; aquí no se editan
         "url": url_limpia(str(f.get("url", ""))[:300]),
         "tipo": f.get("tipo") if f.get("tipo") in dict(TIPOS) else "producto",
         "destacado": f.get("destacado") == "1",
@@ -1247,3 +1265,115 @@ async def usar_sitio(request: Request):
         programar_revision(c)
         log.info("@%s llenó su perfil de empresa con su sitio web", await panel.usuario(c))
     return RedirectResponse("/panel/empresa?paso=1&aviso=web", status_code=303)
+
+
+# --- importar de Shopify (shopify.py) ---
+
+@router.post("/shopify")
+async def leer_shopify(request: Request):
+    panel.de_aqui(request)
+    if not (c := panel.cuenta_de_sesion(request)):
+        return RedirectResponse("/panel", status_code=303)
+    url = (await de(c) or {}).get("sitio_web", "")
+    if not url:
+        return RedirectResponse("/panel/empresa?paso=1", status_code=303)
+
+    async def correr():
+        await shopify.preparar(c, url, MONEDAS)
+        yield "/panel/empresa/shopify"
+
+    return await panel.trabajo_largo(c, "shopify", "Leyendo tu tienda", "Traemos la lista de tus productos;"
+                                     " tarda unos segundos.", "/panel/empresa/shopify", correr,
+                                     menu=("cuenta", "empresa"), boton="Elegir tus productos")
+
+
+def fila_shopify(p: dict, ya: bool) -> str:
+    precio = precio_texto({"precio": p["precio"], "desde": p["desde"], "moneda": ""}).strip()
+    detalles = [f"{len(p['opciones'])} opciones" if p["opciones"] else "",
+                f"{len(p['fotos'])} foto{'s' if len(p['fotos']) != 1 else ''}" if p["fotos"] else "Sin fotos",
+                "" if p["disponible"] else "Agotado", "Ya está en tu catálogo" if ya else ""]
+    sid = escape(p["sid"])
+    return (f'<div class="shop{" ya" if ya else ""}"><input type="checkbox" id="s-{sid}" name="sid" value="{sid}"'
+            f'{" disabled" if ya else ""}><label for="s-{sid}">{escape(p["nombre"])}</label>'
+            f'<span class="precio">{escape(precio)}</span>'
+            f'<small>{escape(" · ".join(x for x in detalles if x))}</small></div>')
+
+
+@router.get("/shopify")
+async def ver_shopify(request: Request):
+    if not (c := panel.cuenta_de_sesion(request)):
+        return RedirectResponse("/panel", status_code=303)
+    datos = await shopify.lista(c)
+    if not datos:
+        return RedirectResponse("/panel/empresa?paso=3", status_code=303)
+    if datos.get("error"):
+        cuerpo = (f'<div class="aviso">{escape(datos["error"])}</div>'
+                  '<div class="cab-paso"><p class="antetitulo">Desde tu tienda</p><h2>No pudimos traer tus productos</h2>'
+                  "<p>Puedes agregarlos a mano en tu catálogo.</p></div>"
+                  '<div class="pie-paso"><span class="der"><a class="boton" href="/panel/empresa?paso=3">'
+                  "Volver a tu catálogo</a></span></div>")
+    else:
+        prods = await productos(c)
+        urls = {p.get("url") for p in prods if p.get("url")}
+        cupo = MAX_PRODUCTOS - len(prods)
+        filas = "".join(fila_shopify(p, p["url"] in urls) for p in datos["productos"])
+        cuerpo = (
+            '<form method="post" action="/panel/empresa/shopify/importar">'
+            '<div class="cab-paso"><p class="antetitulo">Desde tu tienda</p><h2>Elige qué productos agregar</h2>'
+            f"<p>Encontramos {len(datos['productos'])} en tu tienda. Puedes agregar hasta {cupo} más a tu catálogo;"
+            " después los editas como cualquier otro.</p></div>"
+            f'<div class="caja-o"><h3>Tus productos de Shopify <span class="etq-o">Precios en {escape(datos["moneda"])}'
+            f"</span></h3>{filas}</div>"
+            '<div class="pie-config"><button class="boton secundario" name="accion" value="descartar">Cancelar</button>'
+            '<span class="pie-nota"></span><span class="pie-der">'
+            '<button class="boton" name="accion" value="importar">Agregar a mi catálogo</button></span></div></form>')
+    return panel.pagina(
+        f"<style>{ESTILO}{panel.COMUN}</style>"
+        + await panel.menu_de(c, "cuenta", sub="empresa")
+        + f'<main class="emp"><div class="contenedor"><div class="hoja-o">{cuerpo}</div></div></main>'
+    )
+
+
+async def importar(c: Cuenta, elegidos: list[dict], moneda: str) -> None:
+    for p in elegidos:
+        imagenes = await shopify.fotos(c, p["fotos"])
+        prods = await productos(c)  # se relee: el cliente puede guardar otro mientras bajan las fotos
+        if len(prods) >= MAX_PRODUCTOS or p["url"] in {x.get("url") for x in prods}:
+            for t in imagenes:
+                contenido.archivo(c, t).unlink(missing_ok=True)
+            continue
+        await antes_de_guardar(c)
+        prods.append({"id": secrets.token_hex(4), "nombre": p["nombre"], "descripcion": p["descripcion"],
+                      "precio": p["precio"], "moneda": moneda, "desde": p["desde"], "imagenes": imagenes,
+                      "url": p["url"], "tipo": "producto", "destacado": False, "opciones": p["opciones"]})
+        await c.store.set(CLAVE_PRODUCTOS, json.dumps(prods, ensure_ascii=False))
+    programar_revision(c)
+    log.info("@%s importó %d productos de Shopify", await panel.usuario(c), len(elegidos))
+
+
+@router.post("/shopify/importar")
+async def importar_shopify(request: Request):
+    panel.de_aqui(request)
+    if not (c := panel.cuenta_de_sesion(request)):
+        return RedirectResponse("/panel", status_code=303)
+    f = await request.form()
+    datos = await shopify.lista(c)
+    elegidos = set(f.getlist("sid"))
+    if f.get("accion") != "importar" or not datos.get("productos") or not elegidos:
+        await shopify.borrar(c)
+        return RedirectResponse("/panel/empresa?paso=3", status_code=303)
+    prods = await productos(c)
+    urls = {p.get("url") for p in prods}
+    lista_ = [p for p in datos["productos"] if p["sid"] in elegidos and p["url"] not in urls]
+    lista_ = lista_[:max(0, MAX_PRODUCTOS - len(prods))]
+    await shopify.borrar(c)
+
+    async def correr():
+        for i in range(0, len(lista_), 5):
+            yield f"Producto {i + 1} de {len(lista_)}…"
+            await importar(c, lista_[i:i + 5], datos.get("moneda", MONEDAS[0]))
+        yield "/panel/empresa?paso=3&aviso=shopify"
+
+    return await panel.trabajo_largo(c, "shopify_importar", "Agregando tus productos",
+                                     "Bajamos sus fotos y los agregamos a tu catálogo.", "/panel/empresa?paso=3",
+                                     correr, menu=("cuenta", "empresa"), boton="Ver tu catálogo")

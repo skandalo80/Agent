@@ -82,8 +82,9 @@ def cliente() -> httpx.AsyncClient:
                              headers={"User-Agent": AGENTE, "Accept": "text/html,application/json;q=0.9"})
 
 
-async def bajar(http: httpx.AsyncClient, url: str, tipos=("text/html", "application/xhtml")) -> tuple[str, str, dict]:
-    """(url final, texto, encabezados) de una página. Sigue pocas redirecciones, revisando cada una."""
+async def bajar_bytes(http: httpx.AsyncClient, url: str, tipos: tuple[str, ...],
+                      max_bytes: int = MAX_BYTES) -> tuple[str, bytes, str, dict]:
+    """(url final, contenido, codificación, encabezados). Sigue pocas redirecciones, revisando cada una."""
     for _ in range(MAX_REDIRECCIONES + 1):
         await revisar_url(url)
         async with http.stream("GET", url) as r:
@@ -98,10 +99,17 @@ async def bajar(http: httpx.AsyncClient, url: str, tipos=("text/html", "applicat
             datos = b""
             async for trozo in r.aiter_bytes():
                 datos += trozo
-                if len(datos) > MAX_BYTES:
+                if len(datos) > max_bytes:
                     break
-            return url, datos[:MAX_BYTES].decode(r.encoding or "utf-8", errors="replace"), dict(r.headers)
+            return url, datos[:max_bytes], r.encoding or "utf-8", dict(r.headers)
     raise ErrorSitio("El sitio redirige demasiadas veces.")
+
+
+async def bajar(http: httpx.AsyncClient, url: str, tipos=("text/html", "application/xhtml"),
+                max_bytes: int = MAX_BYTES) -> tuple[str, str, dict]:
+    """(url final, texto, encabezados) de una página."""
+    final, datos, codificacion, encabezados = await bajar_bytes(http, url, tipos, max_bytes)
+    return final, datos.decode(codificacion, errors="replace"), encabezados
 
 
 class _Lector(HTMLParser):
