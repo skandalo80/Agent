@@ -30,6 +30,7 @@ import hashlib
 import hmac
 import json
 import logging
+import math
 import os
 import re
 import secrets
@@ -584,6 +585,8 @@ input[type=file]{font:inherit;font-size:.9rem;margin-top:.75rem;max-width:100%}
 .ideas{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin:.6rem 0 .2rem}.ideas .ayuda{margin:0}.ideas input[type=file]{width:auto;max-width:100%}
 .boton[disabled]{opacity:.45;cursor:not-allowed}
 .generando{display:flex;gap:1rem;align-items:center}
+/* La espera de un trabajo largo: porcentaje y barra lima (panel.js la mueve). */
+#generando{padding:var(--caja-pad);border-radius:var(--caja-radio)}.trabajo-cab{display:flex;justify-content:space-between;align-items:baseline;gap:var(--hueco)}.trabajo-cab h2{margin:0;font-size:var(--t-tarjeta);font-weight:var(--peso-tarjeta)}.pct-trabajo{font-size:var(--t-tarjeta);font-weight:var(--peso-tarjeta);color:var(--acento);font-variant-numeric:tabular-nums}.avance-trabajo{height:.5rem;margin:1rem 0 .9rem;border-radius:999px;background:#2E3035;overflow:hidden;box-shadow:inset 2px 2px 4px rgba(0,0,0,.4)}.avance-trabajo i{display:block;height:100%;border-radius:999px;background:var(--neon)}.paso-trabajo{margin:0 0 .35rem;font-size:var(--t-texto-tarjeta);color:var(--t-color,#F5F5F4)}#generando .ayuda{margin:0;font-size:var(--t-texto-tarjeta)}
 .extra{border:1px solid var(--acento);background:rgba(255,138,61,.12)}
 .kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(10.5rem,1fr));gap:.75rem;margin-bottom:1.25rem}
 .kpi{background:var(--blanco);border-radius:1.25rem;padding:1.25rem 1.4rem}
@@ -1898,10 +1901,11 @@ class Trabajo:
     si quiere, la dirección a la que lleva al terminar (una línea que empieza con "/")."""
 
     def __init__(self, c: Cuenta, clave: str, titulo: str, nota: str, destino: str, menu: tuple[str, str],
-                 boton: str, correr):
+                 boton: str, correr, segundos: float = 30, pasos: tuple[str, ...] = ()):
         self.id = secrets.token_urlsafe(9)
         self.slug, self.clave, self.titulo, self.nota = c.slug, clave, titulo, nota
         self.destino, self.menu, self.boton = destino, menu, boton
+        self.segundos, self.pasos, self.inicio = max(segundos, 3), pasos, time.time()
         self.avance: list[str] = []
         self.error = ""
         self.hecho = False
@@ -1924,19 +1928,39 @@ class Trabajo:
             self.hecho, self.fin = True, time.time()
 
 
+def curva(t: Trabajo) -> dict:
+    """Cómo avanza la barra de un trabajo: rápido al principio y cada vez más lento, sin llegar al 100 hasta que
+    termina. El tiempo se estira y se encoge con una onda propia de cada trabajo (sale de su id), así que nunca
+    avanza igual dos veces. panel.js hace la misma cuenta para moverla sin recargar."""
+    h = int(hashlib.sha256(t.id.encode()).hexdigest()[:12], 16)
+    parte = lambda i: (h >> (10 * i)) % 1000 / 1000  # noqa: E731
+    return {"tau": round(t.segundos * (0.85 + 0.3 * parte(0)) / 2.3, 3), "a": round(0.45 + 0.4 * parte(1), 3),
+            "w": round(2 * math.pi / (6 + 8 * parte(2)), 4), "f": round(2 * math.pi * parte(3), 3)}
+
+
+def porcentaje(k: dict, segundos: float) -> float:
+    tiempo = segundos + k["a"] * (math.sin(k["w"] * segundos + k["f"]) - math.sin(k["f"])) / k["w"]
+    return 96 * (1 - math.exp(-tiempo / k["tau"]))
+
+
+def paso_de(pasos: tuple[str, ...], pct: float) -> str:
+    return pasos[min(len(pasos) - 1, int(pct / 100 * len(pasos) * 1.08))] if pasos else ""
+
+
 def en_curso(c: Cuenta, clave: str) -> Trabajo | None:
     return next((t for t in _trabajos.values() if t.slug == c.slug and t.clave == clave and not t.hecho), None)
 
 
 async def trabajo_largo(c: Cuenta, clave: str, titulo: str, nota: str, destino: str, correr,
-                        menu: tuple[str, str] = ("contenido", ""), boton: str = "Ver el resultado") -> HTMLResponse:
+                        menu: tuple[str, str] = ("contenido", ""), boton: str = "Ver el resultado",
+                        segundos: float = 30, pasos: tuple[str, ...] = ()) -> HTMLResponse:
     """Lanza `correr` en segundo plano (o se suma al mismo trabajo si ya corre) y contesta con su página: el
     resultado si terminó en ESPERA_TRABAJO, o la de espera que se recarga sola."""
     ahora = time.time()
     for k in [k for k, t in _trabajos.items() if t.hecho and ahora - t.fin > GUARDAR_TRABAJO]:
         del _trabajos[k]
     if not (t := en_curso(c, clave)):
-        t = Trabajo(c, clave, titulo, nota, destino, menu, boton, correr)
+        t = Trabajo(c, clave, titulo, nota, destino, menu, boton, correr, segundos, pasos)
         _trabajos[t.id] = t
     await asyncio.wait({t.tarea}, timeout=ESPERA_TRABAJO)
     return await pagina_trabajo(c, t)
@@ -1945,12 +1969,18 @@ async def trabajo_largo(c: Cuenta, clave: str, titulo: str, nota: str, destino: 
 async def pagina_trabajo(c: Cuenta, t: Trabajo) -> HTMLResponse:
     if not t.hecho:
         recarga = f'<meta http-equiv="refresh" content="{RECARGA_TRABAJO};url=/panel/trabajo/{t.id}">'
-        avance = "".join(f'<p class="ayuda">{escape(x)}</p>' for x in t.avance[-1:])
-        cuerpo = (recarga + '<div class="tarjeta" id="generando"><div class="generando">'
-                  '<div class="escribiendo"><span></span><span></span><span></span></div>'
-                  f'<div><h2>{escape(t.titulo)}</h2><p class="ayuda">{escape(t.nota)} Puedes cerrar esta página:'
-                  " seguimos trabajando y lo verás al volver.</p></div></div>"
-                  f"{avance}</div>")
+        k, pasado = curva(t), time.time() - t.inicio
+        pct = porcentaje(k, pasado)
+        # Lo que va haciendo: sus pasos según el avance o, si no tiene, lo último que contó el trabajo.
+        paso = paso_de(t.pasos, pct) or (t.avance[-1] if t.avance else "")
+        datos = " ".join(f'data-{n}="{v}"' for n, v in k.items())
+        cuerpo = (recarga + '<div class="tarjeta" id="generando"><div class="trabajo-cab">'
+                  f'<h2>{escape(t.titulo)}</h2><b class="pct-trabajo">{int(pct)}%</b></div>'
+                  f'<div class="avance-trabajo" {datos} data-t="{pasado:.2f}"'
+                  f' data-pasos="{escape(json.dumps(t.pasos, ensure_ascii=False))}"><i style="width:{pct:.1f}%"></i></div>'
+                  f'<p class="paso-trabajo">{escape(paso)}</p>'
+                  f'<p class="ayuda">{escape(t.nota)} Puedes cerrar esta página: seguimos trabajando y lo verás al'
+                  " volver.</p></div>")
     elif t.error:
         cuerpo = (f'<div class="aviso">{escape(t.error)}</div><div class="tarjeta"><h2>{escape(t.titulo)}</h2>'
                   '<p class="ayuda">No se terminó.</p>'

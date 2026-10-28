@@ -889,6 +889,7 @@ def test_un_trabajo_largo_sigue_aunque_cierres_la_pagina(cliente, monkeypatch):
     assert "Generando las imágenes" in html and "Puedes cerrar esta página" in html
     r = client.get(f"/panel/trabajo/{tid}")
     assert "Pieza 1 de 2: Café" in r.text and f"/panel/trabajo/{tid}" in r.text  # sigue: se recarga sola
+    assert 'class="avance-trabajo"' in r.text and 'class="pct-trabajo">' in r.text  # su barra con porcentaje
     assert tid in client.portal.call(lanzar).body.decode() and corridas == [1]  # doble clic: el mismo trabajo
 
     client.portal.call(sigue["evento"].set)

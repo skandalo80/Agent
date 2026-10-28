@@ -1977,12 +1977,20 @@ def tarjeta_extra(accion: str, k: str, destino: str) -> str:
             f'<a class="boton secundario" href="{destino}">Cancelar</a></div></form>')
 
 
-async def trabajando(c: Cuenta, titulo: str, nota: str, trabajo, destino: str = BASE, clave: str = "") -> HTMLResponse:
+# Lo que va diciendo la espera, según avanza la barra (panel.paso_de).
+PASOS_ARMAR = ("Leyendo tu brief…", "Repartiendo los posts en el calendario…", "Generando el plan de cada post…",
+               "Generando contenido…", "Escribiendo los textos…", "Generando dirección visual…",
+               "Revisando que todo cuadre…")
+
+
+async def trabajando(c: Cuenta, titulo: str, nota: str, trabajo, destino: str = BASE, clave: str = "",
+                     segundos: float = 30, pasos: tuple[str, ...] = ()) -> HTMLResponse:
     """En segundo plano (panel.trabajo_largo): sigue aunque cierre la página y, al terminar, lleva de vuelta a la
     campaña. Si ese mismo trabajo (`clave`, o el título y el destino) ya está corriendo por un doble clic o al
     recargar, no se repite."""
     return await panel.trabajo_largo(c, clave or f"{titulo} {destino}", titulo, nota, destino, trabajo,
-                                     menu=("contenido", "campanas"), boton="Ver tu campaña")
+                                     menu=("contenido", "campanas"), boton="Ver tu campaña", segundos=segundos,
+                                     pasos=pasos)
 
 
 # --- rutas ---
@@ -2171,7 +2179,7 @@ async def armar(c: Cuenta, datos: dict, camp: dict, borrador: bool = False):
         yield url_de(nueva)
 
     return await trabajando(c, "Armando tu campaña…", "Tarda alrededor de medio minuto.", trabajo, url_de(nueva),
-                      clave="armar campaña")
+                      clave="armar campaña", segundos=40, pasos=PASOS_ARMAR)
 
 
 @router.post("/campanas")
@@ -2264,7 +2272,7 @@ async def accion(request: Request, cid: str):
             yield url
 
         return await trabajando(c, "Generando las imágenes…", f"Tarda alrededor de {len(pendientes) * 20} segundos.", todas,
-                          url)
+                          url, segundos=len(pendientes) * 20)
 
     if que == "aprobar_todas":
         n = 0
@@ -2343,7 +2351,7 @@ async def accion(request: Request, cid: str):
                 await guardar_post(c, camp, p)
             yield con_desde(f"{url}?post={k}#detalle")
 
-        return await trabajando(c, "Pensando otra idea…", "Tarda unos segundos.", otra, url)
+        return await trabajando(c, "Pensando otra idea…", "Tarda unos segundos.", otra, url, segundos=10)
 
     if que == "prompt" and camp.get("brief"):
         async def escribir_prompt():
@@ -2353,7 +2361,7 @@ async def accion(request: Request, cid: str):
                 await guardar_post(c, camp, p)
             yield con_desde(f"{url}?post={k}#detalle")
 
-        return await trabajando(c, "Escribiendo el prompt…", "Tarda unos segundos.", escribir_prompt, url)
+        return await trabajando(c, "Escribiendo el prompt…", "Tarda unos segundos.", escribir_prompt, url, segundos=10)
 
     if que == "generar":
         extra = f.get("extra") == "1"
@@ -2367,7 +2375,8 @@ async def accion(request: Request, cid: str):
             yield con_desde(f"{url}?post={k}#detalle")
 
         return await trabajando(c, "Generando la imagen…" if costo(p) else "Armando la pieza…",
-                          "Tarda alrededor de medio minuto." if costo(p) else "Tarda unos segundos.", una, url)
+                          "Tarda alrededor de medio minuto." if costo(p) else "Tarda unos segundos.", una, url,
+                          segundos=30 if costo(p) else 8)
 
     if que == "aprobar":
         with usar(c):
