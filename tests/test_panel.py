@@ -194,6 +194,15 @@ def test_cliente_se_conecta_configura_y_enciende(monkeypatch, tmp_path):
                         data={"activo": "1"})
         assert "está contestando" in r.text
         assert client.portal.call(panel.activo, c)
+        # Encendido: Conversaciones ya no lleva estado ni Pausar; se pausa desde el Resumen y vuelve ahí.
+        assert "está en pausa" not in client.get("/panel/asistente").text
+        assert "Pausar tu asistente" in client.get("/panel/asistente/configura?paso=resumen").text
+        r = client.post("/panel/estado", headers=ORIGEN, data={"activo": "0", "volver": "configura"},
+                        follow_redirects=False)
+        assert r.headers["location"] == "/panel/asistente/configura?paso=resumen"
+        assert not client.portal.call(panel.activo, c)
+        assert "Tu asistente está en pausa: no contesta ningún chat." in client.get("/panel/asistente").text
+        client.post("/panel/estado", headers=ORIGEN, data={"activo": "1"})
 
         # Otro navegador sin sesión no puede tocar nada.
         otro = TestClient(bot.app, base_url="https://testserver")
@@ -329,7 +338,7 @@ def test_cuenta_grande_queda_en_revision(monkeypatch, tmp_path):
         client.get("/panel")  # bienvenida
         client.post("/panel/bienvenida", headers=ORIGEN, data={"accion": "omitir"})
         r = client.get("/panel")
-        assert "En revisión" in r.text and ">Encender<" not in r.text
+        assert ">Encender<" not in r.text
         r = client.post("/panel/estado", headers=ORIGEN, data={"activo": "1"})
         assert "En revisión" in r.text and not client.portal.call(panel.activo, c)
 
