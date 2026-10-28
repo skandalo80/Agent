@@ -268,6 +268,7 @@ if not config.CLIENTE:
     app.include_router(campanas.router)
     app.include_router(resultados.router)
     app.include_router(skandi.router)
+    app.include_router(skandi.web_router)
 
     @app.exception_handler(StarletteHTTPException)
     async def pagina_404(request: Request, exc: StarletteHTTPException):

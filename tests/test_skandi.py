@@ -97,3 +97,50 @@ def test_skandi_contesta_y_pasa_a_soporte(monkeypatch, tmp_path):
         client.post("/panel/ayuda", headers=ORIGEN, data={"mensaje": "una más"})
         assert len(vistos) == 3
         assert "límite de preguntas de hoy" in client.get("/panel/resultados").text
+
+
+def test_skandi_en_la_web(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    Path("prompts").mkdir()
+    shutil.copy(PROMPT.parent / "skandi-web.md", "prompts/skandi-web.md")
+    setup(monkeypatch)
+    monkeypatch.setattr(skandi, "_visitantes", {})
+    monkeypatch.setattr(skandi, "MAX_WEB_VISITANTE", 2)
+    respuestas = ["El Asistente virtual cuesta US$29 al mes.",
+                  "Gracias, Ana. El equipo se comunicará contigo pronto.\n[SOPORTE]"]
+    vistos = []
+
+    async def fake_claude(prompt, system, mcp=None, allowed=(), max_turns=5, model=None):
+        vistos.append((prompt, system, model))
+        return respuestas[len(vistos) - 1]
+
+    monkeypatch.setattr(bot.agent, "run_claude", fake_claude)
+    web = {"Origin": "https://skandar.online"}
+    with TestClient(bot.app, base_url="https://testserver") as client:
+        google = FakeGoogle()
+        monkeypatch.setattr(conectar, "google", google)
+        r = client.get("/ayuda")
+        # Se abre en el iframe de la web (mismo sitio) y no en otros.
+        assert "frame-ancestors 'self'" in r.headers["content-security-policy"]
+        assert "Soy Skandi" in r.text or "soy Skandi" in r.text
+        assert client.get("/ayuda/ayuda.js").status_code == 200
+
+        assert client.post("/ayuda", data={"mensaje": "hola"}).status_code == 403  # sin Origin
+        r = client.post("/ayuda", headers=web, data={"mensaje": "¿Cuánto <cuesta>?"}, follow_redirects=False)
+        assert r.status_code == 303 and r.headers["location"] == "/ayuda#fin"
+        prompt, system, model = vistos[0]
+        assert model == skandi.MODELO and "página skandar.online" in system
+        assert "¿Cuánto &lt;cuesta&gt;?" in prompt
+        assert "US$29 al mes" in client.get("/ayuda").text and google.correos == []
+
+        client.post("/ayuda", headers=web, data={"mensaje": "Soy Ana, ana@cafe.mx, quiero que me llamen"})
+        html = client.get("/ayuda").text
+        assert "se comunicará contigo pronto" in html and "[SOPORTE]" not in html
+        (para, asunto, cuerpo), = google.correos
+        assert para == skandi.SOPORTE_EMAIL and "Visitante: Soy Ana, ana@cafe.mx" in cuerpo
+
+        # Límite por visitante (con su cookie); otro visitante empieza de cero.
+        r = client.post("/ayuda", headers=web, data={"mensaje": "otra"})  # sigue la redirección
+        assert len(vistos) == 2 and "ya no puedo contestar" in r.text
+        client.cookies.clear()
+        assert "US$29" not in client.get("/ayuda").text

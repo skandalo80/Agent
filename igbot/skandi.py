@@ -1,4 +1,9 @@
-"""Skandi: la ayuda del panel, en un botón abajo a la derecha de cada página.
+"""Skandi: el asistente de ayuda, con un botón redondo de chat abajo a la derecha.
+
+Dos lugares: el panel (clientes con sesión, abajo) y la web pública skandar.online
+(visitantes; ver "Skandi en la web pública" al final).
+
+En el panel:
 
 El botón abre una ventanita de chat (#skandi con :target, sin JavaScript). La
 pregunta va por un formulario a /panel/ayuda, que contesta con Claude (Haiku,
@@ -27,8 +32,8 @@ from html import escape
 from pathlib import Path
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Request
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
 from starlette.routing import Match
 
 from . import config
@@ -55,13 +60,15 @@ SALUDO = ("Hola, soy Skandi. Pregúntame cómo usar el panel, tu asistente o tus
 _charlas: dict[str, list[list[str]]] = {}
 _avisos: dict[str, str] = {}
 
-ICONO = ('<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"'
-         ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/>'
-         '<path d="M9.3 9.2a2.8 2.8 0 0 1 5.4 1c0 1.9-2.7 2.5-2.7 4"/><path d="M12 17.6h0"/></svg>')
+# El ícono de chat de siempre (burbuja con tres puntos), en el botón redondo.
+ICONO = ('<svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor" aria-hidden="true">'
+         '<path d="M12 3C6.5 3 2 6.8 2 11.5c0 2.4 1.2 4.6 3.1 6.1L4.3 21l4-1.9c1.2.4 2.4.6 3.7.6 5.5 0 10-3.8 10-8.6S17.5 3 12 3z"/>'
+         '<circle cx="8" cy="11.5" r="1.3" fill="var(--tinta,#1E1C26)"/><circle cx="12" cy="11.5" r="1.3" fill="var(--tinta,#1E1C26)"/>'
+         '<circle cx="16" cy="11.5" r="1.3" fill="var(--tinta,#1E1C26)"/></svg>')
 
 CSS = """
-.sk-boton{position:fixed;right:1.25rem;bottom:1.25rem;z-index:15;display:flex;align-items:center;gap:.45rem;background:var(--acento);color:var(--tinta);font-weight:700;padding:.7rem 1.05rem;border-radius:999px;text-decoration:none;box-shadow:0 10px 24px rgba(12,11,16,.45),inset 2px 2px 0 rgba(255,255,255,.25)}
-.sk-boton:hover{filter:brightness(1.05)}
+.sk-boton{position:fixed;right:1.5rem;bottom:1.5rem;z-index:15;width:3.75rem;height:3.75rem;display:grid;place-items:center;background:var(--acento);color:#F7F5FA;border-radius:50%;text-decoration:none;box-shadow:0 10px 24px rgba(12,11,16,.45),inset 2px 2px 0 rgba(255,255,255,.25),inset -3px -4px 8px rgba(0,0,0,.12);transition:transform .15s}
+.sk-boton:hover{transform:scale(1.06)}
 .skandi{display:none;position:fixed;right:1.25rem;bottom:1.25rem;z-index:50;width:min(23rem,calc(100vw - 2rem));height:min(34rem,calc(100dvh - 2.5rem));flex-direction:column;background:#302D3A;color:#F7F5FA;border-radius:1.6rem;box-shadow:10px 14px 28px rgba(12,11,16,.55),inset 2px 2px 0 rgba(255,255,255,.07);overflow:hidden}
 html:not(.js) .skandi:target,.skandi.abierta{display:flex}
 html:not(.js) .skandi:target~.sk-boton,.skandi.abierta~.sk-boton{display:none}
@@ -82,7 +89,7 @@ html:not(.js) .skandi:target~.sk-boton,.skandi.abierta~.sk-boton{display:none}
 .sk-escribir input[type=text]:focus{outline:2px solid var(--acento);outline-offset:1px;border-color:transparent}
 .sk-escribir button{font:inherit;font-weight:700;background:var(--acento);color:var(--tinta);border:0;border-radius:.9rem;padding:.6rem .95rem;cursor:pointer}
 .sk-escribir button:disabled{opacity:.6;cursor:wait}
-@media(max-width:600px){.sk-boton{right:.9rem;bottom:.9rem;padding:.75rem}.sk-boton .txt{display:none}
+@media(max-width:600px){.sk-boton{right:1rem;bottom:1rem;width:3.4rem;height:3.4rem}
 .skandi{right:.5rem;bottom:.5rem;width:calc(100vw - 1rem);height:calc(100dvh - 1rem)}}
 @media print{.sk-boton,.skandi{display:none!important}}
 """
@@ -119,7 +126,7 @@ def widget(c: Cuenta) -> str:
         f'<input type="text" name="mensaje" maxlength="{MAX_MENSAJE}" placeholder="Escribe tu pregunta"'
         ' aria-label="Escribe tu pregunta para Skandi" autocomplete="off" required>'
         '<button>Enviar</button></form></section>'
-        f'<a class="sk-boton" href="#skandi" aria-label="Ayuda: pregúntale a Skandi">{ICONO}<span class="txt">Ayuda</span></a>'
+        f'<a class="sk-boton" href="#skandi" aria-label="Ayuda: pregúntale a Skandi" title="Ayuda">{ICONO}</a>'
     )
 
 
@@ -140,12 +147,14 @@ async def datos_cuenta(c: Cuenta) -> str:
             f"Plan: {plan(c)}\nSu asistente está: {estado}")
 
 
-async def sistema(c: Cuenta) -> str:
+async def sistema(prompt: Path, extra: str = "") -> str:
+    """El contexto base (prompt), la información de empresa de la cuenta principal y `extra`."""
     from . import empresa
-    partes = [PROMPT.read_text(encoding="utf-8").strip()]
+    partes = [prompt.read_text(encoding="utf-8").strip()]
     if (p := principal()) is not None and (info := await empresa.texto_para_prompt(p)):
         partes.append(f"<informacion_de_skandar>\n{info}\n</informacion_de_skandar>")
-    partes.append(f"<cuenta_de_quien_pregunta>\n{await datos_cuenta(c)}\n</cuenta_de_quien_pregunta>")
+    if extra:
+        partes.append(extra)
     return "\n\n".join(partes)
 
 
@@ -153,40 +162,48 @@ def conversacion(previos: list[list[str]]) -> str:
     return "\n".join(f"{'Cliente' if r == 'user' else 'Skandi'}: {escape(t)}" for r, t in previos)
 
 
-async def responder(c: Cuenta, previos: list[list[str]], texto: str) -> str:
+async def responder(c: Cuenta, previos: list[list[str]], texto: str, system: str) -> str:
+    """Una vuelta de Claude sin herramientas; el costo cuenta para `c`."""
     from . import agent  # import tardío: agent importa el SDK
     partes = []
     if previos:
         partes.append(f"<conversacion>\n{conversacion(previos)}\n</conversacion>")
     partes.append(f"<pregunta>\n{escape(texto)}\n</pregunta>\n\nEscribe solo tu respuesta.")
     with usar(c):
-        return await agent.run_claude("\n\n".join(partes), await sistema(c), max_turns=1, model=MODELO)
+        return await agent.run_claude("\n\n".join(partes), system, max_turns=1, model=MODELO)
+
+
+async def correo_a_soporte(asunto: str, texto: str) -> bool:
+    from . import conectar
+    if not conectar.google or not SOPORTE_EMAIL:
+        log.warning("Skandi: no hay correo configurado para avisar a soporte (%s)", asunto)
+        return False
+    try:
+        await conectar.google.send_email(config.MAIL_FROM, "Skandi", SOPORTE_EMAIL, "", asunto, texto)
+    except Exception:
+        log.exception("Skandi: no se pudo mandar el correo a soporte")
+        return False
+    return True
 
 
 async def avisar_soporte(c: Cuenta, charla: list[list[str]]) -> None:
     """Correo a soporte con la cuenta y la conversación (pocos al día por cuenta)."""
-    from . import conectar, panel
+    from . import panel
     k, enviados = await preguntas_hoy(c, "skandi_correos")
     if enviados >= MAX_CORREOS_DIA:
         log.info("Skandi: %s ya mandó %d correos a soporte hoy", clave(c), enviados)
-        return
-    google = conectar.google
-    if not google or not SOPORTE_EMAIL:
-        log.warning("Skandi: no hay correo configurado para avisar a soporte (%s)", clave(c))
         return
     usuario = await panel.usuario(c)
     texto = (f"@{usuario} pidió ayuda en el panel y Skandi lo pasa a soporte.\n\n"
              f"Cuenta: @{usuario} ({clave(c)}, id {c.ig_account_id})\nPlan: {plan(c)}\n"
              + (f"Correo de la cuenta: {c.owner_email}\n" if c.owner_email and c.owner_email != config.MAIL_FROM else "")
-             + f"Instagram: https://www.instagram.com/{usuario}/\n\nConversación:\n"
-             + "\n".join(f"{'Cliente' if r == 'user' else 'Skandi'}: {t}" for r, t in charla))
-    try:
-        await google.send_email(config.MAIL_FROM, "Skandi", SOPORTE_EMAIL, "",
-                                f"Soporte: @{usuario} necesita ayuda", texto)
-    except Exception:
-        log.exception("Skandi: no se pudo mandar el correo a soporte")
-        return
-    await c.store.set(k, str(enviados + 1))
+             + f"Instagram: https://www.instagram.com/{usuario}/\n\nConversación:\n" + texto_charla(charla))
+    if await correo_a_soporte(f"Soporte: @{usuario} necesita ayuda", texto):
+        await c.store.set(k, str(enviados + 1))
+
+
+def texto_charla(charla: list[list[str]], quien: str = "Cliente") -> str:
+    return "\n".join(f"{quien if r == 'user' else 'Skandi'}: {t}" for r, t in charla)
 
 
 def volver_a(request: Request, pedido: str) -> str:
@@ -220,7 +237,8 @@ async def preguntar(request: Request):
     await c.store.set(k, str(usadas + 1))
     previos = _charlas.get(clave(c), [])[-MAX_TURNOS:]
     try:
-        respuesta = await responder(c, previos, texto)
+        extra = f"<cuenta_de_quien_pregunta>\n{await datos_cuenta(c)}\n</cuenta_de_quien_pregunta>"
+        respuesta = await responder(c, previos, texto, await sistema(PROMPT, extra))
     except Exception:
         log.exception("Skandi no pudo contestar a %s", clave(c))
         _avisos[clave(c)] = "No pude contestar esta vez. Intenta de nuevo en un momento."
@@ -232,3 +250,148 @@ async def preguntar(request: Request):
     if soporte:
         await avisar_soporte(c, charla)
     return RedirectResponse(destino, status_code=303)
+
+
+# --- Skandi en la web pública (skandar.online) ---
+#
+# La web es estática: sitio.js pone el botón redondo y una ventanita con un <iframe>
+# a skandar.online/ayuda, que Caddy pasa a este proceso (mismo origen, así el CSP de
+# la web lo deja y aquí no hace falta fetch). Cada visitante tiene una cookie al azar;
+# su conversación vive en memoria. Contra abuso: MAX_WEB_VISITANTE preguntas por
+# visitante al día y MAX_WEB_DIA entre todos; correos a soporte, MAX_WEB_CORREOS al día.
+
+web_router = APIRouter(prefix="/ayuda")
+PROMPT_WEB = Path("prompts/skandi-web.md")
+COOKIE_WEB = "skandi"
+MAX_WEB_VISITANTE = 15
+MAX_WEB_DIA = 300
+MAX_WEB_CORREOS = 20
+MAX_VISITANTES = 500  # conversaciones en memoria; se olvidan las más viejas
+SALUDO_WEB = ("Hola, soy Skandi. Te ayudo con dudas de Skandar: qué hace, cuánto cuesta, cómo empezar"
+              " o cómo ver una demo.")
+CSP_WEB = ("default-src 'none'; script-src 'self'; style-src 'unsafe-inline' https://fonts.googleapis.com;"
+           " font-src https://fonts.gstatic.com; form-action 'self'; base-uri 'none'; frame-ancestors 'self'")
+
+# token del visitante -> {"dia": clave del día, "n": preguntas hoy, "charla": [[rol, texto], ...]}
+_visitantes: dict[str, dict] = {}
+
+ESTILO_WEB = """
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{font:15px/1.5 "Nunito",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#211b25;background:#f6f3f7;display:flex;flex-direction:column}
+.mensajes{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:8px}
+.msj{max-width:85%;padding:9px 13px;border-radius:16px;white-space:pre-wrap;overflow-wrap:anywhere}
+.msj.tu{align-self:flex-end;background:#D29441;color:#36203E;border-bottom-right-radius:5px;font-weight:600}
+.msj.skandi{align-self:flex-start;background:#fff;border-bottom-left-radius:5px;box-shadow:4px 5px 12px rgba(54,32,62,.07)}
+.msj.escribiendo{color:#716a75;font-style:italic}
+.aviso{font-size:13px;color:#9a6420;background:#f7ecdc;border-radius:12px;padding:8px 12px}
+form{display:flex;gap:8px;padding:12px;border-top:1px solid #e9e3eb;background:#f6f3f7}
+input[type=text]{flex:1;min-width:0;font:inherit;color:#211b25;background:#fff;border:1px solid #e9e3eb;border-radius:12px;padding:10px 12px}
+input[type=text]:focus{outline:2px solid #D29441;outline-offset:1px;border-color:transparent}
+button{font:inherit;font-weight:700;background:#D29441;color:#36203E;border:0;border-radius:12px;padding:10px 15px;cursor:pointer;box-shadow:0 3px 0 #a8701f}
+button:disabled{opacity:.6;cursor:wait}
+"""
+
+
+def mensaje_web(rol: str, texto: str) -> str:
+    return f'<div class="msj {"tu" if rol == "user" else "skandi"}">{escape(texto)}</div>'
+
+
+def visitante(request: Request) -> tuple[str, dict]:
+    import secrets
+    token = request.cookies.get(COOKIE_WEB, "")
+    if not (len(token) == 32 and token.isalnum()):
+        token = secrets.token_hex(16)
+    if token not in _visitantes:
+        while len(_visitantes) >= MAX_VISITANTES:
+            _visitantes.pop(next(iter(_visitantes)))
+        _visitantes[token] = {"dia": "", "n": 0, "charla": []}
+    return token, _visitantes[token]
+
+
+def pagina_web(v: dict, aviso: str = "") -> HTMLResponse:
+    from . import panel
+    mensajes = mensaje_web("assistant", SALUDO_WEB) + "".join(mensaje_web(r, t) for r, t in v["charla"])
+    if aviso:
+        mensajes += f'<div class="aviso">{escape(aviso)}</div>'
+    html = (
+        '<!doctype html><html lang="es"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">'
+        '<title>Skandi · Skandar</title>'
+        '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap">'
+        f'<style>{ESTILO_WEB}</style>'
+        f'<script src="/ayuda/ayuda.js?v={panel.VERSION_JS}" defer></script></head><body>'
+        f'<div class="mensajes" id="mensajes">{mensajes}<span id="fin"></span></div>'
+        '<form method="post" action="/ayuda#fin">'
+        f'<input type="text" name="mensaje" maxlength="{MAX_MENSAJE}" placeholder="Escribe tu pregunta"'
+        ' aria-label="Escribe tu pregunta para Skandi" autocomplete="off" required>'
+        '<button>Enviar</button></form></body></html>'
+    )
+    return HTMLResponse(html, headers={"Content-Security-Policy": CSP_WEB, "X-Frame-Options": "SAMEORIGIN",
+                                       "Cache-Control": "no-store"})
+
+
+def con_cookie(response, token: str):
+    response.set_cookie(COOKIE_WEB, token, max_age=30 * 86400, path="/ayuda", httponly=True,
+                        secure=True, samesite="lax")
+    return response
+
+
+@web_router.get("")
+async def ver_web(request: Request):
+    token, v = visitante(request)
+    aviso = v.pop("aviso", "")
+    return con_cookie(pagina_web(v, aviso), token)
+
+
+@web_router.get("/ayuda.js")
+def script_web():
+    from fastapi.responses import FileResponse
+    from . import panel
+    return FileResponse(panel.STATIC / "ayuda.js", media_type="text/javascript",
+                        headers={"Cache-Control": "public, max-age=3600"})
+
+
+def de_la_web(request: Request) -> None:
+    """Contra CSRF: el formulario tiene que venir de la web o del mismo sitio."""
+    h = request.headers
+    if (h.get("origin") not in (config.SITE_URL, config.PUBLIC_URL.rstrip("/"))
+            and h.get("sec-fetch-site") != "same-origin"):
+        raise HTTPException(status_code=403)
+
+
+@web_router.post("")
+async def preguntar_web(request: Request):
+    from . import panel
+    de_la_web(request)
+    token, v = visitante(request)
+    volver = con_cookie(RedirectResponse("/ayuda#fin", status_code=303), token)
+    texto = " ".join((await panel.form(request)).get("mensaje", "").split())[:MAX_MENSAJE]
+    if not texto or (p := principal()) is None:
+        return volver
+    k, total = await preguntas_hoy(p, "skandi_web")
+    if v["dia"] != k:
+        v["dia"], v["n"] = k, 0
+    if v["n"] >= MAX_WEB_VISITANTE or total >= MAX_WEB_DIA:
+        v["aviso"] = ("Por hoy ya no puedo contestar más preguntas. Escríbenos por Instagram a"
+                      " @skandar.online y te contestamos ahí.")
+        return volver
+    v["n"] += 1
+    await p.store.set(k, str(total + 1))
+    previos = v["charla"][-MAX_TURNOS:]
+    try:
+        respuesta = await responder(p, previos, texto, await sistema(PROMPT_WEB))
+    except Exception:
+        log.exception("Skandi (web) no pudo contestar")
+        v["aviso"] = "No pude contestar esta vez. Intenta de nuevo en un momento."
+        return volver
+    soporte = MARCA_SOPORTE in respuesta
+    respuesta = respuesta.replace(MARCA_SOPORTE, "").strip() or "El equipo se comunicará contigo pronto."
+    v["charla"] = (previos + [["user", texto], ["assistant", respuesta]])[-MAX_TURNOS:]
+    if soporte:
+        kc, enviados = await preguntas_hoy(p, "skandi_web_correos")
+        if enviados < MAX_WEB_CORREOS and await correo_a_soporte(
+                "Web: un visitante quiere que lo contacten",
+                "Un visitante de skandar.online habló con Skandi y pidió que lo contacte el equipo.\n\n"
+                "Conversación:\n" + texto_charla(v["charla"], "Visitante")):
+            await p.store.set(kc, str(enviados + 1))
+    return volver

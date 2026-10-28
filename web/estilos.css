@@ -355,3 +355,34 @@ a.tarjeta { display: block; color: inherit; text-decoration: none; }
 .tarjeta h3 + p { margin-top: 8px; }
 .ejemplo .marcas { color: #e2d8e6; }
 .ejemplo .marcas strong { color: #fff; }
+
+/* Skandi: el botón redondo de chat y su ventana (los pone sitio.js) */
+.sk-boton {
+  position: fixed; right: 24px; bottom: 24px; z-index: 40; width: 60px; height: 60px;
+  display: grid; place-items: center; border: 0; border-radius: 50%; cursor: pointer;
+  background: var(--dorado); color: var(--blanco);
+  box-shadow: 0 4px 0 var(--dorado-sombra), 0 12px 24px rgba(54, 32, 62, .22);
+  transition: transform .2s;
+}
+.sk-boton:hover { transform: translateY(-2px) scale(1.04); }
+.skandi {
+  display: none; position: fixed; right: 24px; bottom: 24px; z-index: 41;
+  width: min(380px, calc(100vw - 32px)); height: min(560px, calc(100dvh - 48px));
+  flex-direction: column; overflow: hidden; border-radius: 24px; background: var(--fondo);
+  box-shadow: 11px 13px 30px rgba(54, 32, 62, .18), -4px -4px 14px rgba(255, 255, 255, .8);
+}
+.skandi-abierta .skandi { display: flex; }
+.skandi-abierta .sk-boton { display: none; }
+.skandi iframe { flex: 1; width: 100%; border: 0; }
+.sk-cabeza { display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: var(--ciruela); color: var(--blanco); }
+.sk-avatar { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--dorado); color: var(--ciruela); font-weight: 800; }
+.sk-cabeza b { display: block; line-height: 1.2; }
+.sk-cabeza small { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #d9cfdd; }
+.sk-cabeza small::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--neon); }
+.sk-cerrar { margin-left: auto; border: 0; background: none; color: #d9cfdd; font-size: 26px; line-height: 1; cursor: pointer; padding: 2px 8px; border-radius: 8px; }
+.sk-cerrar:hover { color: var(--blanco); background: rgba(255, 255, 255, .08); }
+@media (max-width: 600px) {
+  .sk-boton { right: 16px; bottom: 16px; width: 56px; height: 56px; }
+  .skandi { right: 8px; bottom: 8px; width: calc(100vw - 16px); height: calc(100dvh - 16px); }
+}
+@media print { .sk-boton, .skandi { display: none !important; } }

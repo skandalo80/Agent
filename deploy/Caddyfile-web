@@ -14,10 +14,25 @@
 skandar.online {
     root * /var/www/skandar.online
     encode gzip
-    import cabeceras-web
 
-    try_files {path} {path}.html
-    file_server
+    # Skandi, el chat de la web: lo atiende el bot (sus cabeceras dejan abrirlo en un
+    # iframe de esta misma web; ver igbot/skandi.py).
+    @ayuda path /ayuda /ayuda/*
+    handle @ayuda {
+        header {
+            Strict-Transport-Security "max-age=31536000; includeSubDomains"
+            X-Content-Type-Options "nosniff"
+            Referrer-Policy "strict-origin-when-cross-origin"
+            -Server
+        }
+        reverse_proxy 127.0.0.1:8001
+    }
+
+    handle {
+        import cabeceras-web
+        try_files {path} {path}.html
+        file_server
+    }
 
     handle_errors 404 {
         import cabeceras-web
