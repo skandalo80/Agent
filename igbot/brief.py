@@ -11,6 +11,7 @@ concreto del Perfil de empresa (datos). Lo que escribió el cliente va escapado:
 instrucciones.
 """
 import json
+import logging
 import random
 import re
 from html import escape
@@ -18,6 +19,8 @@ from html import escape
 from . import config, empresa
 from .contenido import marca_de, visual_marca
 from .cuenta import Cuenta
+
+log = logging.getLogger("igbot.brief")
 
 N_CONCEPTOS = 3
 MAX_PILARES = 4
@@ -59,6 +62,7 @@ Y su dirección visual, pensada para ese concepto (cómo se ve y se siente la ca
 
 Reglas:
 - Todo sale de <empresa>, <marca_visual> y la campaña. Usa solo datos que estén ahí: no inventes precios, promociones, horarios, cifras ni testimonios.
+- Si hay <referencias_visuales> (el ADN de las fotos de referencia que eligió el dueño), es lo que más pesa en la dirección visual: "estetica", "composicion", "colores" y "direccion_visual" salen de ahí (su luz, paleta, texturas, encuadres y ambiente), por encima de <marca_visual>. Se copia su estilo, nunca lo que aparece en ellas.
 - <marca_visual> es el ambiente de la marca (luz, colores, sensación), no objetos que deban salir siempre: si menciona materiales como madera o lino, son una referencia de textura, no utilería fija.
 - Cada concepto sirve al <objetivo> y al <mensaje>; si hay <producto>, gira alrededor de él.
 - Nada genérico: si un concepto le serviría igual a otro negocio del mismo ramo, cámbialo.
@@ -105,6 +109,7 @@ Para cada post:
 Reglas:
 - Ningún par de posts repite escena, gancho, titular ni estructura. Si dos fichas se parecen, búscales ángulos opuestos.
 - Las fotos de la campaña se comparan entre sí: ningún par repite protagonista, escenario, acción ni metáfora visual (dos tazas en dos mesas son la misma foto aunque cambie el encuadre). En Consistente, todas usan el mismo estilo y el mismo color; en las demás variedades puedes alternarlos.
+- Si hay <referencias_visuales>, mandan sobre <marca_visual>: cada foto cabe en ese ADN (luz, paleta, texturas, ambiente) y "estilo" es "Referencias". La variedad cambia protagonista, lugar y acción, no el ADN.
 - La variedad de las imágenes la manda <variedad_visual>. <marca_visual> es el ambiente (luz, color, sensación), no objetos fijos: no repitas el mismo mueble, superficie u objeto en varios posts.
 - Las primeras semanas presentan y las últimas empujan la acción, como dice el brief.
 - Usa solo datos de <empresa>, del brief o de la campaña. No inventes precios, promociones, cifras ni testimonios. Respeta "Lo que no se dice".
@@ -188,6 +193,50 @@ LUCES = ["luz natural suave de mañana", "luz clara y pareja de mediodía", "luz
 SIN_ESCENA = ("texto", "collage")  # formatos sin foto generada
 
 
+MAX_REFERENCIAS = 5  # fotos de referencia por campaña: más, y la señal se diluye y sube el costo
+SISTEMA_ADN = """Eres director de arte. Estas fotos de referencia las eligió el dueño de un negocio para su campaña de Instagram: quiere que las imágenes de la campaña se vean así. Describe su ADN visual, lo que comparten, para que otro lo siga sin ver las fotos.
+
+Campos, en español, cada uno en 1 o 2 frases concretas (nada genérico como "estética moderna"):
+- "luz": tipo, dirección, dureza, hora y temperatura de la luz.
+- "paleta": los colores que dominan y los de acento, y qué tan saturados o apagados.
+- "encuadre": distancia, ángulo, perspectiva y cuánto aire dejan.
+- "composicion": cómo se ordenan los elementos, simetría, espacio negativo.
+- "texturas": materiales, superficies, grano o nitidez.
+- "tratamiento": la edición (contraste, sombras, color, look analógico o digital).
+- "ambiente": la sensación que transmiten.
+- "copiar": lo que hay que repetir en cada imagen, en una frase.
+- "no_copiar": lo que es solo de estas fotos y no debe repetirse (sus objetos, personas, lugares o textos concretos).
+
+Si las fotos no comparten un estilo claro, describe el que domina y dilo en "ambiente". Contesta SOLO con un objeto JSON: {"luz": "...", "paleta": "...", "encuadre": "...", "composicion": "...", "texturas": "...", "tratamiento": "...", "ambiente": "...", "copiar": "...", "no_copiar": "..."}"""
+CAMPOS_ADN = [("luz", "Luz"), ("paleta", "Paleta"), ("encuadre", "Encuadre"), ("composicion", "Composición"),
+              ("texturas", "Texturas"), ("tratamiento", "Tratamiento"), ("ambiente", "Ambiente"),
+              ("copiar", "Se copia"), ("no_copiar", "No se copia")]
+
+
+async def adn_visual(c: Cuenta, tokens: list[str]) -> str:
+    """El ADN visual de las fotos de referencia de la campaña (OpenAI con visión), una línea por campo; "" si no
+    hay fotos, no hay OpenAI o no salió (las fotos igual van al generador en cada imagen)."""
+    from . import openai_texto
+    from .contenido import archivo
+
+    fotos = [archivo(c, t).read_bytes() for t in tokens[:MAX_REFERENCIAS] if archivo(c, t).is_file()]
+    if not fotos or not config.OPENAI_API_KEY:
+        return ""
+    try:
+        respuesta = await openai_texto.json_de(SISTEMA_ADN, f"Son {len(fotos)} fotos de referencia.", 4000, fotos)
+    except Exception:
+        log.exception("ADN visual de las referencias de %s", c.slug)
+        return ""
+    return "\n".join(f"{t}: {' '.join(str(respuesta[k]).split())[:300]}" for k, t in CAMPOS_ADN
+                     if str(respuesta.get(k) or "").strip())
+
+
+def referencias_tag(camp: dict) -> str:
+    """El ADN de las fotos de referencia para los prompts (lo escribió un modelo a partir de fotos del cliente)."""
+    adn = camp.get("adn_visual", "")
+    return f"<referencias_visuales>\n{escape(adn)}\n</referencias_visuales>\n" if adn else ""
+
+
 def variedad_tag(camp: dict) -> str:
     return f"<variedad_visual>{VARIEDAD.get(camp.get('variedad'), VARIEDAD['coherencia'])}</variedad_visual>\n"
 
@@ -253,7 +302,7 @@ async def conceptos(c: Cuenta, camp: dict, otras: list[dict]) -> list[dict]:
               + (f" y {camp['n_historias']} historias" if camp.get("n_historias") else "") + f" en {semanas}"
               f" semana{'s' if semanas > 1 else ''}</campaña>\n"
               + (f"<tema>{escape(camp['tema'])}</tema>\n" if camp.get("tema") else "")
-              + campanas.parametros(camp) + "\n" + variedad_tag(camp)
+              + campanas.parametros(camp) + "\n" + variedad_tag(camp) + referencias_tag(camp)
               + (await campanas.de_tus_clientes(c) if camp.get("clientes") else "")
               + (f"<ideas_anteriores>\n{ya}\n</ideas_anteriores>" if ya else ""))
     sistema = SISTEMA.format(n=N_CONCEPTOS, max_pilares=MAX_PILARES)

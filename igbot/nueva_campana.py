@@ -24,7 +24,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
 from . import brief, campanas, empresa, panel, tools
-from .contenido import marca_de, modo_de, sin_plan
+from .contenido import TOKEN_FOTO, archivo, guardar_fotos, marca_de, modo_de, sin_plan, url_imagen
 from .cuenta import Cuenta, usar
 
 router = APIRouter(prefix="/panel/contenido")
@@ -169,6 +169,7 @@ HORARIOS = {**{k: f"{v[0]} · {v[1]}" for k, v in campanas.HORARIOS.items()}, "i
 DIAS = ("Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom")
 MAX_POSTS = 30
 MAX_HISTORIAS = 30
+MAX_CANDIDATOS_REF = 18  # fotos para elegir como referencia en el paso Estilo y variedad
 
 
 # --- el borrador ---
@@ -296,8 +297,11 @@ async def a_campana(c: Cuenta, b: dict) -> dict:
             "fotos_propias": "propias" in b["visual"], "modo_img": b["armado"], "regla": base == "interaccion",
             "ves": [[k, f"{VISUAL[k][0]}: {VISUAL[k][1]}"] for k in b["visual"] if k in VISUAL and k != "propias"],
             "variedad": b["variedad"],
+            "referencias": b.get("referencias", []),
+            "adn_visual": (b.get("adn") or {}).get("texto", "") if (b.get("adn") or {}).get("fotos") == b.get(
+                "referencias") else "",
             "semilla": b.get("semilla") or 0,
-            "asistente": {k: v for k, v in b.items() if k not in ("cid", "hechos")}}
+            "asistente": {k: v for k, v in b.items() if k not in ("cid", "hechos", "adn")}}
 
 
 # --- guardar cada paso ---
@@ -541,7 +545,18 @@ def paso_5(b: dict) -> str:
                    " empresa. Las usamos como referencia en cada imagen.") + pie(5))
 
 
-def paso_6(b: dict) -> str:
+async def candidatos_ref(c: Cuenta, b: dict) -> list[str]:
+    """Las fotos que puede elegir como referencia: las que ya eligió o subió aquí, las de Tu marca y las de sus
+    productos (las que siguen en disco)."""
+    with usar(c):
+        marca = await marca_de(c)
+        prods = await productos(c)
+    tokens = b.get("referencias", []) + b.get("refs_subidas", []) + marca.get("fotos", []) + [
+        t for p in prods for t in p.get("imagenes", []) if isinstance(t, str)]
+    return [t for t in dict.fromkeys(tokens) if TOKEN_FOTO.match(t) and archivo(c, t).is_file()][:MAX_CANDIDATOS_REF]
+
+
+def paso_6(b: dict, candidatos: list[tuple[str, str]] = ()) -> str:
     variedad = "".join(op("variedad", k, t, d, marcada=b["variedad"] == k, imagen=img("variedad", k, color, t, alta=True),
                           em="Recomendado" if k == "coherencia" else "")
                        for k, (t, d, color) in VARIEDAD.items())
@@ -549,7 +564,21 @@ def paso_6(b: dict) -> str:
                 "Solo cambia esta campaña. Tus colores, tu tipografía y tu logo siguen siendo los de Tu marca.")
             + '<h3 class="wiz-sub">Variedad visual</h3><p class="ayuda">Qué tan distintas se ven las fotos entre'
             ' sí: el lugar, el encuadre y la luz.</p>'
-            f'<div class="wiz-ops cuatro">{variedad}</div>' + pie(6))
+            f'<div class="wiz-ops cuatro">{variedad}</div>' + referencias(b, candidatos) + pie(6))
+
+
+def referencias(b: dict, candidatos: list[tuple[str, str]]) -> str:
+    """Fotos de referencia (opcional): las elige de las que ya tiene o las sube; con ellas manda su estilo."""
+    fotos = "".join(f'<label class="ref-cam"><input type="checkbox" name="referencias" value="{t}"'
+                    f'{" checked" if t in b.get("referencias", []) else ""}><img src="{u}" alt="" loading="lazy"></label>'
+                    for t, u in candidatos)
+    return ('<h3 class="wiz-sub">Fotos de referencia <span class="opc">(opcional)</span></h3>'
+            f'<p class="ayuda">De 3 a {brief.MAX_REFERENCIAS} fotos con el estilo que quieres (luz, colores, ambiente),'
+            " parecidas entre sí. Mandan en la dirección visual: la IA copia su estilo, no lo que aparece en ellas.</p>"
+            + (f'<div class="refs-cam">{fotos}</div>' if fotos else "")
+            + '<label class="subir-ref">Subir fotos<input type="file" name="ref_nuevas" multiple'
+            ' accept="image/jpeg,image/png,image/webp"></label>'
+            f'<p class="ayuda chica">Elige o sube hasta {brief.MAX_REFERENCIAS}. Se guardan al pasar de paso.</p>')
 
 
 def paso_7(b: dict) -> str:
@@ -768,7 +797,7 @@ async def pagina(c: Cuenta, paso: int, aviso: str = "", b: dict | None = None):
         elif paso == 5:
             contenido = paso_5(b)
         elif paso == 6:
-            contenido = paso_6(b)
+            contenido = paso_6(b, [(t, url_imagen(c, t)) for t in await candidatos_ref(c, b)])
         elif paso == 7:
             contenido = paso_7(b)
         elif paso == BRIEF:
@@ -777,7 +806,7 @@ async def pagina(c: Cuenta, paso: int, aviso: str = "", b: dict | None = None):
             contenido = await resumen(c, b, objetivos, mensajes, prods)
         # Un solo formulario con el riel adentro; el primer botón (invisible) es el que usa Enter: seguir.
         sigue = BRIEF if paso == BRIEF else min(vecino(paso, 1), RESUMEN)
-        cuerpo = (f'<form method="post" action="{URL}" class="wiz" id="wiz-form">'
+        cuerpo = (f'<form method="post" action="{URL}" class="wiz" id="wiz-form" enctype="multipart/form-data">'
                   f'<button class="enter-cam" name="ir" value="{sigue}" tabindex="-1" aria-hidden="true">Seguir</button>'
                   f'<input type="hidden" name="paso" value="{paso}">{riel(b, paso)}'
                   f'<div class="wiz-main">{contenido}</div></form>')
@@ -826,6 +855,8 @@ async def guardar(request: Request):
     if paso < RESUMEN:
         antes = {k: v for k, v in b.items() if k not in ("hechos", "brief")}
         error = del_form(f, paso, b, objetivos, mensajes, await productos(c))
+        if paso == 6:
+            await referencias_del_form(c, f, b)
         if b.get("brief") and {k: v for k, v in b.items() if k not in ("hechos", "brief")} != antes:
             b.pop("brief")  # cambió la campaña: el brief de antes ya no le queda
         hechos = set(b.get("hechos", []))
@@ -859,6 +890,29 @@ async def guardar(request: Request):
     return await campanas.armar(c, datos, camp, borrador=True)
 
 
+async def referencias_del_form(c: Cuenta, f, b: dict) -> None:
+    """Las fotos de referencia marcadas (de las que podía elegir) y las que subió, hasta MAX_REFERENCIAS."""
+    validas = set(await candidatos_ref(c, b))
+    elegidas = [t for t in dict.fromkeys(str(x) for x in f.getlist("referencias")) if t in validas]
+    subidas = [x for x in f.getlist("ref_nuevas") if getattr(x, "filename", "")]
+    if subidas and len(elegidas) < brief.MAX_REFERENCIAS:
+        tokens, _ = await guardar_fotos(c, subidas, brief.MAX_REFERENCIAS - len(elegidas))
+        elegidas += tokens
+        b["refs_subidas"] = (tokens + b.get("refs_subidas", []))[:MAX_CANDIDATOS_REF]
+    b["referencias"] = elegidas[:brief.MAX_REFERENCIAS]
+
+
+async def adn_de(c: Cuenta, b: dict) -> str:
+    """El ADN visual de sus referencias, guardado en el borrador mientras no cambien las fotos."""
+    refs = b.get("referencias", [])
+    if not refs:
+        return ""
+    if (b.get("adn") or {}).get("fotos") != refs:
+        with usar(c):
+            b["adn"] = {"fotos": refs, "texto": await brief.adn_visual(c, refs)}
+    return b["adn"]["texto"]
+
+
 async def crear_brief(c: Cuenta, b: dict, datos: dict):
     """Las tres ideas de campaña con su brief (una llamada a Claude, cuenta como una propuesta del día)."""
     if not await campanas.ia_restantes(c):
@@ -869,6 +923,7 @@ async def crear_brief(c: Cuenta, b: dict, datos: dict):
     async def trabajo():
         with usar(c):
             await campanas.usar_ia(c)
+            datos["adn_visual"] = await adn_de(c, b)  # primero se leen las referencias: mandan en la dirección visual
             conceptos = await brief.conceptos(c, datos, otras)
         b["brief"] = {"conceptos": conceptos, "elegido": 0}
         await escribir(c, b)

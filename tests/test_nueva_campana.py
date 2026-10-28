@@ -845,3 +845,49 @@ def test_las_piezas_con_texto_y_el_collage_los_genera_la_ia(cliente, monkeypatch
     client.post(u, headers=ORIGEN, data={"accion": "generar", "k": "99"})
     prompt = proveedor.llamadas[-1][0]
     assert prompt.startswith("A single image laid out as a photo collage") and "Do not include any text" in prompt
+
+
+def test_las_fotos_de_referencia_mandan_en_la_direccion_visual(cliente, monkeypatch):
+    client, c, _, proveedor = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 10)
+    import app as bot
+    from igbot import config, openai_texto
+    de_claude, de_openai = [], []
+    fake_claude = claude_de_campana(de_claude)
+    monkeypatch.setattr(bot.agent, "run_claude", fake_claude)
+    monkeypatch.setattr(config, "OPENAI_API_KEY", "sk-prueba")
+    vistas = []
+    base = openai_de_campana(de_openai, fake_claude)
+
+    async def openai(sistema, prompt, max_tokens=16000, imagenes=()):
+        if imagenes:
+            vistas.append(len(imagenes))
+            return {"luz": "Luz dura de mediodía", "paleta": "Terracota y crema", "copiar": "Sombras marcadas",
+                    "no_copiar": "La taza azul"}
+        return await base(sistema, prompt, max_tokens)
+
+    monkeypatch.setattr(openai_texto, "json_de", openai)
+    listo(client, c)
+    client.portal.call(c.store.set, "productos", json.dumps([PRODUCTO]))
+    llenar(client)
+    foto = io.BytesIO()
+    Image.new("RGB", (40, 40), "orange").save(foto, "JPEG")
+    r = client.post(URL, headers=ORIGEN, data={"paso": "6", "variedad": "coherencia", "ir": "6"},
+                    files=[("ref_nuevas", ("a.jpg", foto.getvalue(), "image/jpeg")),
+                           ("ref_nuevas", ("b.jpg", foto.getvalue(), "image/jpeg"))])
+    r = client.get(f"{URL}?paso=6")
+    assert 'enctype="multipart/form-data"' in r.text and r.text.count('name="referencias"') == 2
+    assert r.text.count('name="referencias" value=') == r.text.count("checked><img")  # las subidas quedan elegidas
+    generar(client)
+    assert vistas == [2]  # el ADN se lee una vez, con las dos fotos
+    conceptos = next(p for p, s in de_claude if "estratega de contenido" in s)
+    assert "<referencias_visuales>" in conceptos and "Luz: Luz dura de mediodía" in conceptos
+    plan = next(p for p, s in de_claude if "director creativo" in s)
+    assert "<referencias_visuales>" in plan and "- Referencias (principal)" in plan
+    camp = leer(client, c)
+    assert len(camp["referencias"]) == 2 and "Paleta: Terracota y crema" in camp["adn_visual"]
+    # En cada imagen, las fotos de referencia van al generador con la instrucción de copiar su estilo.
+    p = next(p for p in camp["posts"] if p["formato"] == "titular")
+    client.post(campanas.url_de(camp), headers=ORIGEN, data={"accion": "generar", "k": str(p["k"])})
+    prompt, fotos = proveedor.llamadas[-1][:2]
+    assert len(fotos) >= 2 and "The first 2 reference images are the visual style to follow" in prompt
