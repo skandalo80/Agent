@@ -9,6 +9,7 @@ Se guarda en la tabla kv de la cuenta:
 - "empresa": los campos de los pasos 1, 2, 4 y 5 (ver CAMPOS) y "terminado".
 - "productos": el catálogo, una lista de {id, nombre, descripcion, precio, moneda,
   desde, imagenes, url, tipo, destacado}; las fotos van en data/<slug>/media.
+- "empresa_sugerencias": lo que se leyó del sitio web del cliente (sitio.py), para que elija qué usar.
 - "campana_opciones": lo que se ofrece al crear una campaña, escrito por Claude para
   esta empresa: los objetivos (qué conseguir) y, dentro de cada uno, sus mensajes (qué
   comunicar). Se vuelve a escribir en segundo plano solo cuando cambia el perfil
@@ -30,7 +31,7 @@ from html import escape
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from . import config, contenido, panel, posicionamiento
+from . import config, contenido, panel, posicionamiento, sitio
 from .cuenta import Cuenta, usar
 
 log = logging.getLogger("igbot.empresa")
@@ -111,6 +112,7 @@ AVISOS = {
     "sin_nombre": "Ponle nombre a tu producto para agregarlo.",
     "listo": "Guardado. En unos segundos tu asistente y tus campañas usan tu perfil.",
     "aplicado": "Cambios aplicados.",
+    "web": "Listo: agregamos lo que elegiste de tu sitio. Revísalo en cada paso.",
 }
 
 
@@ -642,6 +644,16 @@ main.emp{color:var(--claro);padding-bottom:4rem}
 .hoja-o .caja-o{background:#1B1C1F}.hoja-o .caja-o:last-of-type{margin-bottom:0}
 .cab-paso .antetitulo{font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;font-weight:600}
 @media(max-width:560px){.hoja-o{padding:1.4rem 1.1rem}}
+/* Llenar con el sitio web: el botón bajo el campo y la página de sugerencias. */
+.llenar-web{margin-top:.6rem}.llenar-web .ay{margin-top:.4rem}
+.campo-o:has(input[name=sitio_web]:placeholder-shown) .llenar-web{display:none}
+.sug{display:grid;grid-template-columns:auto 1fr;gap:.35rem .8rem;padding:1rem 0;border-top:1px solid #2E3035}
+.sug:first-of-type{border-top:0;padding-top:0}
+.sug>input{accent-color:var(--acento);width:1.1rem;height:1.1rem;margin:.15rem 0 0}
+.sug .t{margin:0}.sug .dato{grid-column:2;display:grid;gap:.4rem}
+.sug .ahora{font-size:.8rem;color:var(--gris);margin:0}
+.sug:has(>input:not(:checked)) .dato{opacity:.55}
+.leidas{font-size:.8rem;color:var(--gris);margin:1rem 0 0;word-break:break-all}
 """
 
 
@@ -727,6 +739,12 @@ def pie(paso: int, nota: str = "") -> str:
                             nota)
 
 
+# Bajo el campo del sitio web; se ve en cuanto hay una dirección escrita (CSS, sin JavaScript).
+LLENAR_WEB = ('<div class="llenar-web"><button class="boton chico" name="accion" value="llenar_web">'
+              "Llenar con mi sitio web</button><p class=\"ay\">Leemos tu sitio y te mostramos lo que encontramos"
+              " para que elijas qué usar.</p></div>")
+
+
 def paso_1(e: dict) -> str:
     giros = "".join(f'<option value="{escape(g)}"{" selected" if g == e.get("giro") else ""}>{escape(g)}</option>' for g in GIROS + [OTRO])
     elige = "" if e.get("giro") else '<option value="" selected disabled>Elige una opción</option>'
@@ -742,7 +760,8 @@ def paso_1(e: dict) -> str:
         + _texto("descripcion", "Describe tu negocio en tus palabras", e.get("descripcion", ""), 1500,
                  "Qué haces, cómo lo haces y desde cuándo. Dos o tres frases bastan.", filas=3, req=True)
         + '<div class="dos">' + _texto("zona", "Ciudad o zona donde atiendes", e.get("zona", ""), 160)
-        + _texto("sitio_web", "Sitio web", e.get("sitio_web", ""), 200, ejemplo="tusitio.com") + "</div>"
+        + _texto("sitio_web", "Sitio web", e.get("sitio_web", ""), 200, ejemplo="tusitio.com")[:-6] + LLENAR_WEB
+        + "</div></div>"
         + _opciones("atiende", "¿Cómo atiendes?", ATIENDE, e.get("atiende", []))
         + "</div>" + pie(1, "* Obligatorio. Lo demás lo puedes llenar después.")
     )
@@ -1023,6 +1042,8 @@ async def guardar(request: Request):
         if c.slug and await c.store.get("bienvenida") != "1":  # cuenta nueva: sigue al paso 2 de la bienvenida
             return RedirectResponse("/panel/bienvenida", status_code=303)
         return RedirectResponse("/panel/empresa?paso=6&aviso=listo", status_code=303)
+    if accion == "llenar_web" and paso == 1:
+        return await llenar_web(c, e)
     if accion == "aplicar":  # guarda y se queda en el paso
         return RedirectResponse(f"/panel/empresa?paso={paso}&aviso=aplicado", status_code=303)
     destino = _paso(accion[3:]) if accion.startswith("ir_") else 0
@@ -1089,3 +1110,140 @@ async def guardar_producto(request: Request):
     log.info("@%s guardó un producto de su perfil de empresa", await panel.usuario(c))
     seguir = f"&producto={nuevo['id']}#editar" if aviso == "foto_quitada" else ""
     return RedirectResponse(f"/panel/empresa?paso=3&aviso={aviso}{seguir}", status_code=303)
+
+
+# --- llenar con el sitio web (sitio.py) ---
+
+# Los campos que puede sugerir el sitio: (clave, etiqueta, paso donde vive).
+SUGERIBLES = [
+    ("nombre", "Nombre de tu empresa", 1), ("giro", "¿A qué se dedica?", 1), ("frase", "Tu empresa en una frase", 1),
+    ("descripcion", "Describe tu negocio", 1), ("zona", "Ciudad o zona donde atiendes", 1),
+    ("precios", "Notas de precios", 3), ("horarios", "Horarios", 4), ("direccion", "Dirección", 4),
+    ("pagos_nota", "Algo más sobre pagos", 4),
+    *((k, nombre, 4) for k, nombre, _ in panel.POLITICAS if k != "pagos"),
+    ("cliente_ideal", "¿Quién es tu cliente ideal?", 2), ("problema", "¿Qué problema les resuelves?", 2),
+    ("distinto", "¿Por qué te eligen a ti?", 2),
+]
+MAXIMOS = {k: n for campos in CAMPOS.values() for k, n in campos}
+
+
+async def llenar_web(c: Cuenta, e: dict) -> HTMLResponse:
+    """Lee el sitio en segundo plano y lleva a lo que encontró (lo guardado del paso 1 ya quedó)."""
+    if not e.get("sitio_web"):
+        return await pagina(c, 1, e, nota="Escribe la dirección de tu sitio web para leerlo.")
+    url = e["sitio_web"]
+
+    async def correr():
+        await sitio.llenar(c, url, GIROS)
+        yield "/panel/empresa/sitio"
+
+    return await panel.trabajo_largo(c, "sitio_web", "Leyendo tu sitio web",
+                                     "Revisamos tu página de inicio y algunas más; tarda alrededor de medio minuto.",
+                                     "/panel/empresa/sitio", correr, menu=("cuenta", "empresa"),
+                                     boton="Ver lo que encontramos")
+
+
+def _sugerencia(k: str, etiqueta: str, valor: str, ahora: str) -> str:
+    marcado = "" if ahora.strip() else " checked"  # lo que ya llenó no se toca si no lo marca
+    if k == "giro":
+        campo = f'<input type="hidden" name="s_{k}" value="{escape(valor)}"><p style="margin:0">{escape(valor)}</p>'
+    elif MAXIMOS.get(k, 0) <= 300 and len(valor) <= 120:
+        campo = (f'<input type="text" id="s-{k}" name="s_{k}" value="{escape(valor)}" maxlength="{MAXIMOS.get(k, 300)}"'
+                 f' aria-label="{escape(etiqueta)}">')
+    else:
+        campo = (f'<textarea id="s-{k}" name="s_{k}" rows="{3 if len(valor) > 160 else 2}" maxlength="{MAXIMOS.get(k, 300)}"'
+                 f' aria-label="{escape(etiqueta)}">{escape(valor)}</textarea>')
+    corto = re.sub(r"\s+", " ", ahora).strip()[:160]
+    ahora_ = f'<p class="ahora">Ahora tienes: {escape(corto)}</p>' if corto else ""
+    return (f'<div class="sug"><input type="checkbox" id="u-{k}" name="usar" value="{k}"{marcado}>'
+            f'<label for="u-{k}" class="t">{escape(etiqueta)}</label><div class="dato">{campo}{ahora_}</div></div>')
+
+
+def pagina_sugerencias(e: dict, datos: dict) -> str:
+    campos = datos["campos"]
+    cajas = []
+    for n in ORDEN:
+        filas = "".join(_sugerencia(k, etiqueta, campos[k], nombre_giro(e) if k == "giro" else str(e.get(k, "")))
+                        for k, etiqueta, paso in SUGERIBLES if paso == n and campos.get(k))
+        if n == 5 and campos.get("faq"):
+            ya = {q.get("p", "").strip().lower() for q in e.get("faq", [])}
+            filas += "".join(
+                f'<div class="sug"><input type="checkbox" id="u-faq-{i}" name="usar_faq" value="{i}"'
+                f'{"" if q["p"].strip().lower() in ya else " checked"}>'
+                f'<label for="u-faq-{i}" class="t">Pregunta {i + 1}</label><div class="dato">'
+                f'<input type="text" name="faq_p_{i}" value="{escape(q["p"])}" maxlength="300" aria-label="Pregunta {i + 1}">'
+                f'<textarea name="faq_r_{i}" rows="2" maxlength="1000" aria-label="Respuesta {i + 1}">{escape(q["r"])}'
+                "</textarea></div></div>" for i, q in enumerate(campos["faq"]))
+        if filas:
+            cajas.append(f'<div class="caja-o"><h3>{PASOS[n][0]} <span class="etq-o">Paso {numero(n)}</span></h3>{filas}</div>')
+    leidas = ", ".join(escape(re.sub(r"^https?://(www\.)?", "", u)) for u in datos.get("paginas", []))
+    return (
+        '<div class="cab-paso"><p class="antetitulo">Desde tu sitio web</p><h2>Lo que encontramos en tu sitio</h2>'
+        "<p>Revisa cada dato, corrígelo si hace falta y marca lo que quieres usar. Lo que ya tenías solo cambia si"
+        " lo marcas. Nada se guarda hasta que pulses Usar lo marcado.</p></div>"
+        + "".join(cajas) + f'<p class="leidas">Páginas que leímos: {leidas}</p>'
+        + '<div class="pie-config"><button class="boton secundario" name="accion" value="descartar">Descartar</button>'
+        '<span class="pie-nota"></span><span class="pie-der">'
+        '<button class="boton" name="accion" value="usar">Usar lo marcado</button></span></div>'
+    )
+
+
+@router.get("/sitio")
+async def ver_sitio(request: Request):
+    if not (c := panel.cuenta_de_sesion(request)):
+        return RedirectResponse("/panel", status_code=303)
+    datos = await sitio.sugerencias(c)
+    if not datos:
+        return RedirectResponse("/panel/empresa?paso=1", status_code=303)
+    e = await de(c) or await precarga(c)
+    if datos.get("error"):
+        cuerpo = (f'<div class="aviso">{escape(datos["error"])}</div>'
+                  '<div class="cab-paso"><p class="antetitulo">Desde tu sitio web</p><h2>No pudimos leer tu sitio</h2>'
+                  "<p>Puedes llenar tu perfil a mano; lo que escribas se guarda igual.</p></div>"
+                  '<div class="pie-paso"><span class="der"><a class="boton" href="/panel/empresa?paso=1">'
+                  "Volver a tu empresa</a></span></div>")
+    else:
+        cuerpo = (f'<form method="post" action="/panel/empresa/sitio">{pagina_sugerencias(e, datos)}</form>')
+    return panel.pagina(
+        f"<style>{ESTILO}{panel.COMUN}</style>"
+        + await panel.menu_de(c, "cuenta", sub="empresa")
+        + f'<main class="emp"><div class="contenedor"><div class="hoja-o">{cuerpo}</div></div></main>'
+    )
+
+
+@router.post("/sitio")
+async def usar_sitio(request: Request):
+    panel.de_aqui(request)
+    if not (c := panel.cuenta_de_sesion(request)):
+        return RedirectResponse("/panel", status_code=303)
+    f = await request.form()
+    datos = await sitio.sugerencias(c)
+    if f.get("accion") != "usar" or not datos.get("campos"):
+        await sitio.borrar(c)
+        return RedirectResponse("/panel/empresa?paso=1", status_code=303)
+    antes = await de(c)
+    e = dict(antes or await precarga(c))
+    usar = set(f.getlist("usar"))
+    for k, _, _ in SUGERIBLES:
+        if k in usar and k in datos["campos"]:
+            valor = str(f.get(f"s_{k}", "")).strip()[:MAXIMOS.get(k, 300)]
+            if k == "giro":
+                if valor in GIROS:
+                    e["giro"] = valor
+            elif valor:
+                e[k] = valor
+    faq, ya = list(e.get("faq", [])), {q.get("p", "").strip().lower() for q in e.get("faq", [])}
+    for i in sorted({int(x) for x in f.getlist("usar_faq") if str(x).isdigit()}):
+        p_, r_ = str(f.get(f"faq_p_{i}", "")).strip()[:300], str(f.get(f"faq_r_{i}", "")).strip()[:1000]
+        if r_ and p_.lower() not in ya and len(faq) < MAX_PREGUNTAS:
+            ya.add(p_.lower())
+            faq.append({"p": p_, "r": r_})
+    e["faq"] = faq
+    await sitio.borrar(c)
+    if e != antes:
+        await antes_de_guardar(c)
+        e["actualizado"] = int(time.time())
+        await c.store.set(CLAVE, json.dumps(e, ensure_ascii=False))
+        programar_revision(c)
+        log.info("@%s llenó su perfil de empresa con su sitio web", await panel.usuario(c))
+    return RedirectResponse("/panel/empresa?paso=1&aviso=web", status_code=303)
