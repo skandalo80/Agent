@@ -684,7 +684,6 @@ p.cli-cam{margin:.5rem 0 0;font-size:.78rem;border-radius:.6rem;padding:.3rem .6
 .edit-cam{display:grid;grid-template-columns:2fr 1fr 1fr;gap:.8rem;align-items:end}
 .edit-cam input{width:100%;box-sizing:border-box;font:inherit;font-size:1rem;padding:.7rem .9rem;border-radius:.8rem;background:var(--claro);border:1px solid var(--linea-clara);color:var(--negro)}
 .cal-cam.fuera .dia-cam{min-height:4.5rem}
-.b-activa{background:rgba(198,250,44,.14);color:#C6FA2C}.b-proxima{background:rgba(255,138,61,.16);color:var(--naranja-t)}.b-pasada{background:#1B1C1F;color:#A8A8AE}
 /* Contenido › Calendario: Mes, Semana, Día y Lista; el color es el estado del post */
 .cal{--e-borrador:#A8A8AE;--e-programado:#FF8A3D;--e-publicado:#C6FA2C;--e-fallo:#FF8A78;padding:1.4rem 1.5rem}
 .cal-cab{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap}.cal-cab h2{margin:0;font-size:1.35rem;margin-right:.5rem}
@@ -1095,8 +1094,7 @@ img.mrc-logo-mini{background:#fff}
 .modal-cam .pie{display:flex;justify-content:space-between;gap:.5rem;padding:1rem 1.6rem 1.4rem;border-top:1px solid var(--linea-clara)}
 .modal-cam .pie .acciones{margin:0;flex-wrap:wrap;gap:.5rem}
 .camps{display:grid;grid-template-columns:repeat(auto-fill,minmax(19rem,1fr));gap:1rem;margin-top:1rem}
-.camp{border:1px solid var(--linea-clara);border-radius:1.1rem;padding:1.15rem 1.2rem 1.15rem 1.4rem;display:flex;flex-direction:column;gap:.6rem;position:relative;background:var(--suave,var(--blanco))}
-.camp .barra-c{position:absolute;left:0;top:1.1rem;bottom:1.1rem;width:4px;border-radius:0 3px 3px 0}
+.camp{border:1px solid var(--linea-clara);border-radius:1.1rem;padding:1.15rem 1.2rem;display:flex;flex-direction:column;gap:.6rem;position:relative;background:var(--suave,var(--blanco))}
 .camp h3{margin:0;font-size:1.08rem;padding-right:1.5rem}.camp .f{color:var(--gris);font-size:.86rem}.camp .f b{color:var(--negro);font-weight:600}
 .camp .obj{display:inline-block;font-size:.75rem;padding:.15rem .55rem;border-radius:1rem;background:rgba(255,255,255,.08);color:#E4E4E2}
 .camp .mets{display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem;padding:.7rem 0;border-top:1px solid var(--linea-clara);border-bottom:1px solid var(--linea-clara)}
