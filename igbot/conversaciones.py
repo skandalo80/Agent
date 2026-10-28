@@ -66,18 +66,19 @@ CSS = """
 .conv .arriba b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .conv .arriba small{color:var(--gris);font-size:.75rem;white-space:nowrap}
 .conv .ult{display:block;font-size:.85rem;color:var(--texto2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:.1rem 0 .25rem}
-.conv.sin .ult{color:var(--negro);font-weight:600}
+.conv.sin .ult{color:var(--negro);font-weight:600;padding-right:1.25rem}
 .conv .lo-tiene{display:block;font-size:.7rem;color:var(--gris)}
 .conv .lo-tiene.rojo{color:var(--naranja-t);font-weight:600}
 .lados{display:flex;gap:.25rem;margin:0 1rem .5rem;padding:.2rem;border-radius:999px;background:var(--claro)}
-.lados a{flex:1;text-align:center;padding:.45rem .75rem;border-radius:999px;color:var(--gris);text-decoration:none;font-weight:600;font-size:.9rem}
+.lados a{flex:1;display:flex;align-items:center;justify-content:center;padding:.45rem .75rem;border-radius:999px;color:var(--gris);text-decoration:none;font-weight:600;font-size:.9rem}
 .lados a.on{background:var(--acento);color:var(--tinta)}
-.lados b{display:inline-block;min-width:1.1rem;margin-left:.35rem;padding:0 .3rem;border-radius:999px;background:#C6FA2C;color:#1B1C1F;font-size:.7rem;line-height:1.1rem}
+.lados b{display:inline-block;min-width:1.1rem;margin-left:.35rem;padding:0 .3rem;border-radius:999px;background:var(--neon);color:#1B1C1F;text-align:center;font-size:.7rem;line-height:1.1rem}
 .conv .razon{display:inline-block;margin-right:.4rem;padding:0 .45rem;border-radius:999px;background:var(--claro);color:var(--gris);font-weight:600}
 .conv .razon.molesto{background:rgba(255,69,58,.18);color:#ff8a80}
 .lat-item{position:relative}
-.punto-menu{position:absolute;width:.5rem;height:.5rem;border-radius:50%;background:#FFD60A;margin:-1.1rem 0 0 1rem;box-shadow:0 0 0 2px #18191C}
-.punto-sin{position:absolute;left:.35rem;top:50%;width:.4rem;height:.4rem;border-radius:50%;background:var(--neon)}
+.punto-menu{position:absolute;width:.5rem;height:.5rem;border-radius:50%;background:var(--neon);margin:-1.1rem 0 0 1rem;box-shadow:0 0 0 2px #18191C}
+/* Como en WhatsApp: el punto de no leído va a la derecha, debajo de la hora. */
+.punto-sin{position:absolute;right:1rem;top:2.6rem;width:.4rem;height:.4rem;border-radius:50%;background:var(--neon)}
 .inbox .vacio{padding:1.5rem 1rem;font-size:.9rem;color:var(--gris)}
 .inbox .lista-vivo .paginas{margin:auto 0 0;padding:.75rem;justify-content:center}
 .hilo{display:flex;flex-direction:column;min-width:0}
