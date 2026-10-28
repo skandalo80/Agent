@@ -609,12 +609,12 @@ label.check input[type=email]{flex:1;max-width:22rem;margin:0}
 .camino .acciones{margin-top:auto}
 .pasos-bienv{margin-bottom:1.5rem}.explorar .boton{white-space:nowrap}.pasos-bienv .wiz-paso{cursor:default}.pasos-bienv .wiz-paso>span small{display:block;font-size:.76rem;font-weight:400;color:var(--gris);margin-top:.05rem}
 .tiempo{align-self:flex-start;font-size:.8rem;color:#A8A8AE;background:var(--claro);border-radius:999px;padding:.2rem .7rem}
-.sola{max-width:46rem;margin:0 auto}
-.despues{margin-top:1.25rem;text-align:center;color:#A8A8AE;font-size:.9rem}.despues a{color:inherit}
+.sola{max-width:none}
+.despues{margin-top:1.25rem;text-align:left;color:#A8A8AE;font-size:.9rem}.despues a{color:inherit}
 .despues button{background:none;border:0;padding:0;font:inherit;color:inherit;text-decoration:underline;cursor:pointer}
 .explorar{margin-top:1.25rem;background:var(--blanco);border-radius:1.5rem;padding:1.25rem 2rem;display:flex;align-items:center;justify-content:space-between;gap:1rem}
 .explorar p{margin:0;color:#E4E4E2}.explorar b{color:var(--negro)}
-.sola+.explorar{max-width:46rem;margin-left:auto;margin-right:auto}
+.sola+.explorar{max-width:none}
 @media(max-width:700px){.caminos{grid-template-columns:1fr}.explorar{flex-direction:column;align-items:flex-start;padding:1.25rem 1.5rem}}
 .regla{border-top:1px solid var(--linea-clara);margin-top:1rem;padding-top:1rem}
 .cab-regla{display:flex;justify-content:space-between;align-items:center;gap:.75rem}
