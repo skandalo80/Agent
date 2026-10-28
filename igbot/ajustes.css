@@ -43,6 +43,8 @@
   --pie-hueco: .6rem;          /* espacio entre botones */
   --boton-pad: .7rem 1.4rem;   /* relleno de cada botón del pie (arriba y abajo, lados) */
   --t-boton: .95rem;           /* letra de los botones del pie */
+  --boton-mini-pad: .35rem .8rem; /* botón chico junto a un campo (Llenar con mi sitio web) */
+  --t-boton-mini: .8rem;       /* su letra */
 
   /* Conversaciones */
   --punto-chat: .6rem;         /* punto lima de no leído en cada chat, debajo de la hora */
