@@ -711,3 +711,35 @@ def test_los_documentos_de_cada_etapa_se_descargan(cliente, monkeypatch):
     assert "**Ángulo:** Ángulo 1" in plan and "**Dato:**" in plan
     assert "Texto 1 #cafe" in z.read("3-posts.md").decode()
     assert "**Prompt:** Photo" in z.read("4-prompts-de-imagen.md").decode()
+
+
+def test_los_prompts_de_imagen_ya_vienen_escritos_al_crear_la_campana(cliente, monkeypatch):
+    client, c, _, proveedor = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 10)
+    import app as bot
+    from igbot import config, openai_texto
+    fake_claude, arte = claude_de_campana([]), []
+    monkeypatch.setattr(bot.agent, "run_claude", fake_claude)
+
+    async def openai(sistema, prompt, max_tokens=16000):
+        if "director de arte" in sistema:
+            arte.append(prompt)
+            return {"prompt": f"Detailed prompt {len(arte)}"}
+        datos = json.loads(await fake_claude(prompt, sistema))
+        for x in datos.get("posts", []):
+            x.pop("prompt", None)  # los posts ya no traen prompt: lo escribe el último paso
+        return datos
+
+    monkeypatch.setattr(config, "OPENAI_API_KEY", "sk-prueba")
+    monkeypatch.setattr(openai_texto, "json_de", openai)
+    listo(client, c)
+    client.portal.call(c.store.set, "productos", json.dumps([PRODUCTO]))
+    llenar(client)
+    generar(client)
+    camp = leer(client, c)
+    fotos = [p for p in camp["posts"] if p["formato"] == "titular"]
+    assert fotos and len(arte) == len(fotos) and not proveedor.llamadas  # sin gastar imágenes
+    assert all(p["prompt"].startswith("Detailed prompt") and p["idea_base"] == p["idea"] for p in fotos)
+    assert all(not p.get("prompt") for p in camp["posts"] if p["formato"] == "texto")
+    r = client.get(f"{campanas.url_de(camp)}?post={fotos[0]['k']}")
+    assert f">{fotos[0]['prompt']}</textarea>" in r.text

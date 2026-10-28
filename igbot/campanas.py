@@ -696,7 +696,25 @@ async def escribir_desde_brief(c: Cuenta, camp: dict, fichas: list[dict], ya: st
                             sum(1 for p in nuevos if p["responde"]))
         nuevos += hechos
         siguiente += len(hechos)
+    await prompts_de(c, camp, nuevos)
     return nuevos
+
+
+async def prompts_de(c: Cuenta, camp: dict, posts: list[dict]) -> None:
+    """El último paso del flujo: el prompt detallado de la imagen de cada post con foto (OpenAI), ya escrito al
+    armar la campaña para que el dueño lo vea y lo edite antes de generar. Varios a la vez, sin pasarse."""
+    import asyncio
+
+    con_foto = [p for p in posts if p.get("idea") and formato_de(p) not in SIN_IDEA and formato_de(p) != "collage"]
+    if not con_foto:
+        return
+    marca, turno = await marca_de(c), asyncio.Semaphore(4)
+
+    async def uno(p: dict) -> None:
+        async with turno:
+            await prompt_de(c, {**camp}, p, marca)
+
+    await asyncio.gather(*(uno(p) for p in con_foto))
 
 
 def linea_ficha(camp: dict, f: dict) -> str:
@@ -1983,6 +2001,8 @@ async def accion(request: Request, cid: str):
             with usar(c):
                 await usar_ia(c)
                 await otra_idea(c, camp, p)
+                if camp.get("brief"):
+                    await prompts_de(c, camp, [p])
                 await guardar(c, camp)
             yield f"{url}?post={k}#detalle"
 
