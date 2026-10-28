@@ -29,7 +29,7 @@ FUENTES = RAIZ / "blog"
 GIROS = RAIZ / "giros"
 WEB = RAIZ / "web"
 SITIO = "https://skandar.online"
-CSS_VERSION = "2026-10-28b"
+CSS_VERSION = "2026-10-28c"
 
 # Orden en el índice: el primero es el destacado.
 ORDEN = [
@@ -125,7 +125,7 @@ def cabeza(titulo, descripcion, url, tipo="website", extra=""):
 <link rel="icon" type="image/png" href="/favicon-32.png" sizes="32x32">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <meta name="description" content="{d}">
-<meta name="theme-color" content="#36203E">
+<meta name="theme-color" content="#18191C">
 <link rel="canonical" href="{url}">
 <meta property="og:type" content="{tipo}">
 <meta property="og:locale" content="es_MX">
@@ -145,7 +145,7 @@ def cabeza(titulo, descripcion, url, tipo="website", extra=""):
 <body>
 <header>
   <div class="contenedor">
-    <a class="marca" href="/"><span>Skandar</span></a>
+    <a class="marca" href="/" aria-label="Skandar, inicio"><img src="/logo-skandar.svg" alt="Skandar" width="110" height="30"></a>
     <nav class="nav-links">
       <a href="/#contenido">Contenido</a>
       <a href="/#como-funciona">Cómo funciona</a>
@@ -167,7 +167,7 @@ PIE = """</main>
 
 <footer>
   <div class="contenedor">
-    <a class="marca" href="/">Skandar</a>
+    <a class="marca" href="/" aria-label="Skandar, inicio"><img src="/logo-skandar.svg" alt="Skandar" width="81" height="22"></a>
     <span>© 2026 Skandar · México</span>
     <div class="pie-enlaces">
       <a href="/blog/">Blog</a>

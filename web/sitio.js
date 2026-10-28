@@ -33,8 +33,8 @@ document.querySelectorAll('.filtros [data-filtro]').forEach(function (b) {
 (function () {
   var icono = '<svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor" aria-hidden="true">' +
     '<path d="M12 3C6.5 3 2 6.8 2 11.5c0 2.4 1.2 4.6 3.1 6.1L4.3 21l4-1.9c1.2.4 2.4.6 3.7.6 5.5 0 10-3.8 10-8.6S17.5 3 12 3z"/>' +
-    '<circle cx="8" cy="11.5" r="1.3" fill="#36203E"/><circle cx="12" cy="11.5" r="1.3" fill="#36203E"/>' +
-    '<circle cx="16" cy="11.5" r="1.3" fill="#36203E"/></svg>';
+    '<circle cx="8" cy="11.5" r="1.3" fill="#FF8A3D"/><circle cx="12" cy="11.5" r="1.3" fill="#FF8A3D"/>' +
+    '<circle cx="16" cy="11.5" r="1.3" fill="#FF8A3D"/></svg>';
   var ventana = document.createElement('div');
   ventana.className = 'skandi';
   ventana.setAttribute('role', 'dialog');

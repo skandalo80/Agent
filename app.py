@@ -283,9 +283,10 @@ def health():
     return {"ok": True}
 
 
-# Los íconos de skandar.online (web/), para que la pestaña del panel lleve el mismo.
+# Los íconos y el logo de skandar.online (web/), para que el panel lleve los mismos.
 WEB = Path(__file__).resolve().parent / "web"
-ICONOS = {"favicon.ico": "image/x-icon", "favicon-32.png": "image/png", "apple-touch-icon.png": "image/png"}
+ICONOS = {"favicon.ico": "image/x-icon", "favicon-32.png": "image/png", "apple-touch-icon.png": "image/png",
+          "logo-skandar.svg": "image/svg+xml", "logo-sk.svg": "image/svg+xml"}
 
 
 def _icono(nombre: str):
