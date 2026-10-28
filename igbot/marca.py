@@ -170,17 +170,18 @@ def menu_pasos(actual: str, hechos_: set[str]) -> str:
         items += (f'<a href="{BASE}?paso={i}" class="{clase}"><b>{marca}</b>'
                   f'<span>{nombre}<small>{desc}</small></span></a>')
     clase = "actual" if actual == RESUMEN else ""
-    items += (f'<div class="sep"></div><a href="{BASE}?paso={RESUMEN}" class="{clase}"><b>★</b>'
+    items += (f'<a href="{BASE}?paso={RESUMEN}" class="{clase}"><b>★</b>'
               "<span>Resumen<small>Revisa y edita</small></span></a>")
+    avance = len(hechos_ & set(CLAVES)) * 100 // len(CLAVES)
     return ('<details class="wiz-pasos" open><summary><span class="hamb"><i></i><i></i><i></i></span>Tu marca</summary>'
-            f'<nav>{items}</nav><div class="mrc-tip"><b>Tú eliges, la IA diseña</b>Entra a cualquier paso cuando'
+            f'<nav>{items}</nav>{panel.avance(avance)}<div class="mrc-tip"><b>Tú eliges, la IA diseña</b>Entra a cualquier paso cuando'
             " quieras. Lo que eliges aquí se aplica a todas tus campañas.</div></details>")
 
 
 def cabeza(i: int) -> str:
     _, _, _, titulo, bajada = PASOS[i - 1]
     return (f'<div class="wiz-cab"><p class="ante">Paso {i} de {len(PASOS)}</p><h2>{titulo}</h2>'
-            f'<p class="baj">{bajada}</p></div><div class="wiz-barra"><i style="width:{i * 100 // len(PASOS)}%"></i></div>')
+            f'<p class="baj">{bajada}</p></div>')
 
 
 def pie(i: int, siguiente: str = "Guardar y continuar →") -> str:
@@ -333,8 +334,8 @@ def resumen(c: Cuenta, marca: dict) -> str:
         k = CLAVES[i - 1]
         boton = "Editar" if k in hechos_ else "Completar"
         pendiente = "" if k in hechos_ else '<p class="ayuda">Aún no lo completas.</p>'
-        return (f'<div class="wiz-res mrc-res{" ancho" if ancho else ""}"><h4>{i:02d} · {titulo}</h4>'
-                f'<p>{desc}</p><a href="{BASE}?paso={i}">{boton}</a>{pendiente or cuerpo}</div>')
+        return (f'<div class="wiz-res mrc-res{" ancho" if ancho else ""}">'
+                f'{panel.cab_tarjeta(titulo, f"{BASE}?paso={i}", boton)}<p>{desc}</p>{pendiente or cuerpo}</div>')
 
     estilos = "".join(
         f'<div class="mrc-fila"><span class="num">{n}</span>{imagen_tarjeta(k, TARJETA_ESTILO[k][2])}'
@@ -357,7 +358,7 @@ def resumen(c: Cuenta, marca: dict) -> str:
     return (
         '<div class="wiz-cab"><p class="ante">Resumen</p><h2>Así se verá tu contenido</h2>'
         '<p class="baj">Esta es tu identidad visual. La usamos cada vez que creamos contenido para ti. Toca Editar para'
-        " cambiar cualquier parte.</p></div><div class=\"wiz-barra\"><i style=\"width:100%\"></i></div>"
+        " cambiar cualquier parte.</p></div>"
         '<div class="wiz-resumen">'
         + caja(1, "Estilo visual", "Tus estilos, en orden de preferencia.", estilos)
         + caja(2, "Colores", escape(nombre_colores), franja)

@@ -1288,6 +1288,41 @@ h1,h2,h3{text-wrap:balance}
 .met-graf.barras .mh::before{display:none}
 """
 
+# Un solo estilo para todo el panel. Va al final de todo (también después del CSS propio de Tu asistente y
+# Tu empresa), así manda sobre las reglas viejas de cada página: antetítulo, título, bajada, tarjetas,
+# cabecera de tarjeta con Editar, rejilla del resumen y la barra de avance bajo los pasos.
+COMUN = """
+:root{--t-ante:.75rem;--t-titulo:1.75rem;--t-bajada:1rem;--t-tarjeta:1.05rem;--hoja-pad:2rem 2.25rem;--caja-pad:1.4rem 1.5rem;--hueco:1rem;--caja-fondo:#1B1C1F;--caja-radio:1.25rem;--t-color:#F5F5F4}
+/* Antetítulo: chico, en mayúsculas y naranja, en todas las páginas. */
+:is(.antetitulo,.wiz-cab .ante,.as-num,.cab-paso .antetitulo,.camino>.num){display:block;font-size:var(--t-ante);font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--acento);line-height:1.4;margin:0 0 .5rem}
+.titulo-fila .antetitulo{margin:0}
+/* Título del paso o de la página y su bajada. */
+:is(.wiz-cab h2,.as-cont .as-h,.cab-paso h2,.camino>h2){font-size:var(--t-titulo);font-weight:600;letter-spacing:-.02em;line-height:1.2;margin:0 0 .4rem}
+:is(.wiz-cab .baj,.as-cont .as-baj,.cab-paso p:not(.antetitulo)){font-size:var(--t-bajada);line-height:1.55;color:var(--texto2);margin:0 0 1.5rem;max-width:52rem}
+/* La hoja de cada paso de configuración y de Crear campaña, y las tarjetas de adentro. */
+:is(.wiz-main,.as-cont,.hoja-o){padding:var(--hoja-pad);border:0}
+:is(.as-cont .as-caja,.hoja-o .caja-o,.wiz-res,.wiz-bloque,.bloq-cam>div){background:var(--caja-fondo);padding:var(--caja-pad);border:0;border-radius:var(--caja-radio)!important;box-shadow:6px 9px 18px rgba(12,11,16,.45),var(--clay-luz)}
+.bloqueo-cam{max-width:none}
+/* Título de tarjeta: el mismo en todas (cabecera de resumen, cajas de pasos, Resultados). */
+:is(.cab-tarjeta h3,.as-caja h3,.caja-o h3,.wiz-bloque h3,.wiz-sub,.bloq-cam b,.met-cab>span){font-size:var(--t-tarjeta);font-weight:700;letter-spacing:0;text-transform:none;color:var(--t-color);line-height:1.3}
+.cab-tarjeta{display:flex;justify-content:space-between;align-items:center;gap:1rem;margin:0 0 .5rem}
+.cab-tarjeta h3{margin:0}
+/* Editar: el mismo botón chico con borde naranja en cada resumen. */
+.cab-tarjeta .editar,.editar{flex:none;font:inherit;font-size:.82rem;font-weight:600;line-height:1.3;color:var(--acento);background:none;border:1px solid rgba(255,138,61,.45);border-radius:999px;padding:.25rem .8rem;text-decoration:none;cursor:pointer;position:static}
+.editar:hover{background:rgba(255,138,61,.1);border-color:var(--acento)}
+/* Resumen: dos columnas de tarjetas, con el mismo hueco. */
+:is(.as-resumen,.wiz-resumen,.resumen-tarjetas){display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--hueco)}
+.resumen-tarjetas .caja-o{margin:0}
+.wiz-res>p,.resumen-tarjetas .caja-o>p{margin:0;font-size:.95rem;color:#E4E4E2;line-height:1.55}
+/* Barra de avance: siempre dentro de la barra de pasos, abajo, en lima. */
+:is(.as-pasos,.riel,.wiz-pasos){position:relative!important;top:auto;padding:.6rem .7rem 1.05rem}
+.avance-pasos{position:absolute;left:1.3rem;right:1.3rem;bottom:.45rem;height:.3rem;border-radius:999px;background:#2E3035;overflow:hidden;box-shadow:inset 2px 2px 4px rgba(0,0,0,.4)}
+.avance-pasos i{display:block;height:100%;border-radius:999px;background:var(--neon)}
+.wiz-pasos .sep{display:none}
+@media(max-width:900px){:is(.as-resumen,.wiz-resumen,.resumen-tarjetas){grid-template-columns:1fr}.avance-pasos{display:none}}
+@media(max-width:560px){:root{--t-titulo:1.5rem;--hoja-pad:1.4rem 1.1rem;--caja-pad:1.1rem}}
+"""
+
 
 # Las tipografías de los posts (fonts/), para que los botones de letra se vean con la suya.
 FONTS = Path(__file__).resolve().parent.parent / "fonts"
@@ -1310,7 +1345,7 @@ PRINCIPIO = (
     '<link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" href="/favicon-32.png" sizes="32x32">'
     '<link rel="apple-touch-icon" href="/apple-touch-icon.png">'
     '<title>Tu asistente · Skandar</title>'
-    f"<style>{ESTILO}{conversaciones.CSS}{skandi.CSS}{FUENTES_CSS}</style>"
+    f"<style>{ESTILO}{conversaciones.CSS}{skandi.CSS}{FUENTES_CSS}{COMUN}</style>"
     # Solo JavaScript propio (CSP script-src 'self'): la vista previa al momento en Contenido.
     # menu.js sin defer: pliega el menú antes de pintar la página (si no, se ve abrirse y cerrarse).
     f'<script src="/panel/static/menu.js?v={VERSION_MENU}"></script>'
@@ -1570,6 +1605,17 @@ def hace(t: float) -> str:
     if s < 86400:
         return f"hace {int(s // 3600)} h"
     return "ayer" if s < 2 * 86400 else f"hace {int(s // 86400)} días"
+
+
+def avance(pct: int) -> str:
+    """La barra de avance que va abajo de la barra de pasos (Tu asistente, Tu marca, Tu empresa, Crear campaña)."""
+    return f'<div class="avance-pasos" aria-hidden="true"><i style="width:{pct}%"></i></div>'
+
+
+def cab_tarjeta(titulo: str, href: str = "", texto: str = "Editar", boton: str = "") -> str:
+    """Cabecera de una tarjeta de resumen: su título y el botón Editar, igual en todo el panel."""
+    accion = boton or (f'<a class="editar" href="{href}">{texto}</a>' if href else "")
+    return f'<div class="cab-tarjeta"><h3>{titulo}</h3>{accion}</div>'
 
 
 def encabezado(ante: str = "", botones: str = "", extra: str = "") -> str:

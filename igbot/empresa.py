@@ -654,8 +654,7 @@ def riel(e: dict, prods: list[dict], actual: int, con_form: bool) -> str:
     pct = round(len(listos) / len(PASOS) * 100)
     return ('<nav class="riel" aria-label="Pasos del perfil"><h2>Perfil de empresa</h2>'
             f'<div class="lista">{"".join(items)}</div>'
-            f'<div class="avance">Tu avance <span>{pct}%</span><div class="barra-av"><i style="width:{pct}%"></i></div>'
-            "Se guarda en cada paso. Puedes saltar entre secciones y volver cuando quieras.</div></nav>")
+            + panel.avance(pct) + "</nav>")
 
 
 def numero(paso: int) -> int:
@@ -869,13 +868,18 @@ def _resumen_de(e: dict, prods: list[dict], n: int) -> str:
     return escape(texto) or '<i style="font-style:normal;color:var(--gris)">Sin llenar</i>'
 
 
+def _editar(n: int) -> str:
+    return f'<button class="editar" name="accion" value="ir_{n}">Editar</button>'
+
+
 def resumen(e: dict, prods: list[dict]) -> str:
-    filas = "".join(f'<div class="res"><b>{PASOS[n][0]}</b><p>{_resumen_de(e, prods, n)}</p>'
-                    f'<button class="mini" name="accion" value="ir_{n}">Editar</button></div>' for n in ORDEN)
+    filas = "".join(f'<div class="caja-o">{panel.cab_tarjeta(PASOS[n][0], boton=_editar(n))}'
+                    f'<p>{_resumen_de(e, prods, n)}</p></div>' for n in ORDEN)
     falta = "" if lista(e) else '<span class="nota">Te falta lo esencial del paso 1.</span>'
     return (
-        '<div class="cab-paso"><p class="antetitulo">Resumen</p></div>'
-        f'<div class="caja-o">{filas}</div>'
+        '<div class="cab-paso"><p class="antetitulo">Resumen</p><h2>Así te conocen tu asistente y tus campañas</h2>'
+        "<p>Revisa que todo esté bien. Con Editar regresas a ese paso.</p></div>"
+        f'<div class="resumen-tarjetas">{filas}</div>'
         f'<div class="pie-paso">{falta}<span class="der"><a class="boton secundario" href="/panel">Ir al panel</a>'
         '<button class="boton acento" name="accion" value="terminar">Guardar perfil ✓</button></span></div>'
     )
@@ -907,7 +911,7 @@ async def pagina(c: Cuenta, paso: int, e: dict | None = None, aviso: str = "", e
         avisos = ('<div class="aviso">Te precargamos lo que ya escribiste en tu asistente y en Tu marca.'
                   " Revísalo y pulsa Siguiente para guardarlo.</div>" if e else "")
     return panel.pagina(
-        f"<style>{ESTILO}</style>"
+        f"<style>{ESTILO}{panel.COMUN}</style>"
         + await panel.menu_de(c, "cuenta", sub="empresa")
         + panel.encabezado("Tu cuenta · Perfil de empresa")
         + f'<main class="emp"><div class="contenedor">{avisos}<div class="mago">'

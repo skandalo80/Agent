@@ -201,8 +201,8 @@ def _lista(actual: str, perfil: dict, hechos: set[str]) -> str:
     return ('<nav class="as-pasos" aria-label="Pasos"><p class="as-t">Tus pasos</p>' + "".join(items)
             + f'<a class="as-paso{" on" if actual == "resumen" else ""}" href="{_href("resumen")}">'
             '<span class="as-n">★</span><span><b>Resumen</b><small>Revisa y enciéndelo</small></span></a>'
-            f'<div class="as-barra"><i style="width:{listos / len(ORDEN) * 100:.0f}%"></i></div>'
-            f'<small class="as-nota">{listos} de {len(ORDEN)} listos. Puedes volver a cualquier paso cuando'
+            + panel.avance(listos * 100 // len(ORDEN))
+            + f'<small class="as-nota">{listos} de {len(ORDEN)} listos. Puedes volver a cualquier paso cuando'
             " quieras.</small></nav>")
 
 
@@ -336,8 +336,7 @@ async def _resumen(c: Cuenta, perfil: dict) -> str:
 
     def caja(titulo: str, paso: str, lineas: list[str]) -> str:
         lis = "".join(f"<li>{escape(x)}</li>" for x in lineas if x)
-        return (f'<div class="as-caja as-res"><div class="as-top"><h3>{titulo}</h3>'
-                f'<a class="as-ed" href="{_href(paso)}">Editar</a></div><ul>{lis}</ul></div>')
+        return f'<div class="as-caja as-res">{panel.cab_tarjeta(titulo, _href(paso))}<ul>{lis}</ul></div>'
 
     from . import empresa  # empresa importa panel
     datos_empresa, catalogo = await empresa.de(c), await empresa.productos(c)
@@ -413,7 +412,7 @@ async def pagina(c: Cuenta, paso: str = "", aviso: str = "", nota: str = "", per
                   "Siguiente</button>"
                   f'<input type="hidden" name="paso" value="{paso}">{cuerpo}</form>')
     return panel.pagina(
-        f"<style>{ESTILO}</style>"
+        f"<style>{ESTILO}{panel.COMUN}</style>"
         + await panel.menu_de(c, "asistente", sub="configura")
         + panel.encabezado("Tu asistente · Configura")
         + '<main class="as-main"><div class="contenedor">'
