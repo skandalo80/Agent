@@ -209,6 +209,32 @@ def prompt_libre(idea: str, texto: "Texto", marca: "Marca | None" = None, histor
     )
 
 
+def prompt_infografia(idea: str, texto: "Texto", marca: "Marca | None" = None, historia: bool = False,
+                      puntos: list[str] = ()) -> str:
+    """Campañas: la IA diseña la pieza completa, estilo infografía, con el texto dentro (sin plantilla)."""
+    m = marca or Marca()
+    lineas = [f'- Headline (largest): "{texto.titulo}"'] if texto.titulo else []
+    if texto.subtitulo:
+        lineas.append(f'- Subtitle (smaller): "{texto.subtitulo}"')
+    lineas += [f'- Short point (small, with a simple icon or graphic): "{x}"' for x in puntos]
+    if texto.firma:
+        lineas.append(f'- Small signature at the bottom: "{texto.firma}"')
+    que = "full-screen Instagram story" if historia else "vertical Instagram post"
+    recorte = (f"{RECORTE_HISTORIA} Keep all text inside the central area." if historia
+               else f"{RECORTE} Keep all text inside the central 4:5 area.")
+    return (
+        f"Design a finished, professional infographic-style {que}: one complete graphic design with the text"
+        " integrated in the layout (clear hierarchy, simple icons or data graphics where they help), not a photo with"
+        f" a caption pasted on top.\n{recorte}\n\n"
+        f"Design brief: {idea.strip()}\n\n"
+        "Write exactly these texts in the design, in Spanish, spelled exactly as given (keep every accent and"
+        " punctuation mark), and no other words, letters or numbers:\n" + "\n".join(lineas) + "\n\n"
+        f"Typography: in the spirit of the {m.fuente} typeface, readable on a phone, generous margins.\n"
+        f"Brand colors: main {m.principal}, accent {m.acento}, background {m.fondo}.\n"
+        "No logos, watermarks or fake buttons."
+    )
+
+
 # Tipografías de títulos que puede elegir el cliente (archivos en fonts/, todas OFL).
 # Nombre que ve el cliente -> archivo en fonts/ (Google Fonts, licencia OFL; 400, 600 y 700 cada una).
 FUENTES = {"Inter": "Inter", "Montserrat": "Montserrat", "Poppins": "Poppins", "Raleway": "Raleway",
@@ -485,15 +511,17 @@ def _jpg(data: bytes, historia: bool = False) -> bytes:
 
 async def crear_pieza(store: Store, user_id: str, idea: str, plantilla: str, texto: Texto,
                       fotos: list[bytes] = (), permitir_extra: bool = False, marca: Marca | None = None,
-                      historia: bool = False) -> dict:
-    """Genera la imagen, la rotula y la deja en la tabla media (lista para publicar). Con `historia`, en 9:16."""
+                      historia: bool = False, infografia: bool = False, puntos: list[str] = ()) -> dict:
+    """Genera la imagen, la rotula y la deja en la tabla media (lista para publicar). Con `historia`, en 9:16.
+    Con `infografia` (y plantilla LIBRE), la IA diseña la pieza con su texto y sus `puntos` dentro."""
     if plantilla not in PLANTILLAS and plantilla != LIBRE:
         raise ErrorImagen(f"Plantilla desconocida: {plantilla}")
     tipo = await reservar(store, permitir_extra)
     try:
         # La espera al generador va aparte: mientras tanto, las vistas previas siguen rotulando.
         async with _generando:
-            prompt = (prompt_libre(idea, texto, marca, historia) if plantilla == LIBRE
+            prompt = (prompt_infografia(idea, texto, marca, historia, puntos) if plantilla == LIBRE and infografia
+                      else prompt_libre(idea, texto, marca, historia) if plantilla == LIBRE
                       else prompt_final(idea, plantilla, historia))
             crudo = await proveedor.generar(prompt, list(fotos))
         async with _turno:

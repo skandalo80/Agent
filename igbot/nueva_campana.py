@@ -258,11 +258,9 @@ async def a_campana(c: Cuenta, b: dict) -> dict:
     if enfoques := [ENFOQUES[k][2] for k in b.get("enfoques", []) if k in ENFOQUES]:
         temas = enfoques + [t for t in temas if t not in enfoques][:max(0, campanas.MIN_TEMAS - len(enfoques))]
     temas = temas[:campanas.MAX_TEMAS]
-    with usar(c):
-        fotos = len(campanas.fotos_marca(c, await marca_de(c)))
     formatos = [k for k in b["formatos"] if k in campanas.FORMATOS]
     if "ia" in b["formatos"] or not formatos:
-        formatos = [k for k in campanas.FORMATOS if k != "collage" or fotos >= campanas.MIN_FOTOS_COLLAGE]
+        formatos = list(campanas.FORMATOS)  # el collage también lo genera la IA: no necesita fotos subidas
     horarios = [k for k in b["horarios"] if k in campanas.HORARIOS]
     if "ia" in b["horarios"] or not horarios:
         horarios = list(campanas.HORARIOS)
@@ -517,14 +515,10 @@ def paso_3(b: dict, objetivos: list[dict]) -> str:
             + pie(3))
 
 def paso_4(b: dict, fotos: int) -> str:
-    sin_collage = fotos < campanas.MIN_FOTOS_COLLAGE
     ops = ""
-    for k, (t, d, color) in FORMATOS.items():
-        usa = campanas.FORMATOS[k][1] if k in campanas.FORMATOS else None
-        em = ("Sube 2 fotos en Tu marca" if k == "collage" and sin_collage else
-              "" if usa is None else "1 imagen" if usa else "No usa tu cupo")
-        ops += op("formatos", k, t, d, "checkbox", k in b["formatos"] and not (k == "collage" and sin_collage),
-                  img("formato", k, color, t, alta=True), em, apagada=k == "collage" and sin_collage)
+    for k, (t, d, color) in FORMATOS.items():  # todas las piezas las genera la IA completas: 1 imagen cada una
+        em = "1 imagen" if k in campanas.FORMATOS else ""
+        ops += op("formatos", k, t, d, "checkbox", k in b["formatos"], img("formato", k, color, t, alta=True), em)
     return (cab(4, "¿Qué formatos te gustan?",
                 "Elige uno o varios. Se reparten parejo para que veas cuál le funciona mejor a tu audiencia.")
             + f'<div class="formatos-cam"><div class="wiz-ops cinco">{ops}</div>'
@@ -599,11 +593,8 @@ async def resumen(c: Cuenta, b: dict, objetivos: list[dict], mensajes: list[dict
     dias = ", ".join(DIAS[d] for d in b["dias"])
     horas = " y ".join(HORARIOS[h].split(" · ")[-1] for h in b["horarios"])
     imagenes_ = 0
-    formatos = [k for k in b["formatos"] if k in campanas.FORMATOS]
-    if "ia" in b["formatos"] or not formatos:
-        formatos = [k for k in campanas.FORMATOS if k != "collage"]
     historias = b.get("n_historias", 0)
-    imagenes_ = round((b["n_posts"] + historias) * sum(campanas.FORMATOS[k][1] for k in formatos) / len(formatos))
+    imagenes_ = b["n_posts"] + historias  # cada pieza la genera la IA completa
     cantidad = f"{b['n_posts']} posts" + (f" y {campanas.cuantos(historias, 'historia')}" if historias else "")
     bloques = [
         ("Objetivo", obj, 1, False), ("Mensaje", msgs + (f" · «{b['texto']}»" if b["texto"] else ""), 2, False),

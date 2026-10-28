@@ -121,11 +121,12 @@ def test_el_asistente_de_punta_a_punta(cliente, monkeypatch):
     r = client.post(URL, headers=ORIGEN, data={"paso": "9", "accion": "proponer", "concepto": "1",
                                                "b1_mensaje_clave": "Tostado <b>esta</b> semana", "b1_p0_nombre": "El tueste"})
     assert "Armando tu campaña" in r.text
-    prompt, sistema = llamadas[-1]
+    prompt, sistema = next((p, s) for p, s in reversed(llamadas) if "Escribes los posts" in s)
     assert "<producto>Latte de calabaza ($75 MXN)" in prompt and "20 % de descuento" in prompt and "<regla>sí</regla>" in prompt
     assert "Concepto: Idea 2." in prompt and "Mensaje clave: Tostado &lt;b&gt;esta&lt;/b&gt; semana" in prompt
     assert "- El tueste:" in prompt and "ya tiene su brief" in sistema and "| pilar: " in prompt
-    plan_prompt, plan_sistema = llamadas[-2]  # el plan de los 6 posts, juntos, antes de escribirlos
+    plan_prompt, plan_sistema = next((p, s) for p, s in llamadas if "director creativo" in s)  # los 6 posts juntos
+    assert "<estilos_disponibles>" in plan_prompt and "<colores_disponibles>" in plan_prompt
     assert "director creativo" in plan_sistema and "6. 2099-" in plan_prompt and "Concepto: Idea 2." in plan_prompt
     assert "| plan: objetivo: Objetivo 1; ángulo: Ángulo 1; titular: Titular 1" in prompt
     camp = leer(client, c)
@@ -301,8 +302,10 @@ def test_con_brief_la_imagen_es_el_prompt_de_claude(cliente, monkeypatch):
     foto = next(p for p in camp["posts"] if p["formato"] == "titular")
     client.post(campanas.url_de(camp), headers=ORIGEN, data={"accion": "generar", "k": str(foto["k"]), "idea": foto["idea"]})
     prompt = proveedor.llamadas[-1][0]
-    assert prompt.startswith(foto["prompt"]) and "Photo style" not in prompt and "Brand context" not in prompt
-    assert prompt.count("Do not include any text") == 1
+    # La IA diseña la pieza completa con su texto dentro (sin plantilla encima).
+    assert f"Design brief: {foto['prompt']}" in prompt and "infographic-style" in prompt
+    assert f'Headline (largest): "{foto["titulo"]}"' in prompt
+    assert "Photo style" not in prompt and "Brand context" not in prompt
 
 
 def test_el_brief_se_guarda_y_se_descarga(cliente, monkeypatch):
@@ -635,21 +638,23 @@ def test_flujo_brief_y_plan_con_claude_posts_e_imagen_con_openai(cliente, monkey
     u = campanas.url_de(camp)
     client.post(u, headers=ORIGEN, data={"accion": "generar", "k": str(foto["k"]), "idea": "Una taza en la barra"})
     arte = [d for s, d in de_openai if "director de arte" in s]
-    # Al cambiar la idea se reescribe solo el de ese post, comparado con los demás y con la idea del dueño mandando.
-    assert len(arte) == 1
+    # Al cambiar la idea se reescribe solo el de ese post, comparado con los demás y con la idea del dueño mandando
+    # (la primera llamada es la de los posts que no traían prompt al crear la campaña).
+    assert len(arte) == 2
+    arte = arte[1:]
     assert "Fotos cálidas con textura de papel" in arte[0] and arte[0].count('<post n="') == 1
     assert "idea del dueño (manda): Una taza en la barra" in arte[0] and "Protagonista" in arte[0]
-    assert "texto encima:" in arte[0] and "<otros_posts>" in arte[0] and "Café Lunar" in arte[0]
-    assert proveedor.llamadas[-1][0].startswith("A detailed art-directed prompt")
+    assert "pieza: diseño completo estilo infografía" in arte[0] and "<otros_posts>" in arte[0] and "Café Lunar" in arte[0]
+    assert "Design brief: A detailed art-directed prompt" in proveedor.llamadas[-1][0]
     p = campanas.buscar_post(leer(client, c), foto["k"])
     assert p["prompt"] == "A detailed art-directed prompt" and p["idea_base"] == "Una taza en la barra"
     r = client.get(f"{u}?post={foto['k']}")
     assert 'name="prompt"' in r.text and ">A detailed art-directed prompt</textarea>" in r.text
     # El prompt editado a mano es el que va al generador, sin volver a escribirlo.
-    llamadas_arte = len(arte)
+    llamadas_arte = len([d for s, d in de_openai if "director de arte" in s])
     client.post(u, headers=ORIGEN, data={"accion": "generar", "k": str(foto["k"]), "idea": "Una taza en la barra",
                                          "prompt": "My own prompt, a cup on the bar"})
-    assert proveedor.llamadas[-1][0].startswith("My own prompt, a cup on the bar")
+    assert "Design brief: My own prompt, a cup on the bar" in proveedor.llamadas[-1][0]
     assert len([d for s, d in de_openai if "director de arte" in s]) == llamadas_arte
     # "Escribir el prompt" lo escribe sin generar la imagen.
     otro = next(p for p in leer(client, c)["posts"] if p["formato"] == "titular" and p["k"] != foto["k"])
@@ -686,7 +691,7 @@ def test_si_openai_falla_el_prompt_lo_escribe_claude(cliente, monkeypatch):
     camp = leer(client, c)
     foto = next(p for p in camp["posts"] if p["formato"] == "titular")
     client.post(campanas.url_de(camp), headers=ORIGEN, data={"accion": "generar", "k": str(foto["k"]), "idea": "Otra idea"})
-    assert proveedor.llamadas[-1][0].startswith("Prompt from Claude")
+    assert "Design brief: Prompt from Claude" in proveedor.llamadas[-1][0]
 
 
 def test_lo_que_hay_que_verificar_sale_en_el_post():
@@ -751,7 +756,7 @@ def test_los_prompts_de_imagen_ya_vienen_escritos_al_crear_la_campana(cliente, m
     assert fotos and len(arte) == 1 and not proveedor.llamadas  # todos juntos, sin gastar imágenes
     assert arte[0].count('<post n="') == sum(1 for p in camp["posts"] if campanas.con_foto(p))
     assert all(p["prompt"].startswith("Detailed prompt") and p["idea_base"] == p["idea"] for p in fotos)
-    assert all(not p.get("prompt") for p in camp["posts"] if p["formato"] == "texto")
+    assert all(p.get("prompt") for p in camp["posts"] if p["formato"] == "texto")  # también los diseños de texto
     r = client.get(f"{campanas.url_de(camp)}?post={fotos[0]['k']}")
     assert f">{fotos[0]['prompt']}</textarea>" in r.text
 
@@ -767,7 +772,7 @@ def test_la_idea_de_la_imagen_sale_del_plan_visual():
                                            {"dia": "2099-01-06", "titulo": "Dos", "caption": "Texto", "idea": ""}]},
                                 fichas, 1, False, 3, 0)
     assert posts[0]["idea"] == ("Una barista sirve un latte, en la barra de la tienda. plano medio. luz de ventana.")
-    assert posts[0]["idea_original"] == posts[0]["idea"] and posts[1]["idea"] == ""
+    assert posts[0]["idea_original"] == posts[0]["idea"] and posts[1]["idea"] == posts[0]["idea"]  # el diseño de texto también
     assert not campanas.idea_editada(posts[0]) and campanas.idea_editada({**posts[0], "idea": "Otra cosa"})
     html = campanas.plan_de_post(posts[0])
     assert "Plan de la imagen" in html and "Protagonista:</b> Una barista" in html
@@ -812,3 +817,31 @@ def test_otra_idea_trae_otro_plan_visual_y_otro_prompt(cliente, monkeypatch):
     assert p["idea_original"] == p["idea"] and p["prompt"] == "A detailed art-directed prompt"
     otra = next(d for s, d in arte if "otra versión" in s)
     assert "<estilos_disponibles>" in otra and "<otras_fotos>" in otra
+
+
+def test_las_piezas_con_texto_y_el_collage_los_genera_la_ia(cliente, monkeypatch):
+    client, c, _, proveedor = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 10)
+    import app as bot
+    monkeypatch.setattr(bot.agent, "run_claude", claude_de_campana([]))
+    listo(client, c)
+    client.portal.call(c.store.set, "productos", json.dumps([PRODUCTO]))
+    llenar(client)
+    generar(client)
+    camp = leer(client, c)
+    u = campanas.url_de(camp)
+    texto = next(p for p in camp["posts"] if p["formato"] == "texto")
+    assert campanas.costo(texto) == 1 and campanas.con_foto(texto)
+    texto["plan"]["foto"]["textos"] = ["Tueste de esta semana", "Desde 75 MXN"]
+    texto["prompt"], texto["idea_base"] = "A bold typographic layout", texto["idea"]
+    collage = {**texto, "k": 99, "formato": "collage", "titulo": "Collage"}
+    camp["posts"].append(collage)
+    client.portal.call(c.store.set, "campanas", json.dumps([camp]))
+    client.post(u, headers=ORIGEN, data={"accion": "generar", "k": str(texto["k"])})
+    prompt = proveedor.llamadas[-1][0]
+    assert "infographic-style" in prompt and f'Headline (largest): "{texto["titulo"]}"' in prompt
+    assert '"Tueste de esta semana"' in prompt and '"Desde 75 MXN"' in prompt
+    # El collage: fotos nuevas de la IA, sin texto y sin pedir fotos subidas en Tu marca.
+    client.post(u, headers=ORIGEN, data={"accion": "generar", "k": "99"})
+    prompt = proveedor.llamadas[-1][0]
+    assert prompt.startswith("A single image laid out as a photo collage") and "Do not include any text" in prompt

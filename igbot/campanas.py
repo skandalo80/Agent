@@ -90,10 +90,11 @@ FORMATOS = {
     "foto": ("Foto sola", 1, "Una foto sin nada escrito encima: la foto cuenta todo. \"titulo\" solo sirve para"
              " reconocerlo en el calendario."),
     "titular": ("Foto con titular", 1, "Una foto con el título escrito encima."),
-    "texto": ("Solo texto", 0, "Sin foto: una frase o un dato escrito en grande sobre el color de la marca."
+    "texto": ("Solo texto", 0, "Un diseño gráfico tipo infografía, sin foto de protagonista: una frase o un dato en"
+              " grande con los colores de la marca."
               " \"titulo\" es esa frase (máximo 12 palabras) y \"subtitulo\" la completa. \"idea\": \"\"."),
-    "collage": ("Collage", 0, "Un collage con fotos del negocio: de Tu marca o de posts que ya salieron (no se"
-                " genera foto nueva)."
+    "collage": ("Collage", 0, "Un collage: varias imágenes en una sola composición (en las campañas con brief, la"
+                " IA genera fotos nuevas)."
                 " \"idea\": qué deben mostrar juntas, en una frase."),
     "bento": ("Bento grid", 1, "Una sola imagen armada como cuadrícula bento: recuadros de distintos tamaños con el"
               " producto, sus detalles y su uso, sin nada escrito. \"titulo\" solo sirve para reconocerlo en el"
@@ -101,7 +102,8 @@ FORMATOS = {
     "vs": ("Esto o aquello", 1, "Dos opciones lado a lado para que la gente elija en comentarios. \"titulo\" es la"
            " pregunta (\"¿A o B?\"). \"idea\": una sola foto dividida a la mitad, A a la izquierda y B a la derecha."),
 }
-SIN_IDEA = ("texto",)  # formatos que no necesitan idea de imagen
+SIN_IDEA = ("texto",)  # formatos que no necesitan idea de imagen (sin plan visual)
+CON_TEXTO = ("titular", "texto", "vs")  # con plan visual, la IA los diseña con su texto dentro (estilo infografía)
 FIJOS = ("foto", "texto", "collage", "bento")  # piezas sin título que se pueda cambiar en el editor
 FORMATO_VIEJO = "titular"  # el de los posts de antes, que no lo tenían
 HORARIOS = {"manana": ("Mañana", "09:00"), "mediodia": ("Mediodía", "14:00"), "noche": ("Noche", "20:00")}
@@ -230,8 +232,14 @@ def cuantos(n: int, medio: str) -> str:
 
 
 def costo(p: dict) -> int:
-    """Imágenes del cupo que usa la pieza de este post."""
-    return FORMATOS[formato_de(p)][1]
+    """Imágenes del cupo que usa la pieza de este post (con plan visual, todas las genera la IA)."""
+    return 1 if ia_completa(p) else FORMATOS[formato_de(p)][1]
+
+
+def ia_completa(p: dict) -> bool:
+    """El post tiene plan visual (campañas con brief): su imagen la genera la IA completa, sin plantilla ni fotos
+    viejas, en cualquier formato."""
+    return bool((p.get("plan") or {}).get("foto"))
 
 
 # --- las campañas ---
@@ -582,7 +590,7 @@ def leer_posts(respuesta: dict, fichas: list[dict], siguiente: int, regla: bool,
         if historia:
             texto["caption"] = ""  # una historia no lleva texto publicado
         foto = (ficha.get("plan") or {}).get("foto")
-        if foto and ficha["formato"] not in SIN_IDEA and ficha["formato"] != "collage":
+        if foto:
             texto["idea"] = brief.idea_de_foto(foto)[:MAX_IDEA]  # la idea sale del plan visual, no la reescribe nadie
         if not (texto["titulo"] and (texto["caption"] or historia) and (texto["idea"] or ficha["formato"] in SIN_IDEA)):
             continue
@@ -785,7 +793,7 @@ async def otra_idea(c: Cuenta, camp: dict, p: dict) -> None:
     texto = limpio(respuesta)
     if es_historia(p):
         texto["caption"] = ""
-    foto = brief.leer_foto(respuesta.get("foto")) if con_brief and formato_de(p) not in (*SIN_IDEA, "collage") else {}
+    foto = brief.leer_foto(respuesta.get("foto")) if con_brief else {}
     if foto:  # otra idea es otro plan visual: de él sale la idea, y el prompt se reescribe
         texto["idea"] = brief.idea_de_foto(foto)[:MAX_IDEA]
     if not (texto["titulo"] and (texto["caption"] or es_historia(p)) and (texto["idea"] or formato_de(p) in SIN_IDEA)):
@@ -960,10 +968,13 @@ async def generar_imagen(c: Cuenta, camp: dict, p: dict, extra: bool) -> int:
         modo = camp.get("modo_img") if camp.get("modo_img") in ("plantilla", "libre") else modo_de(marca)
         usuario = await panel.usuario(c)
         # Foto sola y Esto o aquello necesitan su foto limpia: sin diseño libre.
-        plantilla = imagenes.LIBRE if modo == "libre" and formato == "titular" else plantilla_de(marca)
+        plantilla = imagenes.LIBRE if (modo == "libre" and formato == "titular") or (
+            camp.get("brief") and ia_completa(p) and formato in CON_TEXTO) else plantilla_de(marca)
         pieza_ = pieza_de(camp, p, plantilla)
         historia = es_historia(p)
-        if formato == "texto":
+        if camp.get("brief") and ia_completa(p):  # la IA genera la pieza completa: sin plantilla ni fotos viejas
+            hecha = await pieza_con_ia(c, camp, p, marca, pieza_, usuario, extra)
+        elif formato == "texto":
             hecha = await imagenes.crear_local(c.store, PANEL, "texto", texto_imagen(pieza_, usuario), kit(marca),
                                                tema_de(p["tipo"])[0], historia=historia)
         elif formato == "collage":
@@ -1015,14 +1026,43 @@ async def generar_imagen(c: Cuenta, camp: dict, p: dict, extra: bool) -> int:
     return post_id
 
 
+async def pieza_con_ia(c: Cuenta, camp: dict, p: dict, marca: dict, pieza_: dict, usuario: str, extra: bool) -> dict:
+    """La imagen de un post con plan visual, en cualquier formato: el prompt del último paso y el generador. Los
+    formatos con texto los diseña la IA con el texto dentro (estilo infografía); el collage son fotos nuevas."""
+    formato, idea = formato_de(p), await prompt_de(c, camp, p, marca)
+    if formato == "bento":
+        idea = ("A single image laid out as a bento grid: four to six rounded rectangular tiles of different sizes with"
+                f" thin even gaps, each tile a different photo, same light and palette in all tiles. No text.\n{idea}")
+    elif formato == "collage":
+        idea = ("A single image laid out as a photo collage: three to five new photos of different sizes, neatly"
+                f" arranged with thin even gaps, same light and palette in all of them. No text.\n{idea}")
+    elif formato == "vs":
+        idea = ("A single design split vertically down the middle into two halves, one option on each side, same"
+                f" light and style on both.\n{idea}")
+    referencias = []
+    if p.get("ve") == "productos" or (not p.get("ve") and camp.get("producto_id")):  # solo donde sale el producto
+        tokens = (await fotos_producto(c, camp))[:2] or (
+            marca.get("fotos", []) if camp.get("variedad") == "reconocible" else [])
+        referencias = [archivo(c, t).read_bytes() for t in tokens[:3] if archivo(c, t).is_file()]
+        if referencias:
+            idea += f"\n{ESTILO_REFERENCIA}"
+    con_texto = formato in CON_TEXTO
+    return await imagenes.crear_pieza(c.store, PANEL, idea, imagenes.LIBRE if con_texto else plantilla_de(marca),
+                                      texto_imagen(pieza_, usuario) if con_texto else imagenes.Texto(""),
+                                      referencias, permitir_extra=extra, marca=kit(marca), historia=es_historia(p),
+                                      infografia=con_texto, puntos=p["plan"]["foto"].get("textos", []))
+
+
 SISTEMA_PROMPTS = """Eres el director de arte de una campaña de Instagram. Escribes de una vez el prompt para el generador de imágenes de cada <post> de <posts>. Cada uno trae su formato, su plan visual (función, protagonista, escenario, acción, encuadre, luz, composición, relación con la marca, qué la hace distinta y qué evitar), el estilo y el color que le tocan y, si el dueño la cambió, su idea.
 
-Cada prompt, en inglés, de 120 a 180 palabras en un solo párrafo, cubre en este orden: el sujeto principal; el escenario; la acción; la composición y el encuadre; la iluminación; los colores y cuánto protagonismo tienen los de la marca (según su "color"); el tratamiento de su "estilo"; el espacio libre para el texto si hay "texto encima" (sin escribirlo); y lo que hay que evitar.
+Cada prompt, en inglés (salvo los textos del diseño, que van en español), de 120 a 200 palabras en un solo párrafo, cubre en este orden: el sujeto principal; el escenario; la acción; la composición y el encuadre (en un diseño, dónde va cada texto); la iluminación; los colores y cuánto protagonismo tienen los de la marca (según su "color"); el tratamiento de su "estilo"; y lo que hay que evitar.
 
 Reglas:
 - Fidelidad: el prompt traduce el plan visual de su post, no inventa otra imagen. Si el post trae "idea del dueño", esa manda: cambia lo que ella cambie y conserva del plan lo que no la contradiga (encuadre, luz, formato, lo que se evita).
 - Si el post trae "escena", ese encuadre y esa luz son obligatorios. Si trae "producto", el producto real es el protagonista.
-- El estilo es un tratamiento de luz, color, textura y composición, nunca objetos de arcilla, cristal, neón u otro material dentro de la escena. Sin texto, letras, números ni logos dentro de la imagen. Fotografía realista y creíble salvo que el formato o el plan pidan ilustración o gráfico.
+- El estilo es un tratamiento de luz, color, textura y composición, nunca objetos de arcilla, cristal, neón u otro material dentro de la escena.
+- Si la "pieza" es un diseño estilo infografía, el prompt describe la pieza gráfica terminada: la jerarquía, dónde va cada uno de sus "textos del diseño" (cítalos tal cual, en español y entre comillas, sin agregar otros), los íconos o gráficos simples que los acompañan, los bloques de color de la marca y la foto o ilustración que la completa. Si es una imagen sin texto, ni una letra, número o logo dentro. Fotografía realista y creíble salvo que el formato o el plan pidan ilustración o gráfico.
+- En "Collage", una sola imagen con varias fotos nuevas en recuadros de distintos tamaños, todas de esta campaña (nada de fotos viejas).
 - Contexto: el negocio de <empresa> es real; los lugares, las personas y los objetos son los de su giro, su zona, su público y sus productos. No inventes productos, locales ni datos que no estén ahí.
 - Diferenciación: antes de contestar, compara los prompts entre sí y con <otros_posts> (protagonista, escenario, acción, composición y metáfora). Si dos se parecen aunque cambie el encuadre, ajusta el que tenga más margen dentro de su plan; nunca cambies lo que pide una idea del dueño. No repitas superficies o muebles de catálogo (repisa o mesa de madera) salvo que sean del lugar real.
 - Sigue <direccion_visual> y <variedad_visual>; lo que el brief dice que no se ve va en lo que se evita.
@@ -1074,7 +1114,7 @@ async def empresa_visual(c: Cuenta) -> str:
 
 
 def con_foto(p: dict) -> bool:
-    return bool(p.get("idea")) and formato_de(p) not in SIN_IDEA and formato_de(p) != "collage"
+    return bool(p.get("idea")) and (ia_completa(p) or formato_de(p) not in (*SIN_IDEA, "collage"))
 
 
 def prompt_vigente(p: dict) -> str:
@@ -1097,7 +1137,7 @@ def bloque_imagen(camp: dict, marca: dict, p: dict) -> str:
               f"escena: {escape(p['escena'])}" if p.get("escena") else "",
               f"producto: {escape(camp['producto'])}" if camp.get("producto") and camp.get("producto_id")
               and p.get("ve") in ("productos", None, "") else "",
-              f"texto encima: {escape(p.get('titulo', ''))}" if formato_de(p) == "titular" else "",
+              *textos_del_diseno(p),
               f"estilo: {escape(estilo[0])}. {escape(estilo[2])}", f"color: {color[0]}. {color[2]}"]
     if foto:
         lineas.append(f"plan visual:\n{brief.foto_texto(foto)}")
@@ -1106,6 +1146,17 @@ def bloque_imagen(camp: dict, marca: dict, p: dict) -> str:
     if foto and idea_editada(p):
         lineas.append(f"idea del dueño (manda): {escape(p['idea'])}")
     return f'<post n="{p["k"]}">\n' + "\n".join(x for x in lineas if x) + "\n</post>"
+
+
+def textos_del_diseno(p: dict) -> list[str]:
+    """Las líneas del bloque de un post que dicen si la pieza lleva texto y cuál, tal cual."""
+    if not (ia_completa(p) and formato_de(p) in CON_TEXTO):
+        return ["pieza: imagen sin texto" if ia_completa(p) else "",
+                f"texto encima: {escape(p.get('titulo', ''))}" if formato_de(p) == "titular" else ""]
+    textos = [p.get("titulo", ""), p.get("subtitulo", "") if formato_de(p) in ("titular", "texto") else "",
+              *p["plan"]["foto"].get("textos", [])]
+    return ["pieza: diseño completo estilo infografía, con el texto dentro",
+            "textos del diseño: " + " | ".join(f"«{escape(t)}»" for t in textos if t)]
 
 
 def resumen_imagen(p: dict) -> str:
@@ -1352,16 +1403,16 @@ async def detalle(c: Cuenta, camp: dict, p: dict, quedan_ia: int) -> str:
                  if formato == "texto" and not post else "")
     # Desplegable, como en el editor del calendario: abierto mientras no hay imagen (hay que revisarlo antes de generar).
     # Con brief, la idea corta (en español) y aparte el prompt detallado que recibe el generador, editable.
-    con_prompt = bool(camp.get("brief")) and formato not in SIN_IDEA and formato != "collage"
+    con_prompt = bool(camp.get("brief")) and con_foto(p)
     vigente = prompt_vigente(p) if con_prompt else ""
-    nombre_idea = ("Qué deben mostrar las fotos" if formato == "collage" else
-                   "Idea de la imagen" if con_prompt else "Prompt de la imagen")
-    idea = ("" if formato in SIN_IDEA or (post and formato == "collage") else
+    nombre_idea = ("Idea de la imagen" if con_prompt else "Qué deben mostrar las fotos" if formato == "collage" else
+                   "Prompt de la imagen")
+    idea = ("" if not con_prompt and (formato in SIN_IDEA or (post and formato == "collage")) else
             f'<details class="prompt-img"{"" if post or vigente else " open"}><summary>{nombre_idea}</summary>'
             f'<div class="campo"><textarea id="d-idea" name="idea" rows="8" maxlength="{MAX_IDEA}"'
             f' aria-label="{nombre_idea}"{solo}>{escape(p["idea"])}'
             "</textarea>"
-            + ("" if formato == "collage" else
+            + ("" if formato == "collage" and not con_prompt else
                ('<small>La idea en pocas palabras. Con ella se escribe el prompt detallado de abajo; si la cambias,'
                 ' el prompt se vuelve a escribir.</small>' if con_prompt else
                 '<small>Lo escribe la IA con tu empresa, tu marca y esta campaña. Puedes editarlo antes de generar.</small>')
@@ -1430,6 +1481,8 @@ def plan_de_post(p: dict) -> str:
     if foto := plan.get("foto"):
         filas += '<p class="plan-foto"><b>Plan de la imagen</b></p>' + "".join(
             f"<p><b>{t}:</b> {escape(foto[k])}</p>" for k, t, _ in brief.FOTO if foto.get(k))
+        if foto.get("textos"):
+            filas += "<p><b>Textos del diseño:</b> " + " · ".join(escape(t) for t in foto["textos"]) + "</p>"
         if idea_editada(p):
             filas += "<p><b>Idea:</b> la editaste tú; el prompt sigue tu versión.</p>"
     verificar = ("" if not p.get("verificar") else '<p class="verificar"><b>Revisa antes de publicar:</b> '
@@ -1871,13 +1924,15 @@ def documentos(camp: dict) -> bytes:
         plan_md.append(cab(i, p) + "\n".join(f"- **{t}:** {v}" for t, v in ficha if v)
                        + "".join(f"\n- **{t}:** {plan[k]}" for k, t, _ in brief.PLAN if plan.get(k))
                        + ("\n- **Plan de la imagen:**" + "".join(f"\n    - {t}: {plan['foto'][k]}" for k, t, _ in brief.FOTO
-                                                                if plan["foto"].get(k)) if plan.get("foto") else "") + "\n")
+                                                                if plan["foto"].get(k))
+                          + (f"\n    - Textos del diseño: {' · '.join(plan['foto']['textos'])}" if plan["foto"].get("textos")
+                             else "") if plan.get("foto") else "") + "\n")
         regla = p.get("regla") or {}
         posts_md.append(cab(i, p) + f"**{p['titulo']}**" + (f" · {p['subtitulo']}" if p.get("subtitulo") else "")
                         + f"\n\n{p.get('caption', '')}\n"
                         + (f"\n- **Revisa antes de publicar:** {'; '.join(p['verificar'])}" if p.get("verificar") else "")
                         + (f"\n- **Comenta {regla['clave']}:** {regla.get('dm', '')}" if regla.get("activa") else "") + "\n")
-        if formato_de(p) not in SIN_IDEA and formato_de(p) != "collage":
+        if con_foto(p):
             vigente = prompt_vigente(p)
             prompts_md.append(cab(i, p) + f"**Idea:** {p.get('idea', '')}\n\n"
                               + (f"**Idea original (del plan):** {p['idea_original']}\n\n" if idea_editada(p) else "")
@@ -1931,9 +1986,6 @@ async def armar(c: Cuenta, datos: dict, camp: dict, borrador: bool = False):
     async def de_vuelta(aviso: str, datos_: dict):
         return await nueva_campana.pagina(c, nueva_campana.RESUMEN, aviso)
 
-    with usar(c):
-        if len(fotos_marca(c, await marca_de(c))) < MIN_FOTOS_COLLAGE and "collage" in datos["formatos"]:
-            datos["formatos"].remove("collage")
     if falta := falta_en(datos):
         return await de_vuelta(falta, datos)
     with usar(c):
