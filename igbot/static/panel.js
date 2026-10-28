@@ -474,3 +474,27 @@ if (skandi) {
     document.querySelectorAll(".mandando").forEach((b) => b.classList.remove("mandando"));
   });
 })();
+
+// La barra de un trabajo largo (panel.trabajo_largo): la misma cuenta que panel.curva y panel.porcentaje,
+// para que avance sin parar entre recargas.
+(() => {
+  const barra = document.querySelector(".avance-trabajo");
+  if (!barra) return;
+  const d = barra.dataset;
+  const [tau, a, w, f, t0] = ["tau", "a", "w", "f", "t"].map((k) => parseFloat(d[k]));
+  let pasos = [];
+  try { pasos = JSON.parse(d.pasos || "[]"); } catch (e) { pasos = []; }
+  const relleno = barra.querySelector("i");
+  const pct = document.querySelector(".pct-trabajo");
+  const paso = document.querySelector(".paso-trabajo");
+  const ini = performance.now();
+  const pinta = () => {
+    const t = t0 + (performance.now() - ini) / 1000;
+    const p = 96 * (1 - Math.exp(-(t + a * (Math.sin(w * t + f) - Math.sin(f)) / w) / tau));
+    relleno.style.width = p.toFixed(1) + "%";
+    if (pct) pct.textContent = Math.floor(p) + "%";
+    if (paso && pasos.length) paso.textContent = pasos[Math.min(pasos.length - 1, Math.floor(p / 100 * pasos.length * 1.08))];
+    requestAnimationFrame(pinta);
+  };
+  requestAnimationFrame(pinta);
+})();

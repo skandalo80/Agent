@@ -412,3 +412,19 @@ def test_un_solo_archivo_de_ajustes():
         assert f"var({var})" in panel.COMUN, var
     for var in ("--t-ante", "--t-portada", "--t-tarjeta", "--caja-pad"):
         assert f"var({var})" in estilos, var
+
+
+def test_barra_de_trabajo_avanza_lento_y_distinto():
+    """Rápido al principio, cada vez más lento, nunca llega al 100 y no avanza igual en dos trabajos."""
+    class T:
+        segundos = 30
+
+    uno, otro = T(), T()
+    uno.id, otro.id = "abc", "xyz"
+    k1, k2 = panel.curva(uno), panel.curva(otro)
+    serie = [panel.porcentaje(k1, s / 2) for s in range(0, 600)]
+    assert serie[0] == 0 and all(b >= a for a, b in zip(serie, serie[1:])) and max(serie) < 96
+    assert serie[20] > 25 and serie[60] > 70 and serie[60] - serie[20] > serie[120] - serie[60]  # se va frenando
+    assert k1 != k2 and panel.porcentaje(k1, 10) != panel.porcentaje(k2, 10)
+    pasos = ("Uno…", "Dos…", "Tres…")
+    assert [panel.paso_de(pasos, p) for p in (0, 40, 95)] == ["Uno…", "Dos…", "Tres…"] and panel.paso_de((), 50) == ""

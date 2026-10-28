@@ -911,6 +911,14 @@ async def adn_de(c: Cuenta, b: dict) -> str:
     return b["adn"]["texto"]
 
 
+# Lo que va diciendo la espera, según avanza la barra (panel.paso_de).
+PASOS_BRIEF = ("Leyendo tu empresa y tu marca…", "Revisando tus campañas anteriores…", "Generando opciones de campaña…",
+               "Definiendo el mensaje y los pilares…", "Generando dirección visual…", "Puliendo las ideas…")
+PASOS_RAPIDA = ("Leyendo tu empresa y tu marca…", "Generando opciones de campaña…", "Escribiendo el brief…",
+                "Generando dirección visual…", "Repartiendo los posts en el calendario…", "Generando contenido…",
+                "Escribiendo los textos…", "Revisando que todo cuadre…")
+
+
 async def crear_brief(c: Cuenta, b: dict, datos: dict):
     """Las tres ideas de campaña con su brief (una llamada a Claude, cuenta como una propuesta del día)."""
     if not await campanas.ia_restantes(c):
@@ -928,7 +936,7 @@ async def crear_brief(c: Cuenta, b: dict, datos: dict):
         yield f"{URL}?paso={BRIEF}"
 
     return await campanas.trabajando(c, "Pensando las ideas de tu campaña…", "Tarda unos segundos.", trabajo,
-                               f"{URL}?paso={RESUMEN}")
+                               f"{URL}?paso={RESUMEN}", segundos=30, pasos=PASOS_BRIEF)
 
 
 # --- Crear con IA: solo el objetivo y las fechas; lo demás lo decide la IA ---
@@ -1051,4 +1059,5 @@ async def crear_rapida(request: Request):
             await campanas.guardar(c, hecha)
         yield campanas.url_de(camp)
 
-    return await campanas.trabajando(c, "Creando tu campaña con IA…", "Tarda alrededor de un minuto.", trabajo, RAPIDA)
+    return await campanas.trabajando(c, "Creando tu campaña con IA…", "Tarda alrededor de un minuto.", trabajo, RAPIDA,
+                                     segundos=70, pasos=PASOS_RAPIDA)
