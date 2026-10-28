@@ -124,7 +124,7 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
 
     # Tu marca, paso a paso: sin marca abre el paso 1; cada paso guarda y lleva al siguiente.
     r = client.get("/panel/contenido/marca")
-    assert "Paso 1 de 4" in r.text and '<main class="oscuro-pag">' in r.text and r.text.count('name="estilos"') == 13
+    assert "Paso 1 de 4" in r.text and '<main class="oscuro-pag">' in r.text and r.text.count('name="estilos"') == 12
     assert "¿Cómo quieres que se vean los diseños de tu marca?" in r.text and 'class="antetitulo"' not in r.text
     assert "Sensación: Rebelde · Directo · Impactante" in r.text and "1.º · Estilo principal:" in r.text
     # Tu marca vive abajo, en Configuración, no en el submenú de Contenido.
@@ -1179,5 +1179,5 @@ def test_tu_marca_avanzado_viene_en_automatico_y_se_guarda(cliente, monkeypatch)
     m = client.portal.call(contenido.marca_de, c)
     assert (m["forma_boton"], m["forma_sello"], m["logo_lugar"]) == ("recto", "cinta", "abajo") and m["logo_oscuro"]
     assert tu_marca.formas_de({**m, "estilos": ["brutalista"]}) == ("recto", "cinta")
-    # «Anuncio comercial» es un estilo más y sale recomendado para las tiendas.
-    assert estilos.RECOMENDADOS["Tienda en línea"][0] == "anuncio" and "anuncio" in estilos.COMBINACIONES
+    # Si una pieza es anuncio o no se decide en cada campaña: no es un estilo de Tu marca.
+    assert "anuncio" not in estilos.ESTILOS
