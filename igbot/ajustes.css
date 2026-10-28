@@ -22,7 +22,7 @@
   --menu-margen: 1rem;         /* espacio entre el menú lateral y la orilla de la ventana */
   --menu-ancho: 17rem;         /* ancho del menú abierto */
   --menu-ancho-plegado: 5.25rem; /* ancho del menú plegado (solo íconos) */
-  --margen-arriba: 2rem;       /* de arriba de la ventana a la primera tarjeta */
+  --margen-arriba: var(--menu-margen); /* arriba: la primera tarjeta empieza a la altura del menú */
   --margen-izq: 2.25rem;       /* entre el menú y las tarjetas */
   --margen-der: 1.75rem;       /* de las tarjetas a la orilla derecha */
   --margen-abajo: 3rem;        /* debajo de la última tarjeta */
