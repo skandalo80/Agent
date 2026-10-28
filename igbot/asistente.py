@@ -352,9 +352,14 @@ async def _resumen(c: Cuenta, perfil: dict) -> str:
     if c.en_revision:
         boton = f'<p class="ayuda">{panel.REVISION}</p>'
     elif encendido:
-        boton = '<a class="boton" href="/panel/asistente">Ir a tus conversaciones</a>'
+        # Aquí se pausa al asistente completo (para todos los chats); en Conversaciones solo se pausa cada chat.
+        boton = ('<form method="post" action="/panel/estado"><input type="hidden" name="activo" value="0">'
+                 '<input type="hidden" name="volver" value="configura">'
+                 '<button class="boton secundario">Pausar tu asistente</button></form>'
+                 '<a class="boton" href="/panel/asistente">Ir a tus conversaciones</a>')
     else:
         boton = ('<form method="post" action="/panel/estado"><input type="hidden" name="activo" value="1">'
+                 '<input type="hidden" name="volver" value="configura">'
                  '<button class="boton">Encender tu asistente</button></form>')
     faltan = [t for k, t, _ in PASOS if k not in _hechos(perfil)]
     titulo = ("Tu asistente está contestando" if encendido else
