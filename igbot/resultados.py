@@ -181,8 +181,8 @@ def duracion(segundos: float | None) -> str:
 def barras(valores: list[int], etiquetas: list[str], detalles: list[str], clases: list[str] | None = None,
            descripcion: str = "") -> str:
     """Gráfica de barras: SVG estirado al ancho y, abajo, las `etiquetas` en HTML (así se leen
-    igual en el celular). `detalles` ("valor: lo que es" o "cuándo: valor") sale al pasar el cursor,
-    en una etiqueta sobre la barra."""
+    igual en el celular). Al pasar el cursor sale el número en una etiqueta sobre la barra;
+    `detalles` ya no se muestra."""
     ancho, alto = 100 * len(valores), 100
     tope = max(valores) or 1
     partes = [f'<line class="eje" x1="0" x2="{ancho}" y1="{alto}" y2="{alto}" vector-effect="non-scaling-stroke"/>']
@@ -191,8 +191,7 @@ def barras(valores: list[int], etiquetas: list[str], detalles: list[str], clases
         h = max(round(v / tope * alto, 1), 1)
         clase = f"b {clases[i]}" if clases else "b"
         partes.append(f'<rect class="{clase}" x="{i * 100 + 15}" y="{alto - h}" width="70" height="{h}"/>')
-        cuando, _, valor = detalle.partition(": ")
-        columnas.append((alto - h, f"<b>{escape(valor or cuando)}</b>", escape(cuando if valor else "")))
+        columnas.append((alto - h, f"<b>{v:,}</b>", ""))  # al pasar el cursor, solo el número
     eje = "".join(f"<span>{escape(e)}</span>" for e in etiquetas)
     return (f'<div class="met-graf barras"><svg class="grafica" viewBox="0 0 {ancho} {alto}" preserveAspectRatio="none"'
             f' role="img" aria-label="{escape(descripcion)}">{"".join(partes)}</svg>'

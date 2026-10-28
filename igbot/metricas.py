@@ -208,7 +208,7 @@ def puntos_hover(columnas: list[tuple[float | None, str, str]], punto: bool = Tr
             continue
         lado = (" izq" if i < n * .2 else " der" if i >= n * .8 else "") + (" abajo" if y < 35 else "")
         partes.append(f'<div class="mh{lado}" style="--y:{y:.1f}%">' + ('<i></i>' if punto else "")
-                      + f'<span>{valor}<small>{cuando}</small></span></div>')
+                      + f'<span>{valor}' + (f"<small>{cuando}</small>" if cuando else "") + '</span></div>')
     return f'<div class="met-hover">{"".join(partes)}</div>'
 
 
@@ -228,7 +228,7 @@ def linea(valores: list[int | None], fechas: list[date], nombre: str) -> str:
     guias = "".join(f'<line class="guia" x1="0" x2="{ancho}" y1="{g}" y2="{g}" vector-effect="non-scaling-stroke"/>'
                     for g in (8, 50, 92))
     zonas = puntos_hover([(None, "", "") if v is None else
-                          (y(v), f"<b>{cifra(v)}</b> {escape(nombre)}", f"{tools.DAYS[f.weekday()][:3]} {f:%d/%m}")
+                          (y(v), f"<b>{cifra(v)}</b>", "")
                           for f, v in zip(fechas, valores)])
     cada = 1 if len(fechas) <= 7 else 7 if len(fechas) <= 30 else 15
     eje = "".join(f"<span>{f:%d/%m}</span>" if (len(fechas) - 1 - i) % cada == 0 else "<span></span>"
