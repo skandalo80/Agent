@@ -316,7 +316,7 @@ html.menu-plegado .lateral .logo-largo{display:none}html.menu-plegado .lateral .
 .lat-item.on{color:var(--naranja-t);background:rgba(255,138,61,.12);font-weight:600;box-shadow:inset 3px 0 0 var(--acento)}
 .lat-pie{border-top:1px solid #34363B;padding-top:.75rem;margin:0}
 /* Abajo, antes de tu cuenta: los pasos iniciales (un anillo con el avance) y Ayuda. */
-.lat-etiqueta{font-size:.72rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6E7077;padding:.75rem .9rem .3rem;border-top:1px solid #34363B;margin-top:.2rem}html.menu-plegado .lat-etiqueta{padding:.3rem 0 0}.lat-abajo{display:flex;flex-direction:column;gap:.2rem;padding:.6rem 0 .5rem}
+.lat-etiqueta{font-size:.72rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6E7077;padding:.75rem .9rem .3rem;border-top:1px solid #34363B;margin-top:.2rem}html.menu-plegado .lat-etiqueta{padding:.3rem 0 0}.lat-abajo [data-abrir-skandi]{border-top:1px solid #34363B;border-radius:0 0 .85rem .85rem;margin-top:.35rem;padding-top:1.05rem}.lat-abajo{display:flex;flex-direction:column;gap:.2rem;padding:.6rem 0 .5rem}
 .pasos-ini>summary{background:rgba(255,138,61,.08);border:1px solid rgba(255,138,61,.22);margin-bottom:.35rem;padding:.6rem .75rem}
 .pasos-ini>summary:hover{background:rgba(255,138,61,.14)}
 .pasos-ini .txt{color:var(--claro);font-weight:600;font-size:.95rem}
@@ -1314,9 +1314,9 @@ MENU = [("resultados", "Resultados", "/panel/resultados", "resultados"),
         ("calendario", "Calendario", "/panel/contenido", "contenido")]
 # Abajo, bajo la etiqueta "Configuración" (arriba de Ayuda): lo que se configura una vez. (clave, nombre, dirección)
 # Tu marca solo con contenido en el plan.
-CONFIGURACION = [("configura", "Tu asistente", "/panel/asistente/configura"),
-                 ("marca", "Tu marca", "/panel/contenido/marca"),
-                 ("empresa", "Tu empresa", "/panel/empresa")]
+CONFIGURACION = [("empresa", "Tu empresa", "/panel/empresa"),
+                 ("configura", "Tu asistente", "/panel/asistente/configura"),
+                 ("marca", "Tu marca", "/panel/contenido/marca")]
 # La sección que se marca si la página no dice cuál (`sub`) dentro de su grupo (`menu`).
 POR_GRUPO = {"resultados": "resultados", "asistente": "chats", "contenido": "calendario"}
 
