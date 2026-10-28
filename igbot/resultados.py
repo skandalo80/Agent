@@ -244,20 +244,81 @@ def seccion_comentarios(d: dict) -> str:
     )
 
 
-def seccion_publicaciones(d: dict) -> str:
-    publicadas = "".join(
-        f'<div class="fila"><div class="datos"><b>{escape(p["caption"][:80] or "Publicación")}</b>'
-        + (f'<span><a class="enlace" href="{escape(p["permalink"])}" rel="noopener">Ver en Instagram ›</a></span>'
-           if p["permalink"].startswith("https://") else "")
-        + "</div></div>"
-        for p in d["publicadas"]
-    )
+MAX_POSTS = 24  # los más recientes del periodo con sus Insights (Instagram los guarda 1 h en informe)
+
+
+async def posts_con_numeros(c: Cuenta, publicadas: list[dict]) -> list[dict]:
+    """Los posts publicados del periodo con su foto y sus Insights, del de mejor interacción al peor
+    (los que aún no tienen números, al final)."""
+    import asyncio
+
+    from . import contenido, informe
+    posts = sorted(publicadas, key=lambda p: -(p["publish_at"] or p["created_at"]))[:MAX_POSTS]
+    ids = await informe.ids_de_instagram(c, posts)
+    turno = asyncio.Semaphore(4)
+
+    async def leer(post):
+        if post["id"] not in ids:
+            return None
+        async with turno:
+            return await informe.numeros(c, ids[post["id"]])
+
+    datos = await asyncio.gather(*(leer(p) for p in posts))
+    salida = []
+    for post, d in zip(posts, datos):
+        media = await c.store.media(post["media_ids"][0]) if post["media_ids"] else None
+        salida.append({"post": post, "datos": d, "tasa": informe.tasa(d),
+                       "imagen": contenido.url_imagen(c, media[0]) if media else ""})
+    salida.sort(key=lambda x: (x["tasa"] is None, -(x["tasa"] or 0)))
+    return salida
+
+
+def numero_post(etiqueta: str, valor) -> str:
+    return f'<div><b>{"—" if valor is None else metricas.cifra(valor)}</b><span>{etiqueta}</span></div>'
+
+
+def tarjeta_post(c: Cuenta, x: dict, mejor: bool = False, promedio: float | None = None) -> str:
+    p, d = x["post"], x["datos"] or {}
+    cuando = datetime.fromtimestamp(p["publish_at"] or p["created_at"], ZoneInfo(c.timezone))
+    foto = (f'<img src="{escape(x["imagen"])}" alt="" loading="lazy" referrerpolicy="no-referrer">'
+            if x["imagen"] else '<div class="sin-foto">Sin imagen</div>')
+    if p["permalink"].startswith("https://"):
+        foto = f'<a href="{escape(p["permalink"])}" rel="noopener" title="Ver en Instagram">{foto}</a>'
+    tasa = (f'<b class="tasa">{x["tasa"]:.1f}%</b><small>interacción</small>'.replace(".0%", "%")
+            if x["tasa"] is not None else '<small>Instagram aún no da sus números</small>')
+    tipo = "Historia" if p.get("tipo") == "historia" else "Post"
+    if mejor and promedio and x["tasa"]:
+        tasa += f'<small class="pp-vs">{x["tasa"] / promedio:.1f}× tu promedio</small>'.replace(".0×", "×")
     return (
-        '<div class="tarjeta"><span class="num">Publicaciones</span>'
-        f'<h2>{plural(len(d["publicadas"]), "publicada")} · {plural(d["programadas"], "programada")}</h2>'
-        + (publicadas or '<p class="ayuda">No hubo publicaciones en este periodo.</p>')
-        + '<div class="acciones"><a class="boton secundario" href="/panel/contenido">Ir a Contenido</a></div></div>'
+        f'<article class="pp{" mejor" if mejor else ""}"><div class="pp-foto">{foto}'
+        + ('<span class="pp-sello">Tu mejor post</span>' if mejor else "") + '</div>'
+        f'<div class="pp-cuerpo"><p class="pp-fecha">{tipo} · {cuando:%d/%m} a las {cuando:%H:%M}</p>'
+        f'<p class="pp-texto">{escape(p["caption"][:140] or "Publicación")}</p>'
+        f'<div class="pp-tasa">{tasa}</div><div class="pp-nums">'
+        + numero_post("alcance", d.get("reach")) + numero_post("vistas", d.get("views"))
+        + numero_post("likes", d.get("likes")) + numero_post("comentarios", d.get("comments"))
+        + numero_post("guardados", d.get("saved")) + numero_post("compartidos", d.get("shares"))
+        + "</div></div></article>"
     )
+
+
+async def seccion_publicaciones(c: Cuenta, d: dict) -> str:
+    """Tus publicaciones del periodo: la mejor arriba, en grande, y las demás en tarjetas con sus números."""
+    cabeza = (f'<div class="met-cab"><span>Tus publicaciones</span><b>{plural(len(d["publicadas"]), "publicada")}'
+              f' <small>· {plural(d["programadas"], "programada")}</small></b></div>')
+    if not d["publicadas"]:
+        return (f'<section class="met-c ancho res-posts">{cabeza}<p class="ayuda">No hubo publicaciones en este periodo.</p>'
+                '<div class="acciones"><a class="boton secundario" href="/panel/contenido">Ir a Calendario</a></div></section>')
+    posts = await posts_con_numeros(c, d["publicadas"])
+    con = [x for x in posts if x["tasa"] is not None]
+    promedio = sum(x["tasa"] for x in con) / len(con) if con else None
+    nota = (f'<p class="ayuda chica">Interacción promedio: {promedio:.1f}% (likes, comentarios, guardados y'
+            ' compartidos entre el alcance). Ordenados de mejor a peor.</p>' if con else "")
+    primero, resto = (posts[0], posts[1:]) if con else (None, posts)
+    return (f'<section class="met-c ancho res-posts">{cabeza}{nota}'
+            + (tarjeta_post(c, primero, mejor=True, promedio=promedio) if primero else "")
+            + (f'<div class="pp-grid">{"".join(tarjeta_post(c, x) for x in resto)}</div>' if resto else "")
+            + "</section>")
 
 
 def titulo_periodo(ini: date, fin: date) -> str:
@@ -348,9 +409,9 @@ async def pagina(c: Cuenta, rango: str, fin: date | None = None, vista: str = "i
     else:
         cuerpo = metricas.seccion(await metricas.numeros(c, int(rango), fin))
         if c.imagenes_mes > 0:
-            cuerpo += seccion_publicaciones(await numeros_de(c, rango, fin))
+            cuerpo += f'<div class="met">{await seccion_publicaciones(c, await numeros_de(c, rango, fin))}</div>'
     return panel.pagina(
-        panel.cabecera(salir=True, menu="resultados", cuenta=c, perfil=await panel.usuario(c), foto=await panel.foto_perfil(c))
+        await panel.menu_de(c, "resultados")
         + f'<main><div class="contenedor res">{await barra(c, rango, fin, hoy, vista)}{cuerpo}</div></main>'
     )
 

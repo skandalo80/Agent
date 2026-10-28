@@ -1,5 +1,6 @@
 """Texto con OpenAI para el flujo de campañas: los posts y el prompt de cada imagen (config.POSTS_IA y
 PROMPT_IA). Contesta un objeto JSON, como las llamadas a Claude, y suma lo que cuesta al gasto del día."""
+import base64
 import json
 import logging
 
@@ -18,11 +19,15 @@ def usar(proceso: str) -> bool:
     return eleccion == "openai" and bool(config.OPENAI_API_KEY)
 
 
-async def json_de(sistema: str, prompt: str, max_tokens: int = 16000) -> dict:
-    """Una llamada al modelo de texto de OpenAI que contesta SOLO un objeto JSON; {} si no se pudo leer."""
+async def json_de(sistema: str, prompt: str, max_tokens: int = 16000, imagenes: list[bytes] = ()) -> dict:
+    """Una llamada al modelo de texto de OpenAI que contesta SOLO un objeto JSON; {} si no se pudo leer.
+    Con `imagenes` (JPG), el modelo también las ve (las fotos de referencia de una campaña)."""
+    contenido = prompt if not imagenes else [{"type": "text", "text": prompt}] + [
+        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64.b64encode(x).decode()}"}}
+        for x in imagenes]
     cuerpo = {"model": config.OPENAI_TEXT_MODEL, "response_format": {"type": "json_object"},
               "max_completion_tokens": max_tokens,
-              "messages": [{"role": "system", "content": sistema}, {"role": "user", "content": prompt}]}
+              "messages": [{"role": "system", "content": sistema}, {"role": "user", "content": contenido}]}
     if config.OPENAI_TEXT_EFFORT:
         cuerpo["reasoning_effort"] = config.OPENAI_TEXT_EFFORT
     async with httpx.AsyncClient(timeout=300) as http:

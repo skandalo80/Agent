@@ -30,7 +30,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
 from igbot import (admin, agent, ajustes, asistente, botones, campanas, comentarios, conectar, config, contenido, empresa,
-                   limites, marca, metricas, nueva_campana, panel, reporte, resultados, semana, skandi,
+                   errores, limites, marca, metricas, nueva_campana, panel, reporte, resultados, semana, skandi,
                    sugeridos)
 from igbot.cuenta import Cuenta, cargar, cuenta, de_carpeta, usar
 from igbot.dispatcher import Dispatcher
@@ -277,15 +277,19 @@ if not config.CLIENTE:
             return await panel.no_encontrada(request)
         return await http_exception_handler(request, exc)
 
+    # Un error que nadie atrapó: página amable en vez de "Internal Server Error" y correo a soporte.
+    app.add_exception_handler(Exception, errores.inesperado)
+
 
 @app.get("/health")
 def health():
     return {"ok": True}
 
 
-# Los íconos de skandar.online (web/), para que la pestaña del panel lleve el mismo.
+# Los íconos y el logo de skandar.online (web/), para que el panel lleve los mismos.
 WEB = Path(__file__).resolve().parent / "web"
-ICONOS = {"favicon.ico": "image/x-icon", "favicon-32.png": "image/png", "apple-touch-icon.png": "image/png"}
+ICONOS = {"favicon.ico": "image/x-icon", "favicon-32.png": "image/png", "apple-touch-icon.png": "image/png",
+          "logo-skandar.svg": "image/svg+xml", "logo-sk.svg": "image/svg+xml"}
 
 
 def _icono(nombre: str):

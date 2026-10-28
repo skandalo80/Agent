@@ -135,7 +135,7 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
     assert "Se prueba:" in r.text and "3 formatos" in r.text
     # Las tarjetas dicen si es post o historia, sin el tema ni el formato en gris.
     assert '<span class="medio-cam m-post">Post</span>' in r.text and '<span class="fmt-cam">' not in r.text
-    assert "Arma tu campaña" not in r.text and "↓ Descargar planeación" in r.text  # sin los tres pasos arriba
+    assert "Arma tu campaña" not in r.text and "Planeación (PDF)</a>" in r.text and "‹ Volver a campañas" in r.text and "boton ajuste peligro" in r.text  # sin los tres pasos arriba
     assert "Generar las 3 que faltan · usa 2" in r.text  # el de solo texto no usa cupo
 
     # Arrastrar el del lunes al miércoles: se intercambian.
@@ -263,7 +263,7 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
     con_imagen = {p["k"] for p in leer(client, c)["posts"] if p["post_id"]}
     r = client.post(u, headers=ORIGEN, data=datos_campana(nombre="Otoño 2"))
     assert u in r.text and {p["k"] for p in leer(client, c)["posts"] if p["post_id"]} == con_imagen
-    assert "+ Nueva campaña" in client.get(BASE).text
+    assert "Crear con IA" in client.get(BASE).text
     client.post(BASE, headers=ORIGEN, data=datos_campana(nombre="Navidad"))
     camp = leer(client, c)
     assert camp["nombre"] == "Navidad" and not any(p["post_id"] for p in camp["posts"]) and campanas.url_de(camp) != u
@@ -673,7 +673,7 @@ def test_varias_campanas(cliente, monkeypatch):
     r = client.get(BASE)
     assert 'class="on">Activas<small>2</small>' in r.text and "día 3 de 14" in r.text and "<b>0 de 6</b>" in r.text
     r = client.get(f"{BASE}?ver=proxima")
-    assert "Febrero" in r.text and "Se cruza 7 días con «Invierno»" in r.text and "empieza en 5 días" in r.text
+    assert "Febrero" in r.text and "Se cruza" not in r.text and "empieza en 5 días" in r.text
 
     # Editar: un post no puede quedar fuera; si no, solo cambia el rango y los posts se quedan en su día.
     dias = [p["dia"] for p in inv["posts"]]

@@ -88,10 +88,10 @@ CLASSIFY_SYSTEM = (
 
 
 async def claude_matches(rules: list[Rule], text: str) -> list[Rule]:
-    from .agent import run_claude  # import tardío: agent importa el SDK
+    from .agent import dato, run_claude  # import tardío: agent importa el SDK
 
     listing = "\n".join(f"{i}. {', '.join(r.keywords)}" for i, r in enumerate(rules, 1))
-    prompt = f"<reglas>\n{listing}\n</reglas>\n\n<comentario>\n{text[:500]}\n</comentario>"
+    prompt = f"<reglas>\n{listing}\n</reglas>\n\n<comentario>\n{dato(text[:500])}\n</comentario>"
     answer = await run_claude(prompt, CLASSIFY_SYSTEM, max_turns=1, model=config.COMMENTS_MODEL)
     picked = {int(n) for n in re.findall(r"\d+", answer)}
     return [r for i, r in enumerate(rules, 1) if i in picked]
@@ -137,10 +137,10 @@ SPAM_SYSTEM = (
 
 
 async def claude_spam(text: str) -> bool:
-    from .agent import run_claude  # import tardío: agent importa el SDK
+    from .agent import dato, run_claude  # import tardío: agent importa el SDK
 
     try:
-        answer = await run_claude(f"<comentario>\n{text[:500]}\n</comentario>", SPAM_SYSTEM, max_turns=1,
+        answer = await run_claude(f"<comentario>\n{dato(text[:500])}\n</comentario>", SPAM_SYSTEM, max_turns=1,
                                   model=config.COMMENTS_MODEL)
     except Exception:
         log.exception("No se pudo revisar si el comentario es spam; se deja visible")

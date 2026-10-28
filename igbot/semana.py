@@ -63,7 +63,7 @@ async def temas(c: Cuenta) -> dict:
         from . import agent  # import tardío: agent importa el SDK
 
         personas: dict[str, int] = {}
-        lista = "\n".join(f"- ({tipo}, persona {personas.setdefault(u, len(personas) + 1)}) {t[:200]}"
+        lista = "\n".join(f"- ({tipo}, persona {personas.setdefault(u, len(personas) + 1)}) {agent.dato(t[:200])}"
                           for tipo, u, t in filas)
         try:
             respuesta = await agent.run_claude(f"<mensajes>\n{lista}\n</mensajes>", TEMAS_SISTEMA,

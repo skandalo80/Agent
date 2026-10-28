@@ -1,0 +1,35 @@
+# Skandar
+
+> Skandar es una plataforma de inteligencia artificial para el Instagram de negocios: un asistente que contesta los mensajes directos las 24 horas y un Community Manager que crea y publica contenido con lo que pasa en la cuenta.
+
+- Hecho en México, en español. Funciona solo con Instagram, con la API oficial de Meta.
+- Asistente virtual: US$29 al mes más IVA, 1,000 respuestas al mes.
+- Community Manager: US$79 al mes más IVA, incluye el Asistente virtual, 2,500 respuestas y 12 publicaciones al mes.
+- Sin costo de instalación ni plazo forzoso. Contacto: hola@skandar.online, Instagram @skandar.online.
+
+## Sobre Skandar
+
+- [Inicio](https://skandar.online/): qué hace la plataforma, planes y preguntas frecuentes.
+- [Qué es Skandar](https://skandar.online/que-es-skandar): Skandar es una plataforma de inteligencia artificial para el Instagram de negocios: un asistente que contesta los mensajes directos las 24 horas y un Community Manager que crea y publica contenido con lo que pasa en la cuenta.
+
+## Por giro
+
+- [Asistente virtual para barberías en Instagram](https://skandar.online/para/barberias): Contesta precios, horarios y turnos por Instagram las 24 horas, y crea el contenido de tu barbería con lo que te preguntan tus clientes.
+- [Asistente virtual para consultorios dentales en Instagram](https://skandar.online/para/consultorios-dentales): Contesta tratamientos, costos aproximados, horarios y solicitudes de cita por Instagram las 24 horas, y crea el contenido de tu consultorio.
+- [Asistente virtual para gimnasios y estudios en Instagram](https://skandar.online/para/gimnasios): Contesta mensualidades, horarios de clases y visitas de prueba por Instagram las 24 horas, y crea el contenido de tu gimnasio o estudio.
+- [Asistente virtual para inmobiliarias en Instagram](https://skandar.online/para/inmobiliarias): Contesta precios, ubicación, requisitos y solicitudes de visita por Instagram las 24 horas, y crea el contenido de tu inmobiliaria.
+- [Asistente virtual para pastelerías en Instagram](https://skandar.online/para/pastelerias): Contesta sabores, tamaños, precios y pedidos por Instagram las 24 horas, y crea el contenido de tu pastelería con lo que te piden tus clientes.
+- [Asistente virtual para restaurantes en Instagram](https://skandar.online/para/restaurantes): Contesta reservas, menú, horarios y pedidos por Instagram las 24 horas, y crea el contenido de tu restaurante con lo que te preguntan tus clientes.
+- [Asistente virtual para salones de belleza en Instagram](https://skandar.online/para/salones-de-belleza): Contesta precios, servicios, horarios y citas por Instagram las 24 horas, y crea el contenido de tu salón con lo que te preguntan tus clientas.
+- [Asistente virtual para tiendas de ropa en Instagram](https://skandar.online/para/tiendas-de-ropa): Contesta tallas, existencias, precios y envíos por Instagram las 24 horas, y crea el contenido de tu tienda con lo que más te preguntan.
+
+## Blog
+
+- [Cómo contestar los mensajes de Instagram de tu negocio las 24 horas](https://skandar.online/blog/contestar-mensajes-instagram-24-horas): Qué preguntas se repiten, cuánto cuesta no contestar a tiempo y cómo automatizar tus mensajes directos sin perder el trato personal.
+- [Qué publicar en Instagram: empieza por lo que te preguntan por DM](https://skandar.online/blog/que-publicar-en-instagram): Tus mensajes directos y tus comentarios ya te dicen qué contenido necesita tu cuenta. Así se convierten en ideas de publicación.
+- [Cuándo un asistente debe pasar la conversación a una persona](https://skandar.online/blog/asistente-virtual-pasar-a-persona): Las señales para pausar la respuesta automática en Instagram y atender tú mismo, sin perder clientes ni interrumpir conversaciones.
+- [Cómo armar un calendario de contenido para Instagram en una tarde](https://skandar.online/blog/calendario-de-contenido-instagram): Objetivo, mensaje, formatos y horarios: un método simple para planear un mes completo de publicaciones para tu negocio.
+- [Comenta y recibe por DM: palabras clave que convierten comentarios en clientes](https://skandar.online/blog/comenta-y-recibe-por-dm): Cómo funcionan las publicaciones con palabra clave en Instagram, cuándo usarlas y qué mensaje enviar a quien comenta.
+- [Community Manager tradicional o con inteligencia artificial: qué te conviene](https://skandar.online/blog/community-manager-con-inteligencia-artificial): Costos, tiempos y resultados de contratar a una persona o usar una plataforma con inteligencia artificial para el Instagram de tu negocio.
+- [Skandar vs. ManyChat: cuál conviene para el Instagram de tu negocio](https://skandar.online/blog/skandar-vs-manychat): Una comparación honesta entre ManyChat y Skandar para contestar los mensajes de Instagram con inteligencia artificial: cómo funciona cada uno, qué incluye y cuándo conviene cada uno.
+- [Alternativas a ManyChat en español para el Instagram de tu negocio](https://skandar.online/blog/alternativas-a-manychat): Las opciones reales para automatizar los mensajes y el contenido de Instagram de un negocio en español, según lo que necesitas: flujos, CRM, programación de contenido, inteligencia artificial o una persona.

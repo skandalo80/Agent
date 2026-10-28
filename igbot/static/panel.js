@@ -412,10 +412,54 @@ if (skandi) {
     skandi.classList.remove("abierta");
     marcar("");
   });
-  document.querySelector(".sk-boton").addEventListener("click", (e) => {
+  // El botón flotante y Ayuda en el menú lateral (que en el celular se cierra al abrirla).
+  document.querySelectorAll('a[href="#skandi"]').forEach((a) => a.addEventListener("click", (e) => {
     e.preventDefault();
+    document.documentElement.classList.remove("menu-abierto");
     marcar("#skandi");
     abrir();
-  });
+  }));
   if (location.hash === "#skandi") abrir();
 }
+
+// Formularios que guardan (POST): un segundo clic mientras se manda no lo vuelve a mandar, y si cambiaste
+// algo sin guardar, el navegador pregunta antes de salir de la página. Skandi tiene lo suyo arriba; los
+// formularios que se arman aquí al arrastrar (f.submit()) no pasan por aquí.
+(() => {
+  const cambiados = new Set();
+  let mandando = false;
+  document.querySelectorAll('form[method="post" i]').forEach((form) => {
+    if (form.hasAttribute("data-skandi")) return;
+    const cambio = () => cambiados.add(form);
+    form.addEventListener("input", cambio);
+    form.addEventListener("change", cambio);
+    form.addEventListener("submit", (e) => {
+      if (form.dataset.mandando === "1") {
+        e.preventDefault();
+        return;
+      }
+      form.dataset.mandando = "1";
+      mandando = true;
+      cambiados.delete(form);
+      if (e.submitter) e.submitter.classList.add("mandando");
+      // Si la página no cambia (una descarga, un guardado sin recargar), se puede volver a usar.
+      setTimeout(() => {
+        delete form.dataset.mandando;
+        mandando = false;
+        if (e.submitter) e.submitter.classList.remove("mandando");
+      }, 8000);
+    });
+  });
+  window.addEventListener("beforeunload", (e) => {
+    if (mandando || !cambiados.size) return;
+    e.preventDefault();
+    e.returnValue = "";  // Chrome y Safari muestran su propio "¿Salir del sitio?"
+  });
+  // Al volver con Atrás, la página sale del caché tal cual: los botones vuelven a servir.
+  window.addEventListener("pageshow", (e) => {
+    if (!e.persisted) return;
+    mandando = false;
+    document.querySelectorAll("form[data-mandando]").forEach((f) => { delete f.dataset.mandando; });
+    document.querySelectorAll(".mandando").forEach((b) => b.classList.remove("mandando"));
+  });
+})();
