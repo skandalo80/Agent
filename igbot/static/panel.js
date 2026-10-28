@@ -384,9 +384,10 @@ if (location.pathname === "/panel/responder") {
 // Skandi (el botón de ayuda): sin JavaScript la ventana abre con #skandi (:target).
 // Con JavaScript la abre la clase "abierta" (:target no se entera de replaceState); además
 // recuerda desde qué página preguntan, pone "escribiendo…" y baja al último mensaje.
+// Al abrir un chat del historial vuelve con la ventana abierta en ese chat.
 const skandi = document.getElementById("skandi");
 if (skandi) {
-  const form = skandi.querySelector("form[data-skandi]");
+  const form = skandi.querySelector("form.sk-escribir");
   const mensajes = document.getElementById("sk-mensajes");
   const marcar = (hash) => history.replaceState(null, "", location.pathname + location.search + hash);
   const abrir = () => {
@@ -394,7 +395,8 @@ if (skandi) {
     mensajes.scrollTop = mensajes.scrollHeight;
     form.mensaje.focus({ preventScroll: true });
   };
-  form.volver.value = location.pathname + location.search;
+  // También los botones del historial (abrir un chat, empezar otro) regresan a esta página.
+  skandi.querySelectorAll('input[name="volver"]').forEach((v) => { v.value = location.pathname + location.search; });
   form.addEventListener("submit", () => {
     const tuyo = document.createElement("div");
     tuyo.className = "sk-msj tu";

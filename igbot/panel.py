@@ -1449,7 +1449,11 @@ def menu_perfil(perfil: str, cuenta: Cuenta | None, foto: str = "", sub: str = "
             # Tres grupos: quién eres; tu empresa y tu marca; la cuenta (conexión, Instagram y salir).
             f'<div class="perfil-menu"><div class="quien">Conectado como @{usuario_}</div>'
             f'<a href="/panel/empresa"{ACTIVA if sub == "empresa" else ""}>Información de empresa</a>'
-            f'{marca}<div class="sep"></div>'
+            f'{marca}'
+            # Solo la cuenta principal (Skandar): los chats de clientes y visitantes con Skandi.
+            + (f'<a href="/panel/skandi"{ACTIVA if sub == "skandi" else ""}>Chats de Skandi</a>'
+               if cuenta is not None and not cuenta.slug else "")
+            + '<div class="sep"></div>'
             f'<a href="/panel/conexion"{ACTIVA if sub == "conexion" else ""}>Conexión{luz}</a>'
             f'<a href="https://www.instagram.com/{usuario_}/" target="_blank" rel="noopener">Ver mi Instagram</a>'
             + salir.format("", "", "Salir") + "</div></details></div>")

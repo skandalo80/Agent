@@ -10,7 +10,7 @@ os.environ.update(IG_VERIFY_TOKEN="vt", IG_APP_SECRET="secreto", IG_ACCESS_TOKEN
 from fastapi.testclient import TestClient  # noqa: E402
 
 import app as bot  # noqa: E402
-from igbot import conectar, skandi  # noqa: E402
+from igbot import conectar, panel, skandi  # noqa: E402
 from test_conectar import setup  # noqa: E402
 from test_cuenta import FakeInstagram  # noqa: E402
 from test_panel import ORIGEN, campos_con_nombre  # noqa: E402
@@ -35,7 +35,8 @@ def test_skandi_contesta_y_pasa_a_soporte(monkeypatch, tmp_path):
     monkeypatch.setattr(bot, "cuentas", list(bot.cuentas))
     monkeypatch.setattr(bot, "dispatchers", dict(bot.dispatchers))
     monkeypatch.setattr(bot.principal, "ig_account_id", "negocio")
-    monkeypatch.setattr(skandi, "_charlas", {})
+    monkeypatch.setattr(skandi, "_chats", {})
+    monkeypatch.setattr(skandi, "_actual", {})
     monkeypatch.setattr(skandi, "_avisos", {})
     monkeypatch.setattr(skandi, "MAX_PREGUNTAS_DIA", 3)
     respuestas = ["Ve a Campañas y toca Crear campaña.",
@@ -99,6 +100,27 @@ def test_skandi_contesta_y_pasa_a_soporte(monkeypatch, tmp_path):
         assert len(vistos) == 3
         assert "límite de preguntas de hoy" in r.text  # el aviso sale en la página a la que regresa
 
+        # Historial: el chat quedó guardado; uno nuevo empieza vacío y el anterior se vuelve a abrir.
+        chats, total = client.portal.call(bot.principal.store.chats_skandi, "panel", "cafe_lunar")
+        assert total == 1 and chats[0]["usuario"] == "cafe.lunar" and chats[0]["soporte"]
+        assert len(chats[0]["mensajes"]) == 6
+        html = client.get("/panel/resultados").text
+        assert "Conversaciones anteriores" in html and "¿Cómo creo una &lt;campaña&gt;?</b>" in html
+        r = client.post("/panel/ayuda", headers=ORIGEN, data={"accion": "nueva", "volver": "/panel/resultados"})
+        assert "Ve a Campañas" not in r.text.split('id="sk-mensajes"')[1]
+        r = client.post("/panel/ayuda", headers=ORIGEN,
+                        data={"accion": "abrir", "chat": str(chats[0]["id"]), "volver": "/panel/resultados"})
+        assert "Ve a Campañas" in r.text.split('id="sk-mensajes"')[1]
+        # Al reiniciar, el historial se vuelve a leer de la base.
+        skandi._chats.clear()
+        skandi._actual.clear()
+        client.portal.call(skandi.cargar)
+        assert "Ve a Campañas" in client.get("/panel/resultados").text.split('id="sk-mensajes"')[1]
+
+        # Los chats de todos solo los ve la cuenta principal.
+        assert client.get("/panel/skandi").status_code == 404
+        assert "Chats de Skandi" not in html
+
 
 def test_skandi_en_la_web(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
@@ -145,3 +167,26 @@ def test_skandi_en_la_web(monkeypatch, tmp_path):
         assert len(vistos) == 2 and "ya no puedo contestar" in r.text
         client.cookies.clear()
         assert "US$29" not in client.get("/ayuda").text
+
+
+def test_chats_de_skandi_para_la_cuenta_principal(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    setup(monkeypatch)
+    monkeypatch.setattr(bot, "Instagram", lambda store: FakeInstagram())
+    monkeypatch.setattr(bot.principal, "ig_account_id", "negocio")
+    with TestClient(bot.app, base_url="https://testserver") as client:
+        client.portal.call(bot.principal.store.set, "account_username", "skandar.online")
+        guardar = bot.principal.store.guardar_skandi
+        client.portal.call(guardar, None, "panel", "cafe_lunar", "cafe.lunar",
+                           [["user", "¿Dónde cambio mi <logo>?"], ["assistant", "En Tu marca."]], False)
+        web = client.portal.call(guardar, None, "web", "a" * 32, "",
+                                 [["user", "Quiero una demo"], ["assistant", "Claro."]], True)
+        vence = 9_999_999_999
+        client.cookies.set(panel.COOKIE, f"negocio.{vence}.{panel._firma('negocio', vence)}")
+        html = client.get("/panel/skandi").text
+        assert "Chats de Skandi" in html  # en su menú de perfil
+        assert "¿Dónde cambio mi &lt;logo&gt;?" in html and "@cafe.lunar" in html and "Visitante de la web" in html
+        html = client.get("/panel/skandi?ver=soporte").text
+        assert "Quiero una demo" in html and "cafe.lunar" not in html
+        html = client.get(f"/panel/skandi?chat={web}").text
+        assert '<div class="sk-msj skandi-dice">Claro.</div>' in html
