@@ -1008,8 +1008,8 @@ def test_configuracion_abajo_arriba_de_ayuda(cliente, monkeypatch):
     client, c, *_ = cliente
     monkeypatch.setattr(c, "imagenes_mes", 5)
     abajo = client.get("/panel/resultados").text.split('<div class="lat-abajo">')[1].split('<div class="lat-pie">')[0]
-    orden = [abajo.index(t) for t in ("Pasos iniciales", ">Configuración<", 'title="Tu asistente"', 'title="Tu marca"',
-                                      'title="Tu empresa"', 'title="Ayuda"')]
+    orden = [abajo.index(t) for t in ("Pasos iniciales", ">Configuración<", 'title="Tu empresa"', 'title="Tu asistente"',
+                                      'title="Tu marca"', 'title="Ayuda"')]
     assert orden == sorted(orden)
 
 
