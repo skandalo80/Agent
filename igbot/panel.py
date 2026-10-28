@@ -41,7 +41,7 @@ from urllib.parse import parse_qs
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response, StreamingResponse
 
-from . import config, conversaciones, imagenes
+from . import config, conversaciones, imagenes, skandi
 from .cuenta import Cuenta, usar
 
 log = logging.getLogger("igbot.panel")
@@ -1238,7 +1238,7 @@ PRINCIPIO = (
     '<link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" href="/favicon-32.png" sizes="32x32">'
     '<link rel="apple-touch-icon" href="/apple-touch-icon.png">'
     '<title>Tu asistente · Skandar</title>'
-    f"<style>{ESTILO}{conversaciones.CSS}{FUENTES_CSS}</style>"
+    f"<style>{ESTILO}{conversaciones.CSS}{skandi.CSS}{FUENTES_CSS}</style>"
     # Solo JavaScript propio (CSP script-src 'self'): la vista previa al momento en Contenido.
     # menu.js sin defer: pliega el menú antes de pintar la página (si no, se ve abrirse y cerrarse).
     f'<script src="/panel/static/menu.js?v={VERSION_MENU}"></script>'
@@ -1318,6 +1318,8 @@ def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None, 
         f'<nav class="lat-nav">{"".join(secciones)}</nav>'
         + menu_perfil(perfil, cuenta, foto, sub, luces or {}) + '</aside>'
         '<a class="velo" href="#" aria-label="Cerrar menú"></a>'
+        # El botón de ayuda (Skandi), en todas las páginas con menú.
+        + (skandi.widget(cuenta) if cuenta is not None else "")
     )
 
 
