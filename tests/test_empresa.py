@@ -50,6 +50,12 @@ def test_pasos_guardan_y_el_asistente_usa_el_perfil(cliente):
     assert e["horarios"] == "L a V 8 a 20"  # lo precargado de los otros pasos también queda
     assert client.portal.call(empresa.empresa_lista, c)
 
+    # Aplicar guarda y se queda en el mismo paso.
+    r = client.post("/panel/empresa", headers=ORIGEN, follow_redirects=False,
+                    data={"paso": "2", "clientes_tipo": "personas", "distinto": "Tostamos.", "accion": "aplicar"})
+    assert r.headers["location"] == "/panel/empresa?paso=2&aviso=aplicado"
+    r = client.get(r.headers["location"]).text
+    assert "Cambios aplicados." in r and 'value="aplicar">Aplicar</button>' in r and "Tostamos." in r
     # Paso 2 y 4; el riel guarda y salta a cualquier paso.
     r = client.post("/panel/empresa", headers=ORIGEN, follow_redirects=False,
                     data={"paso": "2", "clientes_tipo": "personas", "distinto": "Tostamos aquí.", "accion": "ir_4"})

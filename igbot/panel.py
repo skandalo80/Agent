@@ -1317,6 +1317,15 @@ COMUN = AJUSTES + """
 /* Editar: el mismo botón chico con borde naranja en cada resumen. */
 .cab-tarjeta .editar,.editar{flex:none;font:inherit;font-size:.82rem;font-weight:600;line-height:1.3;color:var(--acento);background:none;border:1px solid rgba(255,138,61,.45);border-radius:999px;padding:.25rem .8rem;text-decoration:none;cursor:pointer;position:static}
 .editar:hover{background:rgba(255,138,61,.1);border-color:var(--acento)}
+/* Pie de cada paso de Configuración: ← Anterior a la izquierda; Aplicar (guarda y te quedas) y Siguiente (guarda y
+   avanza) a la derecha, en naranja. Igual en las tres páginas de Configuración (medidas en ajustes.css). */
+.pie-config{display:flex;align-items:center;gap:var(--pie-hueco) 1rem;flex-wrap:wrap;margin-top:var(--pie-arriba);padding-top:var(--pie-linea);border-top:1px solid rgba(255,255,255,.08)}
+.pie-config .pie-nota{font-size:.85rem;color:var(--texto2)}
+.pie-config .pie-der{display:flex;gap:var(--pie-hueco);margin-left:auto;flex-wrap:wrap}
+.pie-config .boton{padding:var(--boton-pad);font-size:var(--t-boton);line-height:1.2;text-align:center}
+.pie-config .boton.aplicar{background:transparent;color:var(--acento);border:1px solid var(--acento);box-shadow:none}
+.pie-config .boton.aplicar:hover{background:rgba(255,138,61,.1)}
+@media(max-width:560px){.pie-config .pie-der{width:100%}.pie-config .pie-der .boton{flex:1}}
 /* Resumen: dos columnas de tarjetas, con el mismo hueco. */
 :is(.as-resumen,.wiz-resumen,.resumen-tarjetas){display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--hueco)}
 .resumen-tarjetas .caja-o{margin:0}
@@ -1627,6 +1636,15 @@ def hace(t: float) -> str:
 def avance(pct: int) -> str:
     """La barra de avance que va abajo de la barra de pasos (Tu asistente, Tu marca, Tu empresa, Crear campaña)."""
     return f'<div class="avance-pasos" aria-hidden="true"><i style="width:{pct}%"></i></div>'
+
+
+def pie_config(atras: str, siguiente: str, nota: str = "") -> str:
+    """El pie de cada paso de Configuración (Tu empresa, Tu asistente, Tu marca), igual en las tres: `atras` (el
+    ← Anterior, o nada en el paso 1) y `nota` a la izquierda; Aplicar y `siguiente` (el botón naranja) a la derecha.
+    Aplicar manda accion=aplicar: guarda y se queda en el mismo paso."""
+    return (f'<div class="pie-config">{atras}<span class="pie-nota">{nota}</span><span class="pie-der">'
+            '<button class="boton aplicar" name="accion" value="aplicar">Aplicar</button>'
+            f"{siguiente}</span></div>")
 
 
 def cab_tarjeta(titulo: str, href: str = "", texto: str = "Editar", boton: str = "") -> str:
