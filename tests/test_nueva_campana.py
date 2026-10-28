@@ -935,8 +935,7 @@ def test_crear_con_ia_solo_pide_objetivo_y_fechas(cliente, monkeypatch):
     # Sin empresa ni marca, lo mismo que el asistente: pide completarlas.
     assert "Necesitamos conocer tu negocio" in client.get(rapida).text
     listo(client, c)
-    r = client.get("/panel/contenido")  # el encabezado de Contenido y el de Campañas
-    assert f'href="{BASE}/nueva">Crear campaña</a>' in r.text and f'href="{rapida}">' in r.text
+    assert f'href="{rapida}">' not in client.get("/panel/contenido").text  # en Calendario ya no: es de Campañas
 
     r = client.get(rapida)
     assert r.text.count('name="objetivo"') >= 2 and 'checked' in r.text  # uno ya marcado

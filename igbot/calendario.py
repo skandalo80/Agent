@@ -239,8 +239,7 @@ def fila(x: Item) -> str:
 
 def vista_lista(items: list[Item], est: dict) -> str:
     if not items:
-        return ('<div class="cal-vacio"><b>Nada en estas fechas.</b><span>Cambia el rango o arma una campaña.</span>'
-                '<a class="boton" href="/panel/contenido/campanas/nueva">Crear campaña</a></div>')
+        return '<div class="cal-vacio"><b>Nada en estas fechas.</b><span>Cambia las fechas o los filtros.</span></div>'
     out = ""
     for llave, titulo, ayuda in GRUPOS:
         grupo = [x for x in items if x.estado == llave or (llave == "programado" and x.estado == "fallo")]
