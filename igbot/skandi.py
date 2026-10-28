@@ -63,7 +63,7 @@ MAX_TURNOS = 16
 MAX_MENSAJE = 500
 MAX_HISTORIAL = 30  # chats que ve cada cuenta en su historial
 MAX_GUARDADOS = 200  # mensajes que se guardan por chat (a Claude solo van los últimos MAX_TURNOS)
-SALUDO = "Hola, soy Skandi. ¿Cómo te puedo ayudar?"
+SALUDO = "Hola, soy Skandi ¿Cómo te puedo ayudar?"
 
 # Por cuenta (clave): sus chats del más reciente al más viejo (como los da Store.chats_skandi),
 # el que tiene abierto (None = uno nuevo; sin entrada = el más reciente) y un aviso que sale una vez.
