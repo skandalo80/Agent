@@ -1073,6 +1073,7 @@ img.mrc-logo-mini{background:#fff}
 .modal-cam .top h2{margin:.45rem 0 0;font-size:1.35rem}.modal-cam .top p{margin:.15rem 0 0;color:var(--gris);font-size:.9rem}
 .modal-cam .etqs-cam{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap}
 .modal-cam .x{font-size:1.7rem;text-decoration:none;color:var(--gris);line-height:1}
+.modal-cam .cierre{display:flex;align-items:center;gap:1.1rem;flex:none}.modal-cam .ir-cam{margin:0;white-space:nowrap}
 .modal-cam .cuerpo{display:grid;grid-template-columns:18rem minmax(0,1fr);gap:1.5rem;padding:1.4rem 1.6rem}
 .modal-cam .img-modal{display:block;width:100%;aspect-ratio:4/5;object-fit:cover;border-radius:1rem;background:var(--claro)}
 .modal-cam .img-modal.vacia{border:1px dashed #46484F;display:grid;place-content:center;text-align:center;color:var(--gris);font-size:.95rem;padding:1rem}

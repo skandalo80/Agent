@@ -310,6 +310,9 @@ async def seccion(c: Cuenta, vista: str, fecha: date | None, ver: str, q: str, e
     todos = await items_de(c, ini, fin, con_sin_fecha=ver == "lista")
     nombres = sorted({x["nombre"] for x in await campanas.todas_las(c)})
     items = filtrar(todos, q, estado, campana)
+    for x in items:  # el post se abre sobre esta misma vista y al cerrarlo vuelve aquí
+        if not x.externo and x.href.startswith(BASE):
+            x.href = contenido.con_desde(x.href, enlace(est))
     if ver == "lista":
         cuerpo = vista_lista(items, est)
     elif vista == "mes":
