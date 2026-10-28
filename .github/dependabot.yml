@@ -1,0 +1,10 @@
+# Avisa (con un PR) cuando una dependencia de requirements.txt tiene una versión nueva o una falla
+# de seguridad conocida. Las de seguridad llegan en cuanto se publican; las demás, una vez por semana.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5

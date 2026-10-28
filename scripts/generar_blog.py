@@ -180,12 +180,13 @@ PIE = """</main>
       <a href="/para/">Por giro</a>
       <a href="/que-es-skandar">Qué es Skandar</a>
       <a href="/privacidad">Aviso de privacidad</a>
+      <a href="/terminos">Términos</a>
       <a href="mailto:hola@skandar.online">Contacto</a>
       <a href="https://console.skandar.online/panel">Entrar</a>
     </div>
   </div>
 </footer>
-<script src="/sitio.js?v=2026-10-28b"></script>
+<script src="/sitio.js?v=2026-10-28d"></script>
 </body>
 </html>
 """
@@ -633,7 +634,7 @@ def llms_txt(todos, giros, paginas):
 
 
 def sitemap(todos, giros, paginas):
-    urls = [("/", "2026-10-26"), ("/privacidad", "2026-10-19"),
+    urls = [("/", "2026-10-26"), ("/privacidad", "2026-10-28"), ("/terminos", "2026-10-28"),
             ("/blog/", max(a.get("modificado", a["fecha"]) for a in todos))]
     urls += [(f"/blog/{a['slug']}", a.get("modificado", a["fecha"])) for a in todos]
     urls += [(f"/{p['slug']}", "2026-10-28") for p in paginas]
