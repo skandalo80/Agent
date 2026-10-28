@@ -104,3 +104,10 @@ OPENAI_TEXT_EFFORT = os.getenv("OPENAI_TEXT_EFFORT", "low").strip()
 # Lo que cuesta, en US$ por millón de tokens de entrada y de salida, para el gasto diario de la cuenta.
 OPENAI_TEXT_USD_IN = float(os.getenv("OPENAI_TEXT_USD_IN", "1.25"))
 OPENAI_TEXT_USD_OUT = float(os.getenv("OPENAI_TEXT_USD_OUT", "10"))
+
+# --- Tienda Shopify del cliente (igbot/tienda_shopify.py) ---
+# Llaves de la app de Skandar en Shopify (dev.shopify.com > tu app > Configuración). Sin ellas, "Conecta tu
+# Shopify" no sale; importar el catálogo público sigue igual.
+SHOPIFY_API_KEY = os.getenv("SHOPIFY_API_KEY", "")
+SHOPIFY_API_SECRET = os.getenv("SHOPIFY_API_SECRET", "")
+SHOPIFY_API_VERSION = os.getenv("SHOPIFY_API_VERSION", "2025-10")

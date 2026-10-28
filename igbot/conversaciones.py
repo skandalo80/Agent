@@ -74,6 +74,7 @@ CSS = """
 .lados a.on{background:var(--acento);color:var(--tinta)}
 .lados b{display:inline-block;min-width:1.1rem;margin-left:.35rem;padding:0 .3rem;border-radius:999px;background:var(--neon);color:#1B1C1F;text-align:center;font-size:.7rem;line-height:1.1rem}
 .conv .razon{display:inline-block;margin-right:.4rem;padding:0 .45rem;border-radius:999px;background:var(--claro);color:var(--gris);font-weight:600}
+.conv .razon.anuncio{background:rgba(255,138,61,.16);color:var(--naranja-t)}
 .conv .razon.molesto{background:rgba(255,69,58,.18);color:#ff8a80}
 .lat-item{position:relative}
 .punto-menu{position:absolute;width:.5rem;height:.5rem;border-radius:50%;background:var(--neon);margin:-1.1rem 0 0 1rem;box-shadow:0 0 0 2px #18191C}
@@ -196,6 +197,8 @@ async def partes(c: Cuenta, ver: str = "", buscar: str = "", hoja: int = 1, chat
     # Por qué te lo pasó el asistente (la etiqueta de cada chat del lado "Tú").
     pasados = {f[0] for f in filas if f[6]}
     razones = {u: d for u, d, _ in await c.store.events("humano", humano_desde, ahora + 1) if u in pasados} if pasados else {}
+    # Los que llegaron por un anuncio de "Enviar mensaje".
+    anuncios = await c.store.anuncios_de([f[0] for f in filas])
 
     conv = []
     for (u, t, rol, texto, hasta, est, paso), nombre in zip(filas, nombres):
@@ -216,6 +219,8 @@ async def partes(c: Cuenta, ver: str = "", buscar: str = "", hoja: int = 1, chat
             quien = "Sin contestar"
         else:
             etiqueta, quien = "", "Asistente"
+        if u in anuncios:
+            etiqueta = '<span class="razon anuncio">Anuncio</span>' + etiqueta
         aviso = est in ("nuevo", "tu_sin", "revisar")
         conv.append(
             f'<a class="conv{" sin" if aviso else ""}{" on" if u == chat else ""}"'
@@ -278,6 +283,11 @@ async def _hilo(c: Cuenta, u: str, ver: str, buscar: str, hoja: int, n: int, aho
 
     from . import panel
     sub = (f"Último mensaje {panel.hace(ultimo_cliente)}" if ultimo_cliente else "Aún no te escribe")
+    if anuncio := (await c.store.anuncios_de([u])).get(u):
+        sub += " · Llegó por " + (f"el anuncio «{escape(anuncio['titulo'][:80])}»" if anuncio["titulo"] else "un anuncio")
+    if ventas := await c.store.ventas_de(u):
+        from .tienda_shopify import monto
+        sub += f" · Compró {monto(sum(v['monto'] for v in ventas), ventas[-1]['moneda'])} en tu tienda"
     if nombre.startswith("@"):
         sub += (f' · <a class="enlace" href="https://ig.me/m/{escape(nombre[1:])}" target="_blank" rel="noopener">'
                 "Abrir en Instagram</a>")

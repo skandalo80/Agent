@@ -31,7 +31,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
 from igbot import (admin, agent, ajustes, asistente, botones, campanas, comentarios, conectar, config, contenido, empresa,
                    errores, limites, marca, metricas, nueva_campana, panel, reporte, resultados, semana, skandi,
-                   sugeridos)
+                   sugeridos, tienda_shopify)
 from igbot.cuenta import Cuenta, cargar, cuenta, de_carpeta, usar
 from igbot.dispatcher import Dispatcher
 from igbot.google import Google
@@ -81,6 +81,9 @@ async def handle(user_id: str, rows: list[tuple[int, str]]) -> None:
             break
         log.info("Llegaron más mensajes de %s; se rehace la respuesta", user_id)
         rows = latest
+    if not is_admin:
+        # Los links a su tienda llevan el código del chat, para saber qué compró quién.
+        text = await tienda_shopify.etiquetar(cuenta(), user_id, text)
     await instagram.send_text(admin.real_id(user_id), text)
     await store.mark_answered(user_id, [i for i, _ in rows], text)
     try:
@@ -242,6 +245,7 @@ async def lifespan(app: FastAPI):
     conectar.store, conectar.instagram, conectar.google = store, instagram, google
     panel.buscar, panel.alta = buscar, alta
     skandi.principal = lambda: principal
+    tienda_shopify.cuentas = lambda: cuentas
     for c in cuentas:
         await arrancar(c)
     await skandi.cargar()  # el historial de Skandi de cada cuenta, a la memoria
@@ -272,6 +276,8 @@ if not config.CLIENTE:
     app.include_router(resultados.router)
     app.include_router(skandi.router)
     app.include_router(skandi.web_router)
+    app.include_router(tienda_shopify.router)
+    app.include_router(tienda_shopify.webhooks)
 
     @app.exception_handler(StarletteHTTPException)
     async def pagina_404(request: Request, exc: StarletteHTTPException):
@@ -499,6 +505,13 @@ async def receive_entry(c: Cuenta, entry: dict) -> None:
             # Tocaron un botón de inicio: se contesta como si hubiera escrito la pregunta.
             message = {"mid": postback.get("mid") or f"pb-{event.get('timestamp')}",
                        "text": postback.get("title", "")}
+        ref = (message or {}).get("referral") or event.get("referral") or {}
+        if (ref.get("source") or "").upper() == "ADS" and ref.get("ad_id") and not admin.is_admin(
+                event.get("sender", {}).get("id", "")):
+            # Llegó por un anuncio de "Enviar mensaje": se guarda cuál, para verlo en Conversaciones.
+            datos = ref.get("ads_context_data") or {}
+            await store.guardar_anuncio(event["sender"]["id"], str(ref["ad_id"]), datos.get("ad_title") or "",
+                                        datos.get("photo_url") or "")
         if not message or message.get("is_deleted"):
             continue
         # Eco = un DM que salió de la cuenta. Nunca se contesta (sería un
