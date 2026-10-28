@@ -73,7 +73,7 @@ CSS = """
 .lados{display:flex;gap:.25rem;margin:0 1rem .5rem;padding:.2rem;border-radius:999px;background:var(--claro)}
 .lados a{flex:1;text-align:center;padding:.45rem .75rem;border-radius:999px;color:var(--gris);text-decoration:none;font-weight:600;font-size:.9rem}
 .lados a.on{background:var(--acento);color:var(--tinta)}
-.lados b{display:inline-block;min-width:1.1rem;margin-left:.35rem;padding:0 .3rem;border-radius:999px;background:#FFD60A;color:#1B1C1F;font-size:.7rem;line-height:1.1rem}
+.lados b{display:inline-block;min-width:1.1rem;margin-left:.35rem;padding:0 .3rem;border-radius:999px;background:#C6FA2C;color:#1B1C1F;font-size:.7rem;line-height:1.1rem}
 .conv .razon{display:inline-block;margin-right:.4rem;padding:0 .45rem;border-radius:999px;background:var(--claro);color:var(--gris);font-weight:600}
 .conv .razon.molesto{background:rgba(255,69,58,.18);color:#ff8a80}
 .lat-item{position:relative}
