@@ -30,7 +30,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
 from igbot import (admin, agent, ajustes, asistente, botones, campanas, comentarios, conectar, config, contenido, empresa,
-                   limites, marca, metricas, nueva_campana, panel, reporte, resultados, semana, sugeridos)
+                   limites, marca, metricas, nueva_campana, panel, reporte, resultados, semana, skandi,
+                   sugeridos)
 from igbot.cuenta import Cuenta, cargar, cuenta, de_carpeta, usar
 from igbot.dispatcher import Dispatcher
 from igbot.google import Google
@@ -238,6 +239,7 @@ async def alta(ig_id: str, usuario: str, token: str, grande: bool = False) -> Cu
 async def lifespan(app: FastAPI):
     conectar.store, conectar.instagram, conectar.google = store, instagram, google
     panel.buscar, panel.alta = buscar, alta
+    skandi.principal = lambda: principal
     for c in cuentas:
         await arrancar(c)
     loops = fondo()
@@ -265,6 +267,7 @@ if not config.CLIENTE:
     app.include_router(nueva_campana.router)  # antes que campanas: /campanas/nueva no es /campanas/{cid}
     app.include_router(campanas.router)
     app.include_router(resultados.router)
+    app.include_router(skandi.router)
 
     @app.exception_handler(StarletteHTTPException)
     async def pagina_404(request: Request, exc: StarletteHTTPException):

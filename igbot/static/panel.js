@@ -380,3 +380,42 @@ if (location.pathname === "/panel/responder") {
   const caja = document.querySelector(".inbox .responder textarea");
   if (caja) caja.focus();
 }
+
+// Skandi (el botón de ayuda): sin JavaScript la ventana abre con #skandi (:target).
+// Con JavaScript la abre la clase "abierta" (:target no se entera de replaceState); además
+// recuerda desde qué página preguntan, pone "escribiendo…" y baja al último mensaje.
+const skandi = document.getElementById("skandi");
+if (skandi) {
+  const form = skandi.querySelector("form[data-skandi]");
+  const mensajes = document.getElementById("sk-mensajes");
+  const marcar = (hash) => history.replaceState(null, "", location.pathname + location.search + hash);
+  const abrir = () => {
+    skandi.classList.add("abierta");
+    mensajes.scrollTop = mensajes.scrollHeight;
+    form.mensaje.focus({ preventScroll: true });
+  };
+  form.volver.value = location.pathname + location.search;
+  form.addEventListener("submit", () => {
+    const tuyo = document.createElement("div");
+    tuyo.className = "sk-msj tu";
+    tuyo.textContent = form.mensaje.value;
+    const espera = document.createElement("div");
+    espera.className = "sk-msj skandi-dice escribiendo";
+    espera.textContent = "Skandi está escribiendo…";
+    mensajes.append(tuyo, espera);
+    mensajes.scrollTop = mensajes.scrollHeight;
+    // Se desactiva después de mandarse (si no, el navegador no manda el texto).
+    setTimeout(() => { form.mensaje.readOnly = true; form.querySelector("button").disabled = true; }, 0);
+  });
+  skandi.querySelector("[data-cerrar-skandi]").addEventListener("click", (e) => {
+    e.preventDefault();
+    skandi.classList.remove("abierta");
+    marcar("");
+  });
+  document.querySelector(".sk-boton").addEventListener("click", (e) => {
+    e.preventDefault();
+    marcar("#skandi");
+    abrir();
+  });
+  if (location.hash === "#skandi") abrir();
+}
