@@ -1143,3 +1143,17 @@ def test_el_logo_se_sirve_y_el_menu_plegado_lleva_solo_el_icono(cliente):
     for nombre in ("logo-skandar.svg", "logo-sk.svg"):
         logo = client.get(f"/{nombre}")
         assert logo.status_code == 200 and logo.headers["content-type"].startswith("image/svg+xml")
+
+
+def test_mensaje_al_pasar_una_queja(cliente):
+    client, c, *_ = cliente
+    r = client.get("/panel/asistente/configura?paso=reglas")
+    assert 'class="as-sub as-sub-quejas"' in r.text and 'name="msg_quejas_on" value="1">' in r.text
+    client.post("/panel/asistente/paso", headers=ORIGEN, data={
+        "paso": "reglas", "opcionales": "1", "r_quejas": "1", "msg_quejas_on": "1", "msg_quejas": "Lo siento <mucho>."})
+    prompt = Path(c.prompt_path).read_text()
+    assert "Antes de pasar una queja a una persona, dile esto" in prompt and "Lo siento &lt;mucho&gt;." in prompt
+    # Con la regla apagada no va.
+    client.post("/panel/asistente/paso", headers=ORIGEN, data={
+        "paso": "reglas", "opcionales": "1", "msg_quejas_on": "1", "msg_quejas": "Lo siento."})
+    assert "pasar una queja" not in Path(c.prompt_path).read_text()

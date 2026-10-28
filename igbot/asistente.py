@@ -78,6 +78,14 @@ PERSONALIDADES = {
                  " sin exagerar."),
                 ("usted", "equilibrada", "nunca")),
 }
+# Reglas que pasan a tu equipo y pueden llevar un mensaje propio al transferir:
+# regla: (campo en kv perfil, a quién se lo dice en el prompt, ejemplo)
+AL_TRANSFERIR = {
+    "quejas": ("msg_quejas", "Antes de pasar una queja a una persona",
+               "Ej. Lamento lo que pasó. Le paso tu caso a alguien del equipo para que lo resuelva contigo."),
+    "enojado": ("msg_enojado", "Antes de pasar a una persona molesta",
+                "Ej. Entiendo tu molestia. Le pido a alguien del equipo que te atienda en un momento."),
+}
 MAX_NOMBRE = 40  # nombre del asistente
 MAX_TOQUE = 500  # "¿Quieres darle un toque más personal?" en Personalidad
 TRATOS = {"tu": ("De tú", "Tuteas a las personas."),
@@ -158,9 +166,10 @@ def tono_prompt(perfil: dict) -> list[str]:
     reglas = [si if activas[k] else no for k, _, _, _, si, no in REGLAS if (si if activas[k] else no)]
     if reglas:
         out += ["", "CÓMO ATIENDES", *(f"- {r}" for r in reglas)]
-    if activas["enojado"] and (aviso := perfil.get("msg_enojado", "").strip()):
-        out += ["Antes de pasar a una persona molesta, dile esto (puedes ajustar las palabras):",
-                f"<mensaje_al_transferir>\n{escape(aviso)}\n</mensaje_al_transferir>"]
+    for k, (campo, cuando, _) in AL_TRANSFERIR.items():
+        if activas[k] and (aviso := perfil.get(campo, "").strip()):
+            out += [f"{cuando}, dile esto (puedes ajustar las palabras):",
+                    f"<mensaje_al_transferir>\n{escape(aviso)}\n</mensaje_al_transferir>"]
     # Lo que escribe el dueño va escapado y entre etiquetas: son datos, no instrucciones nuevas.
     if no_hacer := perfil.get("no_hacer", "").strip():
         out += ["", "LO QUE NO DEBES DECIR NI HACER (además de las reglas base)",
@@ -298,11 +307,11 @@ def _reglas(perfil: dict) -> str:
         filas += (f'<label class="as-fila"><span><b>{titulo}</b><small>{ayuda}</small></span>'
                   f'<input type="checkbox" class="as-sw" name="r_{k}" value="1"{" checked" if activas[k] else ""}>'
                   "</label>")
-        if k == "enojado":  # solo se ve con la regla encendida
-            filas += ('<div class="as-sub">' + _opcional(
-                "msg_enojado", "Mensaje al transferir", "Lo que le dice antes de pasar la conversación a tu equipo.",
-                "Ej. Entiendo tu molestia. Le pido a alguien del equipo que te atienda en un momento.",
-                perfil.get("msg_enojado", ""), MAX_TEXTO) + "</div>")
+        if k in AL_TRANSFERIR:  # solo se ve con la regla encendida
+            campo, _, ejemplo = AL_TRANSFERIR[k]
+            filas += (f'<div class="as-sub as-sub-{k}">' + _opcional(
+                campo, "Mensaje al transferir", "Lo que le dice antes de pasar la conversación a tu equipo.",
+                ejemplo, perfil.get(campo, ""), MAX_TEXTO) + "</div>")
     extra = perfil.get("instrucciones", "")
     return (_cabeza("reglas", "Reglas y límites", "Qué puede hacer por su cuenta y qué no.")
             + f'<div class="as-caja">{filas}</div>'
@@ -472,7 +481,8 @@ async def guardar(request: Request):
                 datos[campo] = f[campo]
     elif paso == "reglas":
         datos["reglas"] = {k: f.get(f"r_{k}") == "1" for k, *_ in REGLAS}
-        datos["msg_enojado"] = _texto(f, "msg_enojado", MAX_TEXTO)
+        for campo, *_ in AL_TRANSFERIR.values():
+            datos[campo] = _texto(f, campo, MAX_TEXTO)
         datos["no_hacer"] = _texto(f, "no_hacer", MAX_TEXTO)
         datos["pasar_equipo"] = _texto(f, "pasar_equipo", MAX_TEXTO)
         datos["instrucciones"] = _texto(f, "instrucciones", panel.MAX_INSTRUCCIONES)
@@ -557,7 +567,7 @@ fieldset.as-caja legend{float:left;width:100%;padding:0;font-weight:600;font-siz
 .as-optc input{width:1.15rem;height:1.15rem;flex:none;margin:0;accent-color:var(--acento)}
 .as-optb{display:none;margin-top:.7rem}
 .as-sub{padding:0 0 .9rem}
-.as-caja:has(input[name=r_enojado]:not(:checked)) .as-sub{display:none}
+.as-caja:has(input[name=r_quejas]:not(:checked)) .as-sub-quejas,.as-caja:has(input[name=r_enojado]:not(:checked)) .as-sub-enojado{display:none}
 .as-nombre>.as-opt{margin-top:1rem;padding-top:1rem;border-top:1px solid var(--linea-oscura)}
 .as-opt:has(.as-optc input:checked) .as-optb{display:block}
 .as-lbl{display:block;margin-bottom:.35rem;font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--gris)}
