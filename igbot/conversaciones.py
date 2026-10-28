@@ -54,7 +54,7 @@ CSS = """
 .inbox .buscar button{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 .js .inbox .buscar button{display:none}
 .filtros-chat{display:flex;gap:.1rem;padding:0 .75rem;overflow-x:auto;border-bottom:1px solid var(--linea-clara);font-size:.82rem}
-.filtros-chat a{padding:.7rem .45rem;color:var(--gris);text-decoration:none;font-weight:500;border-bottom:2px solid transparent;white-space:nowrap}
+.filtros-chat a{flex:1;text-align:center;padding:.7rem .45rem;color:var(--gris);text-decoration:none;font-weight:500;border-bottom:2px solid transparent;white-space:nowrap}
 .filtros-chat a.on{color:var(--negro);border-color:var(--acento);font-weight:600}
 .filtros-chat b{display:inline-block;min-width:1.2rem;padding:0 .35rem;margin-left:.25rem;border-radius:999px;background:var(--acento);color:var(--tinta);font-size:.7rem;text-align:center;line-height:1.2rem}
 .filtros-chat b.gris{background:var(--claro);color:var(--gris)}
