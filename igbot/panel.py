@@ -1330,6 +1330,17 @@ COMUN = AJUSTES + """
 :is(.as-paso b,.riel .paso b,.wiz-pasos a>span,.wiz-pasos .wiz-paso){font-size:var(--t-paso);font-weight:var(--peso-paso);color:var(--t-color);line-height:1.2}
 :is(.as-pasos,.riel,.wiz-pasos) :is(.as-paso,.paso,a,.wiz-paso) small{display:block;margin:.1rem 0 0;font-size:var(--t-paso-sub);font-weight:400;color:var(--texto2);line-height:1.3}
 :is(.as-pasos .as-n,.riel .paso .n,.wiz-pasos a>b,.wiz-pasos .wiz-paso>b){width:var(--paso-circulo);height:var(--paso-circulo);font-size:var(--t-paso-num);font-weight:700}
+/* Márgenes de la página (ajustes.css): el menú y el contenido, en computadora. En el celular siguen los de antes. */
+@media(min-width:901px){
+.lateral{inset:var(--menu-margen) auto var(--menu-margen) var(--menu-margen);width:var(--menu-ancho)}
+html.menu-plegado .lateral{width:var(--menu-ancho-plegado)}
+body:has(>.lateral){padding-left:calc(var(--menu-margen) + var(--menu-ancho) + var(--margen-izq))}
+html.menu-plegado body:has(>.lateral){padding-left:calc(var(--menu-margen) + var(--menu-ancho-plegado) + var(--margen-izq))}
+body:has(>.lateral) .contenedor{padding-left:0;padding-right:var(--margen-der)}
+body:has(>.lateral) main{padding-top:var(--margen-arriba);padding-bottom:var(--margen-abajo)}
+body:has(>.lateral) .compacta{padding-top:var(--margen-arriba)}
+body:has(>.lateral) :is(.compacta+main,.compacta.delgada~main,.compacta.delgada~.oscuro-pag>main){padding-top:1.5rem}
+}
 @media(max-width:900px){:is(.as-resumen,.wiz-resumen,.resumen-tarjetas){grid-template-columns:1fr}.avance-pasos{display:none}}
 """
 
