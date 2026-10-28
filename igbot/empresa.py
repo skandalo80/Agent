@@ -649,7 +649,8 @@ main.emp{color:var(--claro);padding-bottom:4rem}
 .cab-paso .antetitulo{font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;font-weight:600}
 @media(max-width:560px){.hoja-o{padding:1.4rem 1.1rem}}
 /* Llenar con el sitio web: el botón bajo el campo y la página de sugerencias. */
-.llenar-web{margin-top:.6rem}.llenar-web .ay{margin-top:.4rem}
+.llenar-web{display:flex;align-items:center;flex-wrap:wrap;gap:.35rem .7rem;margin-top:.5rem}.llenar-web .ay{margin:0}
+.emp .boton.mini-boton{padding:var(--boton-mini-pad);font-size:var(--t-boton-mini);line-height:1.2}
 .campo-o:has(input[name=sitio_web]:placeholder-shown) .llenar-web{display:none}
 .sug{display:grid;grid-template-columns:auto 1fr;gap:.35rem .8rem;padding:1rem 0;border-top:1px solid #2E3035}
 .sug:first-of-type{border-top:0;padding-top:0}
@@ -749,8 +750,8 @@ def pie(paso: int, nota: str = "") -> str:
 
 
 # Bajo el campo del sitio web; se ve en cuanto hay una dirección escrita (CSS, sin JavaScript).
-LLENAR_WEB = ('<div class="llenar-web"><button class="boton chico" name="accion" value="llenar_web">'
-              "Llenar con mi sitio web</button><p class=\"ay\">Leemos tu sitio y te mostramos lo que encontramos"
+LLENAR_WEB = ('<div class="llenar-web"><button class="boton mini-boton" name="accion" value="llenar_web">'
+              "Llenar con mi sitio web</button><p class=\"ay\">Te mostramos lo que encontramos"
               " para que elijas qué usar.</p></div>")
 
 
@@ -761,16 +762,16 @@ def paso_1(e: dict) -> str:
         '<div class="caja-o"><h3>Información general <span class="etq-o esencial">Esencial</span></h3>'
         '<p class="sub">La base para que todo hable de tu negocio y no de uno genérico.</p>'
         '<div class="dos">' + _texto("nombre", "Nombre de tu empresa", e.get("nombre", ""), 80, req=True)
-        + '<div class="campo-o"><label for="e-giro" class="t">¿A qué se dedica? *</label>'
-        f'<select id="e-giro" name="giro">{elige}{giros}</select></div></div>'
-        + '<div class="si-otro">' + _texto("giro_otro", "¿Cuál es tu giro?", e.get("giro_otro", ""), 60) + "</div>"
+        + _texto("sitio_web", "Sitio web", e.get("sitio_web", ""), 200, ejemplo="tusitio.com")[:-6] + LLENAR_WEB
+        + "</div></div>"
         + _texto("frase", "Tu empresa en una frase", e.get("frase", ""), 160,
                  "La que dirías si solo tuvieras cinco segundos.", ejemplo="Ej.: Espacios pequeños, hogares cálidos.")
         + _texto("descripcion", "Describe tu negocio en tus palabras", e.get("descripcion", ""), 1500,
                  "Qué haces, cómo lo haces y desde cuándo. Dos o tres frases bastan.", filas=3, req=True)
         + '<div class="dos">' + _texto("zona", "Ciudad o zona donde atiendes", e.get("zona", ""), 160)
-        + _texto("sitio_web", "Sitio web", e.get("sitio_web", ""), 200, ejemplo="tusitio.com")[:-6] + LLENAR_WEB
-        + "</div></div>"
+        + '<div class="campo-o"><label for="e-giro" class="t">¿A qué se dedica? *</label>'
+        f'<select id="e-giro" name="giro">{elige}{giros}</select></div></div>'
+        + '<div class="si-otro">' + _texto("giro_otro", "¿Cuál es tu giro?", e.get("giro_otro", ""), 60) + "</div>"
         + _opciones("atiende", "¿Cómo atiendes?", ATIENDE, e.get("atiende", []))
         + "</div>" + pie(1, "* Obligatorio. Lo demás lo puedes llenar después.")
     )
