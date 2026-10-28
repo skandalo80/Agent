@@ -316,7 +316,7 @@ html.menu-plegado .lateral .logo-largo{display:none}html.menu-plegado .lateral .
 .lat-item.on{color:var(--naranja-t);background:rgba(255,138,61,.12);font-weight:600;box-shadow:inset 3px 0 0 var(--acento)}
 .lat-pie{border-top:1px solid #34363B;padding-top:.75rem;margin:0}
 /* Abajo, antes de tu cuenta: los pasos iniciales (un anillo con el avance) y Ayuda. */
-.lat-abajo{display:flex;flex-direction:column;gap:.2rem;padding:.6rem 0 .5rem}
+.lat-etiqueta{font-size:.72rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6E7077;padding:.75rem .9rem .3rem;border-top:1px solid #34363B;margin-top:.2rem}html.menu-plegado .lat-etiqueta{padding:.3rem 0 0}.lat-abajo{display:flex;flex-direction:column;gap:.2rem;padding:.6rem 0 .5rem}
 .pasos-ini>summary{background:rgba(255,138,61,.08);border:1px solid rgba(255,138,61,.22);margin-bottom:.35rem;padding:.6rem .75rem}
 .pasos-ini>summary:hover{background:rgba(255,138,61,.14)}
 .pasos-ini .txt{color:var(--claro);font-weight:600;font-size:.95rem}
@@ -1309,10 +1309,14 @@ ACTIVA = ' class="on"'
 # El menú lateral, sin grupos: cada sección con su ícono. (clave, nombre, dirección, grupo al que pertenece)
 MENU = [("resultados", "Resultados", "/panel/resultados", "resultados"),
         ("chats", "Conversaciones", "/panel/asistente", "asistente"),
-        ("configura", "Configura tu asistente", "/panel/asistente/configura", "asistente"),
         ("probar", "Probar tu asistente", "/panel/probar#ultimo", "asistente"),
         ("campanas", "Campañas", "/panel/contenido/campanas", "contenido"),
         ("calendario", "Calendario", "/panel/contenido", "contenido")]
+# Abajo, bajo la etiqueta "Configuración" (arriba de Ayuda): lo que se configura una vez. (clave, nombre, dirección)
+# Tu marca solo con contenido en el plan.
+CONFIGURACION = [("configura", "Tu asistente", "/panel/asistente/configura"),
+                 ("marca", "Tu marca", "/panel/contenido/marca"),
+                 ("empresa", "Tu empresa", "/panel/empresa")]
 # La sección que se marca si la página no dice cuál (`sub`) dentro de su grupo (`menu`).
 POR_GRUPO = {"resultados": "resultados", "asistente": "chats", "contenido": "calendario"}
 
@@ -1334,6 +1338,12 @@ ICONOS = {
     "campanas": _icono('<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>'),
     "calendario": _icono('<rect width="18" height="18" x="3" y="4" rx="2"/><path d="M8 2v4M16 2v4M3 10h18'
                          'M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01"/>'),
+    "marca": _icono('<path d="M12 22a10 10 0 1 1 10-10c0 3-2.5 5-5.5 5H15a1.7 1.7 0 0 0-1.3 2.8c.3.3.4.7.4 1.1'
+                    ' 0 .9-.7 1.6-1.6 1.6z"/><circle cx="13.5" cy="6.5" r=".6" fill="currentColor"/>'
+                    '<circle cx="17.5" cy="10.5" r=".6" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".6" fill="currentColor"/>'
+                    '<circle cx="6.5" cy="12.5" r=".6" fill="currentColor"/>'),
+    "empresa": _icono('<path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2'
+                      'M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"/>'),
     "ayuda": _icono('<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/>'),
     "salir": _icono('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>'),
     "plegar": _icono('<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18M16 15l-3-3 3-3"/>'),
@@ -1391,7 +1401,7 @@ def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None, 
     botón de hamburguesa en el celular. Contenido sale solo si el plan de `cuenta` lo tiene.
     Con `perfil` (su @usuario), abajo va su menú de perfil en vez de solo Salir.
     `luces`: un semáforo junto a una parte del submenú o del menú de perfil (p. ej. {"conexion": "ok"}).
-    `sub` también marca la parte activa del menú de perfil (Conexión vive ahí).
+    `sub` también marca la parte activa de Configuración o del menú de perfil (Conexión vive ahí).
     Abajo, como en otras plataformas: los pasos iniciales (`pasos`, mientras falte alguno), Ayuda y tu cuenta.
     Sin menú (la entrada y las páginas de espera): la barra de arriba de siempre."""
     boton = ('<form method="post" action="/panel/salir"><button class="salir">Salir</button></form>'
@@ -1401,7 +1411,8 @@ def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None, 
     if not menu:
         return (f'<header><div class="contenedor"><a class="marca" href="{inicio_marca}"><img class="logo-largo" src="/logo-skandar.svg" alt="Skandar" width="132" height="36"></a>'
                 f"{boton}</div></header>")
-    activa = sub if any(k == sub for k, *_ in MENU) else POR_GRUPO.get(menu, "")
+    en_config = any(k == sub for k, *_ in CONFIGURACION)
+    activa = sub if any(k == sub for k, *_ in MENU) else "" if en_config else POR_GRUPO.get(menu, "")
     secciones = []
     for k, nombre, href, grupo in MENU:
         if grupo == "contenido" and cuenta is not None and cuenta.imagenes_mes <= 0:
@@ -1412,6 +1423,10 @@ def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None, 
         luz = "" if punto else luz
         secciones.append(f'<a class="lat-item{" on" if k == activa else ""}" href="{href}" title="{nombre}">'
                          f'{ICONOS[k]}{punto}<span class="txt">{nombre}{luz}</span></a>')
+    ajustes = "".join(
+        f'<a class="lat-item{" on" if k == sub else ""}" href="{href}" title="{nombre}">{ICONOS[k]}'
+        f'<span class="txt">{nombre}</span></a>' for k, nombre, href in CONFIGURACION
+        if k != "marca" or cuenta is None or cuenta.imagenes_mes > 0)
     # Sin JavaScript también abre en el celular: la hamburguesa apunta a #lateral (:target).
     return (
         '<header class="movil"><a class="hamburguesa" href="#lateral" aria-label="Abrir menú">'
@@ -1424,6 +1439,7 @@ def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None, 
         f'{ICONOS["plegar"]}</button><a class="cerrar" href="#" aria-label="Cerrar menú">×</a></div>'
         f'<nav class="lat-nav">{"".join(secciones)}</nav>'
         + '<div class="lat-abajo">' + tarjeta_pasos(pasos or [])
+        + (f'<div class="lat-etiqueta"><span class="txt">Configuración</span></div>{ajustes}' if cuenta is not None else "")
         # Ayuda abre a Skandi (la ventanita de abajo).
         + (f'<a class="lat-item" href="#skandi" data-abrir-skandi title="Ayuda">{ICONOS["ayuda"]}'
            '<span class="txt">Ayuda</span></a>' if cuenta is not None else "") + '</div>'
@@ -1440,8 +1456,6 @@ def menu_perfil(perfil: str, cuenta: Cuenta | None, foto: str = "", sub: str = "
     if not perfil:
         return salir.format(' class="lat-pie"', "lat-item", f'{ICONOS["salir"]}<span class="txt">Salir</span>')
     usuario_ = escape(perfil)
-    marca = (f'<a href="/panel/contenido/marca"{ACTIVA if sub == "marca" else ""}>Tu marca</a>'
-             if cuenta is not None and cuenta.imagenes_mes > 0 else "")
     # El logo de Tu marca si ya subió uno; si no, la inicial.
     avatar = (f'<img class="lat-avatar" src="{escape(foto)}" alt="">' if foto else
               f'<span class="lat-avatar">{usuario_[:1].upper()}</span>')
@@ -1450,15 +1464,12 @@ def menu_perfil(perfil: str, cuenta: Cuenta | None, foto: str = "", sub: str = "
     return ('<div class="lat-pie"><details class="perfil">'
             f'<summary class="lat-item" title="@{usuario_}">{avatar}'
             f'<span class="txt">@{usuario_}<small>Tu cuenta</small></span></summary>'
-            # Tres grupos: quién eres; tu empresa y tu marca; la cuenta (conexión, Instagram y salir).
+            # Quién eres y la cuenta (conexión, Instagram y salir); tu empresa y tu marca están en Configuración.
             f'<div class="perfil-menu"><div class="quien">Conectado como @{usuario_}</div>'
-            f'<a href="/panel/empresa"{ACTIVA if sub == "empresa" else ""}>Información de empresa</a>'
-            f'{marca}'
             # Solo la cuenta principal (Skandar): los chats de clientes y visitantes con Skandi.
-            + (f'<a href="/panel/skandi"{ACTIVA if sub == "skandi" else ""}>Chats de Skandi</a>'
+            + (f'<a href="/panel/skandi"{ACTIVA if sub == "skandi" else ""}>Chats de Skandi</a><div class="sep"></div>'
                if cuenta is not None and not cuenta.slug else "")
-            + '<div class="sep"></div>'
-            f'<a href="/panel/conexion"{ACTIVA if sub == "conexion" else ""}>Conexión{luz}</a>'
+            + f'<a href="/panel/conexion"{ACTIVA if sub == "conexion" else ""}>Conexión{luz}</a>'
             f'<a href="https://www.instagram.com/{usuario_}/" target="_blank" rel="noopener">Ver mi Instagram</a>'
             + salir.format("", "", "Salir") + "</div></details></div>")
 
@@ -1664,7 +1675,7 @@ async def bienvenida(c: Cuenta) -> HTMLResponse:
     else:
         empresa = await empresa_lista(c)
         nota = ("Tu perfil de empresa quedó guardado." if empresa else
-                "Tu perfil de empresa te espera en el menú de tu cuenta.")
+                "Tu perfil de empresa te espera en Configuración, abajo en el menú.")
         asistente_desc = "El que contesta tus mensajes directos por ti, de día y de noche."
         if c.imagenes_mes > 0:
             cuerpo = ('<div class="caminos">'
