@@ -1629,8 +1629,7 @@ async def pagina_campana(c: Cuenta, camp: dict, aviso: str = "", sel: str = "", 
                f'<a class="boton ajuste peligro" href="{u}?borrar=1">Borrar campaña</a></span>')
     volver = f'<a class="volver-cam" href="{BASE}?ver={estado(camp, hoy)}">‹ Volver a campañas</a>'
     return panel.pagina(
-        panel.cabecera(salir=True, menu="contenido", cuenta=c, sub="campanas", perfil=await panel.usuario(c),
-                       foto=await panel.foto_perfil(c))
+        await panel.menu_de(c, "contenido", sub="campanas")
         + cabeza(botones, donde=escape(camp["nombre"]))
         + '<div class="oscuro-pag"><main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
@@ -1787,8 +1786,7 @@ async def pagina_lista(c: Cuenta, ver: str = "", aviso: str = "", q: dict | None
         cuerpo += (f'<div class="acciones"><a class="boton secundario chico" href="{BASE}/nueva">+ Planear otra campaña'
                    "</a></div>")
     return panel.pagina(
-        panel.cabecera(salir=True, menu="contenido", cuenta=c, sub="campanas", perfil=await panel.usuario(c),
-                       foto=await panel.foto_perfil(c))
+        await panel.menu_de(c, "contenido", sub="campanas")
         + cabeza(botones_nueva())
         + '<div class="oscuro-pag"><main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
@@ -1817,8 +1815,7 @@ def trabajando(c: Cuenta, titulo: str, nota: str, trabajo, destino: str = BASE) 
     """Sin JavaScript: "trabajando…" mientras tanto y, al terminar, de vuelta a la campaña."""
 
     async def partes():
-        yield (panel.PRINCIPIO + panel.cabecera(salir=True, menu="contenido", cuenta=c, sub="campanas",
-                                                 perfil=await panel.usuario(c), foto=await panel.foto_perfil(c))
+        yield (panel.PRINCIPIO + await panel.menu_de(c, "contenido", sub="campanas")
                + '<main><div class="contenedor"><div class="tarjeta" id="generando"><div class="generando">'
                '<div class="escribiendo"><span></span><span></span><span></span></div>'
                f'<div><h2>{escape(titulo)}</h2><p class="ayuda">{escape(nota)} No cierres esta página.</p></div></div></div>')

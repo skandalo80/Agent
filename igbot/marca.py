@@ -387,8 +387,7 @@ async def pagina_marca(c: Cuenta, paso: str, marca: dict | None = None, aviso: s
     cuerpo = f'<div class="wiz mrc">{menu_pasos(actual, hechos_)}<div class="wiz-main">{falta}{contenido}</div></div>'
     # Tu marca es de la cuenta (menú de perfil, abajo), no una sección de Contenido.
     return panel.pagina(
-        panel.cabecera(salir=True, menu="cuenta", cuenta=c, sub="marca", perfil=await panel.usuario(c),
-                       foto=await panel.foto_perfil(c))
+        await panel.menu_de(c, "cuenta", sub="marca")
         + panel.encabezado("Tu cuenta · Tu marca")
         + '<main class="oscuro-pag"><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")

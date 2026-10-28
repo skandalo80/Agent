@@ -129,7 +129,7 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     assert "Sensación: Rebelde · Directo · Impactante" in r.text and "1.º · Estilo principal:" in r.text
     # Tu marca vive en el menú de perfil (abajo), no en el submenú de Contenido.
     assert '<a href="/panel/contenido/marca" class="on">Tu marca</a>' in r.text
-    assert 'title="Calendario"><svg' in r.text and r.text.count('href="/panel/contenido/marca"') == 1
+    assert 'title="Calendario"><svg' in r.text and r.text.count('href="/panel/contenido/marca"') == 2  # su cuenta y los pasos iniciales
     r = client.post(MARCA, headers=ORIGEN, data={"paso": "1"})
     assert "Elige al menos un estilo" in r.text and client.portal.call(contenido.marca_de, c) == {}
     r = client.post(MARCA, headers=ORIGEN, follow_redirects=False,
@@ -957,6 +957,34 @@ def test_menu_lateral_sin_grupos(cliente, monkeypatch):
     assert 'title="Campañas"' not in client.get("/panel/asistente").text
 
 
+def test_abajo_del_menu_pasos_iniciales_y_ayuda(cliente, monkeypatch):
+    client, c, *_ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 5)
+    r = client.get("/panel/asistente").text
+    abajo = r.split('<div class="lat-abajo">')[1].split('<div class="lat-pie">')[0]
+    # Los pasos iniciales con su avance, y Ayuda abre a Skandi.
+    assert "Pasos iniciales" in abajo and "de 6 listos" in abajo and 'class="anillo"' in abajo
+    assert 'href="/panel/empresa"' in abajo and 'href="/panel/contenido/campanas"' in abajo
+    assert 'href="#skandi" data-abrir-skandi title="Ayuda"' in abajo
+    # Probar cuenta como hecho después de la primera respuesta.
+    from igbot import panel
+
+    async def responde(c, previos, texto):
+        return "¡Hola!"
+
+    monkeypatch.setattr(panel, "responder_prueba", responde)
+    antes = int(abajo.split(" de 6 listos")[0].rsplit(">", 1)[1])
+    client.post("/panel/probar", headers=ORIGEN, data={"mensaje": "hola"})
+    abajo = client.get("/panel/asistente").text.split('<div class="lat-abajo">')[1]
+    assert f">{antes + 1} de 6 listos" in abajo
+    # Con todo listo, la tarjeta ya no sale.
+    async def todo(c):
+        return [("x", "/panel", True)]
+
+    monkeypatch.setattr(panel, "pasos_iniciales", todo)
+    assert "Pasos iniciales" not in client.get("/panel/asistente").text
+
+
 def test_posicionamiento_sale_de_configura_y_llega_a_los_posts(cliente, monkeypatch):
     from igbot import posicionamiento
     client, c, *_ = cliente
@@ -1012,7 +1040,8 @@ def test_reglas_opcionales_plegadas_y_casilla_vacia_las_borra(cliente):
 def test_menu_de_tu_cuenta_en_tres_grupos(cliente, monkeypatch):
     client, c, *_ = cliente
     monkeypatch.setattr(c, "imagenes_mes", 5)
-    menu = client.get("/panel/contenido").text.split('class="perfil-menu"')[1].split("</details>")[0]
+    # El último: el de tu cuenta (antes van los pasos iniciales).
+    menu = client.get("/panel/contenido").text.split('class="perfil-menu"')[-1].split("</details>")[0]
     orden = [menu.index(t) for t in ("Conectado como", "Información de empresa", "Tu marca", 'class="sep"',
                                      "Conexión", "Ver mi Instagram", "Salir")]
     assert orden == sorted(orden)
