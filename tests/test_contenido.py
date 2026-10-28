@@ -594,7 +594,7 @@ def test_lo_que_mas_preguntan(con_mensajes):
         assert r.headers["location"] == "/panel/contenido/campanas"
     menu = client.get("/panel/contenido").text
     assert "Esta semana" not in menu and "Contenido sugerido" not in menu and "Crear post" not in menu
-    assert 'href="/panel/contenido/campanas/nueva">Crear campaña' in menu
+    assert "campanas/nueva" not in menu and "/rapida" not in menu  # Calendario no crea campañas: eso es de Campañas
 
 
 def test_diseno_libre_con_el_estilo_de_sus_fotos(cliente, monkeypatch):
@@ -821,7 +821,8 @@ def test_encabezados_sin_titulo_ni_numeros(cliente, monkeypatch):
     monkeypatch.setattr(c, "posts_mes", 12)
     monkeypatch.setattr(c, "mensajes_mes", 1000)
     r = client.get("/panel/contenido")
-    assert "Crear con IA" in r.text and 'class="titulo-fila sin-ante"' in r.text
+    # Calendario no crea campañas (eso es de Campañas): sin botones, tampoco hay franja de arriba.
+    assert "Crear con IA" not in r.text and 'class="titulo-fila sin-ante"' not in r.text
     assert "Posts restantes" not in r.text and 'class="hoy kpis"' not in r.text
     assert '<nav class="pestanas">' not in r.text
     for ruta in ("/panel/contenido", "/panel/contenido/marca", "/panel/contenido/campanas",

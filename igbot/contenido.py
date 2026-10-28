@@ -495,12 +495,11 @@ NOMBRE_SECCION = {"campanas": "Campañas", "calendario": "Calendario", "marca": 
 
 
 async def pagina(c: Cuenta, actual: str, cuerpo: str, aviso: str = "", oscuro: bool = False) -> HTMLResponse:
-    """Las secciones de Contenido van en el menú lateral; arriba solo el antetítulo y los botones de crear campaña."""
-    from .campanas import botones_nueva  # campanas importa este módulo
-    crear = botones_nueva()
+    """Las secciones de Contenido van en el menú lateral. Calendario (y el editor del post y sus insights) no lleva
+    los botones de crear campaña: esos son de Campañas."""
     return panel.pagina(
         await panel.menu_de(c, "contenido", sub=actual)
-        + panel.encabezado(f"Contenido · {NOMBRE_SECCION.get(actual, 'Calendario')}", crear)
+        + panel.encabezado(f"Contenido · {NOMBRE_SECCION.get(actual, 'Calendario')}")
         + ('<main class="oscuro-pag">' if oscuro else "<main>") + '<div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
         + await panel.pendiente(c, actual)
