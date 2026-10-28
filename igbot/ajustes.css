@@ -17,6 +17,16 @@
   --caja-pad: 1.5rem;          /* relleno de cada tarjeta: más grande = el texto más lejos del borde */
   --hueco: 1rem;               /* espacio entre tarjetas */
   --caja-radio: 1.25rem;       /* redondeo de las esquinas de las tarjetas */
+
+  /* Barra de pasos de arriba (las tres páginas de Configuración y Crear campaña) */
+  --paso-pad: .55rem .6rem;    /* relleno de cada paso */
+  --paso-hueco: .65rem;        /* espacio entre el círculo y el texto */
+  --paso-circulo: 1.75rem;     /* tamaño del círculo con el número */
+  --t-paso-num: .78rem;        /* número dentro del círculo */
+  --t-paso: .9rem;             /* nombre del paso */
+  --t-paso-sub: .76rem;        /* texto gris bajo el nombre */
+  --peso-paso: 600;            /* grosor del nombre del paso */
+  --paso-activo: #2E3035;      /* fondo del paso en el que estás */
 }
 @media (max-width: 560px) {
   :root { --t-titulo: 1.5rem; --hoja-pad: 1.4rem 1.1rem; --caja-pad: 1.1rem; }
