@@ -669,6 +669,7 @@ def test_varias_campanas(cliente, monkeypatch):
     client.post(BASE, headers=ORIGEN, data=datos_campana(nombre="Febrero", inicio="2099-01-12"))
     r = client.get(BASE)
     assert 'class="on">Activas<small>2</small>' in r.text and "día 3 de 14" in r.text and "<b>0 de 6</b>" in r.text
+    assert "Próximos posts" in r.text and "<b>Post 5</b><span>Mié 14</span>" in r.text and "6 sin imagen" in r.text  # a lo ancho
     r = client.get(f"{BASE}?ver=proxima")
     assert "Febrero" in r.text and "Se cruza" not in r.text and "empieza en 5 días" in r.text
 
