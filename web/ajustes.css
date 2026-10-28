@@ -1,0 +1,23 @@
+/* Ajustes de diseño de la web (skandar.online, blog y páginas por giro). Todas las páginas leen sus tamaños
+   de aquí: cambia un número y cambia en todas. El panel tiene los suyos en igbot/ajustes.css. */
+:root {
+  /* Letras */
+  --t-ante: .75rem;            /* antetítulo: RESUMEN, PASO 1 DE 4, UNA SOLA PLATAFORMA */
+  --t-portada: clamp(40px, 5.2vw, 64px);  /* título grande de la portada */
+  --t-seccion: clamp(30px, 3.6vw, 44px);  /* título de cada sección */
+  --t-bajada: 1rem;            /* texto gris bajo el título */
+  --t-tarjeta: 1.125rem;       /* título de cada tarjeta */
+  --t-texto-tarjeta: .9375rem; /* texto dentro de las tarjetas */
+  --peso-titulo: 600;          /* grosor de los títulos */
+  --peso-tarjeta: 700;         /* grosor del título de tarjeta */
+  --peso-ante: 700;            /* grosor del antetítulo */
+  --espaciado-ante: .12em;     /* separación entre letras del antetítulo */
+
+  /* Espacios y bordes */
+  --caja-pad: 1.5rem;          /* relleno de cada tarjeta: más grande = el texto más lejos del borde */
+  --hueco: 1rem;               /* espacio entre tarjetas */
+  --caja-radio: 1.25rem;       /* redondeo de las esquinas de las tarjetas */
+}
+@media (max-width: 560px) {
+  :root { --caja-pad: 1.25rem; }
+}

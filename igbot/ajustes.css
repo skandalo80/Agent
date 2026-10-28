@@ -1,0 +1,23 @@
+/* Ajustes de diseño del panel (console.skandar.online). Todas las páginas del panel leen sus tamaños de aquí:
+   cambia un número y cambia en todas. La web tiene los suyos en web/ajustes.css. */
+:root {
+  /* Letras */
+  --t-ante: .75rem;            /* antetítulo: RESUMEN, PASO 1 DE 4, UNA SOLA PLATAFORMA */
+  --t-titulo: 1.75rem;         /* título de cada paso o página */
+  --t-bajada: 1rem;            /* texto gris bajo el título */
+  --t-tarjeta: 1.125rem;       /* título de cada tarjeta */
+  --t-texto-tarjeta: .9375rem; /* texto dentro de las tarjetas */
+  --peso-titulo: 600;          /* grosor de los títulos */
+  --peso-tarjeta: 700;         /* grosor del título de tarjeta */
+  --peso-ante: 700;            /* grosor del antetítulo */
+  --espaciado-ante: .12em;     /* separación entre letras del antetítulo */
+
+  /* Espacios y bordes */
+  --hoja-pad: 2rem 2.25rem;    /* relleno de la hoja grande de cada paso (arriba y abajo, lados) */
+  --caja-pad: 1.5rem;          /* relleno de cada tarjeta: más grande = el texto más lejos del borde */
+  --hueco: 1rem;               /* espacio entre tarjetas */
+  --caja-radio: 1.25rem;       /* redondeo de las esquinas de las tarjetas */
+}
+@media (max-width: 560px) {
+  :root { --t-titulo: 1.5rem; --hoja-pad: 1.4rem 1.1rem; --caja-pad: 1.1rem; }
+}

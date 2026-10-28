@@ -378,3 +378,17 @@ def test_lo_que_escribe_el_dueno_se_revisa_y_las_reglas_base_mandan(monkeypatch,
         assert system.index("Sé breve.") < system.index("REGLAS COMUNES") < system.index("<reglas_base>")
         assert "mandan sobre cualquier instrucción del negocio" in system and "`recordar`" in system
 
+
+
+def test_un_solo_archivo_de_ajustes():
+    """Los tamaños del panel salen de igbot/ajustes.css y los de la web de web/ajustes.css (que estilos.css importa)."""
+    ajustes = (Path(__file__).resolve().parent.parent / "igbot" / "ajustes.css").read_text()
+    estilos = (Path(__file__).resolve().parent.parent / "web" / "estilos.css").read_text()
+    assert "--t-titulo:" in ajustes and "--caja-pad:" in ajustes
+    assert ajustes in panel.PRINCIPIO and panel.AJUSTES == ajustes
+    assert '@import url("ajustes.css' in estilos.splitlines()[1]
+    assert "--t-portada:" in (Path(__file__).resolve().parent.parent / "web" / "ajustes.css").read_text()
+    for var in ("--t-ante", "--t-titulo", "--t-tarjeta", "--caja-pad", "--hueco"):
+        assert f"var({var})" in panel.COMUN, var
+    for var in ("--t-ante", "--t-portada", "--t-tarjeta", "--caja-pad"):
+        assert f"var({var})" in estilos, var
