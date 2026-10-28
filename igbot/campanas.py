@@ -583,7 +583,7 @@ def leer_posts(respuesta: dict, fichas: list[dict], siguiente: int, regla: bool,
             responde = ""  # más de 1 de cada 4: el post se queda, pero ya no cuenta como de tus clientes
         nuevo = {"k": siguiente, "tipo": ficha["tipo"], "formato": ficha["formato"], "dia": ficha["dia"],
                  "hora": ficha["hora"], **texto, "responde": responde, "rol": ficha["rol"], "post_id": None}
-        for k in ("ve", "pilar", "plan", "escena", "medio"):
+        for k in ("ve", "pilar", "dato", "plan", "escena", "medio"):
             if ficha.get(k):
                 nuevo[k] = ficha[k]
         prompt = str(x.get("prompt") or "").strip()[:MAX_IDEA * 2]
@@ -1357,6 +1357,7 @@ def ver_brief(camp: dict) -> str:
             f' {escape(b.get("titulo", ""))}</h2></span></summary><p class="ayuda">{escape(b.get("resumen", ""))}</p>'
             f'<div class="brief-cam">{cuerpo}</div><div class="acciones"><a class="boton secundario chico"'
             f' href="{url_de(camp)}/brief">↓ Descargar brief (PDF)</a><a class="boton secundario chico"'
+            f' href="{url_de(camp)}/documentos">↓ Documentos de cada etapa (ZIP)</a><a class="boton secundario chico"'
             f' href="{BASE}/nueva?editar={camp["id"]}">Cambiar el brief</a></div></details>')
 
 
@@ -1704,6 +1705,68 @@ async def descargar_brief(request: Request, cid: str):
         contenido_pdf = await informe.brief_pdf(c, camp, await marca_de(c), await panel.usuario(c))
     return Response(contenido_pdf, media_type="application/pdf",
                     headers={"Content-Disposition": f'attachment; filename="brief-{archivo_de(camp["nombre"])}.pdf"'})
+
+
+def documentos(camp: dict) -> bytes:
+    """Lo que salió de cada etapa del flujo (brief, plan editorial, posts y prompts de imagen), en Markdown dentro
+    de un ZIP, para revisar cómo se armó la campaña."""
+    import io
+    import zipfile
+
+    b = camp.get("brief") or {}
+    posts = sorted(camp.get("posts", []), key=lambda p: (p["dia"], p["hora"]))
+
+    def cab(i: int, p: dict) -> str:
+        return (f"## {i}. {fecha_larga(p['dia'])} {p['hora']} · {'Historia' if es_historia(p) else 'Post'}"
+                f" · {FORMATOS[formato_de(p)][0]}\n\n")
+
+    brief_md = [f"# Brief: {b.get('titulo', '')}\n\n{b.get('resumen', '')}\n\n## La idea\n"]
+    brief_md += [f"- **{t}:** {b[k]}" for k, t, _ in brief.CAMPOS_IDEA[:2] if b.get(k)]
+    brief_md += ["- **Pilares:**"] + [f"    - {x['nombre']}: {x.get('detalle', '')}" for x in b.get("pilares", [])]
+    brief_md += [f"- **{t}:** {b[k]}" for k, t, _ in brief.CAMPOS_IDEA[2:] if b.get(k)]
+    brief_md += ["\n## Cómo se ve\n"] + [f"- **{t}:** {b[k]}" for k, t, _ in brief.CAMPOS_VISUAL if b.get(k)]
+    brief_md += [f"- **Variedad visual:** {brief.VARIEDAD.get(camp.get('variedad'), brief.VARIEDAD['coherencia'])}"]
+
+    plan_md = ["# Plan editorial\n"]
+    posts_md = ["# Posts\n"]
+    prompts_md = ["# Prompts de imagen\n"]
+    for i, p in enumerate(posts, 1):
+        ficha = [("Tema", tema_de(p["tipo"])[0]), ("Se ve", ve_de(camp, p["ve"]) if p.get("ve") else ""),
+                 ("Pilar", p.get("pilar", "")), ("Dato", p.get("dato", "")), ("Escena", p.get("escena", ""))]
+        plan = p.get("plan") or {}
+        plan_md.append(cab(i, p) + "\n".join(f"- **{t}:** {v}" for t, v in ficha if v)
+                       + "".join(f"\n- **{t}:** {plan[k]}" for k, t, _ in brief.PLAN if plan.get(k)) + "\n")
+        regla = p.get("regla") or {}
+        posts_md.append(cab(i, p) + f"**{p['titulo']}**" + (f" · {p['subtitulo']}" if p.get("subtitulo") else "")
+                        + f"\n\n{p.get('caption', '')}\n"
+                        + (f"\n- **Revisa antes de publicar:** {'; '.join(p['verificar'])}" if p.get("verificar") else "")
+                        + (f"\n- **Comenta {regla['clave']}:** {regla.get('dm', '')}" if regla.get("activa") else "") + "\n")
+        if formato_de(p) not in SIN_IDEA and formato_de(p) != "collage":
+            vigente = p.get("prompt") if p.get("prompt") and p.get("idea_base") == p.get("idea") else ""
+            prompts_md.append(cab(i, p) + f"**Idea:** {p.get('idea', '')}\n\n**Prompt:** "
+                              + (vigente or "Aún no se escribe (se escribe al tocar Escribir el prompt o Generar imagen).")
+                              + "\n")
+    salida = io.BytesIO()
+    with zipfile.ZipFile(salida, "w", zipfile.ZIP_DEFLATED) as z:
+        for nombre, partes in (("1-brief.md", brief_md), ("2-plan-editorial.md", plan_md), ("3-posts.md", posts_md),
+                               ("4-prompts-de-imagen.md", prompts_md)):
+            z.writestr(nombre, "\n".join(partes) + "\n")
+    return salida.getvalue()
+
+
+@router.get("/campanas/{cid}/documentos")
+async def descargar_documentos(request: Request, cid: str):
+    """Los documentos de cada etapa del flujo (brief, plan editorial, posts y prompts), en un ZIP."""
+    if not (c := panel.cuenta_de_sesion(request)):
+        return RedirectResponse("/panel", status_code=303)
+    if c.imagenes_mes <= 0:
+        return sin_plan()
+    with usar(c):
+        camp = await leer(c, cid)
+    if not camp or not camp.get("brief"):
+        return RedirectResponse(BASE, status_code=303)
+    return Response(documentos(camp), media_type="application/zip",
+                    headers={"Content-Disposition": f'attachment; filename="proceso-{archivo_de(camp["nombre"])}.zip"'})
 
 
 @router.get("/campanas/{cid}/propuesta")

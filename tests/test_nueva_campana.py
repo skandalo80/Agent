@@ -686,3 +686,28 @@ def test_lo_que_hay_que_verificar_sale_en_el_post():
     assert posts[0]["verificar"] == ["Precio de 75 MXN"]
     html = campanas.plan_de_post({**posts[0], "plan": {"angulo": "A", "gancho": "Para"}})
     assert "Revisa antes de publicar" in html and "Precio de 75 MXN" in html and "Gancho" in html
+
+
+def test_los_documentos_de_cada_etapa_se_descargan(cliente, monkeypatch):
+    import io
+    import zipfile
+    client, c, *_ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 4)
+    import app as bot
+    monkeypatch.setattr(bot.agent, "run_claude", claude_de_campana([]))
+    listo(client, c)
+    client.portal.call(c.store.set, "productos", json.dumps([PRODUCTO]))
+    llenar(client)
+    generar(client)
+    camp = leer(client, c)
+    u = campanas.url_de(camp)
+    assert f'href="{u}/documentos"' in client.get(u).text
+    r = client.get(f"{u}/documentos")
+    assert r.headers["content-type"] == "application/zip" and 'filename="proceso-oto' in r.headers["content-disposition"]
+    z = zipfile.ZipFile(io.BytesIO(r.content))
+    assert z.namelist() == ["1-brief.md", "2-plan-editorial.md", "3-posts.md", "4-prompts-de-imagen.md"]
+    assert "# Brief: Idea 1" in z.read("1-brief.md").decode() and "Cómo se ve" in z.read("1-brief.md").decode()
+    plan = z.read("2-plan-editorial.md").decode()
+    assert "**Ángulo:** Ángulo 1" in plan and "**Dato:**" in plan
+    assert "Texto 1 #cafe" in z.read("3-posts.md").decode()
+    assert "**Prompt:** Photo" in z.read("4-prompts-de-imagen.md").decode()
