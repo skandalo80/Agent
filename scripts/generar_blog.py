@@ -1,11 +1,19 @@
-"""Genera el blog estático de skandar.online a partir de blog/*.md.
+"""Genera el blog y las páginas por giro de skandar.online.
+
+Blog: a partir de blog/*.md.
 
 Cada artículo es un .md con cabecera "clave: valor" (titulo, descripcion,
 categoria, portada, fecha, lectura, cta), una línea "---" y el cuerpo en un
 markdown sencillo: párrafos, "## " subtítulos, "- " listas, "> " recuadro,
 **negritas** y [enlaces](/ruta).
 
-Escribe web/blog/index.html, web/blog/<slug>.html y web/sitemap.xml.
+Páginas por giro ("Asistente virtual para restaurantes"): a partir de giros/*.md.
+La cabecera lleva titulo, descripcion, nombre, h1, bajada, cuenta, demo, idea e
+idea_nota; el cuerpo se parte en secciones "## chat" (líneas "- cliente: ..." y
+"- agente: ..."), "## preguntas", "## contenido" (líneas "- Título: texto") y
+"## faq" (líneas "- ¿Pregunta? | Respuesta").
+
+Escribe web/blog/, web/para/ y web/sitemap.xml.
 Uso: python scripts/generar_blog.py
 """
 
@@ -14,12 +22,14 @@ import json
 import re
 from datetime import date
 from pathlib import Path
+from urllib.parse import quote
 
 RAIZ = Path(__file__).resolve().parent.parent
 FUENTES = RAIZ / "blog"
+GIROS = RAIZ / "giros"
 WEB = RAIZ / "web"
 SITIO = "https://skandar.online"
-CSS_VERSION = "2026-10-26d"
+CSS_VERSION = "2026-10-28"
 
 # Orden en el índice: el primero es el destacado.
 ORDEN = [
@@ -119,7 +129,7 @@ def cabeza(titulo, descripcion, url, tipo="website", extra=""):
 <link rel="canonical" href="{url}">
 <meta property="og:type" content="{tipo}">
 <meta property="og:locale" content="es_MX">
-<meta property="og:site_name" content="Agentes IA by Skandar">
+<meta property="og:site_name" content="Skandar">
 <meta property="og:url" content="{url}">
 <meta property="og:title" content="{t}">
 <meta property="og:description" content="{d}">
@@ -135,7 +145,7 @@ def cabeza(titulo, descripcion, url, tipo="website", extra=""):
 <body>
 <header>
   <div class="contenedor">
-    <a class="marca" href="/"><span class="sello">S</span><span>Agentes IA <span class="nombre-largo">by Skandar</span></span></a>
+    <a class="marca" href="/"><span>Skandar</span></a>
     <nav class="nav-links">
       <a href="/#contenido">Contenido</a>
       <a href="/#como-funciona">Cómo funciona</a>
@@ -157,10 +167,11 @@ PIE = """</main>
 
 <footer>
   <div class="contenedor">
-    <a class="marca" href="/"><span class="sello">S</span>Agentes IA by Skandar</a>
-    <span>© 2026 Agentes IA by Skandar · México</span>
+    <a class="marca" href="/">Skandar</a>
+    <span>© 2026 Skandar · México</span>
     <div class="pie-enlaces">
       <a href="/blog/">Blog</a>
+      <a href="/para/">Por giro</a>
       <a href="/privacidad">Aviso de privacidad</a>
       <a href="mailto:hola@skandar.online">Contacto</a>
       <a href="https://console.skandar.online/panel">Entrar</a>
@@ -208,8 +219,8 @@ def pagina_articulo(a, todos):
                 "dateModified": a.get("modificado", a["fecha"]),
                 "inLanguage": "es-MX",
                 "mainEntityOfPage": url,
-                "author": {"@type": "Organization", "name": "Agentes IA by Skandar", "url": f"{SITIO}/"},
-                "publisher": {"@type": "Organization", "name": "Agentes IA by Skandar",
+                "author": {"@type": "Organization", "name": "Skandar", "url": f"{SITIO}/"},
+                "publisher": {"@type": "Organization", "name": "Skandar",
                               "logo": {"@type": "ImageObject", "url": f"{SITIO}/apple-touch-icon.png"}},
             },
             {
@@ -229,13 +240,13 @@ def pagina_articulo(a, todos):
     misma = [o for o in todos if o["slug"] != a["slug"] and o["categoria"] == a["categoria"]]
     otras = [o for o in todos if o["slug"] != a["slug"] and o["categoria"] != a["categoria"]]
     relacionados = "".join(tarjeta(o) for o in (misma + otras)[:3])
-    return cabeza(f"{a['titulo']} · Agentes IA by Skandar", a["descripcion"], url, "article", extra) + f"""  <section class="oscuro articulo-cabecera">
+    return cabeza(f"{a['titulo']} · Skandar", a["descripcion"], url, "article", extra) + f"""  <section class="oscuro articulo-cabecera">
     <div class="contenedor">
       <p class="migas"><a href="/">Inicio</a> / <a href="/blog/">Blog</a> / {html.escape(a['categoria'])}</p>
       <p class="antetitulo">{html.escape(a['categoria'])}</p>
       <h1>{html.escape(a['titulo'])}</h1>
       <p class="bajada">{html.escape(a['descripcion'])}</p>
-      <p class="datos">Por el equipo de Agentes IA by Skandar · {fecha_larga(a['fecha'])} · {a['lectura']} min de lectura</p>
+      <p class="datos">Por el equipo de Skandar · {fecha_larga(a['fecha'])} · {a['lectura']} min de lectura</p>
     </div>
   </section>
 
@@ -269,11 +280,11 @@ def pagina_indice(todos):
     esquema = {
         "@context": "https://schema.org",
         "@type": "Blog",
-        "name": "Blog de Agentes IA by Skandar",
+        "name": "Blog de Skandar",
         "url": url,
         "description": descripcion,
         "inLanguage": "es-MX",
-        "publisher": {"@type": "Organization", "name": "Agentes IA by Skandar", "url": f"{SITIO}/"},
+        "publisher": {"@type": "Organization", "name": "Skandar", "url": f"{SITIO}/"},
         "blogPost": [{"@type": "BlogPosting", "headline": a["titulo"], "url": f"{SITIO}/blog/{a['slug']}",
                       "datePublished": a["fecha"]} for a in todos],
     }
@@ -282,7 +293,7 @@ def pagina_indice(todos):
         f'<button type="button" class="pastilla" data-filtro="{html.escape(c)}">{html.escape(c)}</button>'
         for c in categorias)
     tarjetas = "".join(tarjeta(a, i == 0) for i, a in enumerate(todos))
-    return cabeza("Blog: Instagram para tu negocio · Agentes IA by Skandar", descripcion, url,
+    return cabeza("Blog: Instagram para tu negocio · Skandar", descripcion, url,
                   extra=ld(esquema)) + f"""  <section class="oscuro blog-portada">
     <div class="contenedor">
       <p class="antetitulo">Blog</p>
@@ -312,10 +323,238 @@ def pagina_indice(todos):
 """ + PIE
 
 
-def sitemap(todos):
+# Páginas por giro. Los precios y lo que incluye cada plan son los mismos de la portada.
+PLANES = f"""  <section class="banda centro" id="planes">
+    <div class="contenedor">
+      <p class="antetitulo">Planes</p>
+      <h2>Dos planes. Una sola plataforma.</h2>
+      <p class="bajada">Sin costo de instalación. Conectas tu Instagram y lo configuras desde tu panel.</p>
+      <div class="planes">
+        <article class="plan">
+          <h3>Asistente virtual</h3>
+          <p class="resumen">Contesta tus mensajes.</p>
+          <p class="precio">US$29 <small>+ IVA al mes</small></p>
+          <p class="instalacion">Sin instalación · 1,000 respuestas al mes</p>
+          <ul>
+            <li>Respuesta a mensajes directos 24/7</li>
+            <li>Tu información, tus precios y tus preguntas frecuentes</li>
+            <li>Memoria por cliente</li>
+            <li>Se pausa cuando tú contestas</li>
+          </ul>
+          <a class="boton contorno" href="{CTAS['asistente'][2]}">{CTAS['asistente'][3]}</a>
+        </article>
+        <article class="plan destacado">
+          <span class="popular">Más completo</span>
+          <h3>Community Manager</h3>
+          <p class="resumen">Además crea tu contenido con lo que pasa en tu cuenta.</p>
+          <p class="precio">US$79 <small>+ IVA al mes</small></p>
+          <p class="instalacion">Sin instalación · 2,500 respuestas y 12 posts al mes</p>
+          <ul>
+            <li>Todo lo del Asistente virtual</li>
+            <li>Campañas con calendario automático</li>
+            <li>Ideas a partir de tus métricas, DMs y comentarios</li>
+            <li>Imágenes y textos con tu marca</li>
+            <li>Publicación programada</li>
+          </ul>
+          <a class="boton" href="{CTAS['community'][2]}">{CTAS['community'][3]}</a>
+        </article>
+      </div>
+      <p class="nota">Se paga mes a mes y puedes cancelar cuando quieras. Precios en dólares estadounidenses, más IVA.</p>
+    </div>
+  </section>
+"""
+
+# Preguntas que aplican a cualquier giro; van después de las propias de cada página.
+FAQ_COMUN = [
+    ("¿Necesito instalar algo?",
+     "No. Conectas tu Instagram en unos minutos y todo lo demás lo haces desde tu panel, en el navegador."),
+    ("¿Qué pasa si un cliente quiere hablar con una persona?",
+     "Tu asistente se pausa en esa conversación y te avisa. También se pausa cuando tú contestas a mano, para no interrumpirte."),
+    ("¿Puedo cancelar cuando quiera?",
+     "Sí. Se paga mes a mes, sin plazo forzoso y sin costo de instalación."),
+]
+
+
+def leer_giro(slug):
+    texto = (GIROS / f"{slug}.md").read_text(encoding="utf-8")
+    cabecera, cuerpo = texto.split("\n---\n", 1)
+    g = dict(l.split(": ", 1) for l in cabecera.strip().split("\n"))
+    g["slug"] = slug
+    secciones, actual = {}, None
+    for linea in cuerpo.strip().split("\n"):
+        linea = linea.strip()
+        if linea.startswith("## "):
+            actual = secciones.setdefault(linea[3:].strip(), [])
+        elif linea.startswith("- ") and actual is not None:
+            actual.append(linea[2:])
+    g["chat"] = [l.split(": ", 1) for l in secciones["chat"]]
+    g["preguntas"] = secciones["preguntas"]
+    g["contenido"] = [l.split(": ", 1) for l in secciones["contenido"]]
+    g["faq"] = [tuple(x.strip() for x in l.split(" | ", 1)) for l in secciones["faq"]] + FAQ_COMUN
+    return g
+
+
+def pagina_giro(g, todos):
+    url = f"{SITIO}/para/{g['slug']}"
+    demo = html.escape(g["demo"])
+    enlace_demo = "https://ig.me/m/skandar.online?text=" + quote(g["demo"])
+    esquema = {
+        "@context": "https://schema.org",
+        "@graph": [
+            {
+                "@type": "Service",
+                "name": g["titulo"],
+                "serviceType": "Inteligencia artificial para Instagram",
+                "description": g["descripcion"],
+                "audience": {"@type": "BusinessAudience", "name": g["nombre"]},
+                "areaServed": "MX",
+                "provider": {"@type": "Organization", "name": "Skandar", "url": f"{SITIO}/"},
+                "offers": [
+                    {"@type": "Offer", "name": "Asistente virtual", "price": "29", "priceCurrency": "USD",
+                     "url": f"{url}#planes"},
+                    {"@type": "Offer", "name": "Community Manager", "price": "79", "priceCurrency": "USD",
+                     "url": f"{url}#planes"},
+                ],
+            },
+            {
+                "@type": "FAQPage",
+                "mainEntity": [{"@type": "Question", "name": p,
+                                "acceptedAnswer": {"@type": "Answer", "text": r}} for p, r in g["faq"]],
+            },
+            {
+                "@type": "BreadcrumbList",
+                "itemListElement": [
+                    {"@type": "ListItem", "position": 1, "name": "Inicio", "item": f"{SITIO}/"},
+                    {"@type": "ListItem", "position": 2, "name": "Por giro", "item": f"{SITIO}/para/"},
+                    {"@type": "ListItem", "position": 3, "name": g["nombre"], "item": url},
+                ],
+            },
+        ],
+    }
+    iniciales = "".join(w[0] for w in g["cuenta"].replace("_", " ").split()[:2]).upper()
+    burbujas = "".join(f'            <div class="burbuja {quien}">{html.escape(texto)}</div>\n'
+                       for quien, texto in g["chat"])
+    preguntas = "".join(f'        <div class="funcion"><span class="num">{i:02d}</span><h3>{html.escape(p)}</h3></div>\n'
+                        for i, p in enumerate(g["preguntas"], 1))
+    ideas = "".join(f"          <li><span><strong>{html.escape(t)}.</strong> {html.escape(x[:1].upper() + x[1:])}</span></li>\n"
+                    for t, x in g["contenido"])
+    faq = "".join(f"        <details><summary>{html.escape(p)}</summary><p>{html.escape(r)}</p></details>\n"
+                  for p, r in g["faq"])
+    otros = "".join(f'<a class="pastilla" href="/para/{o["slug"]}">{html.escape(o["nombre"])}</a>'
+                    for o in todos if o["slug"] != g["slug"])
+    return cabeza(f"{g['titulo']} · Skandar", g["descripcion"], url, extra=ld(esquema)) + f"""  <section class="oscuro portada">
+    <div class="contenedor portada-rejilla">
+      <div>
+        <p class="migas"><a href="/">Inicio</a> / <a href="/para/">Por giro</a> / {html.escape(g['nombre'])}</p>
+        <p class="antetitulo">{html.escape(g['titulo'])}</p>
+        <h1>{html.escape(g['h1'])}<span class="punto">.</span></h1>
+        <p class="bajada">{html.escape(g['bajada'])}</p>
+        <div class="acciones">
+          <a class="boton" href="{enlace_demo}">Pedir una demo por Instagram</a>
+          <a class="boton contorno" href="#planes">Ver planes</a>
+        </div>
+        <p class="micro">Sin costo de instalación · Lo configuras desde tu panel · Responde a cualquier hora</p>
+      </div>
+      <div class="visual" aria-hidden="true">
+        <div class="halo"></div>
+        <div class="telefono">
+          <div class="telefono-cabecera"><div class="avatar">{iniciales}</div><div>{html.escape(g['cuenta'])}<div class="en-linea">● Asistente activo</div></div></div>
+          <div class="chat">
+{burbujas}          </div>
+        </div>
+        <div class="tarjeta-idea">
+          <span class="etiqueta">IDEA DE CONTENIDO</span>
+          <div class="arte-post">{html.escape(g['idea']).replace("&lt;br&gt;", "<br>")}</div>
+          <strong>Una pregunta real, un post para publicar.</strong><br>
+          <small>{html.escape(g['idea_nota'])}</small>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="claro centro">
+    <div class="contenedor">
+      <p class="antetitulo">Asistente virtual</p>
+      <h2>Lo que te preguntan todos los días.</h2>
+      <p class="bajada">Tu asistente contesta estas preguntas con tu información, tus precios y tu tono. Cuando algo necesita a una persona, se pausa y te avisa.</p>
+      <div class="tarjetas">
+{preguntas}      </div>
+    </div>
+  </section>
+
+  <section class="banda">
+    <div class="contenedor dividido">
+      <div>
+        <p class="antetitulo">Community Manager</p>
+        <h2>Tu contenido sale de tus propios mensajes.</h2>
+        <p class="bajada">La plataforma revisa lo que te preguntan por DM, lo que comentan y lo que mejor te funciona, y te propone qué publicar. Tú apruebas cada post antes de que salga.</p>
+      </div>
+      <div class="ejemplo">
+        <p class="mini">Ideas que te puede proponer</p>
+        <ul class="marcas">
+{ideas}        </ul>
+      </div>
+    </div>
+  </section>
+
+{PLANES}
+  <section class="claro centro" id="preguntas">
+    <div class="contenedor">
+      <p class="antetitulo">Preguntas frecuentes</p>
+      <h2>Lo esencial, sin complicaciones.</h2>
+      <div class="preguntas">
+{faq}      </div>
+    </div>
+  </section>
+
+  <section class="oscuro centro cierre">
+    <div class="contenedor">
+      <h2>Velo funcionar con tu negocio<span class="punto">.</span></h2>
+      <p class="bajada">Escríbenos por Instagram y te contestamos como lo haría tu propio asistente.</p>
+      <div class="acciones">
+        <a class="boton" href="{enlace_demo}">Escribir «{demo}»</a>
+        <a class="boton contorno" href="/conectar">Conectar mi Instagram</a>
+      </div>
+      <p class="antetitulo otros-giros-titulo">Otros giros</p>
+      <div class="pastillas otros-giros">{otros}</div>
+    </div>
+  </section>
+""" + PIE
+
+
+def pagina_giros(todos):
+    url = f"{SITIO}/para/"
+    descripcion = ("Asistente virtual y Community Manager con inteligencia artificial para el Instagram "
+                   "de restaurantes, tiendas, salones, consultorios y más.")
+    tarjetas = "".join(f"""        <a class="tarjeta" href="/para/{g['slug']}">
+          <h3>{html.escape(g['nombre'])}</h3>
+          <p>{html.escape(g['descripcion'])}</p>
+        </a>
+""" for g in todos)
+    return cabeza("Asistente virtual para Instagram por giro · Skandar", descripcion, url) + f"""  <section class="oscuro blog-portada">
+    <div class="contenedor">
+      <p class="antetitulo">Por giro</p>
+      <h1>Hecho para tu negocio<span class="punto">.</span></h1>
+      <p class="bajada">{descripcion}</p>
+    </div>
+  </section>
+
+  <section class="claro">
+    <div class="contenedor">
+      <div class="tarjetas">
+{tarjetas}      </div>
+    </div>
+  </section>
+""" + PIE
+
+
+def sitemap(todos, giros):
     urls = [("/", "2026-10-26"), ("/privacidad", "2026-10-19"),
             ("/blog/", max(a.get("modificado", a["fecha"]) for a in todos))]
     urls += [(f"/blog/{a['slug']}", a.get("modificado", a["fecha"])) for a in todos]
+    if giros:
+        urls.append(("/para/", max(g["fecha"] for g in giros)))
+        urls += [(f"/para/{g['slug']}", g["fecha"]) for g in giros]
     filas = "".join(f"  <url><loc>{SITIO}{u}</loc><lastmod>{f}</lastmod></url>\n" for u, f in urls)
     return ('<?xml version="1.0" encoding="UTF-8"?>\n'
             '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' + filas + "</urlset>\n")
@@ -329,8 +568,14 @@ def main():
     (salida / "index.html").write_text(pagina_indice(todos), encoding="utf-8")
     for a in todos:
         (salida / f"{a['slug']}.html").write_text(pagina_articulo(a, todos), encoding="utf-8")
-    (WEB / "sitemap.xml").write_text(sitemap(todos), encoding="utf-8")
-    print(f"{len(todos)} artículos en {salida}")
+    giros = [leer_giro(p.stem) for p in sorted(GIROS.glob("*.md"))]
+    para = WEB / "para"
+    para.mkdir(exist_ok=True)
+    (para / "index.html").write_text(pagina_giros(giros), encoding="utf-8")
+    for g in giros:
+        (para / f"{g['slug']}.html").write_text(pagina_giro(g, giros), encoding="utf-8")
+    (WEB / "sitemap.xml").write_text(sitemap(todos, giros), encoding="utf-8")
+    print(f"{len(todos)} artículos en {salida} y {len(giros)} giros en {para}")
 
 
 if __name__ == "__main__":
