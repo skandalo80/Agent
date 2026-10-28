@@ -62,7 +62,7 @@ def test_skandi_contesta_y_pasa_a_soporte(monkeypatch, tmp_path):
 
         # El botón sale en las páginas con menú, con la ventana cerrada (abre con #skandi).
         r = client.get("/panel/resultados")
-        assert "Hola, soy Skandi. ¿Cómo te puedo ayudar?" in r.text
+        assert "Hola, soy Skandi ¿Cómo te puedo ayudar?" in r.text
         assert 'class="sk-boton" href="#skandi"' in r.text and 'id="skandi"' in r.text
         campos_con_nombre(r.text)
 
@@ -145,7 +145,7 @@ def test_skandi_en_la_web(monkeypatch, tmp_path):
         r = client.get("/ayuda")
         # Se abre en el iframe de la web (mismo sitio) y no en otros.
         assert "frame-ancestors 'self'" in r.headers["content-security-policy"]
-        assert "Soy Skandi" in r.text or "soy Skandi" in r.text
+        assert "Hola, soy Skandi ¿Cómo te puedo ayudar?" in r.text
         assert client.get("/ayuda/ayuda.js").status_code == 200
 
         assert client.post("/ayuda", data={"mensaje": "hola"}).status_code == 403  # sin Origin
