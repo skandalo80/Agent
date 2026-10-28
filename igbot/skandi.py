@@ -374,8 +374,7 @@ MAX_WEB_VISITANTE = 15
 MAX_WEB_DIA = 300
 MAX_WEB_CORREOS = 20
 MAX_VISITANTES = 500  # conversaciones en memoria; se olvidan las más viejas
-SALUDO_WEB = ("Hola, soy Skandi. Te ayudo con dudas de Skandar: qué hace, cuánto cuesta, cómo empezar"
-              " o cómo ver una demo.")
+SALUDO_WEB = SALUDO
 CSP_WEB = ("default-src 'none'; script-src 'self'; style-src 'unsafe-inline' https://fonts.googleapis.com;"
            " font-src https://fonts.gstatic.com; form-action 'self'; base-uri 'none'; frame-ancestors 'self'")
 
