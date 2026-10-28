@@ -361,6 +361,15 @@ document.querySelectorAll(".inbox[data-vivo]").forEach((inbox) => {
     try { p = JSON.parse(e.data); } catch { return; }
     const lista = inbox.querySelector(".lista-vivo");
     if (lista && p.lista) lista.innerHTML = p.lista;
+    // El punto amarillo de Conversaciones en el menú: chats del lado "Tú" esperando respuesta.
+    const item = document.querySelector('.lat-item[href="/panel/asistente"]');
+    const punto = item && item.querySelector(".punto-menu");
+    if (item && p.punto && !punto) {
+      const nuevo = document.createElement("span");
+      nuevo.className = "punto-menu";
+      nuevo.title = "Tienes chats por contestar";
+      item.insertBefore(nuevo, item.querySelector(".txt"));
+    } else if (punto && !p.punto) punto.remove();
     const hilo = inbox.querySelector(".hilo");
     if (!hilo || !p.hilo || !inbox.classList.contains("abierto")) return;
     const caja = hilo.querySelector("textarea");
