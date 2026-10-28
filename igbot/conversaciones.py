@@ -78,7 +78,7 @@ CSS = """
 .lat-item{position:relative}
 .punto-menu{position:absolute;width:.5rem;height:.5rem;border-radius:50%;background:var(--neon);margin:-1.1rem 0 0 1rem;box-shadow:0 0 0 2px #18191C}
 /* Como en WhatsApp: el punto de no leído va a la derecha, debajo de la hora. */
-.punto-sin{position:absolute;right:1rem;top:2.6rem;width:.4rem;height:.4rem;border-radius:50%;background:var(--neon)}
+.punto-sin{position:absolute;right:1rem;top:2.5rem;width:var(--punto-chat);height:var(--punto-chat);border-radius:50%;background:var(--neon)}
 .inbox .vacio{padding:1.5rem 1rem;font-size:.9rem;color:var(--gris)}
 .inbox .lista-vivo .paginas{margin:auto 0 0;padding:.75rem;justify-content:center}
 .hilo{display:flex;flex-direction:column;min-width:0}
