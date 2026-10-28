@@ -18,7 +18,7 @@ cliente = test_contenido.cliente  # el mismo cliente conectado de las pruebas de
 PASO_1 = {"paso": "1", "nombre": "Café Lunar", "giro": "Restaurante o cafetería", "frase": "Café de especialidad.",
           "descripcion": "Cafetería de especialidad en Puebla desde 2019.", "zona": "Puebla centro",
           "sitio_web": "cafelunar.mx", "caracter": ["Cercana", "Premium", "Natural", "Elegante"],
-          "atiende": ["local", "nada"], "accion": "ir_2"}
+          "atiende": ["local", "nada"], "accion": "ir_3"}
 
 OPCIONES = {"objetivos": [{"k": f"Obj {i}", "titulo": f"Objetivo {i}", "descripcion": "x",
                            "mensajes": [{"k": f"m{i}-{j}", "titulo": f"Mensaje {i}.{j}", "descripcion": "y",
@@ -31,7 +31,10 @@ def test_pasos_guardan_y_el_asistente_usa_el_perfil(cliente):
     client.portal.call(c.store.set, "perfil", json.dumps({"negocio": "Café en Puebla", "horarios": "L a V 8 a 20",
                                                           "envios": "No enviamos"}))
     r = client.get("/panel/empresa")
-    assert "Empecemos por tu empresa" in r.text and "Café en Puebla" in r.text and "Te precargamos" in r.text
+    assert "Paso 1 de 5" in r.text and "Café en Puebla" in r.text and "Te precargamos" in r.text
+    assert "¿Cómo es tu empresa?" not in r.text and 'class="leyenda-usos"' in r.text
+    # Tus clientes va al final: el riel lo numera 5 y el paso 1 sigue a productos.
+    assert "Siguiente: productos y servicios" in r.text and r.text.index("Tus clientes") > r.text.index("Preguntas frecuentes")
     assert 'href="/panel/empresa" class="on"' in r.text  # el menú de perfil la marca
     campos_con_nombre(r.text)
     assert client.portal.call(empresa.de, c) == {}
@@ -39,10 +42,10 @@ def test_pasos_guardan_y_el_asistente_usa_el_perfil(cliente):
 
     assert client.post("/panel/empresa", data=PASO_1).status_code == 403  # sin Origin
     r = client.post("/panel/empresa", headers=ORIGEN, data=PASO_1, follow_redirects=False)
-    assert r.headers["location"] == "/panel/empresa?paso=2"
+    assert r.headers["location"] == "/panel/empresa?paso=3"
     e = client.portal.call(empresa.de, c)
     assert e["nombre"] == "Café Lunar" and e["sitio_web"] == "https://cafelunar.mx"
-    assert e["caracter"] == ["Cercana", "Premium", "Natural"] and e["atiende"] == ["local"]
+    assert "caracter" not in e and e["atiende"] == ["local"]  # el carácter ya no se pregunta aquí
     assert e["horarios"] == "L a V 8 a 20"  # lo precargado de los otros pasos también queda
     assert client.portal.call(empresa.empresa_lista, c)
 
@@ -71,12 +74,14 @@ def test_pasos_guardan_y_el_asistente_usa_el_perfil(cliente):
     assert "Café Lunar" in Path(c.prompt_path).read_text() and "Elegante y premium" in Path(c.prompt_path).read_text()
 
     r = client.get("/panel/empresa")  # con lo esencial lleno abre el resumen
-    assert "Así queda tu empresa" in r.text and "Se preparan cuando guardes" in r.text
+    assert ">Resumen</p>" in r.text and "Se preparan cuando guardes" in r.text
     assert 'class="antetitulo"' not in r.text.split("<main")[0] and "Café Lunar<span" not in r.text  # sin título arriba
 
 
 def test_catalogo_con_fotos_y_texto_para_prompt(cliente):
     client, c, *_ = cliente
+    # El carácter ya no está en el formulario; el que tenga guardado (de Tu marca o de antes) se sigue usando.
+    client.portal.call(c.store.set, empresa.CLAVE, json.dumps({"caracter": ["Cercana"]}))
     client.post("/panel/empresa", headers=ORIGEN, data=PASO_1)
     r = client.get("/panel/empresa?paso=3")
     assert "Aún no tienes productos" in r.text and "<details open" in r.text
@@ -133,7 +138,7 @@ def test_la_revision_puede_rechazar(cliente, monkeypatch):
     # Se guarda sin esperar; la revisión corre después y, si rechaza, vuelve lo aprobado.
     r = client.post("/panel/empresa", headers=ORIGEN, data={**PASO_1, "descripcion": "Éxito garantizado"},
                     follow_redirects=False)
-    assert r.headers["location"] == "/panel/empresa?paso=2"
+    assert r.headers["location"] == "/panel/empresa?paso=3"
     client.portal.call(empresa.esperar_revision, c)
     assert client.portal.call(empresa.de, c)["descripcion"] == PASO_1["descripcion"]
     assert Path(c.prompt_path).read_text() == prompt and "garantizado" not in prompt  # nunca llegó al asistente
@@ -254,3 +259,25 @@ def test_posicionamiento_sale_del_perfil_de_empresa(cliente, monkeypatch):
     assert client.portal.call(posicionamiento.de, c)["distinto"] == "Tostado propio"
     client.portal.call(posicionamiento.actualizar, c, {})  # sin cambios en el perfil no se vuelve a pedir
     assert len(prompts) == 1
+
+
+def test_iconos_de_quien_usa_cada_campo_y_caracter_guardado(cliente):
+    client, c, _, _ = cliente
+    client.portal.call(c.store.set, empresa.CLAVE, json.dumps({"nombre": "Café Lunar", "caracter": ["Cercana"]}))
+    client.post("/panel/empresa", headers=ORIGEN, data={**PASO_1, "caracter": []})
+    assert client.portal.call(empresa.de, c)["caracter"] == ["Cercana"]  # lo guardado no se borra
+
+    def iconos(html: str, etiqueta: str) -> str:
+        return html.split(etiqueta, 1)[1].split("</label>", 1)[0].split("</legend>", 1)[0]
+    p1 = client.get("/panel/empresa?paso=1").text
+    assert "<h2>" not in p1.split('class="cab-paso"')[1].split("</div>")[0]
+    assert iconos(p1, "Tu empresa en una frase").count('class="uso"') == 2
+    p2 = client.get("/panel/empresa?paso=2").text
+    assert "Paso 5 de 5" in p2 and "Siguiente: resumen" in p2
+    assert "Lo usan tus campañas" in iconos(p2, "¿Con quién te comparan?")
+    assert "Lo usa tu asistente" not in iconos(p2, "¿Con quién te comparan?")
+    p3 = client.get("/panel/empresa?paso=3").text
+    assert "Lo usa tu asistente" in iconos(p3, ">Enlace") and "Lo usan" not in iconos(p3, ">Enlace")
+    assert "Lo usan tus campañas" in p3.split("Fotos <i", 1)[1].split('class="fotos-o"', 1)[0]
+    p5 = client.get("/panel/empresa?paso=5").text
+    assert iconos(p5, "Pregunta 1").count('class="uso"') == 1 and "Lo usa tu asistente" in iconos(p5, "Pregunta 1")
