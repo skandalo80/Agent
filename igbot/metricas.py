@@ -212,11 +212,11 @@ def linea(valores: list[int | None], fechas: list[date], nombre: str) -> str:
     cada = 1 if len(fechas) <= 7 else 7
     eje = "".join(f"<span>{f:%d/%m}</span>" if (len(fechas) - 1 - i) % cada == 0 else "<span></span>"
                   for i, f in enumerate(fechas))
-    return (f'<div class="met-escala"><span>{cifra(tope)}</span><span>{cifra(bajo)}</span></div>'
+    return (f'<div class="met-graf"><div class="met-escala"><span>{cifra(tope)}</span><span>{cifra(bajo)}</span></div>'
             f'<svg class="met-linea" viewBox="0 0 {ancho} {alto}" preserveAspectRatio="none" role="img"'
             f' aria-label="{escape(nombre)} por día">{guias}<path class="area" d="{relleno}"/>'
-            f'<path class="trazo" d="{camino}" vector-effect="non-scaling-stroke"/>{zonas}</svg>'
-            f'<div class="ejex">{eje}</div>')
+            f'<path class="trazo" d="{camino}" vector-effect="non-scaling-stroke"/>{zonas}</svg></div>'
+            f'<div class="ejex met-eje">{eje}</div>')
 
 
 def dona(partes: list[tuple[str, int]], centro: str, debajo: str) -> str:
@@ -238,8 +238,8 @@ def dona(partes: list[tuple[str, int]], centro: str, debajo: str) -> str:
 
 
 def tarjeta(titulo: str, cuerpo: str, numero: str = "", clase: str = "") -> str:
-    return (f'<section class="met-c {clase}"><header><span>{escape(titulo)}</span>'
-            f'<b>{numero}</b></header>{cuerpo}</section>')
+    return (f'<section class="met-c {clase}"><div class="met-cab"><span>{escape(titulo)}</span>'
+            f'<b>{numero}</b></div>{cuerpo}</section>')
 
 
 def edades(d: dict[str, int]) -> str:
@@ -253,7 +253,7 @@ def edades(d: dict[str, int]) -> str:
 def seccion(d: dict) -> str:
     """Las tarjetas de Instagram en Resultados."""
     if not d["hay"]:
-        return ('<div class="met"><section class="met-c ancho"><header><span>Instagram</span></header>'
+        return ('<div class="met"><section class="met-c ancho"><div class="met-cab"><span>Instagram</span></div>'
                 '<p class="ayuda">Empezamos a guardar tus números de Instagram. Mañana verás tus seguidores, '
                 'alcance y vistas aquí, y cada día se irá formando tu historial.</p></section></div>')
     fechas, serie = d["fechas"], d["serie"]

@@ -1168,19 +1168,19 @@ input[type=text],input[type=search],textarea,select,.inbox input[type=search],.e
 @media(max-width:900px){.cal-d .ev.con-img{display:block}.cal-d .ev img{display:none}}
 /* Resultados: tarjetas de Instagram (metricas.py), en 12 columnas; una sola en el celular. */
 .met{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:1rem;margin-bottom:1.25rem}
-.met-c{grid-column:span 6;background:var(--grafito);border:1px solid var(--linea-oscura);border-radius:1.25rem;padding:1.25rem 1.4rem;min-width:0;display:flex;flex-direction:column}
+.met-c{grid-column:span 6;color:var(--negro);background:var(--grafito);border:1px solid var(--linea-oscura);border-radius:1.25rem;padding:1.25rem 1.4rem;min-width:0;display:flex;flex-direction:column}
 .met-c.t3{grid-column:span 3}.met-c.t4{grid-column:span 4}.met-c.ancho{grid-column:1/-1}
-.met-c>header{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;margin-bottom:.75rem}
-.met-c>header span{color:var(--gris);font-size:.9rem}.met-c>header b{font-size:1.15rem;font-weight:700;color:var(--claro)}
-.met-c>header b small{font-size:.8rem;font-weight:400;color:var(--gris)}
-.met-grande{font-size:clamp(2.8rem,5vw,4rem);font-weight:800;letter-spacing:-.03em;color:var(--claro);margin:auto 0 .75rem;line-height:1}
+.met-cab{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;margin-bottom:.75rem}
+.met-cab span{color:var(--gris);font-size:.9rem}.met-cab b{font-size:1.15rem;font-weight:700;color:var(--negro)}
+.met-cab b small{font-size:.8rem;font-weight:400;color:var(--gris)}
+.met-grande{font-size:clamp(2.8rem,5vw,4rem);font-weight:800;letter-spacing:-.03em;color:var(--negro);margin:auto 0 .75rem;line-height:1}
 .met-cambios{display:flex;flex-direction:column;gap:.35rem;color:var(--gris);font-size:.85rem}
-.met-pct{font-weight:700;color:var(--claro)}.met-pct.sube{color:var(--naranja-t)}.met-pct.baja{color:#E58C8C}
+.met-pct{font-weight:700;color:var(--negro)}.met-pct.sube{color:var(--naranja-t)}.met-pct.baja{color:#E58C8C}
 .met .ayuda.chica{margin-top:.75rem;font-size:.82rem}
-.met-escala{display:flex;flex-direction:column;justify-content:space-between;position:absolute;color:var(--gris);font-size:.7rem;height:9rem;pointer-events:none}
-.met-c:has(.met-linea){position:relative}
+.met-graf{position:relative}
+.met-escala{position:absolute;left:0;top:0;height:9rem;display:flex;flex-direction:column;justify-content:space-between;color:var(--gris);font-size:.7rem;line-height:1;padding:.35rem 0;box-sizing:border-box;pointer-events:none}
 .met-linea{width:100%;height:9rem;display:block;padding-left:2rem;box-sizing:border-box;overflow:visible}
-.met-linea+.ejex{padding-left:2rem}
+.met-eje{padding-left:2rem}
 .met-linea .guia{stroke:var(--linea-clara)}.met-linea .area{fill:rgba(243,154,54,.12)}
 .met-linea .trazo{fill:none;stroke:var(--acento);stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}
 .met-linea .zona{fill:transparent}.met-linea .zona:hover{fill:rgba(255,255,255,.05)}
@@ -1190,8 +1190,8 @@ input[type=text],input[type=search],textarea,select,.inbox input[type=search],.e
 .met-dona circle{fill:none;stroke-width:13}.met-dona .fondo{stroke:#3A3746}
 .met-dona .c0{stroke:var(--acento)}.met-dona .c1{stroke:#8F7FD6}.met-dona .c2{stroke:#C6FA2C}.met-dona .c3{stroke:var(--gris)}
 .met-dona .centro{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
-.met-dona .centro b{font-size:1.7rem;font-weight:800;color:var(--claro)}.met-dona .centro small{color:var(--gris);font-size:.78rem}
-.met-dona ul,.met-lista{list-style:none;margin:0;padding:0;display:grid;gap:.55rem;font-size:.9rem;color:var(--claro)}
+.met-dona .centro b{font-size:1.7rem;font-weight:800;color:var(--negro)}.met-dona .centro small{color:var(--gris);font-size:.78rem}
+.met-dona ul,.met-lista{list-style:none;margin:0;padding:0;display:grid;gap:.55rem;font-size:.9rem;color:var(--negro)}
 .met-dona li,.met-lista li{display:flex;align-items:center;gap:.55rem}.met-dona li b,.met-lista li b{margin-left:auto;padding-left:1.25rem;font-weight:700}
 .met-dona li i{width:.7rem;height:.7rem;border-radius:50%;display:inline-block}
 .met-dona li i.c0{background:var(--acento)}.met-dona li i.c1{background:#8F7FD6}.met-dona li i.c2{background:#C6FA2C}.met-dona li i.c3{background:var(--gris)}
