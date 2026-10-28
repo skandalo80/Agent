@@ -52,6 +52,10 @@ from .estilos import ESTILO_INICIAL, ESTILOS, USO_COLOR
 log = logging.getLogger("igbot.campanas")
 router = APIRouter(prefix="/panel/contenido")
 BASE = "/panel/contenido/campanas"
+# Los brillitos de IA (en lima): los sugeridos de cada lunes y Crear con IA.
+BRILLOS_IA = ('<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M10 2l1.9'
+              ' 5.6L17.5 9.5l-5.6 1.9L10 17l-1.9-5.6L2.5 9.5l5.6-1.9zM18.5 13l.95 2.55L22 16.5l-2.55.95L18.5 20l-.95-2.55'
+              'L15 16.5l2.55-.95z"/></svg>')
 
 # tema: (cómo se le dice al cliente, objetivo del post en Crear post, qué le pedimos a Claude)
 TEMAS = {
@@ -1437,7 +1441,7 @@ async def detalle(c: Cuenta, camp: dict, p: dict, quedan_ia: int) -> str:
                " Usar Tu marca como contexto</label>")
             + "</div></details>")
     if con_prompt:
-        idea += ('<details class="prompt-img" open><summary>Prompt de la imagen</summary><div class="campo">'
+        idea += ('<details class="prompt-img"><summary>Prompt de la imagen</summary><div class="campo">'
                  f'<textarea id="d-prompt" name="prompt" rows="9" maxlength="{MAX_IDEA * 2}" lang="en"'
                  f' aria-label="Prompt de la imagen" placeholder="Aún no se escribe: toca Escribir el prompt o Generar'
                  f' imagen."{solo}>{escape(vigente)}</textarea><small>Es lo que recibe el generador de imágenes, con la'
@@ -1513,6 +1517,12 @@ def de_a(ini: date, fin: date) -> str:
 def cabeza(boton: str = "", pasos: str = "", donde: str = "") -> str:
     """El encabezado de Campañas: antetítulo y botones. `donde` (ya escapado) se suma al antetítulo."""
     return panel.encabezado("Contenido · Campañas" + (f" · {donde}" if donde else ""), boton, pasos)
+
+
+def botones_nueva() -> str:
+    """Crear campaña (el asistente paso por paso) y Crear con IA (solo objetivo y fechas)."""
+    return (f'<span class="botones-nueva"><a class="boton secundario ajuste" href="{BASE}/nueva">Crear campaña</a>'
+            f'<a class="boton ajuste boton-ia" href="{BASE}/rapida">{BRILLOS_IA} Crear con IA</a></span>')
 
 
 def boton_todas(ver: str = "") -> str:
@@ -1781,14 +1791,15 @@ async def pagina_lista(c: Cuenta, ver: str = "", aviso: str = "", q: dict | None
                                                   for x in grupos[ver]]) + "</div>"
     else:
         cuerpo = (f'<p class="ayuda">No tienes campañas {PESTANAS[ver].lower()}.</p>'
-                  f'<div class="acciones"><a class="boton secundario chico" href="{BASE}/nueva">+ Nueva campaña</a></div>')
+                  f'<div class="acciones"><a class="boton secundario chico" href="{BASE}/nueva">Crear campaña</a>'
+                  f'<a class="boton chico boton-ia" href="{BASE}/rapida">{BRILLOS_IA} Crear con IA</a></div>')
     if ver == "proxima" and grupos[ver]:
         cuerpo += (f'<div class="acciones"><a class="boton secundario chico" href="{BASE}/nueva">+ Planear otra campaña'
                    "</a></div>")
     return panel.pagina(
         panel.cabecera(salir=True, menu="contenido", cuenta=c, sub="campanas", perfil=await panel.usuario(c),
                        foto=await panel.foto_perfil(c))
-        + cabeza(f'<a class="boton ajuste" href="{BASE}/nueva">+ Nueva campaña</a>')
+        + cabeza(botones_nueva())
         + '<div class="oscuro-pag"><main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
         + await panel.pendiente(c, "campanas")

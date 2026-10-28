@@ -263,7 +263,7 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
     con_imagen = {p["k"] for p in leer(client, c)["posts"] if p["post_id"]}
     r = client.post(u, headers=ORIGEN, data=datos_campana(nombre="Otoño 2"))
     assert u in r.text and {p["k"] for p in leer(client, c)["posts"] if p["post_id"]} == con_imagen
-    assert "+ Nueva campaña" in client.get(BASE).text
+    assert "Crear con IA" in client.get(BASE).text
     client.post(BASE, headers=ORIGEN, data=datos_campana(nombre="Navidad"))
     camp = leer(client, c)
     assert camp["nombre"] == "Navidad" and not any(p["post_id"] for p in camp["posts"]) and campanas.url_de(camp) != u
