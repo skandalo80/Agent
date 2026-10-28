@@ -300,7 +300,7 @@ body:has(>.lateral){padding-left:19rem}
 .lateral{position:fixed;inset:1rem auto 1rem 1rem;width:17rem;background:var(--grafito);color:var(--claro);border:1px solid var(--linea-oscura);border-radius:1.4rem;display:flex;flex-direction:column;padding:1rem .85rem;z-index:30}
 /* Solo anima al plegarlo con el botón (menu-anima), no al cargar cada página. */
 html.menu-anima .lateral{transition:width .18s ease}html.menu-anima body:has(>.lateral){transition:padding-left .18s ease}
-.lat-cabeza{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:0 .35rem .9rem;border-bottom:1px solid #34363B;margin-bottom:.9rem}
+.lat-cabeza{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:0 .35rem .9rem calc(.9rem + 2px);border-bottom:1px solid #34363B;margin-bottom:.9rem}
 .lateral .marca{display:flex;align-items:center;gap:.6rem;color:var(--claro);overflow:hidden;line-height:1.15}
 .lateral .marca{font-size:1.3rem;font-weight:600;letter-spacing:-.02em;padding:.35rem 0}
 /* El logo (web/logo-skandar.svg y logo-sk.svg): completo con el menú abierto, solo Sk plegado. */
@@ -336,6 +336,10 @@ html.menu-plegado .lateral{width:5.25rem}
 html.menu-plegado .lateral .txt{display:none}
 html.menu-plegado .lat-cabeza{flex-direction:column}
 html.menu-plegado .plegar svg{transform:rotate(180deg)}
+/* Plegado, todo en una sola columna centrada: el logo Sk, el botón, los íconos y tu cuenta. */
+html.menu-plegado .lat-cabeza{align-items:center;padding:0 0 .9rem}
+html.menu-plegado .lateral .marca{justify-content:center;margin-right:0}
+html.menu-plegado .lat-item{justify-content:center;padding-left:0;padding-right:0;gap:0}
 .perfil{position:relative}
 .perfil>summary{list-style:none}.perfil>summary::-webkit-details-marker{display:none}
 .lat-avatar{flex:none;width:2rem;height:2rem;border-radius:50%;object-fit:cover;background:var(--acento);color:var(--tinta);display:grid;place-items:center;font-size:.8rem;font-weight:600;margin-left:-.1rem}
@@ -354,6 +358,8 @@ header.movil{display:flex;align-items:center;gap:.9rem;height:3.25rem;padding:0 
 .hamburguesa{display:flex;flex-direction:column;gap:4px;padding:.4rem}.hamburguesa span{width:20px;height:2px;background:var(--claro);border-radius:2px}
 .lateral,html.menu-plegado .lateral{width:17rem;inset:.75rem auto .75rem .75rem;transform:translateX(calc(-100% - 1rem));transition:transform .2s ease}
 html.menu-plegado .lateral .txt{display:inline}html.menu-plegado .lat-cabeza{flex-direction:row}
+html.menu-plegado .lat-cabeza{padding:0 .35rem .9rem calc(.9rem + 2px)}html.menu-plegado .lateral .marca{justify-content:flex-start}
+html.menu-plegado .lat-item{justify-content:flex-start;padding:.8rem .9rem;gap:.85rem}
 html.menu-plegado .lateral .logo-largo{display:block}html.menu-plegado .lateral .logo-corto{display:none}
 html.menu-plegado .perfil-menu{left:0;right:0;bottom:calc(100% + .4rem);width:auto}
 .lateral:target,html.menu-abierto .lateral{transform:none}
