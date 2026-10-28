@@ -715,10 +715,13 @@ def test_insights_de_un_post(cliente, monkeypatch):
     assert "Alcance" in r.text and "1,520" in r.text and "Guardados" in r.text and pedidos == ["1"]
     assert client.get("/panel/contenido/insights/999").status_code == 404
     assert client.get("/panel/contenido/insights/abc").status_code == 404
+    assert "1,520" in client.get("/panel/contenido/insights/1").text and pedidos == ["1"]  # ya guardadas
 
     async def sin_permiso(media_id):
         raise RuntimeError("Instagram respondió 400")
     monkeypatch.setattr(c.instagram, "media_insights", sin_permiso, raising=False)
+    from igbot import informe
+    monkeypatch.setattr(informe, "CACHE_SEG", 0)  # ya pasó la hora: se vuelven a pedir
     r = client.get("/panel/contenido/insights/1")
     assert r.status_code == 200 and "vuelve a conectarla" in r.text
 

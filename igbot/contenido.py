@@ -43,7 +43,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response, StreamingResponse
 from PIL import Image, ImageOps
 
-from . import config, imagenes, panel, posicionamiento, tools
+from . import config, imagenes, informe, panel, posicionamiento, tools
 from .admin import PANEL, parse_when
 from .comentarios import Rule, shortcode
 from .estilos import ESTILO_INICIAL, ESTILOS, MAX_ESTILOS, USO_COLOR, VIEJOS_ESTILOS, VIEJOS_USOS
@@ -595,11 +595,7 @@ async def pagina_insights(c: Cuenta, media_id: str) -> HTMLResponse:
         except Exception:
             raise HTTPException(status_code=404)
     titulo = recortar((m.get("caption") or "").strip().split("\n")[0]) or "Post de Instagram"
-    try:
-        datos = await c.instagram.media_insights(media_id)
-    except Exception as e:  # p. ej. el token no tiene el permiso de estadísticas
-        log.warning("Sin insights de %s para %s: %s", media_id, c.slug, e)
-        datos = None
+    datos = await informe.numeros(c, media_id)  # None: p. ej. el token no tiene el permiso de estadísticas
     if datos is None:
         cifras = ('<p class="ayuda">Instagram no nos dio las estadísticas de este post. Casi siempre es porque tu'
                   " cuenta se conectó antes de que pidiéramos ese permiso: vuelve a conectarla en"

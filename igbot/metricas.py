@@ -9,9 +9,11 @@ Cada día, desde las HORA, el bucle de fondo de app.py (tick) guarda por cuenta:
   dos últimos, que Instagram todavía ajusta.
 - Una vez por semana, el público: edades, género y ciudades (Instagram solo lo da a
   cuentas con 100 seguidores o más).
+- Las estadísticas de cada post publicado en los últimos 30 días (informe.refrescar_numeros), para que
+  Campañas, Pasadas y Resultados las lean de la base sin preguntarle a Instagram.
 
-Son unas 5 llamadas al día por cuenta (15 la primera vez) y una fila al día en
-metricas_dia. Las métricas que Instagram no da (cuenta chica, permiso que falta) se
+Son unas 5 llamadas al día por cuenta (15 la primera vez) más una por post de esos 30 días, y una
+fila al día en metricas_dia. Las métricas que Instagram no da (cuenta chica, permiso que falta) se
 saltan sin romper las demás.
 
 La sección de Resultados son tarjetas con números, líneas y donas en SVG hechas aquí
@@ -23,7 +25,7 @@ from datetime import date, datetime, timedelta
 from html import escape
 from zoneinfo import ZoneInfo
 
-from . import tools
+from . import informe, tools
 from .cuenta import Cuenta, usar
 
 log = logging.getLogger("igbot.metricas")
@@ -106,6 +108,11 @@ async def guardar(c: Cuenta, hoy: date) -> None:
         if atras <= 2 or "alcance" not in guardados.get(dia.isoformat(), {}):
             if valores := await insights_del_dia(c, dia):
                 await store.guardar_metricas(dia.isoformat(), valores)
+    try:
+        log.info("Estadísticas de %d posts refrescadas para %s", await informe.refrescar_numeros(c),
+                 c.slug or "la principal")
+    except Exception:  # no deja sin público ni seguidores a la cuenta
+        log.exception("No se pudieron refrescar las estadísticas de los posts de %s", c.slug or "la principal")
     semana = f"{hoy.isocalendar()[0]}-{hoy.isocalendar()[1]}"
     anterior = json.loads(await store.get(CLAVE_PUBLICO) or "{}")
     if anterior.get("semana") != semana:

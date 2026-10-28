@@ -400,7 +400,6 @@ def test_tus_campanas_y_reporte(cliente, monkeypatch):
 
     client, c, *_ = cliente
     monkeypatch.setattr(c, "imagenes_mes", 4)
-    monkeypatch.setattr(informe, "_insights", {})
     llamadas = []
     import app as bot
     fake = claude_de_campana(llamadas)
@@ -514,12 +513,9 @@ def test_repetir_reparte_con_la_mezcla():
 
 def test_repetir_lo_que_funciono(cliente, monkeypatch):
     """Con 12 posts con resultados se puede repetir: la forma que ganó, sin repetir asuntos ni preguntas."""
-    from igbot import informe
-
     client, c, *_ = cliente
     import app as bot
     monkeypatch.setattr(c, "imagenes_mes", 40)
-    monkeypatch.setattr(informe, "_insights", {})
     llamadas = []
     fake = claude_de_campana(llamadas)
 
