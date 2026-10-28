@@ -153,6 +153,13 @@ CREATE TABLE IF NOT EXISTS conexiones (
     slug       TEXT                        -- su carpeta en clientes/ si se dio de alta sola
 );
 
+-- Foto diaria de la cuenta de Instagram (seguidores, alcance, vistas...), para Resultados.
+-- Una fila por día (fecha local AAAA-MM-DD); `datos` es JSON y se completa por partes.
+CREATE TABLE IF NOT EXISTS metricas_dia (
+    dia   TEXT PRIMARY KEY,
+    datos TEXT NOT NULL DEFAULT '{}'
+);
+
 CREATE TABLE IF NOT EXISTS kv (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -826,6 +833,24 @@ class Store:
             "SELECT correo FROM solicitudes WHERE usuario = ? ORDER BY created_at DESC LIMIT 1", (usuario,))
         row = await cur.fetchone()
         return row[0] if row else ""
+
+    # --- métricas diarias de Instagram ---
+
+    async def metricas(self, desde: str) -> dict[str, dict]:
+        """Los días guardados desde `desde` (AAAA-MM-DD), del más viejo al más nuevo."""
+        cur = await self.db.execute("SELECT dia, datos FROM metricas_dia WHERE dia >= ? ORDER BY dia", (desde,))
+        return {dia: json.loads(datos) for dia, datos in await cur.fetchall()}
+
+    async def guardar_metricas(self, dia: str, valores: dict) -> None:
+        """Suma `valores` a lo que ya tenía ese día (lo que no viene se queda como estaba)."""
+        cur = await self.db.execute("SELECT datos FROM metricas_dia WHERE dia = ?", (dia,))
+        row = await cur.fetchone()
+        datos = {**(json.loads(row[0]) if row else {}), **valores}
+        await self.db.execute(
+            "INSERT INTO metricas_dia (dia, datos) VALUES (?, ?)"
+            " ON CONFLICT (dia) DO UPDATE SET datos = excluded.datos",
+            (dia, json.dumps(datos)))
+        await self.db.commit()
 
     # --- valores sueltos (token de Instagram, etc.) ---
 
