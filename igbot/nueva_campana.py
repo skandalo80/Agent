@@ -33,7 +33,7 @@ BORRADOR = "campana_borrador"
 
 PASOS = ("Objetivo", "Mensaje", "Enfoque del contenido", "Formatos", "Qué se ve", "Estilo y variedad", "Cantidad y fechas")
 RESUMEN = len(PASOS) + 1
-OCULTOS = {5}  # Qué se ve: fuera del asistente (las imágenes usan lo de siempre: productos, personas, tus fotos)
+OCULTOS = {5}  # Qué se ve: fuera del asistente (el plan de cada imagen sale del ángulo del post y del perfil)
 VISIBLES = [i for i in range(1, RESUMEN) if i not in OCULTOS]
 
 
@@ -279,7 +279,9 @@ async def a_campana(c: Cuenta, b: dict) -> dict:
             if b["condicion"]:
                 producto += f" ({b['condicion']})"
         producto += "."
-    visual = ", ".join(VISUAL[k][0] for k in b["visual"] if k in VISUAL)
+    # Qué se ve solo cuenta si el dueño lo eligió: con el paso oculto, lo decide el plan con los datos de su perfil.
+    ves = [] if 5 in OCULTOS else [k for k in b["visual"] if k in VISUAL and k != "propias"]
+    visual = ", ".join(VISUAL[k][0] for k in ves)
     titular = (f"Texto en las fotos con titular (se alternan): {', '.join(TEXTO[k][0].lower() for k in textos(b))}. "
                if "titular" in b["formatos"] else "")
     estilo = (f"{titular}Variedad visual: {VARIEDAD[b['variedad']][0]}"
@@ -295,7 +297,7 @@ async def a_campana(c: Cuenta, b: dict) -> dict:
             "mensaje": "; ".join(f"{m['titulo']}: {m.get('descripcion', '')}" for m in msgs),
             "producto": producto, "producto_id": prod["id"] if prod else "", "visual": visual, "estilo": estilo,
             "fotos_propias": "propias" in b["visual"], "modo_img": b["armado"], "regla": base == "interaccion",
-            "ves": [[k, f"{VISUAL[k][0]}: {VISUAL[k][1]}"] for k in b["visual"] if k in VISUAL and k != "propias"],
+            "ves": [[k, f"{VISUAL[k][0]}: {VISUAL[k][1]}"] for k in ves],
             "variedad": b["variedad"],
             "referencias": b.get("referencias", []),
             "adn_visual": (b.get("adn") or {}).get("texto", "") if (b.get("adn") or {}).get("fotos") == b.get(
