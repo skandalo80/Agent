@@ -271,7 +271,7 @@ def test_iconos_de_quien_usa_cada_campo_y_caracter_guardado(cliente):
     def iconos(html: str, etiqueta: str) -> str:
         return html.split(etiqueta, 1)[1].split("</label>", 1)[0].split("</legend>", 1)[0]
     p1 = client.get("/panel/empresa?paso=1").text
-    assert "<h2>" not in p1.split('class="cab-paso"')[1].split("</div>")[0]
+    assert "<h2>Empecemos por tu empresa</h2>" in p1.split('class="cab-paso"')[1].split("</div>")[0]  # título y bajada, como Tu asistente y Tu marca
     assert iconos(p1, "Tu empresa en una frase").count('class="uso"') == 2
     p2 = client.get("/panel/empresa?paso=2").text
     assert "Paso 5 de 5" in p2 and "Siguiente: resumen" in p2

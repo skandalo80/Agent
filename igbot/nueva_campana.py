@@ -434,18 +434,18 @@ def riel(b: dict, actual: int) -> str:
         f' name="ir" value="{i}"><b>{"✓" if i in hechos and i != actual else n}</b>{PASOS[i - 1]}</button>'
         for n, i in enumerate(VISIBLES, 1))
     listo = not faltan(b)
-    return (f'<nav class="wiz-pasos" aria-label="Pasos de la campaña"><p>Tu campaña</p>{filas}<div class="sep"></div>'
+    avance = 100 if actual in (RESUMEN, BRIEF) else len(hechos & set(VISIBLES)) * 100 // len(VISIBLES)
+    return (f'<nav class="wiz-pasos" aria-label="Pasos de la campaña"><p>Tu campaña</p>{filas}'
             f'<button class="wiz-paso{" actual" if actual == RESUMEN else ""}{"" if listo else " apagado"}" name="ir"'
             f' value="{RESUMEN}"><b>✓</b>Resumen</button>'
             + (f'<button class="wiz-paso{" actual" if actual == BRIEF else ""}" name="ir" value="{BRIEF}"><b>✓</b>Brief'
-               "</button>" if b.get("brief") else "") + "</nav>")
+               "</button>" if b.get("brief") else "") + panel.avance(avance) + "</nav>")
 
 
 def cab(n: int, titulo: str, bajada: str) -> str:
     v = VISIBLES.index(n) + 1  # el número que ve: sin contar los pasos ocultos
     return (f'<div class="wiz-cab"><p class="ante">Paso {v} de {len(VISIBLES)} · {PASOS[n - 1]}</p><h2>{titulo}</h2>'
-            f'<p class="baj">{bajada}</p><div class="wiz-barra"><i style="width:{round(100 * v / len(VISIBLES))}%"></i>'
-            "</div></div>")
+            f'<p class="baj">{bajada}</p></div>')
 
 
 def pie(n: int) -> str:
@@ -634,8 +634,9 @@ async def resumen(c: Cuenta, b: dict, objetivos: list[dict], mensajes: list[dict
         ("Cantidad y fechas", f"{escape(b['nombre']) or 'Sin nombre'} · {cantidad} ·"
          f" {campanas.de_a(ini, fin)} · {dias} · {horas}", 7, True)]
     tarjetas = "".join(
-        f'<div class="wiz-res{" ancho" if ancho else ""}"><h4>{t}</h4><p>{v if t == "Cantidad y fechas" else escape(v)}</p>'
-        f'<button class="enlace" name="ir" value="{n}">Editar</button></div>' for t, v, n, ancho in bloques)
+        f'<div class="wiz-res{" ancho" if ancho else ""}">'
+        + panel.cab_tarjeta(t, boton=f'<button class="editar" name="ir" value="{n}">Editar</button>')
+        + f'<p>{v if t == "Cantidad y fechas" else escape(v)}</p></div>' for t, v, n, ancho in bloques)
     with usar(c):
         quedan = await campanas.ia_restantes(c)
     editar = bool(b.get("cid"))
@@ -645,7 +646,7 @@ async def resumen(c: Cuenta, b: dict, objetivos: list[dict], mensajes: list[dict
             " central de la campaña. Nada de esto gasta imágenes: primero ves el calendario con textos e ideas, y las"
             " imágenes las generas al final."
             + (" Los posts que ya tienen imagen se quedan en su día." if editar else "")
-            + '</p><div class="wiz-barra"><i style="width:100%"></i></div></div>'
+            + '</p></div>'
             f'<div class="wiz-resumen">{tarjetas}</div>{await cruce(c, b)}'
             f'<div class="wiz-total"><div><b>{cantidad}</b><span>en {b["semanas"]} semana'
             f'{"s" if b["semanas"] > 1 else ""}</span></div><div><b>{len(b["formatos"])} formato'
@@ -724,8 +725,7 @@ def paso_brief(b: dict, quedan: int) -> str:
 
     return ('<div class="wiz-cab"><p class="ante">Brief</p><h2>Elige la idea de tu campaña</h2><p class="baj">Con tu'
             " empresa, tu marca y lo que elegiste, te proponemos tres ideas distintas a tus campañas anteriores. Elige"
-            " una y ajusta su brief: cada post se escribe a partir de él.</p>"
-            '<div class="wiz-barra"><i style="width:100%"></i></div></div>'
+            " una y ajusta su brief: cada post se escribe a partir de él.</p></div>"
             f'<div class="conceptos">{tarjetas}</div>' + "".join(editor(i, x) for i, x in enumerate(conceptos))
             + f'<div class="wiz-pie"><button class="boton secundario" name="ir" value="{RESUMEN}">‹ Resumen</button>'
             f'<button class="boton secundario" name="accion" value="brief"{"" if quedan else " disabled"}>Otras 3 ideas'
