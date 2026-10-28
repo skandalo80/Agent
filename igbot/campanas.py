@@ -27,6 +27,7 @@ cada campaña y una miniatura de cada post (mes()).
 Lo que escribe el cliente son datos, no instrucciones: va entre etiquetas.
 """
 import json
+from collections import Counter
 import logging
 import os
 import random
@@ -1724,15 +1725,6 @@ async def pagina_nueva(c: Cuenta, aviso: str = "", form: dict | None = None) -> 
 PESTANAS = {"activa": "Activas", "proxima": "Próximas", "pasada": "Pasadas"}
 
 
-async def numeros_de(c: Cuenta, camp: dict) -> tuple[int, int, float | None]:
-    """Publicados, alcance y tasa de interacción de la campaña (de Instagram, con su caché de 1 hora)."""
-    renglones = await informe.filas(c, [camp])
-    con = [f["datos"] for f in renglones if f["datos"]]
-    alcance = sum(d.get("reach", 0) for d in con)
-    tasa = round(sum(informe.interacciones(d) for d in con) / alcance * 100, 1) if alcance else None
-    return len(renglones), alcance, tasa
-
-
 def cabecera_campana(camp: dict, hoy: date, botones: str) -> str:
     """La tarjeta de arriba de una campaña: volver, su nombre, fechas y objetivo, y sus botones."""
     ini, fin = date.fromisoformat(camp["inicio"]), informe.fin_de(camp)
@@ -1758,8 +1750,9 @@ def objetivo_corto(camp: dict) -> str:
 
 async def tarjeta_campana(c: Cuenta, camp: dict, cual: str, hoy: date, marcar: bool | None = None,
                           completa: bool = True) -> str:
-    """Una campaña en la lista: fechas, objetivo, sus números en miniatura y sus botones. En Pasadas, con su
-    casilla para el reporte (marcar)."""
+    """Una campaña en la lista, a lo ancho: a la izquierda sus fechas, objetivo, avance y botones; en medio sus
+    próximos posts (en Pasadas, los que mejor funcionaron); a la derecha sus números y su mejor post. En Pasadas,
+    con su casilla para el reporte (marcar)."""
     ini, fin = date.fromisoformat(camp["inicio"]), informe.fin_de(camp)
     n = len(camp["posts"]) if completa else 0
     fechas = de_a(ini, fin) + (f" {fin.year}" if cual == "pasada" else "")
@@ -1773,13 +1766,21 @@ async def tarjeta_campana(c: Cuenta, camp: dict, cual: str, hoy: date, marcar: b
         avance = 0
     else:
         avance = 100
-    publicados, alcance, tasa = await numeros_de(c, camp) if cual != "proxima" else (0, 0, None)
+    renglones = await informe.filas(c, [camp]) if cual != "proxima" and completa else []
+    con = [f["datos"] for f in renglones if f["datos"]]
+    publicados, alcance = len(renglones), sum(d.get("reach", 0) for d in con)
+    tasa = round(sum(informe.interacciones(d) for d in con) / alcance * 100, 1) if alcance else None
     total_posts = n or len(camp["posts"])
-    mets = (("Publicados", f"{publicados} de {total_posts}" if cual == "activa" else str(publicados)),
-            ("Alcance", informe.cifra(alcance) if alcance else "—"),
-            ("Interacción", informe.pct(tasa) if tasa is not None else "—")) if cual != "proxima" else (
-        ("Posts", str(total_posts)), ("Con imagen", str(sum(1 for p in camp["posts"] if p.get("post_id")))),
-        ("Formatos", str(len({formato_de(p) for p in camp["posts"]}))))
+    if cual == "proxima":
+        mets = (("Posts", str(total_posts)), ("Con imagen", str(sum(1 for p in camp["posts"] if p.get("post_id")))),
+                ("Formatos", str(len({formato_de(p) for p in camp["posts"]}))),
+                ("Historias", str(sum(1 for p in camp["posts"] if es_historia(p)))))
+    else:
+        mets = (("Publicados", f"{publicados} de {total_posts}" if cual == "activa" else str(publicados)),
+                ("Alcance", informe.cifra(alcance) if alcance else "—"),
+                ("Interacción", informe.pct(tasa) if tasa is not None else "—"),
+                ("Comentarios", str(sum(d.get("comments", 0) for d in con)) if con else "—"))
+    estados = await estados_de(c, camp) if completa else {}
     obj = objetivo_corto(camp)
     casilla = ("" if marcar is None else
                f'<input class="sel" type="checkbox" name="c" value="{camp["id"]}" form="tus-campanas"'
@@ -1792,12 +1793,71 @@ async def tarjeta_campana(c: Cuenta, camp: dict, cual: str, hoy: date, marcar: b
                + (f'<a class="boton secundario chico" href="{url_de(camp)}/brief">Brief</a>' if camp.get("brief") else ""))
     tacho = (f'<a class="borrar{" con-sel" if casilla else ""}" href="{url_de(camp)}?borrar=lista"'
               f' title="Borrar campaña" aria-label="Borrar campaña">{PAPELERA}</a>' if completa else "")
+    puntos = "".join(f'<span><i class="{clase}"></i>{v} {t}</span>' for (t, clase), v in
+                     ((("publicados", "e-pub"), estados.get("publicados", 0)),
+                      (("programados", "e-prog"), estados.get("programados", 0)),
+                      (("en borrador", "e-bor"), estados.get("borradores", 0)),
+                      (("sin imagen", "e-sin"), estados.get("sin", 0)),
+                      (("no salieron", "e-fallo"), estados.get("fallidos", 0))) if v)
+    if cual == "pasada":
+        medio = ("Lo que mejor funcionó", "".join(mini_mejor(c, f) for f in renglones[:4])
+                 or '<p class="nada">Ningún post de esta campaña se publicó.</p>')
+    else:
+        medio = ("Próximos posts", await proximos(c, camp, hoy) if completa else "")
+    mejor = renglones[0] if cual == "activa" and renglones and renglones[0]["tasa"] is not None else None
     return (f'<div class="camp{"" if publicados or cual != "pasada" else " apagada"}">'
             f'{casilla}{tacho}'
-            f'<div><h3>{escape(camp["nombre"])}</h3><span class="f">{fechas}</span></div>'
+            f'<div class="col-a"><h3>{escape(camp["nombre"])}</h3><span class="f">{fechas}</span>'
             + (f'<div><span class="obj">{escape(obj)}</span></div>' if obj else "")
-            + '<div class="mets">' + "".join(f"<div><b>{v}</b><span>{t}</span></div>" for t, v in mets) + "</div>"
-            f'<div class="prog"><i style="width:{avance}%"></i></div><div class="acc">{botones}</div></div>')
+            + f'<div class="prog"><i style="width:{avance}%"></i></div>'
+            + (f'<div class="puntos">{puntos}</div>' if puntos else "")
+            + f'<div class="acc">{botones}</div></div>'
+            f'<div class="col-b"><span class="lbl">{medio[0]}</span>{medio[1]}</div>'
+            f'<div class="col-c"><span class="lbl">{"Resultados" if cual == "pasada" else "Lista para salir" if cual == "proxima" else "Cómo va"}</span>'
+            '<div class="mets">' + "".join(f"<div><b>{v}</b><span>{t}</span></div>" for t, v in mets) + "</div>"
+            + (f'<div class="mejor">{mini_img(c, mejor["token"])}<div>Mejor post<b>{escape(mejor["titulo"] or "Sin título")}</b>'
+               f'{informe.pct(mejor["tasa"])} de interacción</div></div>' if mejor else "")
+            + "</div></div>")
+
+
+async def estados_de(c: Cuenta, camp: dict) -> dict:
+    """Cuántos posts de la campaña están publicados, programados, en borrador, sin imagen o no salieron."""
+    posts = await c.store.posts_by_id([p["post_id"] for p in camp["posts"] if p.get("post_id")])
+    cuenta = Counter()
+    for p in camp["posts"]:
+        st = posts.get(p.get("post_id"), {}).get("status") if p.get("post_id") else None
+        cuenta[{"publicada": "publicados", "publicando": "programados", "programada": "programados",
+                "borrador": "borradores", "fallida": "fallidos"}.get(st, "sin")] += 1
+    return cuenta
+
+
+def mini_img(c: Cuenta, token: str) -> str:
+    return (f'<img class="mini" src="{url_imagen(c, token)}" alt="" loading="lazy">' if token
+            else '<span class="mini sin">sin imagen</span>')
+
+
+def mini_mejor(c: Cuenta, f: dict) -> str:
+    return (f'<div class="pp">{mini_img(c, f["token"])}<b>{escape(f["titulo"] or "Sin título")}</b>'
+            f'<span>{informe.pct(f["tasa"]) + " de interacción" if f["tasa"] is not None else "sin números aún"}</span></div>')
+
+
+async def proximos(c: Cuenta, camp: dict, hoy: date, cuantos_: int = 4) -> str:
+    """Los siguientes posts que salen (de hoy en adelante, sin los ya publicados), con su miniatura, día y hora."""
+    posts = await c.store.posts_by_id([p["post_id"] for p in camp["posts"] if p.get("post_id")])
+    sig = sorted((p for p in camp["posts"] if p["dia"] >= hoy.isoformat()
+                  and posts.get(p.get("post_id"), {}).get("status") not in ("publicada", "publicando")),
+                 key=lambda p: (p["dia"], p.get("hora") or ""))[:cuantos_]
+    if not sig:
+        return '<p class="nada">Ya no quedan posts por salir.</p>'
+    piezas = []
+    for p in sig:
+        post = posts.get(p.get("post_id"))
+        media = await c.store.media(post["media_ids"][0]) if post and post.get("media_ids") else None
+        d = date.fromisoformat(p["dia"])
+        piezas.append(f'<a class="pp" href="{url_de(camp)}?post={p["k"]}#detalle">{mini_img(c, media[0] if media else "")}'
+                      f'<b>{escape(p["titulo"])}</b><span>{DIAS[d.weekday()]} {d.day}</span>'
+                      f'<em>{escape(p.get("hora") or "")}</em></a>')
+    return f'<div class="prox">{"".join(piezas)}</div>'
 
 
 PERIODOS = {"mes": ("Último mes", 31), "dos": ("Últimos 2 meses", 62), "rango": ("Rango de fechas", 0)}
