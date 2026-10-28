@@ -82,6 +82,7 @@ PASOS = {
     5: ("Preguntas frecuentes", "Lo que más te preguntan"),
 }
 ORDEN = [1, 3, 4, 5, 2]
+CORTOS = {3: "Productos", 5: "Preguntas"}  # en la barra de pasos, para que quepan en una línea
 RESUMEN = 6
 
 MAX_PRODUCTOS, MAX_FOTOS_PRODUCTO = 60, 5
@@ -557,13 +558,9 @@ main.emp{color:var(--claro);padding-bottom:4rem}
 .res:first-of-type{border-top:0;padding-top:0}
 .res b{font-size:1rem}.res p{grid-column:1;margin:0;color:#A8A8AE;font-size:.9rem}
 .res .mini{grid-row:1/3;grid-column:2;align-self:center}
-.ideas{display:grid;grid-template-columns:1fr 1fr;gap:1.2rem}
-.ideas h4{margin:0 0 .6rem;font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:var(--gris)}
-.idea{border:1px solid #2E3035;border-radius:.85rem;padding:.65rem .85rem;margin-bottom:.5rem;background:#18191C}
-.idea b{display:block;font-size:.92rem}.idea span{font-size:.8rem;color:var(--gris)}
 @media(max-width:860px){.mago{grid-template-columns:1fr}.cab-paso h2{font-size:1.6rem}.caja-o{padding:1.3rem 1.2rem}
 .pie-paso .der{width:100%}.pie-paso .der .boton{flex:1;text-align:center;padding:.8rem 1rem}.riel{position:static}.riel .lista{flex-direction:row;overflow-x:auto}
-.riel .paso{flex:none;width:auto}.riel .paso small{display:none}.dos,.ideas{grid-template-columns:1fr}.fotos-o{grid-template-columns:repeat(3,1fr)}
+.riel .paso{flex:none;width:auto}.riel .paso small{display:none}.dos{grid-template-columns:1fr}.fotos-o{grid-template-columns:repeat(3,1fr)}
 .prod{grid-template-columns:3.5rem 1fr}.prod .foto{width:3.5rem;height:3.5rem}.prod>div:last-child{grid-column:2}.prod .precio{text-align:left}.prod .acc{justify-content:flex-start}}
 .paso .n{color:var(--acento);border-color:rgba(255,138,61,.45)}
 .paso.on .n{visibility:hidden}
@@ -588,6 +585,14 @@ main.emp{color:var(--claro);padding-bottom:4rem}
 .uso{display:inline-grid;place-items:center;width:1.45rem;height:1.45rem;border-radius:.45rem;background:rgba(255,255,255,.07);color:#A8A8AE}
 .leyenda-usos{display:flex;flex-wrap:wrap;gap:.5rem 1.2rem;font-size:.85rem;color:#A8A8AE;margin:0 0 1.2rem}
 .leyenda-usos .l{display:inline-flex;align-items:center;gap:.45rem}
+/* Igual que Tu marca y Tu asistente: barra de pasos de la misma altura y el paso entero dentro de una tarjeta. */
+.riel{margin-bottom:0;min-height:5.25rem}
+.riel .paso{padding:.55rem .6rem;gap:.6rem}.riel .paso b{font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.riel .paso .n{width:1.75rem;height:1.75rem}
+.hoja-o{background:var(--grafito);border-radius:1.75rem;padding:2rem 2.25rem;box-shadow:var(--clay-sombra),var(--clay-luz)}
+.hoja-o .caja-o{background:#1B1C1F}.hoja-o .caja-o:last-of-type{margin-bottom:0}
+.cab-paso .antetitulo{font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;font-weight:600}
+@media(max-width:560px){.hoja-o{padding:1.4rem 1.1rem}}
 """
 
 
@@ -642,7 +647,7 @@ def riel(e: dict, prods: list[dict], actual: int, con_form: bool) -> str:
     for n, (titulo, bajada) in [*((n, PASOS[n]) for n in ORDEN), (RESUMEN, ("Resumen", "Revisa y guarda"))]:
         cls = "on" if n == actual else "ok" if n in listos else ""
         marca = "★" if n == RESUMEN else "✓" if n in listos and n != actual else str(numero(n))
-        dentro = f'<span class="n">{marca}</span><span><b>{titulo}</b><small>{bajada}</small></span>'
+        dentro = f'<span class="n">{marca}</span><span><b>{CORTOS.get(n, titulo)}</b><small>{bajada}</small></span>'
         actual_ = ' aria-current="step"' if n == actual else ""
         items.append(f'<button class="paso {cls}" form="f-emp" name="accion" value="ir_{n}"{actual_}>{dentro}</button>'
                      if con_form else f'<a class="paso {cls}" href="/panel/empresa?paso={n}"{actual_}>{dentro}</a>')
@@ -864,36 +869,13 @@ def _resumen_de(e: dict, prods: list[dict], n: int) -> str:
     return escape(texto) or '<i style="font-style:normal;color:var(--gris)">Sin llenar</i>'
 
 
-def ideas(opciones: dict | None, e: dict) -> str:
-    if opciones:
-        def columna(titulo, xs):
-            return (f"<div><h4>{titulo}</h4>" + "".join(
-                f'<div class="idea"><b>{escape(x["titulo"])}</b><span>{escape(x.get("descripcion", ""))}</span></div>'
-                for x in xs) + "</div>")
-        objetivos = [{**o, "descripcion": (" · ".join(m["titulo"] for m in o["mensajes"]) if o.get("mensajes")
-                                           else o.get("descripcion", ""))} for o in opciones["objetivos"]]
-        cuerpo = (f'<div class="ideas">{columna("¿Qué quieres conseguir? Y qué comunicar con cada uno", objetivos)}'
-                  "</div>" if any(o.get("mensajes") for o in opciones["objetivos"]) else
-                  f'<div class="ideas">{columna("¿Qué quieres conseguir?", opciones["objetivos"])}'
-                  f'{columna("¿Qué quieres comunicar?", opciones["mensajes"])}</div>')
-    elif lista(e) and e.get("terminado"):
-        cuerpo = '<p class="vacio-o">Las estamos preparando con tu perfil. Recarga en un momento para verlas.</p>'
-    elif lista(e):
-        cuerpo = '<p class="vacio-o">Se preparan cuando guardes tu perfil.</p>'
-    else:
-        cuerpo = '<p class="vacio-o">Llena lo esencial de tu empresa (paso 1) para prepararlas.</p>'
-    return ('<div class="caja-o"><h3>Tus campañas, a la medida <span class="etq-o">Se actualiza al guardar</span></h3>'
-            '<p class="sub">Con tu perfil preparamos las opciones que verás al crear una campaña. Se quedan fijas'
-            f" hasta que cambies tu perfil.</p>{cuerpo}</div>")
-
-
-def resumen(e: dict, prods: list[dict], opciones: dict | None) -> str:
+def resumen(e: dict, prods: list[dict]) -> str:
     filas = "".join(f'<div class="res"><b>{PASOS[n][0]}</b><p>{_resumen_de(e, prods, n)}</p>'
                     f'<button class="mini" name="accion" value="ir_{n}">Editar</button></div>' for n in ORDEN)
     falta = "" if lista(e) else '<span class="nota">Te falta lo esencial del paso 1.</span>'
     return (
         '<div class="cab-paso"><p class="antetitulo">Resumen</p></div>'
-        f'<div class="caja-o">{filas}</div>{ideas(opciones, e)}'
+        f'<div class="caja-o">{filas}</div>'
         f'<div class="pie-paso">{falta}<span class="der"><a class="boton secundario" href="/panel">Ir al panel</a>'
         '<button class="boton acento" name="accion" value="terminar">Guardar perfil ✓</button></span></div>'
     )
@@ -914,7 +896,7 @@ async def pagina(c: Cuenta, paso: int, e: dict | None = None, aviso: str = "", e
         cuerpo = cabeza_paso(3) + paso_3(c, e, prods, editando)
     else:
         if paso == RESUMEN:
-            dentro = resumen(e, prods, await opciones_campana(c))
+            dentro = resumen(e, prods)
         else:
             dentro = cabeza_paso(paso) + {1: paso_1, 2: paso_2, 4: paso_4}[paso](e) if paso != 5 else (
                 cabeza_paso(5) + paso_5(e, filas_extra))
@@ -929,7 +911,7 @@ async def pagina(c: Cuenta, paso: int, e: dict | None = None, aviso: str = "", e
         + await panel.menu_de(c, "cuenta", sub="empresa")
         + panel.encabezado("Tu cuenta · Perfil de empresa")
         + f'<main class="emp"><div class="contenedor">{avisos}<div class="mago">'
-        f'{riel(e, prods, paso, con_form=True)}<div>{cuerpo}</div></div></div></main>'
+        f'{riel(e, prods, paso, con_form=True)}<div class="hoja-o">{cuerpo}</div></div></div></main>'
     )
 
 

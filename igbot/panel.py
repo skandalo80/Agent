@@ -1268,6 +1268,8 @@ h1,h2,h3{text-wrap:balance}
 .pp-grid .pp-foto{aspect-ratio:1}
 .pp-vs{margin-left:.5rem;background:rgba(243,154,54,.14);color:var(--naranja-t)!important;border-radius:999px;padding:.15rem .6rem;font-weight:700}
 @media(max-width:700px){.pp-grid{grid-template-columns:1fr 1fr;gap:.6rem}.pp-grid .pp-cuerpo{padding:.75rem}.pp-grid .pp-nums{grid-template-columns:1fr 1fr}.pp-grid .pp-texto{display:none}.pp-grid .pp-tasa small{display:none}.pp-grid .pp-nums span{font-size:.68rem}.pp-tasa{flex-wrap:wrap}.res-posts .met-cab{flex-direction:column;gap:.2rem}.pp.mejor{flex-direction:column}.pp.mejor .pp-foto{width:100%}.pp.mejor .pp-nums{grid-template-columns:repeat(3,1fr)}}
+/* Configuración (asistente, marca y empresa): la barra de pasos mide lo mismo en las tres páginas. */
+.wiz.mrc>.wiz-pasos{min-height:5.25rem;box-sizing:border-box}
 """
 
 
