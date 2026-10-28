@@ -54,6 +54,10 @@ RESUMEN = "resumen"
 
 # --- datos ---
 
+def completa(marca: dict) -> bool:
+    return set(CLAVES) <= hechos(marca)
+
+
 def hechos(marca: dict) -> set[str]:
     """Los pasos ya completos. Una marca guardada con el formulario de antes cuenta lo que ya tenía."""
     pasos = set(marca.get("pasos", []))
@@ -359,9 +363,9 @@ def resumen(c: Cuenta, marca: dict) -> str:
         + caja(2, "Colores", escape(nombre_colores), franja)
         + caja(3, "Tipografía", f"{fuente} + {letra_texto(marca)}", vista_par(fuente, letra_texto(marca), chica=True))
         + caja(4, "Logotipo", "Cómo aparece tu marca.", logo_html)
-        + '</div><div class="wiz-pie"><span>Tu marca se aplica sola en cada campaña. El objetivo, los formatos y la'
-        " variedad visual y lo que se ve se eligen al crear cada campaña.</span>"
-        '<a class="boton" href="/panel/contenido/campanas/nueva">Crear una campaña →</a></div>')
+        + '</div><div class="wiz-pie"><span>Tu marca ya está guardada y se aplica sola en cada campaña nueva. El'
+        " objetivo, los formatos y la variedad visual se eligen al crear cada campaña.</span>"
+        '<a class="boton secundario" href="/panel/contenido/campanas/nueva">Crear una campaña</a></div>')
 
 
 async def pagina_marca(c: Cuenta, paso: str, marca: dict | None = None, aviso: str = ""):
@@ -381,14 +385,15 @@ async def pagina_marca(c: Cuenta, paso: str, marca: dict | None = None, aviso: s
                      # Enter en un campo de texto guarda y sigue (el primer botón del formulario).
                      '<button class="oculto" name="accion" value="guardar" tabindex="-1" aria-hidden="true">Guardar</button>'
                      + cabeza(i) + hacer()
-                     + pie(i, "Ver resumen →" if i == len(PASOS) else "Guardar y continuar →") + "</form>")
+                     # Ya completa (entró a cambiar algo desde el resumen): guarda y vuelve al resumen.
+                     + pie(i, "Guardar cambios" if completa(marca) else
+                           "Ver resumen →" if i == len(PASOS) else "Guardar y continuar →") + "</form>")
     # El aviso de lo que falta va dentro del paso, para que los pasos queden a la altura de las demás páginas.
     falta = await panel.pendiente(c, "marca")
     cuerpo = f'<div class="wiz mrc">{menu_pasos(actual, hechos_)}<div class="wiz-main">{falta}{contenido}</div></div>'
-    # Tu marca es de la cuenta (menú de perfil, abajo), no una sección de Contenido.
+    # Tu marca es de la cuenta (Configuración, abajo en el menú), no una sección de Contenido.
     return panel.pagina(
-        panel.cabecera(salir=True, menu="cuenta", cuenta=c, sub="marca", perfil=await panel.usuario(c),
-                       foto=await panel.foto_perfil(c))
+        await panel.menu_de(c, "cuenta", sub="marca")
         + panel.encabezado("Tu cuenta · Tu marca")
         + '<main class="oscuro-pag"><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
@@ -439,7 +444,7 @@ async def ver_marca(request: Request):
         marca = await marca_de(c)
         faltan = [i for i, k in enumerate(CLAVES, 1) if k not in hechos(marca)]
         paso = RESUMEN if lista(marca) or not faltan else str(faltan[0])
-    return await pagina_marca(c, paso)
+    return await pagina_marca(c, paso, aviso="Guardamos tus cambios." if request.query_params.get("guardado") else "")
 
 
 @router.post("/marca")
@@ -462,7 +467,8 @@ async def guardar_marca(request: Request):
         por = (f"para un negocio de {giro.lower()}" if giro in RECOMENDADOS else
                "(llena el giro en tu Perfil de empresa para una recomendación a tu medida)")
         return await pagina_marca(c, "1", {**antes, "estilos": elegidos},
-                                  f"Te recomendamos {nombres} {por}. Cámbialos si quieres y pulsa Guardar y continuar.")
+                                  f"Te recomendamos {nombres} {por}. Cámbialos si quieres y pulsa"
+                                  f" {'Guardar cambios' if completa(antes) else 'Guardar y continuar'}.")
     datos, aviso = guardar_paso(f, antes, paso)
     if aviso:
         return await pagina_marca(c, str(i), aviso=aviso)
@@ -485,4 +491,6 @@ async def guardar_marca(request: Request):
     log.info("@%s guardó Tu marca: %s", await panel.usuario(c), paso)
     if accion != "guardar" or aviso:  # subió o quitó el logo: se queda en el paso para verlo
         return await pagina_marca(c, str(i), datos, aviso)
+    if completa(antes):
+        return RedirectResponse(f"{BASE}?paso={RESUMEN}&guardado=1", status_code=303)
     return RedirectResponse(f"{BASE}?paso={i + 1 if i < len(PASOS) else RESUMEN}", status_code=303)

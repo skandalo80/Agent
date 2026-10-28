@@ -13,7 +13,10 @@ idea_nota; el cuerpo se parte en secciones "## chat" (líneas "- cliente: ..." y
 "- agente: ..."), "## preguntas", "## contenido" (líneas "- Título: texto") y
 "## faq" (líneas "- ¿Pregunta? | Respuesta").
 
-Escribe web/blog/, web/para/ y web/sitemap.xml.
+Páginas sueltas ("Qué es Skandar"): a partir de paginas/*.md, con cabecera
+titulo, descripcion y antetitulo y el mismo markdown del blog; salen en web/<slug>.html.
+
+Escribe web/blog/, web/para/, las páginas sueltas, web/sitemap.xml y web/llms.txt.
 Uso: python scripts/generar_blog.py
 """
 
@@ -27,9 +30,10 @@ from urllib.parse import quote
 RAIZ = Path(__file__).resolve().parent.parent
 FUENTES = RAIZ / "blog"
 GIROS = RAIZ / "giros"
+PAGINAS = RAIZ / "paginas"
 WEB = RAIZ / "web"
 SITIO = "https://skandar.online"
-CSS_VERSION = "2026-10-28"
+CSS_VERSION = "2026-10-28e"
 
 # Orden en el índice: el primero es el destacado.
 ORDEN = [
@@ -39,6 +43,8 @@ ORDEN = [
     "calendario-de-contenido-instagram",
     "comenta-y-recibe-por-dm",
     "community-manager-con-inteligencia-artificial",
+    "skandar-vs-manychat",
+    "alternativas-a-manychat",
 ]
 
 MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
@@ -125,7 +131,7 @@ def cabeza(titulo, descripcion, url, tipo="website", extra=""):
 <link rel="icon" type="image/png" href="/favicon-32.png" sizes="32x32">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <meta name="description" content="{d}">
-<meta name="theme-color" content="#36203E">
+<meta name="theme-color" content="#18191C">
 <link rel="canonical" href="{url}">
 <meta property="og:type" content="{tipo}">
 <meta property="og:locale" content="es_MX">
@@ -145,7 +151,7 @@ def cabeza(titulo, descripcion, url, tipo="website", extra=""):
 <body>
 <header>
   <div class="contenedor">
-    <a class="marca" href="/"><span>Skandar</span></a>
+    <a class="marca" href="/" aria-label="Skandar, inicio"><img src="/logo-skandar.svg" alt="Skandar" width="110" height="30"></a>
     <nav class="nav-links">
       <a href="/#contenido">Contenido</a>
       <a href="/#como-funciona">Cómo funciona</a>
@@ -167,18 +173,20 @@ PIE = """</main>
 
 <footer>
   <div class="contenedor">
-    <a class="marca" href="/">Skandar</a>
+    <a class="marca" href="/" aria-label="Skandar, inicio"><img src="/logo-skandar.svg" alt="Skandar" width="81" height="22"></a>
     <span>© 2026 Skandar · México</span>
     <div class="pie-enlaces">
       <a href="/blog/">Blog</a>
       <a href="/para/">Por giro</a>
+      <a href="/que-es-skandar">Qué es Skandar</a>
       <a href="/privacidad">Aviso de privacidad</a>
+      <a href="/terminos">Términos</a>
       <a href="mailto:hola@skandar.online">Contacto</a>
       <a href="https://console.skandar.online/panel">Entrar</a>
     </div>
   </div>
 </footer>
-<script src="/sitio.js"></script>
+<script src="/sitio.js?v=2026-10-28d"></script>
 </body>
 </html>
 """
@@ -548,10 +556,88 @@ def pagina_giros(todos):
 """ + PIE
 
 
-def sitemap(todos, giros):
-    urls = [("/", "2026-10-26"), ("/privacidad", "2026-10-19"),
+def leer_pagina(slug):
+    texto = (PAGINAS / f"{slug}.md").read_text(encoding="utf-8")
+    cabecera, cuerpo = texto.split("\n---\n", 1)
+    p = dict(l.split(": ", 1) for l in cabecera.strip().split("\n"))
+    p["slug"] = slug
+    p["cuerpo"] = cuerpo
+    return p
+
+
+def pagina_suelta(p):
+    url = f"{SITIO}/{p['slug']}"
+    cuerpo, _ = cuerpo_html(p["cuerpo"])
+    esquema = {
+        "@context": "https://schema.org",
+        "@type": "AboutPage",
+        "name": p["titulo"],
+        "url": url,
+        "description": p["descripcion"],
+        "inLanguage": "es-MX",
+        "mainEntity": {
+            "@type": "Organization",
+            "name": "Skandar",
+            "url": f"{SITIO}/",
+            "logo": f"{SITIO}/apple-touch-icon.png",
+            "email": "hola@skandar.online",
+            "description": p["descripcion"],
+            "areaServed": "MX",
+            "sameAs": ["https://www.instagram.com/skandar.online/"],
+        },
+    }
+    return cabeza(f"{p['titulo']} · Skandar", p["descripcion"], url, extra=ld(esquema)) + f"""  <section class="oscuro articulo-cabecera">
+    <div class="contenedor">
+      <p class="migas"><a href="/">Inicio</a> / {html.escape(p['titulo'])}</p>
+      <p class="antetitulo">{html.escape(p['antetitulo'])}</p>
+      <h1>{html.escape(p['titulo'])}<span class="punto">.</span></h1>
+      <p class="bajada">{html.escape(p['descripcion'])}</p>
+    </div>
+  </section>
+
+  <section class="claro articulo">
+    <div class="contenedor angosto">
+{cuerpo}
+      <div class="cta-articulo oscuro">
+        <h3>Velo funcionar con tu negocio.</h3>
+        <p>Escríbenos por Instagram y te contestamos como lo haría tu propio asistente.</p>
+        <div class="acciones izquierda-acciones"><a class="boton" href="https://ig.me/m/skandar.online">Escribir a @skandar.online</a><a class="boton contorno" href="/#planes">Ver planes</a></div>
+      </div>
+    </div>
+  </section>
+""" + PIE
+
+
+def llms_txt(todos, giros, paginas):
+    """Resumen para modelos de lenguaje (https://llmstxt.org): qué es Skandar y sus páginas."""
+    que_es = next(p for p in paginas if p["slug"] == "que-es-skandar")
+    filas = [
+        "# Skandar",
+        "",
+        f"> {que_es['descripcion']}",
+        "",
+        "- Hecho en México, en español. Funciona solo con Instagram, con la API oficial de Meta.",
+        "- Asistente virtual: US$29 al mes más IVA, 1,000 respuestas al mes.",
+        "- Community Manager: US$79 al mes más IVA, incluye el Asistente virtual, 2,500 respuestas y 12 publicaciones al mes.",
+        "- Sin costo de instalación ni plazo forzoso. Contacto: hola@skandar.online, Instagram @skandar.online.",
+        "",
+        "## Sobre Skandar",
+        "",
+        f"- [Inicio]({SITIO}/): qué hace la plataforma, planes y preguntas frecuentes.",
+    ]
+    filas += [f"- [{p['titulo']}]({SITIO}/{p['slug']}): {p['descripcion']}" for p in paginas]
+    filas += ["", "## Por giro", ""]
+    filas += [f"- [{g['titulo']}]({SITIO}/para/{g['slug']}): {g['descripcion']}" for g in giros]
+    filas += ["", "## Blog", ""]
+    filas += [f"- [{a['titulo']}]({SITIO}/blog/{a['slug']}): {a['descripcion']}" for a in todos]
+    return "\n".join(filas) + "\n"
+
+
+def sitemap(todos, giros, paginas):
+    urls = [("/", "2026-10-26"), ("/privacidad", "2026-10-28"), ("/terminos", "2026-10-28"),
             ("/blog/", max(a.get("modificado", a["fecha"]) for a in todos))]
     urls += [(f"/blog/{a['slug']}", a.get("modificado", a["fecha"])) for a in todos]
+    urls += [(f"/{p['slug']}", "2026-10-28") for p in paginas]
     if giros:
         urls.append(("/para/", max(g["fecha"] for g in giros)))
         urls += [(f"/para/{g['slug']}", g["fecha"]) for g in giros]
@@ -574,7 +660,11 @@ def main():
     (para / "index.html").write_text(pagina_giros(giros), encoding="utf-8")
     for g in giros:
         (para / f"{g['slug']}.html").write_text(pagina_giro(g, giros), encoding="utf-8")
-    (WEB / "sitemap.xml").write_text(sitemap(todos, giros), encoding="utf-8")
+    paginas = [leer_pagina(p.stem) for p in sorted(PAGINAS.glob("*.md"))]
+    for p in paginas:
+        (WEB / f"{p['slug']}.html").write_text(pagina_suelta(p), encoding="utf-8")
+    (WEB / "sitemap.xml").write_text(sitemap(todos, giros, paginas), encoding="utf-8")
+    (WEB / "llms.txt").write_text(llms_txt(todos, giros, paginas), encoding="utf-8")
     print(f"{len(todos)} artículos en {salida} y {len(giros)} giros en {para}")
 
 

@@ -16,6 +16,7 @@ Claude. Los números se guardan CACHE_SEGUNDOS en memoria para que recargar la
 página no repita las consultas. Las gráficas son SVG hechas aquí (el CSP del
 bot no deja JavaScript; sus estilos están en panel.ESTILO); el detalle de cada barra sale al pasar el cursor.
 """
+import json
 import time
 from collections import Counter
 from datetime import date, datetime, timedelta
@@ -227,15 +228,8 @@ def kpi(etiqueta: str, valor, nota: str = "") -> str:
     return f'<div class="kpi"><span>{etiqueta}</span><b>{valor}</b><small>{nota}</small></div>'
 
 
-def seccion_contenido(d: dict) -> str:
+def seccion_comentarios(d: dict) -> str:
     palabras = "".join(f'<span class="chip">{escape(w)} · {n}</span> ' for w, n in d["palabras"])
-    publicadas = "".join(
-        f'<div class="fila"><div class="datos"><b>{escape(p["caption"][:80] or "Publicación")}</b>'
-        + (f'<span><a class="enlace" href="{escape(p["permalink"])}" rel="noopener">Ver en Instagram ›</a></span>'
-           if p["permalink"].startswith("https://") else "")
-        + "</div></div>"
-        for p in d["publicadas"]
-    )
     return (
         '<div class="tarjeta"><span class="num">Comentarios</span><h2>De comentario a mensaje</h2>'
         '<p class="ayuda">Cuando alguien comenta una palabra clave, tu asistente le escribe por mensaje directo.</p>'
@@ -247,11 +241,84 @@ def seccion_contenido(d: dict) -> str:
         + "</div>"
         + (f'<p class="ayuda" style="margin-top:1.25rem">Palabras clave más usadas</p><div>{palabras}</div>' if palabras else "")
         + "</div>"
-        '<div class="tarjeta"><span class="num">Publicaciones</span>'
-        f'<h2>{plural(len(d["publicadas"]), "publicada")} · {plural(d["programadas"], "programada")}</h2>'
-        + (publicadas or '<p class="ayuda">No hubo publicaciones en este periodo.</p>')
-        + '<div class="acciones"><a class="boton secundario" href="/panel/contenido">Ir a Contenido</a></div></div>'
     )
+
+
+MAX_POSTS = 24  # los más recientes del periodo con sus Insights (Instagram los guarda 1 h en informe)
+
+
+async def posts_con_numeros(c: Cuenta, publicadas: list[dict]) -> list[dict]:
+    """Los posts publicados del periodo con su foto y sus Insights, del de mejor interacción al peor
+    (los que aún no tienen números, al final)."""
+    import asyncio
+
+    from . import contenido, informe
+    posts = sorted(publicadas, key=lambda p: -(p["publish_at"] or p["created_at"]))[:MAX_POSTS]
+    ids = await informe.ids_de_instagram(c, posts)
+    turno = asyncio.Semaphore(4)
+
+    async def leer(post):
+        if post["id"] not in ids:
+            return None
+        async with turno:
+            return await informe.numeros(c, ids[post["id"]])
+
+    datos = await asyncio.gather(*(leer(p) for p in posts))
+    salida = []
+    for post, d in zip(posts, datos):
+        media = await c.store.media(post["media_ids"][0]) if post["media_ids"] else None
+        salida.append({"post": post, "datos": d, "tasa": informe.tasa(d),
+                       "imagen": contenido.url_imagen(c, media[0]) if media else ""})
+    salida.sort(key=lambda x: (x["tasa"] is None, -(x["tasa"] or 0)))
+    return salida
+
+
+def numero_post(etiqueta: str, valor) -> str:
+    return f'<div><b>{"—" if valor is None else metricas.cifra(valor)}</b><span>{etiqueta}</span></div>'
+
+
+def tarjeta_post(c: Cuenta, x: dict, mejor: bool = False, promedio: float | None = None) -> str:
+    p, d = x["post"], x["datos"] or {}
+    cuando = datetime.fromtimestamp(p["publish_at"] or p["created_at"], ZoneInfo(c.timezone))
+    foto = (f'<img src="{escape(x["imagen"])}" alt="" loading="lazy" referrerpolicy="no-referrer">'
+            if x["imagen"] else '<div class="sin-foto">Sin imagen</div>')
+    if p["permalink"].startswith("https://"):
+        foto = f'<a href="{escape(p["permalink"])}" rel="noopener" title="Ver en Instagram">{foto}</a>'
+    tasa = (f'<b class="tasa">{x["tasa"]:.1f}%</b><small>interacción</small>'.replace(".0%", "%")
+            if x["tasa"] is not None else '<small>Instagram aún no da sus números</small>')
+    tipo = "Historia" if p.get("tipo") == "historia" else "Post"
+    if mejor and promedio and x["tasa"]:
+        tasa += f'<small class="pp-vs">{x["tasa"] / promedio:.1f}× tu promedio</small>'.replace(".0×", "×")
+    return (
+        f'<article class="pp{" mejor" if mejor else ""}"><div class="pp-foto">{foto}'
+        + ('<span class="pp-sello">Tu mejor post</span>' if mejor else "") + '</div>'
+        f'<div class="pp-cuerpo"><p class="pp-fecha">{tipo} · {cuando:%d/%m} a las {cuando:%H:%M}</p>'
+        f'<p class="pp-texto">{escape(p["caption"][:140] or "Publicación")}</p>'
+        f'<div class="pp-tasa">{tasa}</div><div class="pp-nums">'
+        + numero_post("alcance", d.get("reach")) + numero_post("vistas", d.get("views"))
+        + numero_post("likes", d.get("likes")) + numero_post("comentarios", d.get("comments"))
+        + numero_post("guardados", d.get("saved")) + numero_post("compartidos", d.get("shares"))
+        + "</div></div></article>"
+    )
+
+
+async def seccion_publicaciones(c: Cuenta, d: dict) -> str:
+    """Tus publicaciones del periodo: la mejor arriba, en grande, y las demás en tarjetas con sus números."""
+    cabeza = (f'<div class="met-cab"><span>Tus publicaciones</span><b>{plural(len(d["publicadas"]), "publicada")}'
+              f' <small>· {plural(d["programadas"], "programada")}</small></b></div>')
+    if not d["publicadas"]:
+        return (f'<section class="met-c ancho res-posts">{cabeza}<p class="ayuda">No hubo publicaciones en este periodo.</p>'
+                '<div class="acciones"><a class="boton secundario" href="/panel/contenido">Ir a Calendario</a></div></section>')
+    posts = await posts_con_numeros(c, d["publicadas"])
+    con = [x for x in posts if x["tasa"] is not None]
+    promedio = sum(x["tasa"] for x in con) / len(con) if con else None
+    nota = (f'<p class="ayuda chica">Interacción promedio: {promedio:.1f}% (likes, comentarios, guardados y'
+            ' compartidos entre el alcance). Ordenados de mejor a peor.</p>' if con else "")
+    primero, resto = (posts[0], posts[1:]) if con else (None, posts)
+    return (f'<section class="met-c ancho res-posts">{cabeza}{nota}'
+            + (tarjeta_post(c, primero, mejor=True, promedio=promedio) if primero else "")
+            + (f'<div class="pp-grid">{"".join(tarjeta_post(c, x) for x in resto)}</div>' if resto else "")
+            + "</section>")
 
 
 def titulo_periodo(ini: date, fin: date) -> str:
@@ -263,19 +330,25 @@ def titulo_periodo(ini: date, fin: date) -> str:
     return f"{ini.day} de {MESES[ini.month - 1]} al {fin.day} de {MESES[fin.month - 1]} de {fin.year}"
 
 
-def enlace(rango: str, fin: date, hoy: date, base: str = "/panel/resultados") -> str:
-    return f"{base}?dias={rango}" + (f"&fin={fin.isoformat()}" if fin < hoy else "")
+VISTAS = {"instagram": "Instagram", "conversaciones": "Conversaciones"}
 
 
-async def barra(c: Cuenta, rango: str, fin: date, hoy: date) -> str:
-    """La barra de arriba, como la de Calendario: el periodo con ‹ › y Hoy, 7/30/90 días, cuándo se
-    actualizaron los números y la descarga en PDF."""
+def enlace(rango: str, fin: date, hoy: date, vista: str = "instagram", base: str = "/panel/resultados") -> str:
+    return (f"{base}?dias={rango}" + (f"&fin={fin.isoformat()}" if fin < hoy else "")
+            + (f"&ver={vista}" if vista != "instagram" else ""))
+
+
+async def barra(c: Cuenta, rango: str, fin: date, hoy: date, vista: str) -> str:
+    """La barra de arriba, como la de Calendario: el periodo con ‹ › y Hoy, Instagram o Conversaciones,
+    7/30/90 días, cuándo se actualizaron los números y la descarga en PDF de lo que se ve."""
     dias = int(rango)
     ini = fin - timedelta(days=dias - 1)
-    antes = enlace(rango, fin - timedelta(days=dias), hoy)
-    siguiente = (f'<a href="{enlace(rango, min(fin + timedelta(days=dias), hoy), hoy)}" aria-label="Siguiente">›</a>'
+    antes = enlace(rango, fin - timedelta(days=dias), hoy, vista)
+    siguiente = (f'<a href="{enlace(rango, min(fin + timedelta(days=dias), hoy), hoy, vista)}" aria-label="Siguiente">›</a>'
                  if fin < hoy else '<span class="off" aria-hidden="true">›</span>')
-    rangos = "".join(f'<a href="{enlace(k, fin, hoy)}"{panel.ACTIVA if k == rango else ""}>{nombre}</a>'
+    vistas = "".join(f'<a href="{enlace(rango, fin, hoy, k)}"{panel.ACTIVA if k == vista else ""}>{nombre}</a>'
+                     for k, nombre in VISTAS.items())
+    rangos = "".join(f'<a href="{enlace(k, fin, hoy, vista)}"{panel.ACTIVA if k == rango else ""}>{nombre}</a>'
                      for k, nombre in RANGOS.items())
     guardado = await c.store.get(metricas.CLAVE_HORA)
     if guardado:
@@ -288,50 +361,58 @@ async def barra(c: Cuenta, rango: str, fin: date, hoy: date) -> str:
         '<div class="tarjeta cal res-barra"><div class="cal-cab">'
         f'<h2>{titulo_periodo(ini, fin)}</h2><div class="cal-nav">'
         f'<a href="{antes}" aria-label="Anterior">‹</a>{siguiente}'
-        f'<a class="hoy-b" href="{enlace(rango, hoy, hoy)}">Hoy</a></div>'
+        f'<a class="hoy-b" href="{enlace(rango, hoy, hoy, vista)}">Hoy</a></div>'
         f'<div class="cal-sw modo">{rangos}</div></div>'
-        '<div class="cal-filtros res-info">'
-        f'<span><i class="punto"></i>{instagram}</span>'
-        '<span>Mensajes: cada 10 minutos</span>'
-        f'<span class="res-comp">Seguidores comparados con 7 y 30 días antes del {fin:%d/%m}</span>'
-        f'<a class="boton secundario chico cal-bajar" href="{enlace(rango, fin, hoy, "/panel/resultados/descargar")}"'
+        f'<div class="cal-filtros res-info"><div class="cal-sw res-vista">{vistas}</div>'
+        + (f'<span><i class="punto"></i>{instagram}</span>'
+           '<span class="res-comp">Seguidores vs. 7 y 30 días antes</span>'
+           if vista == "instagram" else
+           '<span><i class="punto"></i>Mensajes: se actualizan cada 10 minutos</span>')
+        + f'<a class="boton secundario chico cal-bajar" href="{enlace(rango, fin, hoy, vista, "/panel/resultados/descargar")}"'
         ' title="Este periodo, en PDF">↓ Descargar</a></div></div>'
     )
 
 
-async def pagina(c: Cuenta, rango: str, fin: date | None = None) -> HTMLResponse:
-    hoy = datetime.now(ZoneInfo(c.timezone)).date()
-    fin = min(fin or hoy, hoy)
-    d = await numeros_de(c, rango, fin)
+def conversaciones_html(c: Cuenta, d: dict, publico: dict) -> str:
     if d["recibidos"]:
         pct = round(d["resueltas"] / d["escribieron"] * 100) if d["escribieron"] else 0
-        numeros = (
+        cuerpo = (
             '<div class="hoy kpis res-kpis">'
             + kpi("Conversaciones", d["personas"], plural(d["nuevas"], "nueva"))
             + kpi("Mensajes recibidos", d["recibidos"], plural(d["respuestas_bot"], "respuesta"))
             + kpi("Resueltas solas", f"{pct}%", f'{d["resueltas"]} de {d["escribieron"]} sin ayuda')
             + kpi("Tiempo de respuesta", duracion(d["respuesta"]), "lo normal (mediana)")
             + kpi("Fuera de horario", d["fuera"], plural(d["fuera"], "respuesta"))
-            + "</div>")
-        cuerpo = (
-            numeros
-            + '<div class="tarjeta"><span class="num">Por día</span><h2>Mensajes recibidos</h2>'
+            + "</div>"
+            '<div class="tarjeta"><span class="num">Por día</span><h2>Mensajes recibidos</h2>'
             f"{por_dia(d)}</div>"
-            '<div class="tarjeta"><span class="num">Por hora</span><h2>A qué hora te escriben</h2>'
+            '<div class="res-dos"><div class="tarjeta"><span class="num">Por hora</span><h2>A qué hora te escriben</h2>'
             f"{por_hora(d, c)}"
             '<div class="leyenda"><span><i></i>Dentro de tu horario</span><span><i class="fuera"></i>Fuera de tu horario</span></div></div>'
+            + metricas.ciudades(publico, "De dónde es tu público") + "</div>"
         )
     else:
         cuerpo = ('<div class="tarjeta"><h2>Aún no hay mensajes en este periodo</h2>'
                   '<p class="ayuda">Cuando tu asistente esté encendido y te escriban, aquí verás lo que hizo por ti.</p>'
                   '<div class="acciones"><a class="boton" href="/panel/asistente">Ir a tu asistente</a></div></div>')
     if c.imagenes_mes > 0:
-        cuerpo += seccion_contenido(d)
-    cuerpo = (await barra(c, rango, fin, hoy) + metricas.seccion(await metricas.numeros(c, int(rango), fin))
-              + cuerpo)
+        cuerpo += seccion_comentarios(d)
+    return cuerpo
+
+
+async def pagina(c: Cuenta, rango: str, fin: date | None = None, vista: str = "instagram") -> HTMLResponse:
+    hoy = datetime.now(ZoneInfo(c.timezone)).date()
+    fin = min(fin or hoy, hoy)
+    if vista == "conversaciones":
+        publico = json.loads(await c.store.get(metricas.CLAVE_PUBLICO) or "{}")
+        cuerpo = conversaciones_html(c, await numeros_de(c, rango, fin), publico)
+    else:
+        cuerpo = metricas.seccion(await metricas.numeros(c, int(rango), fin))
+        if c.imagenes_mes > 0:
+            cuerpo += f'<div class="met">{await seccion_publicaciones(c, await numeros_de(c, rango, fin))}</div>'
     return panel.pagina(
-        panel.cabecera(salir=True, menu="resultados", cuenta=c, perfil=await panel.usuario(c), foto=await panel.foto_perfil(c))
-        + f'<main><div class="contenedor res">{cuerpo}</div></main>'
+        await panel.menu_de(c, "resultados")
+        + f'<main><div class="contenedor res">{await barra(c, rango, fin, hoy, vista)}{cuerpo}</div></main>'
     )
 
 
@@ -343,15 +424,15 @@ def leer_fin(texto: str) -> date | None:
 
 
 @router.get("")
-async def ver(request: Request, dias: str = "7", fin: str = ""):
+async def ver(request: Request, dias: str = "7", fin: str = "", ver: str = "instagram"):
     if not (c := panel.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
-    return await pagina(c, dias if dias in RANGOS else "7", leer_fin(fin))
+    return await pagina(c, dias if dias in RANGOS else "7", leer_fin(fin), ver if ver in VISTAS else "instagram")
 
 
 @router.get("/descargar")
-async def descargar(request: Request, dias: str = "7", fin: str = ""):
-    """El periodo que se ve en Resultados, en PDF."""
+async def descargar(request: Request, dias: str = "7", fin: str = "", ver: str = "instagram"):
+    """Lo que se ve en Resultados (Instagram o Conversaciones, en su periodo), en PDF."""
     if not (c := panel.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     from . import informe
@@ -361,6 +442,7 @@ async def descargar(request: Request, dias: str = "7", fin: str = ""):
     ini = fin_ - timedelta(days=int(rango) - 1)
     d = await numeros_de(c, rango, fin_)
     m = await metricas.numeros(c, int(rango), fin_)
-    pdf = await informe.resultados_pdf(c, titulo_periodo(ini, fin_), d, m, await panel.usuario(c))
+    pdf = await informe.resultados_pdf(c, titulo_periodo(ini, fin_), d, m, await panel.usuario(c),
+                                       ver if ver in VISTAS else "instagram")
     return Response(pdf, media_type="application/pdf", headers={
-        "Content-Disposition": f'attachment; filename="resultados-{ini.isoformat()}-al-{fin_.isoformat()}.pdf"'})
+        "Content-Disposition": f'attachment; filename="resultados-{ver if ver in VISTAS else 'instagram'}-{ini.isoformat()}-al-{fin_.isoformat()}.pdf"'})

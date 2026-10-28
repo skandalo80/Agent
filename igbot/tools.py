@@ -524,6 +524,22 @@ def store_tools(
     return tools + [enviar_cotizacion_pedido] if store else tools
 
 
+# Por qué el asistente pasa un chat a una persona: sale como etiqueta en Conversaciones.
+RAZONES = {"pide_persona": "Pidió una persona", "molesto": "Molesto", "precio": "Negociar precio",
+           "fuera_catalogo": "Fuera del catálogo", "otro": "Otro motivo"}
+HUMANO_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "razon": {"type": "string", "enum": list(RAZONES),
+                  "description": "pide_persona si pidió hablar con alguien; molesto si está enojado o"
+                                 " inconforme; precio si quiere negociar; fuera_catalogo si busca algo que no"
+                                 " está en lo que vendemos; otro para lo demás."},
+        "motivo": {"type": "string", "description": "Una línea con qué necesita."},
+    },
+    "required": ["razon", "motivo"],
+}
+
+
 def human_tools(store: Store, google: Google | None, user_id: str, state: dict | None = None,
                 instagram: Instagram | None = None) -> list:
     state = state if state is not None else {}
@@ -532,19 +548,21 @@ def human_tools(store: Store, google: Google | None, user_id: str, state: dict |
         "pasar_a_humano",
         "Avisa al dueño para que una persona continúe esta conversación y deja de contestar aquí"
         " por unas horas. Úsalo si la persona lo pide, si quiere negociar precio o algo fuera del"
-        " catálogo, o si está molesta. motivo: una línea con qué necesita.",
-        {"motivo": str},
+        " catálogo, o si está molesta.",
+        HUMANO_SCHEMA,
     )
     async def pasar_a_humano(args):
+        razon = args.get("razon") if args.get("razon") in RAZONES else "otro"  # se valida aquí, no en el prompt
+        # El evento va antes que la pausa: así el panel en vivo ya lo ve como "nuevo" al despertar.
+        await store.add_event(user_id, "humano", {"motivo": args["motivo"][:300], "razon": razon})
         await store.pause(user_id, time.time() + cuenta().human_pause_hours * 3600)
-        await store.add_event(user_id, "humano", {"motivo": args["motivo"][:300]})
         state["acted"] = True
         # Por DM a los administradores (solo llega si le escribieron al bot en las últimas 24 h).
         if instagram and cuenta().aviso_dm:
             quien = await instagram.username(user_id)
             for admin_id in cuenta().admin_ig_ids:
                 try:
-                    await instagram.send_text(admin_id, f"{quien} pidió hablar con una persona: {args['motivo'][:300]}")
+                    await instagram.send_text(admin_id, f"{quien} necesita hablar contigo ({RAZONES[razon]}): {args['motivo'][:300]}")
                 except Exception:
                     log.warning("No se pudo avisar por DM a %s", admin_id)
         if google and cuenta().owner_email and cuenta().aviso_correo:

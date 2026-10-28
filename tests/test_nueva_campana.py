@@ -100,7 +100,7 @@ def test_el_asistente_de_punta_a_punta(cliente, monkeypatch):
     assert "Revisa tu campaña antes de generarla" in r.text and "Latte de calabaza · Promoción con descuento 20 %" in r.text
     assert r.text.count("Editar</button>") == 7 and "Crear el brief" in r.text
     assert "Consejos e ideas útiles · Historias y situaciones cotidianas" in r.text
-    assert 'class="cruce"' in r.text and "Con 6 posts cubrimos" in r.text
+    assert 'class="cruce"' not in r.text  # Qué se ve está oculto: no hay cruce que mostrar
 
     # Sin brief no se escriben posts: vuelve al resumen.
     r = client.post(URL, headers=ORIGEN, data={"paso": "8", "accion": "proponer"}, follow_redirects=False)
@@ -130,7 +130,7 @@ def test_el_asistente_de_punta_a_punta(cliente, monkeypatch):
     assert "director creativo" in plan_sistema and "6. 2099-" in plan_prompt and "Concepto: Idea 2." in plan_prompt
     assert "| plan: objetivo: Objetivo 1; ángulo: Ángulo 1; titular: Titular 1" in prompt
     camp = leer(client, c)
-    assert camp["brief"]["titulo"] == "Idea 2" and all(p["ve"] == "productos" for p in camp["posts"])
+    assert camp["brief"]["titulo"] == "Idea 2" and not any(p.get("ve") for p in camp["posts"])
     assert all(p["plan"]["cta"] == "Escríbenos" for p in camp["posts"])
     assert camp["temas"] == ["ensena", "historias"]  # los enfoques que eligió
     assert {p["tipo"] for p in camp["posts"]} <= {"ensena", "historias"}
@@ -321,7 +321,7 @@ def test_el_brief_se_guarda_y_se_descarga(cliente, monkeypatch):
     u = campanas.url_de(camp)
     r = client.get(u)
     assert "Brief: Idea 3" in r.text and "Nadie explica de dónde viene su café" in r.text
-    assert f'href="{u}/brief">↓ Descargar brief' in r.text
+    assert f'href="{u}/brief">Brief (PDF)' in r.text
     r = client.get(f"{u}/brief")
     assert r.headers["content-type"] == "application/pdf" and r.content.startswith(b"%PDF")
     assert 'filename="brief-oto' in r.headers["content-disposition"]
@@ -336,6 +336,38 @@ def test_leer_el_plan_por_numero():
                                      {"n": "x"}, "nada", {"n": 1, "titular": "Sin ángulo ni visual"}]}, 3)
     assert plan[0] == {} and plan[1]["angulo"] == "B" and plan[1]["cta"] == "" and plan[2] == {}
     assert brief.plan_texto({"angulo": "<b>A</b>", "cta": "Ven"}) == "ángulo: &lt;b&gt;A&lt;/b&gt;; llamada a la acción: Ven"
+
+
+def test_el_plan_va_en_tandas_y_pide_otra_vez_lo_que_falta(monkeypatch):
+    import asyncio
+    from igbot import agent
+
+    llamadas, revisiones, falla = [], [], {"una": True}
+
+    async def fake(prompt, system, mcp=None, allowed=(), max_turns=5, model=None):
+        if "coherencia" in system:  # la revisión marca el post 2 de los que tienen foto
+            revisiones.append(prompt)
+            return json.dumps({"revisar": [{"n": 2, "motivo": "La imagen no muestra el asistente"}]})
+        llamadas.append(prompt)
+        n = len(re.findall(r"^\d+\. ", prompt.split("<posts>")[-1], re.M))
+        if falla.pop("una", False):  # la primera respuesta llega cortada: JSON inválido
+            return '{"plan": [{"n": 1, "angulo": "A"'
+        return json.dumps({"plan": [{"n": i + 1, "angulo": f"A{i}", "foto": {"protagonista": f"P{i}",
+                                                                              "escenario": "E"}} for i in range(n)]})
+
+    monkeypatch.setattr(agent, "run_claude", fake)
+    fichas = [{"dia": f"2099-01-{i + 1:02d}", "tipo": "ensena", "formato": "foto", "ve": "", "pilar": "", "dato": ""}
+              for i in range(23)]
+    asyncio.run(campanas.planear("<brief>b</brief>\n", {"nombre": "X", "inicio": "2099-01-01"}, fichas))
+    assert all(f["plan"]["foto"]["protagonista"] for f in fichas)
+    assert len(llamadas) == 5  # 10 + 10 + 3, otra vez los 10 de la tanda que falló y el post que no cuadró
+    assert "<ya_planeados>" not in llamadas[1]  # la primera tanda no salió: no hay nada planeado
+    assert llamadas[2].count("| plan: ") == 10  # la tercera ve lo que ya planeó la segunda
+    assert "10. 2099-01-10" in llamadas[3] and llamadas[3].count("| plan: ") == 13
+    assert len(revisiones) == 1 and revisiones[0].count("| imagen: ") == 23
+    assert "<corregir>" in llamadas[4] and "motivo: La imagen no muestra el asistente" in llamadas[4]
+    assert "1. 2099-01-02" in llamadas[4].split("<posts>")[-1]  # el segundo post, planeado otra vez
+    assert brief.leer_revision({"revisar": [{"n": 9, "motivo": "x"}, {"n": "a"}, {"n": 1, "motivo": " y "}]}, 3) == {0: "y"}
 
 
 def test_limite_de_propuestas_al_dia(cliente, monkeypatch):
@@ -845,3 +877,79 @@ def test_las_piezas_con_texto_y_el_collage_los_genera_la_ia(cliente, monkeypatch
     client.post(u, headers=ORIGEN, data={"accion": "generar", "k": "99"})
     prompt = proveedor.llamadas[-1][0]
     assert prompt.startswith("A single image laid out as a photo collage") and "Do not include any text" in prompt
+
+
+def test_las_fotos_de_referencia_mandan_en_la_direccion_visual(cliente, monkeypatch):
+    client, c, _, proveedor = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 10)
+    import app as bot
+    from igbot import config, openai_texto
+    de_claude, de_openai = [], []
+    fake_claude = claude_de_campana(de_claude)
+    monkeypatch.setattr(bot.agent, "run_claude", fake_claude)
+    monkeypatch.setattr(config, "OPENAI_API_KEY", "sk-prueba")
+    vistas = []
+    base = openai_de_campana(de_openai, fake_claude)
+
+    async def openai(sistema, prompt, max_tokens=16000, imagenes=()):
+        if imagenes:
+            vistas.append(len(imagenes))
+            return {"luz": "Luz dura de mediodía", "paleta": "Terracota y crema", "copiar": "Sombras marcadas",
+                    "no_copiar": "La taza azul"}
+        return await base(sistema, prompt, max_tokens)
+
+    monkeypatch.setattr(openai_texto, "json_de", openai)
+    listo(client, c)
+    client.portal.call(c.store.set, "productos", json.dumps([PRODUCTO]))
+    llenar(client)
+    foto = io.BytesIO()
+    Image.new("RGB", (40, 40), "orange").save(foto, "JPEG")
+    r = client.post(URL, headers=ORIGEN, data={"paso": "6", "variedad": "coherencia", "ir": "6"},
+                    files=[("ref_nuevas", ("a.jpg", foto.getvalue(), "image/jpeg")),
+                           ("ref_nuevas", ("b.jpg", foto.getvalue(), "image/jpeg"))])
+    r = client.get(f"{URL}?paso=6")
+    assert 'enctype="multipart/form-data"' in r.text and r.text.count('name="referencias"') == 2
+    assert r.text.count('name="referencias" value=') == r.text.count("checked><img")  # las subidas quedan elegidas
+    generar(client)
+    assert vistas == [2]  # el ADN se lee una vez, con las dos fotos
+    conceptos = next(p for p, s in de_claude if "estratega de contenido" in s)
+    assert "<referencias_visuales>" in conceptos and "Luz: Luz dura de mediodía" in conceptos
+    plan = next(p for p, s in de_claude if "director creativo" in s)
+    assert "<referencias_visuales>" in plan and "- Referencias (principal)" in plan
+    camp = leer(client, c)
+    assert len(camp["referencias"]) == 2 and "Paleta: Terracota y crema" in camp["adn_visual"]
+    # En cada imagen, las fotos de referencia van al generador con la instrucción de copiar su estilo.
+    p = next(p for p in camp["posts"] if p["formato"] == "titular")
+    client.post(campanas.url_de(camp), headers=ORIGEN, data={"accion": "generar", "k": str(p["k"])})
+    prompt, fotos = proveedor.llamadas[-1][:2]
+    assert len(fotos) >= 2 and "The first 2 reference images are the visual style to follow" in prompt
+
+
+def test_crear_con_ia_solo_pide_objetivo_y_fechas(cliente, monkeypatch):
+    client, c, *_ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 4)
+    llamadas = []
+    import app as bot
+    monkeypatch.setattr(bot.agent, "run_claude", claude_de_campana(llamadas))
+    rapida = f"{BASE}/rapida"
+    # Sin empresa ni marca, lo mismo que el asistente: pide completarlas.
+    assert "Necesitamos conocer tu negocio" in client.get(rapida).text
+    listo(client, c)
+    assert f'href="{rapida}">' not in client.get("/panel/contenido").text  # en Calendario ya no: es de Campañas
+
+    r = client.get(rapida)
+    assert r.text.count('name="objetivo"') >= 2 and 'checked' in r.text  # uno ya marcado
+    assert 'name="inicio"' in r.text and 'name="semanas"' in r.text and 'name="texto"' in r.text
+    assert 'name="mensajes"' not in r.text and 'name="formatos"' not in r.text
+
+    r = client.post(rapida, headers=ORIGEN, data={"objetivo": "no-existe", "inicio": LUNES.isoformat()})
+    assert "Elige qué quieres lograr." in r.text and not llamadas
+
+    r = client.post(rapida, headers=ORIGEN, data={"objetivo": "vender", "inicio": LUNES.isoformat(), "semanas": "1",
+                                                  "texto": "20 % de descuento en noviembre"})
+    assert "Creando tu campaña con IA" in r.text, r.text[-500:]
+    camp = leer(client, c)
+    assert camp["brief"] and len(camp["posts"]) == nueva_campana.POSTS_SEMANA
+    assert not any(p.get("post_id") for p in camp["posts"])  # sin imágenes
+    assert "20 % de descuento en noviembre" in llamadas[0][0]  # lo que escribió llega al brief
+    assert camp["asistente"]["objetivo"] == "vender" and camp["asistente"]["mensajes"]

@@ -257,6 +257,18 @@ def edades(d: dict[str, int]) -> str:
                   descripcion="Seguidores por edad")
 
 
+def ciudades(p: dict, titulo: str = "Ciudades") -> str:
+    """Las ciudades de los seguidores (Instagram las da con 100 o más), en Instagram y en Conversaciones."""
+    if not p.get("ciudad"):
+        cuerpo = '<p class="ayuda">Instagram muestra las ciudades de tus seguidores cuando la cuenta tiene 100 o más.</p>'
+    else:
+        total = sum(p["ciudad"].values()) or 1
+        cuerpo = '<ol class="met-lista">' + "".join(
+            f'<li>{escape(ciudad.split(",")[0])}<b>{cifra(n)}</b><small>{n / total:.0%}</small></li>'
+            for ciudad, n in sorted(p["ciudad"].items(), key=lambda x: -x[1])[:6]) + "</ol>"
+    return tarjeta(titulo, cuerpo, clase="t3")
+
+
 def seccion(d: dict) -> str:
     """Las tarjetas de Instagram en Resultados."""
     if not d["hay"]:
@@ -292,10 +304,7 @@ def seccion(d: dict) -> str:
         publico = (tarjeta("Edad", edades(p["edad"]) if p.get("edad") else "", cifra(sum(p.get("edad", {}).values())), "t6")
                    + tarjeta("Género", dona([(GENEROS.get(k, k), genero.get(k, 0)) for k in GENEROS if genero.get(k)],
                                             cifra(sum(genero.values())), "seguidores"), clase="t3")
-                   + tarjeta("Ciudades", '<ol class="met-lista">' + "".join(
-                       f"<li>{escape(ciudad.split(',')[0])}<b>{cifra(n)}</b></li>"
-                       for ciudad, n in sorted(p.get("ciudad", {}).items(), key=lambda x: -x[1])[:6]) + "</ol>",
-                       clase="t3"))
+                   + ciudades(p))
     else:
         publico = tarjeta("Tu público", '<p class="ayuda">Instagram muestra edades, género y ciudades de tus '
                                         'seguidores cuando la cuenta tiene 100 o más.</p>', clase="ancho")

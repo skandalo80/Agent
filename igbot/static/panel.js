@@ -361,6 +361,15 @@ document.querySelectorAll(".inbox[data-vivo]").forEach((inbox) => {
     try { p = JSON.parse(e.data); } catch { return; }
     const lista = inbox.querySelector(".lista-vivo");
     if (lista && p.lista) lista.innerHTML = p.lista;
+    // El punto amarillo de Conversaciones en el menú: chats del lado "Tú" esperando respuesta.
+    const item = document.querySelector('.lat-item[href="/panel/asistente"]');
+    const punto = item && item.querySelector(".punto-menu");
+    if (item && p.punto && !punto) {
+      const nuevo = document.createElement("span");
+      nuevo.className = "punto-menu";
+      nuevo.title = "Tienes chats por contestar";
+      item.insertBefore(nuevo, item.querySelector(".txt"));
+    } else if (punto && !p.punto) punto.remove();
     const hilo = inbox.querySelector(".hilo");
     if (!hilo || !p.hilo || !inbox.classList.contains("abierto")) return;
     const caja = hilo.querySelector("textarea");
@@ -380,3 +389,88 @@ if (location.pathname === "/panel/responder") {
   const caja = document.querySelector(".inbox .responder textarea");
   if (caja) caja.focus();
 }
+
+// Skandi (el botón de ayuda): sin JavaScript la ventana abre con #skandi (:target).
+// Con JavaScript la abre la clase "abierta" (:target no se entera de replaceState); además
+// recuerda desde qué página preguntan, pone "escribiendo…" y baja al último mensaje.
+// Al abrir un chat del historial vuelve con la ventana abierta en ese chat.
+const skandi = document.getElementById("skandi");
+if (skandi) {
+  const form = skandi.querySelector("form.sk-escribir");
+  const mensajes = document.getElementById("sk-mensajes");
+  const marcar = (hash) => history.replaceState(null, "", location.pathname + location.search + hash);
+  const abrir = () => {
+    skandi.classList.add("abierta");
+    mensajes.scrollTop = mensajes.scrollHeight;
+    form.mensaje.focus({ preventScroll: true });
+  };
+  // También los botones del historial (abrir un chat, empezar otro) regresan a esta página.
+  skandi.querySelectorAll('input[name="volver"]').forEach((v) => { v.value = location.pathname + location.search; });
+  form.addEventListener("submit", () => {
+    const tuyo = document.createElement("div");
+    tuyo.className = "sk-msj tu";
+    tuyo.textContent = form.mensaje.value;
+    const espera = document.createElement("div");
+    espera.className = "sk-msj skandi-dice escribiendo";
+    espera.textContent = "Skandi está escribiendo…";
+    mensajes.append(tuyo, espera);
+    mensajes.scrollTop = mensajes.scrollHeight;
+    // Se desactiva después de mandarse (si no, el navegador no manda el texto).
+    setTimeout(() => { form.mensaje.readOnly = true; form.querySelector("button").disabled = true; }, 0);
+  });
+  skandi.querySelector("[data-cerrar-skandi]").addEventListener("click", (e) => {
+    e.preventDefault();
+    skandi.classList.remove("abierta");
+    marcar("");
+  });
+  // El botón flotante y Ayuda en el menú lateral (que en el celular se cierra al abrirla).
+  document.querySelectorAll('a[href="#skandi"]').forEach((a) => a.addEventListener("click", (e) => {
+    e.preventDefault();
+    document.documentElement.classList.remove("menu-abierto");
+    marcar("#skandi");
+    abrir();
+  }));
+  if (location.hash === "#skandi") abrir();
+}
+
+// Formularios que guardan (POST): un segundo clic mientras se manda no lo vuelve a mandar, y si cambiaste
+// algo sin guardar, el navegador pregunta antes de salir de la página. Skandi tiene lo suyo arriba; los
+// formularios que se arman aquí al arrastrar (f.submit()) no pasan por aquí.
+(() => {
+  const cambiados = new Set();
+  let mandando = false;
+  document.querySelectorAll('form[method="post" i]').forEach((form) => {
+    if (form.hasAttribute("data-skandi")) return;
+    const cambio = () => cambiados.add(form);
+    form.addEventListener("input", cambio);
+    form.addEventListener("change", cambio);
+    form.addEventListener("submit", (e) => {
+      if (form.dataset.mandando === "1") {
+        e.preventDefault();
+        return;
+      }
+      form.dataset.mandando = "1";
+      mandando = true;
+      cambiados.delete(form);
+      if (e.submitter) e.submitter.classList.add("mandando");
+      // Si la página no cambia (una descarga, un guardado sin recargar), se puede volver a usar.
+      setTimeout(() => {
+        delete form.dataset.mandando;
+        mandando = false;
+        if (e.submitter) e.submitter.classList.remove("mandando");
+      }, 8000);
+    });
+  });
+  window.addEventListener("beforeunload", (e) => {
+    if (mandando || !cambiados.size) return;
+    e.preventDefault();
+    e.returnValue = "";  // Chrome y Safari muestran su propio "¿Salir del sitio?"
+  });
+  // Al volver con Atrás, la página sale del caché tal cual: los botones vuelven a servir.
+  window.addEventListener("pageshow", (e) => {
+    if (!e.persisted) return;
+    mandando = false;
+    document.querySelectorAll("form[data-mandando]").forEach((f) => { delete f.dataset.mandando; });
+    document.querySelectorAll(".mandando").forEach((b) => b.classList.remove("mandando"));
+  });
+})();

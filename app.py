@@ -30,7 +30,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
 from igbot import (admin, agent, ajustes, asistente, botones, campanas, comentarios, conectar, config, contenido, empresa,
-                   limites, marca, metricas, nueva_campana, panel, reporte, resultados, semana, sugeridos)
+                   errores, limites, marca, metricas, nueva_campana, panel, reporte, resultados, semana, skandi,
+                   sugeridos)
 from igbot.cuenta import Cuenta, cargar, cuenta, de_carpeta, usar
 from igbot.dispatcher import Dispatcher
 from igbot.google import Google
@@ -238,8 +239,10 @@ async def alta(ig_id: str, usuario: str, token: str, grande: bool = False) -> Cu
 async def lifespan(app: FastAPI):
     conectar.store, conectar.instagram, conectar.google = store, instagram, google
     panel.buscar, panel.alta = buscar, alta
+    skandi.principal = lambda: principal
     for c in cuentas:
         await arrancar(c)
+    await skandi.cargar()  # el historial de Skandi de cada cuenta, a la memoria
     loops = fondo()
     yield
     for task in loops:
@@ -265,6 +268,8 @@ if not config.CLIENTE:
     app.include_router(nueva_campana.router)  # antes que campanas: /campanas/nueva no es /campanas/{cid}
     app.include_router(campanas.router)
     app.include_router(resultados.router)
+    app.include_router(skandi.router)
+    app.include_router(skandi.web_router)
 
     @app.exception_handler(StarletteHTTPException)
     async def pagina_404(request: Request, exc: StarletteHTTPException):
@@ -273,15 +278,19 @@ if not config.CLIENTE:
             return await panel.no_encontrada(request)
         return await http_exception_handler(request, exc)
 
+    # Un error que nadie atrapó: página amable en vez de "Internal Server Error" y correo a soporte.
+    app.add_exception_handler(Exception, errores.inesperado)
+
 
 @app.get("/health")
 def health():
     return {"ok": True}
 
 
-# Los íconos de skandar.online (web/), para que la pestaña del panel lleve el mismo.
+# Los íconos y el logo de skandar.online (web/), para que el panel lleve los mismos.
 WEB = Path(__file__).resolve().parent / "web"
-ICONOS = {"favicon.ico": "image/x-icon", "favicon-32.png": "image/png", "apple-touch-icon.png": "image/png"}
+ICONOS = {"favicon.ico": "image/x-icon", "favicon-32.png": "image/png", "apple-touch-icon.png": "image/png",
+          "logo-skandar.svg": "image/svg+xml", "logo-sk.svg": "image/svg+xml"}
 
 
 def _icono(nombre: str):

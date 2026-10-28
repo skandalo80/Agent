@@ -1,7 +1,8 @@
 """Tu asistente > Conversaciones: la bandeja de DMs del panel.
 
-A la izquierda, los chats de 10 en 10 con buscador y tres pestañas (Sin contestar,
-Pidieron una persona, Todas); a la derecha, el chat abierto con el interruptor
+A la izquierda, los chats de 10 en 10 con buscador, arriba quién los atiende (Tú: Nuevos, Sin
+contestar y Todas, con la razón por la que te los pasó el asistente o por la que no pudo contestar;
+Tu asistente: En curso y Todas); a la derecha, el chat abierto con el interruptor
 Asistente / Tú y la caja para contestar desde aquí. Solo DMs: los comentarios no salen.
 Todo es HTML que arma el servidor; el buscador se manda solo mientras escribes con
 panel.js (sin fetch: recarga la página), y sin JS se busca con Enter.
@@ -24,8 +25,20 @@ MAX_MENSAJES = 400
 MAX_RESPUESTA = 1000
 # Instagram solo deja contestar dentro de las 24 h desde el último mensaje del cliente.
 VENTANA = 24 * 3600
-# "todas" es explícita: sin `ver`, se abre Sin contestar si hay alguno y si no, Todas.
-FILTROS = {"sin": "Sin contestar", "persona": "Pidieron una persona", "todas": "Todas"}
+# Arriba, quién atiende: "Tú" (el chat está en pausa) o "Tu asistente"; debajo, sus pestañas.
+# Sin `ver` se abre "Tú" si algo espera tu respuesta; si no, "Tu asistente".
+FILTROS = {"nuevos": "Nuevos", "sin": "Sin contestar", "tuyas": "Todas", "curso": "En curso", "bot": "Todas"}
+LADO = {"nuevos": "tu", "sin": "tu", "tuyas": "tu", "curso": "bot", "bot": "bot"}
+AVISAN = {"nuevos", "sin"}  # las pestañas cuyo número sale en naranja
+# Un mensaje del cliente sin respuesta del asistente después de esto pasa a "Tú", en Sin contestar.
+SIN_RESPUESTA = 120
+
+
+def primero(cuantos: dict, lado: str) -> str:
+    """La pestaña con la que abre un lado: la primera que pide atención y tiene algo; si no, En curso / Todas."""
+    if lado == "tu":
+        return "nuevos" if cuantos["nuevos"] else "sin" if cuantos["sin"] else "tuyas"
+    return "curso" if cuantos["curso"] else "bot"
 DIAS = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"]
 MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
 MESES_LARGOS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre",
@@ -40,14 +53,14 @@ CSS = """
 .inbox .buscar button{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 .js .inbox .buscar button{display:none}
 .filtros-chat{display:flex;gap:.1rem;padding:0 .75rem;overflow-x:auto;border-bottom:1px solid var(--linea-clara);font-size:.82rem}
-.filtros-chat a{padding:.7rem .45rem;color:var(--gris);text-decoration:none;font-weight:500;border-bottom:2px solid transparent;white-space:nowrap}
+.filtros-chat a{flex:1;text-align:center;padding:.7rem .45rem;color:var(--gris);text-decoration:none;font-weight:500;border-bottom:2px solid transparent;white-space:nowrap}
 .filtros-chat a.on{color:var(--negro);border-color:var(--acento);font-weight:600}
 .filtros-chat b{display:inline-block;min-width:1.2rem;padding:0 .35rem;margin-left:.25rem;border-radius:999px;background:var(--acento);color:var(--tinta);font-size:.7rem;text-align:center;line-height:1.2rem}
 .filtros-chat b.gris{background:var(--claro);color:var(--gris)}
 .inbox .cuantos{font-size:.75rem;color:var(--gris);padding:.5rem 1rem 0;margin:0}
 .conv{display:flex;gap:.75rem;padding:.85rem 1rem;text-decoration:none;color:inherit;border-bottom:1px solid var(--linea-clara);position:relative}
 .conv:hover{background:rgba(255,255,255,.04)}.conv.on{background:var(--claro)}
-.inbox .avatar{flex:none;width:2.6rem;height:2.6rem;border-radius:50%;background:#4A4756;color:var(--negro);display:grid;place-items:center;font-weight:600;font-size:.95rem}
+.inbox .avatar{flex:none;width:2.6rem;height:2.6rem;border-radius:50%;background:#3F4147;color:var(--negro);display:grid;place-items:center;font-weight:600;font-size:.95rem}
 .conv .txt{min-width:0;flex:1}
 .conv .arriba{display:flex;justify-content:space-between;gap:.5rem;font-size:.9rem}
 .conv .arriba b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -56,6 +69,14 @@ CSS = """
 .conv.sin .ult{color:var(--negro);font-weight:600}
 .conv .lo-tiene{display:block;font-size:.7rem;color:var(--gris)}
 .conv .lo-tiene.rojo{color:var(--naranja-t);font-weight:600}
+.lados{display:flex;gap:.25rem;margin:0 1rem .5rem;padding:.2rem;border-radius:999px;background:var(--claro)}
+.lados a{flex:1;text-align:center;padding:.45rem .75rem;border-radius:999px;color:var(--gris);text-decoration:none;font-weight:600;font-size:.9rem}
+.lados a.on{background:var(--acento);color:var(--tinta)}
+.lados b{display:inline-block;min-width:1.1rem;margin-left:.35rem;padding:0 .3rem;border-radius:999px;background:#C6FA2C;color:#1B1C1F;font-size:.7rem;line-height:1.1rem}
+.conv .razon{display:inline-block;margin-right:.4rem;padding:0 .45rem;border-radius:999px;background:var(--claro);color:var(--gris);font-weight:600}
+.conv .razon.molesto{background:rgba(255,69,58,.18);color:#ff8a80}
+.lat-item{position:relative}
+.punto-menu{position:absolute;width:.5rem;height:.5rem;border-radius:50%;background:#FFD60A;margin:-1.1rem 0 0 1rem;box-shadow:0 0 0 2px #18191C}
 .punto-sin{position:absolute;left:.35rem;top:50%;width:.4rem;height:.4rem;border-radius:50%;background:var(--neon)}
 .inbox .vacio{padding:1.5rem 1rem;font-size:.9rem;color:var(--gris)}
 .inbox .lista-vivo .paginas{margin:auto 0 0;padding:.75rem;justify-content:center}
@@ -65,9 +86,9 @@ CSS = """
 .quien-contesta{display:flex;align-items:center;border:1px solid var(--linea-clara);border-radius:999px;padding:.2rem;background:var(--claro);margin:0}
 .quien-contesta button{font:inherit;font-size:.85rem;font-weight:600;border:0;background:transparent;padding:.4rem .9rem;border-radius:999px;cursor:pointer;color:var(--gris)}
 .quien-contesta button[aria-pressed=true]{background:var(--acento);color:var(--tinta);cursor:default}
-.hilo .alerta{margin:1rem 1.5rem 0;padding:.75rem 1rem;border-radius:1rem;background:rgba(243,154,54,.12);border:1px solid rgba(243,154,54,.35);color:#E6E3EC;font-size:.9rem}
+.hilo .alerta{margin:1rem 1.5rem 0;padding:.75rem 1rem;border-radius:1rem;background:rgba(255,138,61,.12);border:1px solid rgba(255,138,61,.35);color:#E4E4E2;font-size:.9rem}
 .hilo .alerta b,.hilo .alerta strong{color:var(--naranja-t)}
-.hilo .alerta.tuyo{background:var(--claro);border-color:var(--linea-clara);color:#E6E3EC}
+.hilo .alerta.tuyo{background:var(--claro);border-color:var(--linea-clara);color:#E4E4E2}
 .hilo .alerta form{display:inline;margin:0}
 .hilo .alerta button{font:inherit;font-weight:600;background:none;border:0;padding:0;color:inherit;text-decoration:underline;cursor:pointer}
 /* column-reverse: el chat abre ya abajo, en lo más nuevo, sin JS. */
@@ -76,7 +97,7 @@ CSS = """
 .mensajes .dia{text-align:center;font-size:.75rem;color:var(--gris);margin:.5rem 0 1rem}
 .mensajes .anteriores{text-align:center;font-size:.85rem;margin-bottom:1rem}
 .mensajes .burbuja.de-cliente{background:var(--claro);border:1px solid var(--linea-clara);border-bottom-left-radius:.35rem}
-.mensajes .burbuja.de-bot{background:#4A4756;color:var(--negro);margin-left:auto;border-bottom-right-radius:.35rem}
+.mensajes .burbuja.de-bot{background:#3F4147;color:var(--negro);margin-left:auto;border-bottom-right-radius:.35rem}
 .mensajes .burbuja.de-ti{background:var(--acento);color:var(--tinta);margin-left:auto;border-bottom-right-radius:.35rem}
 .mensajes .hora-msg{font-size:.7rem;color:var(--gris);margin:-.3rem 0 .8rem;text-align:right}
 .mensajes .hora-msg.izq{text-align:left}
@@ -154,13 +175,16 @@ async def partes(c: Cuenta, ver: str = "", buscar: str = "", hoja: int = 1, chat
     # Quién pidió una persona: el asistente lo pasó contigo (pasar_a_humano) durante su pausa actual.
     humano_desde = ahora - c.human_pause_hours * 3600 - 60
 
-    async def pagina(filtro: str, n_: int):
-        return await c.store.chats_page(ahora, ahora - VENTANA, humano_desde, "" if filtro == "todas" else filtro,
-                                        buscar.lstrip("@"), POR_HOJA, (n_ - 1) * POR_HOJA)
+    from .limites import LIMIT_NOTICE
+    from .tools import RAZONES
+
+    async def pagina(filtro: str, n_: int, buscar_: str = buscar, limite: int = POR_HOJA):
+        return await c.store.chats_page(ahora, ahora - VENTANA, humano_desde, ahora - SIN_RESPUESTA, LIMIT_NOTICE,
+                                        filtro, buscar_.lstrip("@"), limite, (n_ - 1) * limite)
     if ver not in FILTROS:
-        # Sin filtro (o un enlace viejo): Sin contestar si hay alguno; si no, Todas.
-        _, cuantos, _ = await c.store.chats_page(ahora, ahora - VENTANA, humano_desde, "sin", "", 1, 0)
-        ver = "sin" if cuantos["sin"] else "todas"
+        # Sin filtro (o un enlace viejo): lo que espera tu respuesta; si no hay nada, lo del asistente.
+        _, cuantos, _ = await pagina("nuevos", 1, "", 1)
+        ver = primero(cuantos, "tu" if cuantos["nuevos"] or cuantos["sin"] else "bot")
     filas, cuantos, encontrados = await pagina(ver, max(1, hoja))
     total = max(1, -(-encontrados // POR_HOJA))
     if hoja > total or hoja < 1:
@@ -168,34 +192,52 @@ async def partes(c: Cuenta, ver: str = "", buscar: str = "", hoja: int = 1, chat
         filas, cuantos, encontrados = await pagina(ver, hoja)
     with usar(c):
         nombres = await asyncio.gather(*(c.instagram.username(f[0]) for f in filas))
+    # Por qué te lo pasó el asistente (la etiqueta de cada chat del lado "Tú").
+    pasados = {f[0] for f in filas if f[6]}
+    razones = {u: d for u, d, _ in await c.store.events("humano", humano_desde, ahora + 1) if u in pasados} if pasados else {}
 
-    lo_tiene = {"persona": ("Pidió hablar con una persona", " rojo"), "sin": ("Sin contestar · Asistente", ""),
-                "tu": ("Contestaste tú · Asistente", ""), "asistente": ("Asistente", "")}
     conv = []
-    for (u, t, rol, texto, _, hasta, est), nombre in zip(filas, nombres):
+    for (u, t, rol, texto, hasta, est, paso), nombre in zip(filas, nombres):
         nombre = nombre if nombre.startswith("@") else "Cliente de Instagram"
+        limite = texto == LIMIT_NOTICE
         if rol == "assistant":
             manual = texto.startswith(MANUAL)
             texto = ("Tú: " + texto[len(MANUAL):].strip()) if manual else "Asistente: " + texto
         ult = escape(texto[:140]) if texto else "Sin mensajes todavía"
-        if est == "pausa":
-            quien, color = f"Lo atiendes tú · {max(1, round((hasta - ahora) / 3600))} h", ""
+        if est in ("nuevo", "tu_sin", "tu"):
+            razon = razones.get(u, {}).get("razon") if paso else None
+            etiqueta = (f'<span class="razon{" molesto" if razon == "molesto" else ""}">'
+                        f'{RAZONES.get(razon, "Te lo pasó el asistente") if paso else "Lo tomaste tú"}</span>')
+            quien = {"nuevo": "Nuevo", "tu_sin": "Sin contestar"}.get(est, "Lo atiendes tú")
+            quien += f" · {max(1, round((hasta - ahora) / 3600))} h"
+        elif est == "revisar":
+            etiqueta = f'<span class="razon">{"Límite del plan" if limite else "El asistente no respondió"}</span>'
+            quien = "Sin contestar"
         else:
-            quien, color = lo_tiene[est]
+            etiqueta, quien = "", "Asistente"
+        aviso = est in ("nuevo", "tu_sin", "revisar")
         conv.append(
-            f'<a class="conv{" sin" if est == "sin" else ""}{" on" if u == chat else ""}"'
+            f'<a class="conv{" sin" if aviso else ""}{" on" if u == chat else ""}"'
             f' href="{escape(enlace(ver, buscar, hoja, u))}"' + (' aria-current="true"' if u == chat else "") + ">"
-            + ('<span class="punto-sin"></span>' if est == "sin" else "")
+            + ('<span class="punto-sin"></span>' if aviso else "")
             + f'<span class="avatar">{escape(nombre[1:2].upper() or "?")}</span><span class="txt">'
             f'<span class="arriba"><b>{escape(nombre)}</b><small>{_hora(t, zona, hoy) if t else ""}</small></span>'
-            f'<span class="ult">{ult}</span><span class="lo-tiene{color}">{quien}</span></span></a>')
+            f'<span class="ult">{ult}</span><span class="lo-tiene">{etiqueta}{quien}</span></span></a>')
+    lado = LADO[ver]
+    pendientes = cuantos["nuevos"] + cuantos["sin"]
+    lados = "".join(
+        f'<a href="{escape(enlace(primero(cuantos, k), buscar))}"' + (' class="on" aria-current="true"' if k == lado else "")
+        + f">{nombre}" + (f"<b>{pendientes}</b>" if k == "tu" and pendientes else "") + "</a>"
+        for k, nombre in (("tu", "Tú"), ("bot", "Tu asistente")))
     pestanas = "".join(
         f'<a href="{escape(enlace(k, buscar))}"' + (' class="on" aria-current="page"' if k == ver else "") + ">"
-        f'{nombre}<b class="{"gris" if k == "todas" or not cuantos[k if k != "todas" else ""] else ""}">'
-        f'{cuantos[k if k != "todas" else ""]}</b></a>' for k, nombre in FILTROS.items())
-    vacio = {"todas": "Aún no te escribe nadie. Aquí vas a ver tus chats en cuanto lleguen.",
-             "persona": "Nadie: ningún chat está esperando a que le contestes tú.",
-             "sin": "Ninguno: todos tus chats tienen respuesta."}[ver]
+        f'{nombre}<b class="{"" if cuantos[k] and k in AVISAN else "gris"}">{cuantos[k]}</b></a>'
+        for k, nombre in FILTROS.items() if LADO[k] == lado)
+    vacio = {"nuevos": "Ninguno: el asistente no te ha pasado chats nuevos.",
+             "sin": "Ninguno: ya contestaste todos los chats que atiendes tú.",
+             "tuyas": "Ninguno: tu asistente está atendiendo todos tus chats.",
+             "curso": "Nadie ha escrito en las últimas 24 horas.",
+             "bot": "Aún no te escribe nadie. Aquí vas a ver tus chats en cuanto lleguen."}[ver]
     if buscar:
         vacio = f"No encontramos chats con «{escape(buscar)}»."
     busqueda = ('<form method="get" action="/panel/asistente#chats" class="buscar" role="search" data-vivo>'
@@ -205,12 +247,13 @@ async def partes(c: Cuenta, ver: str = "", buscar: str = "", hoja: int = 1, chat
                 '<button>Buscar</button></form>')
     cuantos_txt = (f'<p class="cuantos">{encontrados} {"chat" if encontrados == 1 else "chats"}'
                    + (f" · página {hoja} de {total}" if total > 1 else "") + "</p>") if buscar and encontrados else ""
-    lista = (f'<nav class="filtros-chat" aria-label="Filtros">{pestanas}</nav>{cuantos_txt}'
+    lista = (f'<nav class="lados" aria-label="Quién atiende">{lados}</nav>'
+             f'<nav class="filtros-chat" aria-label="Filtros">{pestanas}</nav>{cuantos_txt}'
              + ("".join(conv) or f'<p class="vacio">{vacio}</p>')
              + panel.paginas(hoja, total, lambda x: enlace(ver, buscar, x, chat)))
     hilo = await _hilo(c, chat, ver, buscar, hoja, n, ahora, zona, hoy, humano_desde) if chat else ""
     return {"busqueda": busqueda, "lista": lista, "hilo": hilo, "ver": ver, "buscar": buscar, "hoja": hoja,
-            "chat": chat if hilo else ""}
+            "chat": chat if hilo else "", "pendientes": pendientes}
 
 
 async def _hilo(c: Cuenta, u: str, ver: str, buscar: str, hoja: int, n: int, ahora: float, zona: ZoneInfo,
@@ -226,10 +269,9 @@ async def _hilo(c: Cuenta, u: str, ver: str, buscar: str, hoja: int, n: int, aho
     n = min(max(POR_TANDA, n), MAX_MENSAJES)
     mensajes, hay_mas = await c.store.chat_messages(u, n)
     ultimo_cliente = await c.store.last_message_from(u)
-    motivo = ""
+    pidio = None  # lo que dijo el asistente al pasártelo (pasar_a_humano), si fue así
     if en_pausa:
-        pidio = [d for x, d, _ in await c.store.events("humano", humano_desde, ahora + 1) if x == u]
-        motivo = pidio[-1].get("motivo", "") if pidio else None
+        pidio = ([d for x, d, _ in await c.store.events("humano", humano_desde, ahora + 1) if x == u] or [None])[-1]
     horas = max(1, round((hasta - ahora) / 3600))
     ocultos = _ocultos(ver, buscar, hoja, u) + f'<input type="hidden" name="usuario" value="{escape(u)}">'
 
@@ -247,8 +289,10 @@ async def _hilo(c: Cuenta, u: str, ver: str, buscar: str, hoja: int, n: int, aho
         + (" disabled" if en_pausa else "") + ">Tú</button></form>")
     extender = (f'<form method="post" action="/panel/pausas#chats">{ocultos}'
                 f'<button name="accion" value="extender">Darte {c.human_pause_hours:g} h más</button></form>')
-    if en_pausa and motivo is not None:
-        alerta = ('<div class="alerta"><b>Pidió hablar con una persona.</b> '
+    if pidio is not None:
+        from .tools import RAZONES
+        motivo = pidio.get("motivo", "")
+        alerta = (f'<div class="alerta"><b>Te lo pasó el asistente: {RAZONES.get(pidio.get("razon"), "pidió una persona")}.</b> '
                   + (f"Motivo: {escape(motivo[:200])}. " if motivo else "")
                   + f"Tu asistente no le contesta en las próximas {horas} h. {extender}</div>")
     elif en_pausa:

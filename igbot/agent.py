@@ -4,12 +4,14 @@ Usa el Claude Agent SDK con todas las herramientas de Claude Code apagadas
 (nada de Bash ni archivos: lo que escribe un desconocido por DM nunca debe
 poder tocar el servidor). Solo tiene las herramientas de tools.py.
 """
+import asyncio
 import logging
+from html import escape
 from pathlib import Path
 
 from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query
 
-from . import catalog, limites, tienda, tools
+from . import catalog, config, limites, tienda, tools
 from .cuenta import cuenta
 from .google import Google
 from .instagram import Instagram
@@ -42,9 +44,13 @@ async def run_claude(
         extra_args={"no-session-persistence": None},  # la memoria es nuestra
     )
     result = None
-    async for message in query(prompt=prompt, options=options):
-        if isinstance(message, ResultMessage):
-            result = message
+    try:
+        async with asyncio.timeout(config.CLAUDE_TIMEOUT_SECONDS):
+            async for message in query(prompt=prompt, options=options):
+                if isinstance(message, ResultMessage):
+                    result = message
+    except TimeoutError:
+        raise RuntimeError(f"Claude no contestó en {config.CLAUDE_TIMEOUT_SECONDS:g} s") from None
     if result is None or result.is_error or not result.result:
         raise RuntimeError(f"Claude no devolvió respuesta: {result}")
     log.info("Claude: %d turnos, US$%.4f", result.num_turns, result.total_cost_usd or 0)
@@ -52,8 +58,14 @@ async def run_claude(
     return result.result.strip()
 
 
+def dato(texto: str) -> str:
+    """Texto que escribió otra persona, listo para ir dentro de una etiqueta del prompt: sin < ni >
+    no puede cerrar la etiqueta (p. ej. escribir "</mensajes_nuevos>") y hacerse pasar por instrucciones."""
+    return escape(texto, quote=False)
+
+
 def render(rows) -> str:
-    return "\n".join(f"{'Usuario' if role == 'user' else 'Tú'}: {text}" for role, text in rows)
+    return "\n".join(f"{'Usuario' if role == 'user' else 'Tú'}: {dato(text)}" for role, text in rows)
 
 
 async def build_prompt(store: Store, user_id: str, new_messages: list[str]) -> str:
@@ -64,16 +76,16 @@ async def build_prompt(store: Store, user_id: str, new_messages: list[str]) -> s
     if facts:
         parts.append(
             "<datos_guardados>\n"
-            + "\n".join(f"- {k}: {v}" for k, v in facts.items())
+            + "\n".join(f"- {dato(k)}: {dato(v)}" for k, v in facts.items())
             + "\n</datos_guardados>"
         )
     if summary:
-        parts.append(f"<resumen_de_antes>\n{summary}\n</resumen_de_antes>")
+        parts.append(f"<resumen_de_antes>\n{dato(summary)}\n</resumen_de_antes>")
     if history:
         parts.append(f"<conversacion_reciente>\n{render(history)}\n</conversacion_reciente>")
     parts.append(f"<ahora>{tools.fmt(tools.now())} ({cuenta().timezone}), {tools.now():%Y-%m-%d}</ahora>")
     parts.append(
-        "<mensajes_nuevos>\n" + "\n".join(new_messages) + "\n</mensajes_nuevos>\n\n"
+        "<mensajes_nuevos>\n" + "\n".join(dato(m) for m in new_messages) + "\n</mensajes_nuevos>\n\n"
         "Escribe la respuesta que se enviará por DM (solo el texto del mensaje)."
     )
     return "\n\n".join(parts)
@@ -133,7 +145,7 @@ async def summarize_if_needed(store: Store, user_id: str) -> None:
         return
     previous = await store.summary(user_id)
     prompt = (
-        (f"<resumen_anterior>\n{previous}\n</resumen_anterior>\n\n" if previous else "")
+        (f"<resumen_anterior>\n{dato(previous)}\n</resumen_anterior>\n\n" if previous else "")
         + f"<mensajes>\n{render([(r, t) for _, r, t in old])}\n</mensajes>\n\n"
         "Escribe el resumen actualizado."
     )

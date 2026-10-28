@@ -24,7 +24,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
 from . import brief, campanas, empresa, panel, tools
-from .contenido import marca_de, modo_de, sin_plan
+from .contenido import TOKEN_FOTO, archivo, guardar_fotos, marca_de, modo_de, sin_plan, url_imagen
 from .cuenta import Cuenta, usar
 
 router = APIRouter(prefix="/panel/contenido")
@@ -33,7 +33,7 @@ BORRADOR = "campana_borrador"
 
 PASOS = ("Objetivo", "Mensaje", "Enfoque del contenido", "Formatos", "Qué se ve", "Estilo y variedad", "Cantidad y fechas")
 RESUMEN = len(PASOS) + 1
-OCULTOS = {5}  # Qué se ve: fuera del asistente (las imágenes usan lo de siempre: productos, personas, tus fotos)
+OCULTOS = {5}  # Qué se ve: fuera del asistente (el plan de cada imagen sale del ángulo del post y del perfil)
 VISIBLES = [i for i in range(1, RESUMEN) if i not in OCULTOS]
 
 
@@ -169,6 +169,7 @@ HORARIOS = {**{k: f"{v[0]} · {v[1]}" for k, v in campanas.HORARIOS.items()}, "i
 DIAS = ("Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom")
 MAX_POSTS = 30
 MAX_HISTORIAS = 30
+MAX_CANDIDATOS_REF = 18  # fotos para elegir como referencia en el paso Estilo y variedad
 
 
 # --- el borrador ---
@@ -278,7 +279,9 @@ async def a_campana(c: Cuenta, b: dict) -> dict:
             if b["condicion"]:
                 producto += f" ({b['condicion']})"
         producto += "."
-    visual = ", ".join(VISUAL[k][0] for k in b["visual"] if k in VISUAL)
+    # Qué se ve solo cuenta si el dueño lo eligió: con el paso oculto, lo decide el plan con los datos de su perfil.
+    ves = [] if 5 in OCULTOS else [k for k in b["visual"] if k in VISUAL and k != "propias"]
+    visual = ", ".join(VISUAL[k][0] for k in ves)
     titular = (f"Texto en las fotos con titular (se alternan): {', '.join(TEXTO[k][0].lower() for k in textos(b))}. "
                if "titular" in b["formatos"] else "")
     estilo = (f"{titular}Variedad visual: {VARIEDAD[b['variedad']][0]}"
@@ -294,10 +297,13 @@ async def a_campana(c: Cuenta, b: dict) -> dict:
             "mensaje": "; ".join(f"{m['titulo']}: {m.get('descripcion', '')}" for m in msgs),
             "producto": producto, "producto_id": prod["id"] if prod else "", "visual": visual, "estilo": estilo,
             "fotos_propias": "propias" in b["visual"], "modo_img": b["armado"], "regla": base == "interaccion",
-            "ves": [[k, f"{VISUAL[k][0]}: {VISUAL[k][1]}"] for k in b["visual"] if k in VISUAL and k != "propias"],
+            "ves": [[k, f"{VISUAL[k][0]}: {VISUAL[k][1]}"] for k in ves],
             "variedad": b["variedad"],
+            "referencias": b.get("referencias", []),
+            "adn_visual": (b.get("adn") or {}).get("texto", "") if (b.get("adn") or {}).get("fotos") == b.get(
+                "referencias") else "",
             "semilla": b.get("semilla") or 0,
-            "asistente": {k: v for k, v in b.items() if k not in ("cid", "hechos")}}
+            "asistente": {k: v for k, v in b.items() if k not in ("cid", "hechos", "adn")}}
 
 
 # --- guardar cada paso ---
@@ -391,9 +397,7 @@ def img(seccion: str, clave: str, color: str, texto: str = "", alta: bool = Fals
 
 
 # Los brillitos de IA de los sugeridos de cada lunes (en lima: un acento chico).
-BRILLOS = ('<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M10 2l1.9'
-           ' 5.6L17.5 9.5l-5.6 1.9L10 17l-1.9-5.6L2.5 9.5l5.6-1.9zM18.5 13l.95 2.55L22 16.5l-2.55.95L18.5 20l-.95-2.55'
-           'L15 16.5l2.55-.95z"/></svg>')
+BRILLOS = campanas.BRILLOS_IA
 
 
 def op(nombre: str, valor: str, titulo: str, desc: str, tipo: str = "radio", marcada: bool = False,
@@ -541,7 +545,18 @@ def paso_5(b: dict) -> str:
                    " empresa. Las usamos como referencia en cada imagen.") + pie(5))
 
 
-def paso_6(b: dict) -> str:
+async def candidatos_ref(c: Cuenta, b: dict) -> list[str]:
+    """Las fotos que puede elegir como referencia: las que ya eligió o subió aquí, las de Tu marca y las de sus
+    productos (las que siguen en disco)."""
+    with usar(c):
+        marca = await marca_de(c)
+        prods = await productos(c)
+    tokens = b.get("referencias", []) + b.get("refs_subidas", []) + marca.get("fotos", []) + [
+        t for p in prods for t in p.get("imagenes", []) if isinstance(t, str)]
+    return [t for t in dict.fromkeys(tokens) if TOKEN_FOTO.match(t) and archivo(c, t).is_file()][:MAX_CANDIDATOS_REF]
+
+
+def paso_6(b: dict, candidatos: list[tuple[str, str]] = ()) -> str:
     variedad = "".join(op("variedad", k, t, d, marcada=b["variedad"] == k, imagen=img("variedad", k, color, t, alta=True),
                           em="Recomendado" if k == "coherencia" else "")
                        for k, (t, d, color) in VARIEDAD.items())
@@ -549,7 +564,21 @@ def paso_6(b: dict) -> str:
                 "Solo cambia esta campaña. Tus colores, tu tipografía y tu logo siguen siendo los de Tu marca.")
             + '<h3 class="wiz-sub">Variedad visual</h3><p class="ayuda">Qué tan distintas se ven las fotos entre'
             ' sí: el lugar, el encuadre y la luz.</p>'
-            f'<div class="wiz-ops cuatro">{variedad}</div>' + pie(6))
+            f'<div class="wiz-ops cuatro">{variedad}</div>' + referencias(b, candidatos) + pie(6))
+
+
+def referencias(b: dict, candidatos: list[tuple[str, str]]) -> str:
+    """Fotos de referencia (opcional): las elige de las que ya tiene o las sube; con ellas manda su estilo."""
+    fotos = "".join(f'<label class="ref-cam"><input type="checkbox" name="referencias" value="{t}"'
+                    f'{" checked" if t in b.get("referencias", []) else ""}><img src="{u}" alt="" loading="lazy"></label>'
+                    for t, u in candidatos)
+    return ('<h3 class="wiz-sub">Fotos de referencia <span class="opc">(opcional)</span></h3>'
+            f'<p class="ayuda">De 3 a {brief.MAX_REFERENCIAS} fotos con el estilo que quieres (luz, colores, ambiente),'
+            " parecidas entre sí. Mandan en la dirección visual: la IA copia su estilo, no lo que aparece en ellas.</p>"
+            + (f'<div class="refs-cam">{fotos}</div>' if fotos else "")
+            + '<label class="subir-ref">Subir fotos<input type="file" name="ref_nuevas" multiple'
+            ' accept="image/jpeg,image/png,image/webp"></label>'
+            f'<p class="ayuda chica">Elige o sube hasta {brief.MAX_REFERENCIAS}. Se guardan al pasar de paso.</p>')
 
 
 def paso_7(b: dict) -> str:
@@ -768,7 +797,7 @@ async def pagina(c: Cuenta, paso: int, aviso: str = "", b: dict | None = None):
         elif paso == 5:
             contenido = paso_5(b)
         elif paso == 6:
-            contenido = paso_6(b)
+            contenido = paso_6(b, [(t, url_imagen(c, t)) for t in await candidatos_ref(c, b)])
         elif paso == 7:
             contenido = paso_7(b)
         elif paso == BRIEF:
@@ -777,14 +806,13 @@ async def pagina(c: Cuenta, paso: int, aviso: str = "", b: dict | None = None):
             contenido = await resumen(c, b, objetivos, mensajes, prods)
         # Un solo formulario con el riel adentro; el primer botón (invisible) es el que usa Enter: seguir.
         sigue = BRIEF if paso == BRIEF else min(vecino(paso, 1), RESUMEN)
-        cuerpo = (f'<form method="post" action="{URL}" class="wiz" id="wiz-form">'
+        cuerpo = (f'<form method="post" action="{URL}" class="wiz" id="wiz-form" enctype="multipart/form-data">'
                   f'<button class="enter-cam" name="ir" value="{sigue}" tabindex="-1" aria-hidden="true">Seguir</button>'
                   f'<input type="hidden" name="paso" value="{paso}">{riel(b, paso)}'
                   f'<div class="wiz-main">{contenido}</div></form>')
     editar = bool(b.get("cid"))
     return panel.pagina(
-        panel.cabecera(salir=True, menu="contenido", cuenta=c, sub="campanas", perfil=await panel.usuario(c),
-                       foto=await panel.foto_perfil(c))
+        await panel.menu_de(c, "contenido", sub="campanas")
         + campanas.cabeza(f'<div class="der-cam">{hero}{campanas.boton_todas()}</div>', "", "Editar estrategia" if editar else "Nueva campaña")
         + '<div class="oscuro-pag"><main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
@@ -826,6 +854,8 @@ async def guardar(request: Request):
     if paso < RESUMEN:
         antes = {k: v for k, v in b.items() if k not in ("hechos", "brief")}
         error = del_form(f, paso, b, objetivos, mensajes, await productos(c))
+        if paso == 6:
+            await referencias_del_form(c, f, b)
         if b.get("brief") and {k: v for k, v in b.items() if k not in ("hechos", "brief")} != antes:
             b.pop("brief")  # cambió la campaña: el brief de antes ya no le queda
         hechos = set(b.get("hechos", []))
@@ -859,6 +889,29 @@ async def guardar(request: Request):
     return await campanas.armar(c, datos, camp, borrador=True)
 
 
+async def referencias_del_form(c: Cuenta, f, b: dict) -> None:
+    """Las fotos de referencia marcadas (de las que podía elegir) y las que subió, hasta MAX_REFERENCIAS."""
+    validas = set(await candidatos_ref(c, b))
+    elegidas = [t for t in dict.fromkeys(str(x) for x in f.getlist("referencias")) if t in validas]
+    subidas = [x for x in f.getlist("ref_nuevas") if getattr(x, "filename", "")]
+    if subidas and len(elegidas) < brief.MAX_REFERENCIAS:
+        tokens, _ = await guardar_fotos(c, subidas, brief.MAX_REFERENCIAS - len(elegidas))
+        elegidas += tokens
+        b["refs_subidas"] = (tokens + b.get("refs_subidas", []))[:MAX_CANDIDATOS_REF]
+    b["referencias"] = elegidas[:brief.MAX_REFERENCIAS]
+
+
+async def adn_de(c: Cuenta, b: dict) -> str:
+    """El ADN visual de sus referencias, guardado en el borrador mientras no cambien las fotos."""
+    refs = b.get("referencias", [])
+    if not refs:
+        return ""
+    if (b.get("adn") or {}).get("fotos") != refs:
+        with usar(c):
+            b["adn"] = {"fotos": refs, "texto": await brief.adn_visual(c, refs)}
+    return b["adn"]["texto"]
+
+
 async def crear_brief(c: Cuenta, b: dict, datos: dict):
     """Las tres ideas de campaña con su brief (una llamada a Claude, cuenta como una propuesta del día)."""
     if not await campanas.ia_restantes(c):
@@ -869,6 +922,7 @@ async def crear_brief(c: Cuenta, b: dict, datos: dict):
     async def trabajo():
         with usar(c):
             await campanas.usar_ia(c)
+            datos["adn_visual"] = await adn_de(c, b)  # primero se leen las referencias: mandan en la dirección visual
             conceptos = await brief.conceptos(c, datos, otras)
         b["brief"] = {"conceptos": conceptos, "elegido": 0}
         await escribir(c, b)
@@ -876,3 +930,126 @@ async def crear_brief(c: Cuenta, b: dict, datos: dict):
 
     return campanas.trabajando(c, "Pensando las ideas de tu campaña…", "Tarda unos segundos.", trabajo,
                                f"{URL}?paso={RESUMEN}")
+
+
+# --- Crear con IA: solo el objetivo y las fechas; lo demás lo decide la IA ---
+
+RAPIDA = f"{campanas.BASE}/rapida"
+POSTS_SEMANA = 4  # Crear con IA: posts por semana, de lunes a viernes
+
+
+def pagina_rapida_html(b: dict, objetivos: list[dict]) -> str:
+    ops = "".join(op("objetivo", o["k"], o["titulo"], o.get("descripcion", ""), marcada=o["k"] == b["objetivo"],
+                     sugerido=bool(o.get("sugerido"))) for o in objetivos)
+    semanas = "".join(f'<option value="{n}"{" selected" if b["semanas"] == n else ""}>{n} semana{"s" if n > 1 else ""}'
+                      "</option>" for n in campanas.SEMANAS)
+    return (f'<form method="post" action="{RAPIDA}" class="wiz rapida-cam"><div class="wiz-main">'
+            '<div class="wiz-cab"><p class="ante">Crear con IA</p><h2>¿Qué quieres lograr con esta campaña?</h2>'
+            '<p class="baj">Elige el objetivo y cuándo empieza. Nosotros escribimos todos los posts con tu perfil de'
+            " empresa, tu marca y tus resultados. Las imágenes las generas después, cuando las revises.</p></div>"
+            f'<div class="wiz-ops">{ops}</div>'
+            '<h3 class="wiz-sub">Cuándo</h3><div class="wiz-campos dos-r">'
+            f'<div><label for="r-inicio">Empieza</label><input type="date" id="r-inicio" name="inicio"'
+            f' value="{b["inicio"]}"></div>'
+            f'<div><label for="r-semanas">Duración</label><select id="r-semanas" name="semanas">{semanas}</select></div>'
+            "</div>"
+            '<details class="prompt-img rapida-extra"><summary>¿Algo que debamos saber? (opcional)</summary>'
+            f'<textarea name="texto" rows="3" maxlength="{MAX_TEXTO}" placeholder="Ej. Tenemos 20 % de descuento en'
+            f' noviembre, o abrimos sucursal el día 15.">{escape(b.get("texto", ""))}</textarea></details>'
+            '<div class="wiz-pie">'
+            f'<a class="boton secundario" href="{campanas.BASE}">Cancelar</a>'
+            f'<span>{POSTS_SEMANA} posts por semana, sin imágenes</span>'
+            f'<button class="boton" name="accion" value="crear">{BRILLOS} Crear con IA</button></div>'
+            "</div></form>")
+
+
+async def pagina_rapida(c: Cuenta, aviso: str = "", b: dict | None = None):
+    hay_empresa, hay_marca = await lista_para_empezar(c)
+    b = b or inicial(await marca_de(c))
+    if not (hay_empresa and hay_marca):
+        cuerpo = bloqueo(hay_empresa, hay_marca)
+    else:
+        objetivos, _ = await opciones(c)
+        if not b["objetivo"] and objetivos:  # uno ya marcado: el sugerido de esta semana, si hay
+            b["objetivo"] = next((o["k"] for o in objetivos if o.get("sugerido")), objetivos[0]["k"])
+        cuerpo = pagina_rapida_html(b, objetivos)
+    return panel.pagina(
+        await panel.menu_de(c, "contenido", sub="campanas")
+        + campanas.cabeza(f'<div class="der-cam">{campanas.boton_todas()}</div>', "", "Crear con IA")
+        + '<div class="oscuro-pag"><main><div class="contenedor">'
+        + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
+        + cuerpo + "</div></main></div>")
+
+
+def borrador_rapido(b: dict, f, objetivos: list[dict], mensajes: list[dict]) -> str:
+    """El borrador completo con lo poco que eligió; devuelve '' o lo que falta."""
+    g = lambda k: str(f.get(k, "")).strip()  # noqa: E731
+    if g("objetivo") not in {o["k"] for o in objetivos}:
+        return "Elige qué quieres lograr."
+    b["objetivo"] = g("objetivo")
+    b["inicio"] = _fecha(g("inicio")) or b["inicio"]
+    b["semanas"] = int(g("semanas")) if g("semanas").isdigit() and int(g("semanas")) in campanas.SEMANAS else 2
+    b["texto"] = g("texto")[:MAX_TEXTO]
+    b["con_texto"] = bool(b["texto"])
+    b["mensajes"] = [m["k"] for m in mensajes][:MAX_MENSAJES]
+    b["formatos"], b["horarios"] = ["ia"], ["ia"]  # la IA reparte todos los formatos y los horarios
+    b["n_posts"] = min(POSTS_SEMANA * b["semanas"], MAX_POSTS)
+    return "" if b["mensajes"] else "Ese objetivo todavía no tiene mensajes; elige otro."
+
+
+@router.get("/campanas/rapida")
+async def ver_rapida(request: Request):
+    if not (c := panel.cuenta_de_sesion(request)):
+        return RedirectResponse("/panel", status_code=303)
+    if c.imagenes_mes <= 0:
+        return sin_plan()
+    return await pagina_rapida(c)
+
+
+@router.post("/campanas/rapida")
+async def crear_rapida(request: Request):
+    panel.de_aqui(request)
+    if not (c := panel.cuenta_de_sesion(request)):
+        return RedirectResponse("/panel", status_code=303)
+    if c.imagenes_mes <= 0:
+        return sin_plan()
+    hay_empresa, hay_marca = await lista_para_empezar(c)
+    if not (hay_empresa and hay_marca):
+        return RedirectResponse(RAPIDA, status_code=303)
+    f = await request.form()
+    b = inicial(await marca_de(c))
+    b["semilla"] = int(time.time())
+    objetivos, _ = await opciones(c)
+    _, mensajes = await opciones(c, str(f.get("objetivo", "")))
+    if error := borrador_rapido(b, f, objetivos, mensajes):
+        return await pagina_rapida(c, error, b)
+    with usar(c):
+        hoy = tools.now().date()
+    if date.fromisoformat(b["inicio"]) < hoy:
+        return await pagina_rapida(c, "La campaña no puede empezar en un día que ya pasó.", b)
+    if await campanas.ia_restantes(c) < 2:  # dos propuestas del día: el brief y los posts
+        return await pagina_rapida(c, "Por hoy ya no quedan propuestas; mañana puedes pedir más.", b)
+    datos = await a_campana(c, b)
+    if falta := campanas.falta_en(datos):
+        return await pagina_rapida(c, falta, b)
+    with usar(c):
+        todas = await campanas.todas_las(c)
+        anteriores = await campanas.informe.todas(c, todas)
+        fotos = len(campanas.fotos_marca(c, await marca_de(c)))
+    camp = {**datos, "id": int(time.time() * 1000), "posts": [], "creada": time.time()}
+
+    async def trabajo():
+        with usar(c):
+            await campanas.usar_ia(c)
+            yield "Pensando la idea de tu campaña…"
+            conceptos = await brief.conceptos(c, datos, todas)
+            b["brief"] = {"conceptos": conceptos, "elegido": 0}  # la primera idea: la que la IA pone primero
+            camp["brief"] = conceptos[0]
+            camp["asistente"] = {k: v for k, v in b.items() if k not in ("cid", "hechos", "adn")}
+            await campanas.usar_ia(c)
+            yield "Escribiendo los posts…"
+            hecha = await campanas.proponer(c, camp, anteriores, None, fotos)
+            await campanas.guardar(c, hecha)
+        yield campanas.url_de(camp)
+
+    return campanas.trabajando(c, "Creando tu campaña con IA…", "Tarda alrededor de un minuto.", trabajo, RAPIDA)

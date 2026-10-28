@@ -50,6 +50,9 @@ CUENTA_GRANDE_POSTS = int(os.getenv("CUENTA_GRANDE_POSTS", "1000"))
 # Dirección pública del bot, para mandar el PDF por DM (Instagram lo descarga de ahí).
 PUBLIC_URL = os.getenv("PUBLIC_URL", "").rstrip("/")
 
+# Tiempo máximo de una llamada a Claude: si no contesta, falla como cualquier error (y la pantalla
+# "Generando…" muestra el aviso en vez de quedarse girando).
+CLAUDE_TIMEOUT_SECONDS = float(os.getenv("CLAUDE_TIMEOUT_SECONDS", "240"))
 # Segundos que se espera a que el usuario termine de escribir antes de contestar.
 DEBOUNCE_SECONDS = float(os.getenv("DEBOUNCE_SECONDS", "5"))
 # Conversaciones que se atienden a la vez (cada una abre un proceso del Agent SDK).

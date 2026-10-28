@@ -112,7 +112,7 @@ def test_basico_sin_mensajes_y_con_mensajes(cliente, monkeypatch):
     client, c = cliente
     assert 'href="/panel/resultados" title="Resultados"' in client.get("/panel/asistente").text  # todos los planes
     assert 'title="Contenido"' not in client.get("/panel").text
-    assert "Aún no hay mensajes" in client.get("/panel/resultados").text
+    assert "Aún no hay mensajes" in client.get("/panel/resultados?ver=conversaciones").text
 
     async def conversar():
         await c.store.add_incoming("ana", "m1", "¿precio?")
@@ -122,14 +122,17 @@ def test_basico_sin_mensajes_y_con_mensajes(cliente, monkeypatch):
         await c.store.add_incoming("admin:yo", "m4", "no cuenta")
 
     client.portal.call(conversar)
-    assert "Aún no hay mensajes" in client.get("/panel/resultados").text  # sigue en caché
+    assert "Aún no hay mensajes" in client.get("/panel/resultados?ver=conversaciones").text  # sigue en caché
     monkeypatch.setattr(resultados, "_cache", {})
-    html = client.get("/panel/resultados").text
+    html = client.get("/panel/resultados?ver=conversaciones").text
     assert "1 de 2 sin ayuda" in html and "50%" in html
     assert ">1 respuesta<" in html
     assert html.split("<main")[1].count("<svg") == 2 and "no cuenta" not in html
+    assert "De dónde es tu público" in html and "Seguidores nuevos" not in html  # solo conversaciones
     assert "De comentario a mensaje" not in html  # Básico: sin bloque de contenido
     assert 'class="on">30 días' in client.get("/panel/resultados?dias=30").text
+    html = client.get("/panel/resultados?dias=30&ver=conversaciones").text
+    assert 'class="on">Conversaciones' in html and 'href="/panel/resultados?dias=7&ver=conversaciones"' in html
     assert 'class="on">7 días' in client.get("/panel/resultados?dias=999").text
 
 
@@ -150,7 +153,7 @@ def test_inicio_del_panel(cliente, monkeypatch):
     # Lo omite: paso 2, una sola vez (Básico: un solo camino y seguir explorando).
     r = client.post("/panel/bienvenida", headers=ORIGEN, data={"accion": "omitir"})
     assert "¿Por dónde seguimos?" in r.text and "Tu plan Asistente virtual" in r.text and "Tu marca" not in r.text
-    assert "te espera en el menú de tu cuenta" in r.text and "Seguir explorando" in r.text
+    assert "te espera en Configuración" in r.text and "Seguir explorando" in r.text
     assert "Te falta llenar tu <b>Perfil de empresa</b>" in client.get("/panel/asistente").text
     lista["empresa"] = True
     assert "Te falta llenar tu" not in client.get("/panel/asistente").text
@@ -181,7 +184,11 @@ def test_community_ve_comentarios_y_publicaciones(cliente, monkeypatch):
         await c.store.set_post(2, "programada")
 
     client.portal.call(actividad)
-    html = client.get("/panel/resultados").text
+    html = client.get("/panel/resultados?ver=conversaciones").text
     assert 'href="/panel/contenido" title="Calendario"' in html
     assert "De comentario a mensaje" in html and "PRECIO · 1" in html and "Spam ocultado" in html
-    assert "1 publicada · 1 programada" in html and "https://www.instagram.com/p/X/" in html
+    assert "1 publicada" not in html  # las publicaciones van en Instagram
+    html = client.get("/panel/resultados").text
+    assert "1 publicada <small>· 1 programada" in html and "https://www.instagram.com/p/X/" in html
+    assert "Instagram aún no da sus números" in html
+    assert "De comentario a mensaje" not in html
