@@ -287,7 +287,8 @@ async def _hilo(c: Cuenta, u: str, ver: str, buscar: str, hoja: int, n: int, aho
         sub += " · Llegó por " + (f"el anuncio «{escape(anuncio['titulo'][:80])}»" if anuncio["titulo"] else "un anuncio")
     if ventas := await c.store.ventas_de(u):
         from .tienda_shopify import monto
-        sub += f" · Compró {monto(sum(v['monto'] for v in ventas), ventas[-1]['moneda'])} en tu tienda"
+        donde = " en tu tienda" if all(v["origen"] == "shopify" for v in ventas) else ""
+        sub += f" · Compró {monto(sum(v['monto'] for v in ventas), ventas[-1]['moneda'])}{donde}"
     if nombre.startswith("@"):
         sub += (f' · <a class="enlace" href="https://ig.me/m/{escape(nombre[1:])}" target="_blank" rel="noopener">'
                 "Abrir en Instagram</a>")
