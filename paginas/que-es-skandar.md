@@ -10,9 +10,10 @@ Tus redes sociales, trabajando: tus anuncios traen el mensaje, Skandar lo contes
 
 ## Qué hace
 
-- **Asistente virtual.** Contesta al instante los mensajes directos de Instagram, también los que llegan de anuncios, con la información del negocio: productos, precios, horarios, disponibilidad y preguntas frecuentes. Recuerda a cada cliente, usa el tono que elige el dueño y se pausa cuando alguien pide a una persona o cuando el dueño contesta a mano.
-- **Community Manager.** Arma campañas con calendario, genera cada imagen y cada texto con la marca del negocio y publica en Instagram a la hora programada. También arma campañas para promocionar un producto o servicio con su oferta y sus fechas.
-- **Medición de anuncios.** Cada chat que llega de un anuncio queda marcado con ese anuncio. Con Shopify conectado, la venta aparece en el chat de quien compró, con el anuncio que lo trajo.
+- **Asistente virtual.** Contesta al instante los mensajes de Instagram y de Facebook Messenger, también los que llegan de anuncios, con la información del negocio: productos, precios, horarios, disponibilidad y preguntas frecuentes. Recuerda a cada cliente, usa el tono que elige el dueño y se pausa cuando alguien pide a una persona o cuando el dueño contesta a mano.
+- **Community Manager.** Arma campañas con calendario, genera cada imagen y cada texto con la marca del negocio y publica en Instagram y en la página de Facebook a la hora programada. También arma campañas para promocionar un producto o servicio con su oferta (descuento, 2x1, 3x2) y sus fechas.
+- **Citas y cobros.** Con Google Calendar conectado, el asistente revisa los horarios libres y agenda la cita en el calendario del negocio. Con Mercado Pago o Stripe conectado, manda un link de pago por el chat.
+- **Medición de anuncios.** Cada chat que llega de un anuncio queda marcado con ese anuncio. Los pagos por link y las compras en Shopify aparecen en el chat de quien pagó, con el anuncio que lo trajo.
 - **Comenta y recibe por DM.** Cada publicación puede llevar una palabra clave: quien la comenta recibe la información por mensaje directo.
 
 ## Para quién es
@@ -28,13 +29,13 @@ Sobre todo para negocios que ya pagan anuncios en Instagram o Facebook y quieren
 ## Cómo funciona
 
 - Se necesita una cuenta profesional de Instagram, de Empresa o de Creador.
-- La cuenta se conecta con la API oficial de Instagram de Meta.
+- Las cuentas se conectan con la API oficial de Meta (Instagram y Facebook).
 - Todo se configura desde un panel en el navegador; no hay que instalar nada.
 - El dueño aprueba cada publicación antes de que salga.
 
 ## Qué no hace
 
-- Por ahora funciona solo con Instagram; no atiende WhatsApp ni Facebook Messenger.
+- Por ahora funciona con Instagram y Facebook (página y Messenger); no atiende WhatsApp.
 - No escribe primero a nadie ni sigue cuentas o da "me gusta" en automático: contesta a quien escribe o comenta, como lo permite Meta.
 - No inventa: contesta con la información que le da el dueño, y lo que no sabe se lo pasa a él.
 

@@ -20,19 +20,19 @@ Skandar se basa en **un asistente con inteligencia artificial**: le das la infor
 ## Comparación rápida
 
 - **Cómo se configura.** ManyChat: construyes flujos en un editor visual. Skandar: llenas un panel guiado con la información de tu negocio.
-- **Canales.** ManyChat: Instagram, Facebook Messenger, WhatsApp y otros. Skandar: solo Instagram, por ahora.
+- **Canales.** ManyChat: Instagram, Facebook Messenger, WhatsApp y otros. Skandar: Instagram y Facebook Messenger, por ahora sin WhatsApp.
 - **Respuestas con IA.** ManyChat: disponibles como complemento. Skandar: es la base del producto.
 - **Contenido.** ManyChat: no crea publicaciones. Skandar: el plan Community Manager mantiene tu perfil activo con campañas, imágenes y textos de tu marca, y los publica.
 - **Comenta y recibe por DM.** Ambos lo tienen.
 - **Precio.** ManyChat: tiene plan gratuito y planes de pago que suben según tus contactos. Skandar: US$49 al mes más IVA el Asistente virtual y US$79 al mes más IVA el Community Manager, sin plan gratuito.
-- **Integraciones.** ManyChat: muchas, como tiendas en línea, hojas de cálculo y Zapier. Skandar: pocas, porque está enfocado en Instagram.
+- **Integraciones.** ManyChat: muchas, como tiendas en línea, hojas de cálculo y Zapier. Skandar: las que necesita para vender por chat: Shopify, Mercado Pago, Stripe y Google Calendar.
 
 ## Cuándo conviene ManyChat
 
-- Necesitas atender también WhatsApp o Messenger desde la misma herramienta.
+- Necesitas atender también WhatsApp desde la misma herramienta.
 - Te gusta diseñar cada paso de la conversación y tienes tiempo para hacerlo.
 - Quieres empezar con un plan gratuito.
-- Necesitas conectar los mensajes con otras herramientas, como tu tienda en línea.
+- Necesitas conectar los mensajes con muchas otras herramientas, como hojas de cálculo o Zapier.
 
 ## Cuándo conviene Skandar
 
@@ -43,6 +43,6 @@ Skandar se basa en **un asistente con inteligencia artificial**: le das la infor
 
 ## Nuestra recomendación
 
-Si tu negocio vive en WhatsApp o necesitas muchas integraciones, ManyChat es una buena opción. Si tu negocio vive en Instagram y quieres que tus mensajes, tu contenido y tus anuncios trabajen juntos sin construir flujos, prueba Skandar: escríbenos por DM y te contestamos como lo haría tu propio asistente.
+Si tu negocio vive en WhatsApp o necesitas muchas integraciones, ManyChat es una buena opción. Si tu negocio vive en Instagram y Facebook y quieres que tus mensajes, tu contenido y tus anuncios trabajen juntos sin construir flujos, prueba Skandar: escríbenos por DM y te contestamos como lo haría tu propio asistente.
 
 Más información en [Qué es Skandar](/que-es-skandar) y en [nuestros planes](/#planes).

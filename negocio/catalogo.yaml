@@ -47,7 +47,10 @@ paquetes:
       - Lo configuras tú desde el panel (tu negocio, precios, preguntas frecuentes y políticas)
       - Recuerda a cada cliente (memoria por persona)
       - Te pasa la conversación cuando el cliente pide una persona, y se calla cuando tú contestas
-      - Marca los chats que llegan de tus anuncios (y con Shopify, la venta que dejó cada anuncio)
+      - Contesta también Facebook Messenger y los comentarios de tu página, si la conectas
+      - Agenda citas en tu Google Calendar, si lo conectas
+      - Cobra con links de pago de Mercado Pago o Stripe, si los conectas
+      - Marca los chats que llegan de tus anuncios y la venta que dejó cada uno (pagos por link o Shopify)
       - Panel con tus conversaciones y tus resultados
   community:
     nombre: Community Manager
@@ -58,10 +61,11 @@ paquetes:
     incluye:
       - Todo lo del Asistente virtual
       - Campañas con calendario automático armado con la información de tu negocio, listas para programar
+      - Campañas para promocionar un producto o servicio con descuento, 2x1 o 3x2
       - Campañas de prueba (temas, formatos y horarios distintos) y campañas que repiten lo que mejor te funcionó
       - Contenido sugerido a partir de lo que te preguntan en DMs y comentarios
       - Genera cada post (imagen y texto) según Tu marca, tus colores, tus fotos y las referencias que le des
-      - Publica solo en tu Instagram a la hora programada
+      - Publica solo en tu Instagram y tu página de Facebook a la hora programada
       - Palabra clave por post ("comenta PRECIO y te mando la info por DM")
       - Reportes de tus campañas con tus métricas reales
       - 12 posts al mes con imagen

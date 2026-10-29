@@ -1,7 +1,7 @@
 titulo: Asistente virtual para tiendas de ropa en Instagram
 descripcion: Contesta tallas, existencias, precios y envíos por Instagram las 24 horas, y crea el contenido de tu tienda con lo que más te preguntan.
 nombre: Tiendas de ropa
-fecha: 2026-10-28
+fecha: 2026-10-29
 h1: Tu tienda vende por Instagram aunque no estés en línea
 bajada: Tu asistente responde tallas, colores, precios y envíos al momento, aparta prendas y te avisa cuando un cliente está listo para pagar.
 cuenta: tu_tienda
@@ -29,4 +29,5 @@ idea_nota: Nace de las dudas de tallas que te llegan por DM.
 ## faq
 - ¿El asistente sabe qué tengo en existencia? | Sabe lo que tú le cargas en el panel: productos, precios, tallas y colores. Cuando algo se agota, lo actualizas y deja de ofrecerlo.
 - ¿Puede apartar prendas? | Puede tomar los datos del cliente y la prenda, y pasarte la conversación para que confirmes el apartado y el pago.
+- ¿Puede cobrar por el chat? | Sí. Si conectas Mercado Pago o Stripe, manda un link de pago con el precio del producto y el pago aparece en ese chat, con el anuncio que trajo al cliente.
 - ¿Puede contestar comentarios en mis publicaciones? | Sí. En los posts con palabra clave, quien comenta recibe la información por DM y el asistente sigue la conversación.

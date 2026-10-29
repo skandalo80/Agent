@@ -1,7 +1,7 @@
 titulo: Asistente virtual para gimnasios y estudios en Instagram
 descripcion: Contesta mensualidades, horarios de clases y visitas de prueba por Instagram las 24 horas, y crea el contenido de tu gimnasio o estudio.
 nombre: Gimnasios y estudios
-fecha: 2026-10-28
+fecha: 2026-10-29
 h1: Tu gimnasio contesta a quien quiere empezar hoy
 bajada: Tu asistente responde precios, horarios de clases y promociones por mensaje directo en el momento en que la persona tiene ganas de empezar.
 cuenta: tu_estudio
@@ -27,6 +27,6 @@ idea_nota: Nace de las dudas de quienes apenas empiezan.
 - Comenta PRUEBA: quien comenta recibe cómo agendar su clase por DM
 - Historias de alumnos: el avance de alguien real, con su permiso
 ## faq
-- ¿El asistente puede inscribir alumnos? | Puede dar precios, resolver dudas y tomar los datos para la clase de prueba. La inscripción y el pago los confirmas tú.
+- ¿El asistente puede inscribir alumnos? | Puede dar precios, resolver dudas, agendar la clase de prueba en tu Google Calendar y mandar un link de pago de Mercado Pago o Stripe para la mensualidad.
 - ¿Sabe mis horarios de clase? | Sí. Los cargas en el panel y los comparte cuando alguien pregunta. Si cambian, los actualizas una vez.
 - ¿Puede avisar de promociones? | Contesta con las promociones vigentes que tú le indiques, y con el Community Manager las publicas con tu marca.

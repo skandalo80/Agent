@@ -7,7 +7,7 @@
 <link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" href="/favicon-32.png" sizes="32x32">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<meta name="description" content="Para negocios que anuncian en Instagram: un asistente que contesta cada mensaje al instante y lo lleva a la venta, contenido de tu marca para que tu perfil se vea activo y la medición de qué anuncio te trajo cada cliente.">
+<meta name="description" content="Para negocios que anuncian en Instagram y Facebook: un asistente que contesta cada mensaje al instante, agenda citas y cobra por el chat, contenido de tu marca para que tu perfil se vea activo y la medición de qué anuncio te trajo cada venta.">
 <meta name="theme-color" content="#18191C">
 <link rel="canonical" href="https://skandar.online/">
 <meta property="og:type" content="website">
@@ -52,7 +52,7 @@
       "@type": "Service",
       "name": "Asistente virtual",
       "serviceType": "Inteligencia artificial para Instagram",
-      "description": "Contesta al instante los mensajes directos de Instagram de tu negocio, también los que llegan de tus anuncios, con tu información, tus precios y tus preguntas frecuentes.",
+      "description": "Contesta al instante los mensajes de Instagram y Facebook Messenger de tu negocio, también los que llegan de tus anuncios, agenda citas en tu Google Calendar y cobra con links de Mercado Pago o Stripe.",
       "provider": {
         "@id": "https://skandar.online/#organizacion"
       },
@@ -75,7 +75,7 @@
       "@type": "Service",
       "name": "Community Manager",
       "serviceType": "Inteligencia artificial para Instagram",
-      "description": "Mantiene activo el perfil de Instagram de tu negocio con campañas, imágenes y textos de tu marca, y los publica por ti. Incluye el Asistente virtual.",
+      "description": "Mantiene activos el Instagram y la página de Facebook de tu negocio con campañas, imágenes y textos de tu marca, y los publica por ti. Incluye el Asistente virtual.",
       "provider": {
         "@id": "https://skandar.online/#organizacion"
       },
@@ -139,6 +139,22 @@
         },
         {
           "@type": "Question",
+          "name": "¿Funciona con Facebook?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Sí. Conectas tu página de Facebook y tu asistente contesta también Messenger y los comentarios de la página. En el plan Community Manager, tus publicaciones salen también en Facebook."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "¿Puede agendar citas y cobrar?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Sí. Si conectas tu Google Calendar, tu asistente revisa tus horarios libres y agenda la cita en tu calendario. Si conectas Mercado Pago o Stripe, manda un link de pago por el chat y el pago aparece en esa conversación, con el anuncio que trajo al cliente."
+          }
+        },
+        {
+          "@type": "Question",
           "name": "¿Me sirve si no pago anuncios?",
           "acceptedAnswer": {
             "@type": "Answer",
@@ -185,9 +201,9 @@
   <section class="oscuro portada">
     <div class="contenedor portada-rejilla">
       <div>
-        <p class="antetitulo">Para negocios que anuncian en Instagram</p>
+        <p class="antetitulo">Para negocios que anuncian en Instagram y Facebook</p>
         <h1>Tus redes sociales, trabajando<span class="punto">.</span></h1>
-        <p class="bajada">Tus anuncios traen el mensaje. Skandar lo contesta al instante, lo lleva a la venta y te dice qué anuncio funcionó, mientras tu perfil se mantiene activo con contenido de tu marca.</p>
+        <p class="bajada">Tus anuncios traen el mensaje. Skandar lo contesta al instante, agenda la cita o cobra por el chat y te dice qué anuncio funcionó, mientras tu perfil se mantiene activo con contenido de tu marca.</p>
         <div class="acciones">
           <a class="boton" href="https://ig.me/m/skandar.online">Escríbenos por DM</a>
           <a class="boton contorno" href="#demo">Velo funcionar</a>
@@ -224,17 +240,17 @@
         <article class="tarjeta">
           <div class="icono"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg></div>
           <h3>Atiende y vende</h3>
-          <p>Contesta en segundos precios, horarios y disponibilidad con tu información y tu tono, lleva la conversación a la venta y te la pasa cuando alguien pide a una persona.</p>
+          <p>Contesta en segundos por Instagram y Messenger con tu información y tu tono, agenda citas en tu Google Calendar, cobra con un link de Mercado Pago o Stripe y te pasa la conversación cuando alguien pide a una persona.</p>
         </article>
         <article class="tarjeta">
           <div class="icono"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M3 9h18M8 2v4M16 2v4"/></svg></div>
           <h3>Se ve activo</h3>
-          <p>Quien llega de tu anuncio encuentra un perfil al día: campañas con calendario, cada imagen y cada texto con tu marca, publicados a la hora programada.</p>
+          <p>Quien llega de tu anuncio encuentra un perfil al día: campañas con calendario y promociones, cada imagen y cada texto con tu marca, publicados en Instagram y Facebook a la hora programada.</p>
         </article>
         <article class="tarjeta">
           <div class="icono"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg></div>
           <h3>Mide</h3>
-          <p>Cada chat que llega de un anuncio queda marcado con ese anuncio, y si vendes en Shopify, ves qué ventas dejó cada uno.</p>
+          <p>Cada chat que llega de un anuncio queda marcado con ese anuncio, y los pagos por link o en tu tienda Shopify aparecen en ese chat, para que veas qué ventas dejó cada anuncio.</p>
         </article>
       </div>
     </div>
@@ -255,7 +271,7 @@
       <div class="ejemplo">
         <p class="mini">Ejemplo del camino completo</p>
         <h3>Una persona da clic en tu anuncio y te escribe a las 11 de la noche.</h3>
-        <p>Tu asistente le contesta con tus precios y existencias y le aparta el producto. El chat queda marcado con el anuncio que la trajo, y si compra en tu tienda Shopify, la venta aparece en esa misma conversación.</p>
+        <p>Tu asistente le contesta con tus precios y existencias y le manda un link de pago. El chat queda marcado con el anuncio que la trajo, y cuando paga, la venta aparece en esa misma conversación.</p>
         <div class="pastillas"><span class="pastilla">Anuncio</span><span class="pastilla">Conversación</span><span class="pastilla activa">Venta</span></div>
       </div>
     </div>
@@ -268,10 +284,10 @@
       <p class="bajada">Con la información de tu negocio, la plataforma te propone qué publicar, lo genera con tu marca y lo publica a la hora indicada, para que quien llegue de un anuncio encuentre un negocio activo.</p>
       <div class="tarjetas">
         <div class="funcion"><span class="num">01</span><h3>Campañas automáticas</h3><p>Arma un calendario con el tema, el formato y la hora de cada post, listo para programar.</p></div>
-        <div class="funcion"><span class="num">02</span><h3>Promociona tus productos</h3><p>Campañas de un producto o servicio con su oferta y sus fechas, con piezas listas para tu perfil y tus anuncios.</p></div>
+        <div class="funcion"><span class="num">02</span><h3>Promociona tus productos</h3><p>Campañas de un producto o servicio con su oferta (descuento, 2x1, 3x2) y sus fechas, con piezas listas para tu perfil y tus anuncios.</p></div>
         <div class="funcion"><span class="num">03</span><h3>Prueba y repite</h3><p>Lanza campañas con temas, formatos y horarios distintos, y luego repite lo que mejor funcionó.</p></div>
         <div class="funcion"><span class="num">04</span><h3>Con tu marca</h3><p>Genera cada imagen y cada texto con tus colores, tu tipografía, tus fotos y las referencias que le des.</p></div>
-        <div class="funcion"><span class="num">05</span><h3>Publica por ti</h3><p>Apruebas el post y sale solo en tu Instagram a la hora programada.</p></div>
+        <div class="funcion"><span class="num">05</span><h3>Publica por ti</h3><p>Apruebas el post y sale solo en tu Instagram y tu página de Facebook a la hora programada.</p></div>
         <div class="funcion"><span class="num">06</span><h3>Comenta y recibe</h3><p>Cada post puede llevar una palabra clave: quien la comenta recibe la información por DM.</p></div>
       </div>
     </div>
@@ -283,7 +299,7 @@
       <h2>Tú pones el contexto. Nosotros, el resto.</h2>
       <p class="bajada">Todo se configura desde un panel guiado. No necesitas instalar nada ni cambiar tu forma de trabajar.</p>
       <div class="pasos">
-        <article><div class="paso-num">1</div><h3>Conecta tu Instagram</h3><p>Tu cuenta debe ser profesional. Te guiamos en tres pasos desde <a class="enlace" href="/conectar">skandar.online/conectar</a>.</p></article>
+        <article><div class="paso-num">1</div><h3>Conecta tu Instagram</h3><p>Tu cuenta debe ser profesional. Te guiamos en tres pasos desde <a class="enlace" href="/conectar">skandar.online/conectar</a>. Si quieres, conecta también tu página de Facebook, tu Google Calendar y tu Mercado Pago o Stripe.</p></article>
         <article><div class="paso-num">2</div><h3>Cuéntanos sobre tu negocio</h3><p>Tus productos, precios, horarios y preguntas frecuentes, además de la personalidad de tu asistente y el estilo de tu marca.</p></article>
         <article><div class="paso-num">3</div><h3>Enciéndelo y crea campañas</h3><p>Tu asistente empieza a contestar, también a quien llega de tus anuncios, y tú apruebas el contenido que la plataforma te propone.</p></article>
       </div>
@@ -325,6 +341,9 @@
             <li>Tu información, tus precios y tus preguntas frecuentes</li>
             <li>Memoria por cliente</li>
             <li>Se pausa cuando tú contestas</li>
+            <li>Instagram y Facebook Messenger</li>
+            <li>Agenda citas en tu Google Calendar</li>
+            <li>Cobra con links de Mercado Pago o Stripe</li>
             <li>Marca los chats que llegan de tus anuncios</li>
             <li>Panel con tus conversaciones y resultados</li>
           </ul>
@@ -361,6 +380,8 @@
         <details><summary>¿Qué pasa si un cliente quiere hablar con una persona?</summary><p>Tu asistente se pausa en esa conversación y te avisa. También se pausa cuando tú contestas a mano, para no interrumpirte.</p></details>
         <details><summary>¿Puedo definir el tono y el estilo de mi marca?</summary><p>Sí. Eliges la personalidad y las reglas de tu asistente, y para el contenido defines tus colores, tu tipografía, tu logotipo y tus fotos.</p></details>
         <details><summary>¿Cómo sé qué anuncio me trajo clientes?</summary><p>Cada chat que llega de un anuncio de Instagram queda marcado con ese anuncio. Si vendes en Shopify, la compra aparece en el chat de quien compró, con el anuncio que lo trajo.</p></details>
+        <details><summary>¿Funciona con Facebook?</summary><p>Sí. Conectas tu página de Facebook y tu asistente contesta también Messenger y los comentarios de la página. En el plan Community Manager, tus publicaciones salen también en Facebook.</p></details>
+        <details><summary>¿Puede agendar citas y cobrar?</summary><p>Sí. Si conectas tu Google Calendar, tu asistente revisa tus horarios libres y agenda la cita en tu calendario. Si conectas Mercado Pago o Stripe, manda un link de pago por el chat y el pago aparece en esa conversación, con el anuncio que trajo al cliente.</p></details>
         <details><summary>¿Me sirve si no pago anuncios?</summary><p>Sí. Tu asistente contesta todos tus mensajes y tu contenido mantiene tu perfil activo. Los anuncios solo hacen que lleguen más personas.</p></details>
         <details><summary>¿Puedo cancelar cuando quiera?</summary><p>Sí. Se paga mes a mes, sin plazo forzoso y sin costo de instalación.</p></details>
       </div>

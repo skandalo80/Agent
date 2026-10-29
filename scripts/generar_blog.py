@@ -348,6 +348,9 @@ PLANES = f"""  <section class="banda centro" id="planes">
             <li>Tu información, tus precios y tus preguntas frecuentes</li>
             <li>Memoria por cliente</li>
             <li>Se pausa cuando tú contestas</li>
+            <li>Instagram y Facebook Messenger</li>
+            <li>Agenda citas en tu Google Calendar</li>
+            <li>Cobra con links de Mercado Pago o Stripe</li>
             <li>Marca los chats que llegan de tus anuncios</li>
           </ul>
           <a class="boton contorno" href="{CTAS['asistente'][2]}">{CTAS['asistente'][3]}</a>
@@ -618,7 +621,8 @@ def llms_txt(todos, giros, paginas):
         f"> {que_es['descripcion']}",
         "",
         "- Línea: Tus redes sociales, trabajando. Sobre todo para negocios que pagan anuncios en Instagram o Facebook.",
-        "- Hecho en México, en español. Funciona solo con Instagram, con la API oficial de Meta.",
+        "- Hecho en México, en español. Funciona con Instagram y Facebook (página y Messenger), con la API oficial de Meta.",
+        "- Agenda citas en el Google Calendar del negocio y cobra con links de Mercado Pago o Stripe; las ventas se ligan al chat y al anuncio que las trajo.",
         "- Asistente virtual: US$49 al mes más IVA, 1,500 respuestas al mes.",
         "- Community Manager: US$79 al mes más IVA, incluye el Asistente virtual, 2,500 respuestas y 12 publicaciones al mes.",
         "- Sin costo de instalación ni plazo forzoso. Contacto: hola@skandar.online, Instagram @skandar.online.",
