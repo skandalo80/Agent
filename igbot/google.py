@@ -64,23 +64,25 @@ class Google:
         return [(b["start"], b["end"]) for b in data["calendars"]["primary"].get("busy", [])]
 
     async def create_meeting(
-        self, start_iso: str, end_iso: str, tz: str, email: str, summary: str, description: str
+        self, start_iso: str, end_iso: str, tz: str, email: str, summary: str, description: str,
+        meet: bool = True,
     ) -> tuple[str, str]:
-        """Crea el evento con Google Meet e invita a `email`. Devuelve (id, link)."""
+        """Crea el evento (con Google Meet si `meet`) e invita a `email` si hay. Devuelve (id, link)."""
+        evento = {
+            "summary": summary,
+            "description": description,
+            "start": {"dateTime": start_iso, "timeZone": tz},
+            "end": {"dateTime": end_iso, "timeZone": tz},
+            "attendees": [{"email": email}] if email else [],
+        }
+        if meet:
+            evento["conferenceData"] = {"createRequest": {
+                "requestId": uuid.uuid4().hex,
+                "conferenceSolutionKey": {"type": "hangoutsMeet"},
+            }}
         event = await self._call(
             "POST", f"{CAL}/calendars/primary/events",
-            params={"conferenceDataVersion": 1, "sendUpdates": "all"},
-            json={
-                "summary": summary,
-                "description": description,
-                "start": {"dateTime": start_iso, "timeZone": tz},
-                "end": {"dateTime": end_iso, "timeZone": tz},
-                "attendees": [{"email": email}],
-                "conferenceData": {"createRequest": {
-                    "requestId": uuid.uuid4().hex,
-                    "conferenceSolutionKey": {"type": "hangoutsMeet"},
-                }},
-            },
+            params={"conferenceDataVersion": 1, "sendUpdates": "all"}, json=evento,
         )
         return event["id"], event.get("hangoutLink", "")
 

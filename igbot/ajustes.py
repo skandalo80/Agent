@@ -181,6 +181,19 @@ async def conexion(c: Cuenta) -> tuple[str, str]:
         else:  # no es un problema: no colorea el botón Conexión
             fila("no", "Tienda Shopify", "Sin conectar: tu asistente vería el inventario y tú, qué ventas dejan tus chats",
                  ir.format("Conectar tu Shopify"))
+    from . import agenda_google
+    if agenda_google.enabled():
+        cal = await agenda_google.conexion(c)
+        ir = '<a class="boton secundario chico" href="/panel/google">{}</a>'
+        if cal.get("revocado"):
+            fila("aviso", "Google Calendar", f"{escape(cal.get('email', ''))} · se quitó el permiso: tu asistente no"
+                 " puede agendar", ir.format("Volver a conectar"))
+        elif cal.get("refresh_token"):
+            fila("ok", "Google Calendar", f"{escape(cal.get('email', ''))} · tu asistente agenda citas",
+                 ir.format("Ver"))
+        else:  # no es un problema: no colorea el botón Conexión
+            fila("no", "Google Calendar", "Sin conectar: tu asistente agendaría citas en tu calendario",
+                 ir.format("Conectar Google Calendar"))
     if not c.slug:
         with usar(c):
             gasto = await limites.spent_today(c.store)
