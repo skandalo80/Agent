@@ -76,6 +76,7 @@ SITE_URL = os.getenv("SITE_URL", "https://skandar.online").rstrip("/")
 # Login de Facebook (conectar la página de Facebook y, con ella, su Instagram): el identificador de la app
 # de Meta (Configuración > Básica), no el de Instagram. Su secreto es IG_APP_SECRET. Sin esto no sale el botón.
 FB_APP_ID = os.getenv("FB_APP_ID", "")
+FB_SCOPES = os.getenv("FB_SCOPES", "").replace(" ", "")
 
 # --- Imágenes para contenido (igbot/imagenes.py) ---
 # Quién pinta las imágenes: "openai" (desde 2026-10-23) o "gemini" (el de antes, por si se vuelve).

@@ -31,8 +31,10 @@ router = APIRouter(prefix="/panel/facebook")
 
 # Messenger, comentarios y publicar en la página, más lo mismo de su Instagram enlazado (los permisos de
 # Instagram con el login de Facebook se llaman distinto que con el de Instagram).
-SCOPES = ",".join([
-    "pages_show_list", "pages_manage_metadata", "pages_messaging", "pages_read_engagement",
+# business_management: sin él no salen las páginas que están dentro de un portafolio comercial.
+# FB_SCOPES en .env los reemplaza, por si Meta le cambia el nombre a alguno.
+SCOPES = config.FB_SCOPES or ",".join([
+    "pages_show_list", "business_management", "pages_manage_metadata", "pages_messaging", "pages_read_engagement",
     "pages_manage_engagement", "pages_read_user_content", "pages_manage_posts",
     "instagram_basic", "instagram_manage_messages", "instagram_manage_comments",
     "instagram_content_publish", "instagram_manage_insights",
