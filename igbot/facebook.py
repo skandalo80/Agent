@@ -58,7 +58,9 @@ def _dialogo() -> RedirectResponse:
     state = conectar.nuevo_state()
     url = f"https://www.facebook.com/{config.API_VERSION}/dialog/oauth?" + urlencode({
         "client_id": config.FB_APP_ID, "redirect_uri": redirect_uri(), "state": state,
-        "response_type": "code", "scope": SCOPES})
+        "response_type": "code",
+        # Login de Facebook para empresas: la "configuración" de Meta dice qué permisos pide; sin ella, la lista.
+        **({"config_id": config.FB_CONFIG_ID} if config.FB_CONFIG_ID else {"scope": SCOPES})})
     r = RedirectResponse(url, status_code=303)
     r.set_cookie(STATE_COOKIE, state, max_age=TTL, path="/panel/facebook", secure=True, httponly=True,
                  samesite="lax")

@@ -240,3 +240,10 @@ def test_pagina_sin_instagram_no_crea_cuenta(con_facebook, monkeypatch):
     q = parse_qs(urlsplit(client.get("/panel/facebook/entrar", follow_redirects=False).headers["location"]).query)
     r = client.get(f"/panel/facebook/callback?code=x&state={q['state'][0]}", follow_redirects=False)
     assert "Tu página no tiene Instagram" in r.text and "Entrar con Instagram" in r.text
+
+
+def test_con_configuracion_de_meta_se_manda_config_id(con_facebook, monkeypatch):
+    client, *_ = con_facebook
+    monkeypatch.setattr(config, "FB_CONFIG_ID", "cfg123")
+    q = parse_qs(urlsplit(client.get("/panel/facebook/entrar", follow_redirects=False).headers["location"]).query)
+    assert q["config_id"] == ["cfg123"] and "scope" not in q
