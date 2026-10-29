@@ -111,3 +111,10 @@ OPENAI_TEXT_USD_OUT = float(os.getenv("OPENAI_TEXT_USD_OUT", "10"))
 SHOPIFY_API_KEY = os.getenv("SHOPIFY_API_KEY", "")
 SHOPIFY_API_SECRET = os.getenv("SHOPIFY_API_SECRET", "")
 SHOPIFY_API_VERSION = os.getenv("SHOPIFY_API_VERSION", "2025-10")
+
+# Conecta tu Mercado Pago / tu Stripe (cobros.py). Sin estas llaves no salen en Conexión.
+MP_CLIENT_ID = os.getenv("MP_CLIENT_ID", "")
+MP_CLIENT_SECRET = os.getenv("MP_CLIENT_SECRET", "")
+STRIPE_CLIENT_ID = os.getenv("STRIPE_CLIENT_ID", "")  # ca_…, de Connect > Configuración de OAuth
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")  # la llave secreta de la plataforma (sk_…)
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")  # whsec_… del webhook de Connect

@@ -1859,7 +1859,9 @@ async def ver_asistente(request: Request):
 @router.get("/conexion")
 async def ver_conexion(request: Request):
     c = cuenta_de_sesion(request)
-    return await panel_de(c, vista="conexion") if c else entrar()
+    from .cobros import AVISOS  # al volver de conectar un cobro
+    return await panel_de(c, vista="conexion", aviso=AVISOS.get(request.query_params.get("aviso", ""), "")) \
+        if c else entrar()
 
 
 @router.get("/asistente/conexion")  # su dirección anterior

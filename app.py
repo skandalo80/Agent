@@ -29,9 +29,9 @@ from fastapi.exception_handlers import http_exception_handler
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
-from igbot import (admin, agent, ajustes, asistente, botones, campanas, comentarios, comprimir, conectar, config,
-                   contenido, empresa, errores, lentitud, limites, marca, metricas, nueva_campana, panel, reporte,
-                   resultados, semana, skandi, sugeridos, tienda_shopify)
+from igbot import (admin, agent, ajustes, asistente, botones, campanas, cobros, comentarios, comprimir, conectar,
+                   config, contenido, empresa, errores, lentitud, limites, marca, metricas, nueva_campana, panel,
+                   reporte, resultados, semana, skandi, sugeridos, tienda_shopify)
 from igbot.cuenta import Cuenta, cargar, cuenta, de_carpeta, usar
 from igbot.dispatcher import Dispatcher
 from igbot.google import Google
@@ -246,7 +246,7 @@ async def lifespan(app: FastAPI):
     conectar.store, conectar.instagram, conectar.google = store, instagram, google
     panel.buscar, panel.alta = buscar, alta
     skandi.principal = lambda: principal
-    tienda_shopify.cuentas = lambda: cuentas
+    tienda_shopify.cuentas = cobros.cuentas = lambda: cuentas
     for c in cuentas:
         await arrancar(c)
     await skandi.cargar()  # el historial de Skandi de cada cuenta, a la memoria
@@ -283,6 +283,8 @@ if not config.CLIENTE:
     app.include_router(skandi.web_router)
     app.include_router(tienda_shopify.router)
     app.include_router(tienda_shopify.webhooks)
+    app.include_router(cobros.router)
+    app.include_router(cobros.publico)
 
     @app.exception_handler(StarletteHTTPException)
     async def pagina_404(request: Request, exc: StarletteHTTPException):

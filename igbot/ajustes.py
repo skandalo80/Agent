@@ -181,6 +181,9 @@ async def conexion(c: Cuenta) -> tuple[str, str]:
         else:  # no es un problema: no colorea el botón Conexión
             fila("no", "Tienda Shopify", "Sin conectar: tu asistente vería el inventario y tú, qué ventas dejan tus chats",
                  ir.format("Conectar tu Shopify"))
+    from . import cobros
+    for estado, titulo, detalle, boton in await cobros.filas(c):
+        fila(estado, titulo, detalle, boton)
     if not c.slug:
         with usar(c):
             gasto = await limites.spent_today(c.store)
