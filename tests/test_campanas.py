@@ -135,7 +135,8 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
     assert "Se prueba:" in r.text and "3 formatos" in r.text
     # Las tarjetas dicen si es post o historia, sin el tema ni el formato en gris.
     assert '<span class="medio-cam m-post">Post</span>' in r.text and '<span class="fmt-cam">' not in r.text
-    assert "Arma tu campaña" not in r.text and "Planeación (PDF)</a>" in r.text and "‹ Volver a campañas" in r.text and "boton ajuste peligro" in r.text  # sin los tres pasos arriba
+    assert 'class="tarjeta cab-camp"' in r.text and "<h2>Otoño</h2>" in r.text
+    assert "Arma tu campaña" not in r.text and "Planeación (PDF)</a>" in r.text and "‹ Volver a campañas" in r.text and "boton chico peligro" in r.text  # sin los tres pasos arriba
     assert "Generar las 3 que faltan · usa 2" in r.text  # el de solo texto no usa cupo
 
     # Arrastrar el del lunes al miércoles: se intercambian.
@@ -221,7 +222,7 @@ def test_campana_de_punta_a_punta(cliente, monkeypatch):
     # Las demás de un jalón y aprobar todas: solo las fotos usan cupo.
     pendientes = [p for p in leer(client, c)["posts"] if not p["post_id"]]
     r = client.post(u, headers=ORIGEN, data={"accion": "generar_todas"})
-    assert f"Pieza {len(pendientes)} de {len(pendientes)}" in r.text
+    assert "Generando las imágenes" in r.text and "Listo." in r.text and f'content="0;url={u}"' in r.text
     camp = leer(client, c)
     assert all(p["post_id"] for p in camp["posts"])
     assert client.portal.call(contenido.imagenes.usadas, c.store)[0] == sum(campanas.costo(p) for p in pendientes)
@@ -400,7 +401,6 @@ def test_tus_campanas_y_reporte(cliente, monkeypatch):
 
     client, c, *_ = cliente
     monkeypatch.setattr(c, "imagenes_mes", 4)
-    monkeypatch.setattr(informe, "_insights", {})
     llamadas = []
     import app as bot
     fake = claude_de_campana(llamadas)
@@ -514,12 +514,9 @@ def test_repetir_reparte_con_la_mezcla():
 
 def test_repetir_lo_que_funciono(cliente, monkeypatch):
     """Con 12 posts con resultados se puede repetir: la forma que ganó, sin repetir asuntos ni preguntas."""
-    from igbot import informe
-
     client, c, *_ = cliente
     import app as bot
     monkeypatch.setattr(c, "imagenes_mes", 40)
-    monkeypatch.setattr(informe, "_insights", {})
     llamadas = []
     fake = claude_de_campana(llamadas)
 
@@ -670,8 +667,25 @@ def test_varias_campanas(cliente, monkeypatch):
     hoy = datetime(2099, 1, 7, 12, tzinfo=campanas.tools.tz())
     monkeypatch.setattr(campanas.tools, "now", lambda: hoy)
     client.post(BASE, headers=ORIGEN, data=datos_campana(nombre="Febrero", inicio="2099-01-12"))
+
+    from igbot.admin import PANEL
+
+    async def con_estado(estados):  # dos posts de Invierno con imagen (uno en borrador y otro programado) o sin ella
+        x = await campanas.leer(c, inv["id"])
+        for p, estado in zip(sorted(x["posts"], key=lambda p: (p["dia"], p["hora"]))[1:3], estados):
+            if estado:
+                p["post_id"] = await c.store.add_post(PANEL, [], "t", 1)
+                await c.store.set_post(p["post_id"], estado)
+            else:
+                p["post_id"] = None
+        await campanas.guardar(c, x)
+
+    client.portal.call(con_estado, ("borrador", "programada"))
     r = client.get(BASE)
+    assert '<small><i class="e-bor"></i>Borrador</small>' in r.text and '<small><i class="e-prog"></i>Programado</small>' in r.text
     assert 'class="on">Activas<small>2</small>' in r.text and "día 3 de 14" in r.text and "<b>0 de 6</b>" in r.text
+    assert "Próximos posts" in r.text and "<b>Post 5</b><span>Mié 14</span>" in r.text and "4 sin imagen" in r.text and "1 en borrador" in r.text  # a lo ancho
+    client.portal.call(con_estado, (None, None))
     r = client.get(f"{BASE}?ver=proxima")
     assert "Febrero" in r.text and "Se cruza" not in r.text and "empieza en 5 días" in r.text
 
@@ -706,8 +720,23 @@ def test_varias_campanas(cliente, monkeypatch):
     r = client.get("/panel/contenido?mes=2099-01")
     assert "Enero de 2099" in r.text and 'class="cal-mes"' in r.text and "fecha=2099-02-01" in r.text
     # Con miniatura, el título arriba y abajo la hora y si es post o historia; la campaña, en el título flotante.
-    assert f'class="ev e-borrador con-img" href="/panel/contenido/post/{post_id}"' in r.text
+    desde = "desde=%2Fpanel%2Fcontenido%3Ffecha%3D2099-01-01"  # el post se abre sobre esta misma vista
+    assert f'class="ev e-borrador con-img" href="/panel/contenido/post/{post_id}?{desde}"' in r.text
     assert f'href="{u}?post=' in r.text and " · Invierno &lt;b&gt; · Borrador" in r.text  # las propuestas sin imagen
+    # Abierto desde Calendario: la ventana va sobre esa vista, cierra ahí y lleva a la campaña con el enlace lima.
+    r = client.get(f"/panel/contenido/post/{post_id}?{desde}", follow_redirects=False)
+    assert r.headers["location"] == f"{u}?post={k}&{desde}#detalle"
+    r = client.get(r.headers["location"])
+    assert 'class="tarjeta cal"' in r.text and "Enero de 2099" in r.text and 'class="cab-camp' not in r.text
+    assert 'class="x" href="/panel/contenido?fecha=2099-01-01#cal"' in r.text
+    assert f'<a class="volver-cam ir-cam" href="{u}">Ir a la campaña ›</a>' in r.text
+    assert 'name="desde" value="/panel/contenido?fecha=2099-01-01"' in r.text
+    r = client.post(u, headers=ORIGEN, data={"accion": "guardar", "k": str(k), "caption": "Desde el calendario",
+                                             "desde": "/panel/contenido?fecha=2099-01-01"})
+    assert "Guardado." in r.text and 'class="tarjeta cal"' in r.text and "Desde el calendario" in r.text
+    assert "Ir a la campaña" not in client.get(f"{u}?post={k}").text  # desde la campaña, como siempre
+    assert client.get(f"{u}?post={k}&desde=https://otro.sitio").text.count('class="tarjeta cal"') == 0
+    r = client.get("/panel/contenido?mes=2099-01")
     assert '<span class="m-post">Post</span></small>' in r.text
     assert "Próximos posts" not in r.text and "Ya publicados" not in r.text  # sin listas debajo
     r = client.get("/panel/contenido?vista=semana&fecha=2099-01-05")
@@ -791,3 +820,104 @@ def test_la_campana_se_escribe_con_la_empresa_la_marca_y_sus_parametros(cliente,
     assert "<objetivo>Vender más &lt;lattes&gt;</objetivo>" in prompt and "<producto>Latte de calabaza</producto>" in prompt
     assert "<lo_que_se_ve>Personas</lo_que_se_ve>" in prompt and "<estilo_de_campana>Poco texto</estilo_de_campana>" in prompt
     assert "de 120 a 180 palabras" in sistema and "nunca algo genérico del ramo" in sistema
+
+
+def test_abrir_la_campana_no_la_vuelve_a_guardar(cliente, monkeypatch):
+    """Abrir una campaña solo lee; guarda únicamente si un post se descartó en Calendario, y sobre lo último guardado."""
+    client, c, *_ = cliente
+    from igbot.admin import PANEL
+    monkeypatch.setattr(c, "imagenes_mes", 10)
+
+    async def preparar():
+        ids = [await c.store.add_post(PANEL, [], "t", 1) for _ in range(2)]
+        posts = [{"k": i + 1, "tipo": "dato", "formato": "texto", "dia": LUNES.isoformat(), "hora": "09:00",
+                  "titulo": f"Post {i + 1}", "caption": "c", "idea": "", "post_id": ids[i]} for i in range(2)]
+        await campanas.guardar(c, {"id": 7, "nombre": "Una", "inicio": LUNES.isoformat(), "semanas": 1,
+                                   "publicar": "lmv", "creada": 1.0, "modo": "explorar", "posts": posts})
+        return ids
+
+    ids = client.portal.call(preparar)
+    escrituras = []
+    original = c.store.set
+
+    async def contar(clave, valor):
+        if clave == "campanas":
+            escrituras.append(valor)
+        await original(clave, valor)
+    monkeypatch.setattr(c.store, "set", contar)
+
+    assert "Post 1" in client.get(f"{BASE}/7").text and "Post 1" in client.get(f"{BASE}/7?post=1").text
+    assert not escrituras  # nada cambió: no se escribe
+
+    client.portal.call(c.store.set_post, ids[0], "cancelada")  # lo descartaron en Calendario
+    client.get(f"{BASE}/7")
+    camp = client.portal.call(campanas.leer, c, 7)
+    assert len(escrituras) == 1 and [p["post_id"] for p in camp["posts"]] == [None, ids[1]]
+    client.get(f"{BASE}/7")
+    assert len(escrituras) == 1  # ya quedó guardado: no se repite
+
+    # El menú sabe si tiene campañas sin leerlas todas; al borrar la última, vuelve el paso «Crea tu primera campaña».
+    assert client.portal.call(campanas.hay_campanas, c)
+    client.post(f"{BASE}/7", headers=ORIGEN, data={"accion": "borrar"})
+    assert client.portal.call(c.store.get, campanas.HAY_CAMPANAS) == "0"
+    assert not client.portal.call(campanas.hay_campanas, c)
+
+
+def test_un_trabajo_largo_sigue_aunque_cierres_la_pagina(cliente, monkeypatch):
+    """Corre aparte de la página: la de espera se recarga sola con el avance, un doble clic se suma al mismo
+    trabajo y al terminar lleva al resultado. Solo lo ve su cuenta."""
+    import asyncio
+
+    from igbot import panel
+    client, c, *_ = cliente
+    monkeypatch.setattr(panel, "ESPERA_TRABAJO", 0)
+    corridas, sigue = [], {}
+
+    async def correr():
+        corridas.append(1)
+        yield "Pieza 1 de 2: Café"
+        await sigue["evento"].wait()
+        yield f"{BASE}/7"
+
+    async def lanzar():
+        sigue.setdefault("evento", asyncio.Event())
+        return await panel.trabajo_largo(c, "generar 7", "Generando las imágenes…", "Tarda un minuto.", BASE, correr)
+
+    r = client.portal.call(lanzar)
+    html = r.body.decode()
+    tid = re.search(r'url=/panel/trabajo/([\w-]+)"', html).group(1)
+    assert "Generando las imágenes" in html and "Puedes cerrar esta página" in html
+    r = client.get(f"/panel/trabajo/{tid}")
+    assert "Pieza 1 de 2: Café" in r.text and f"/panel/trabajo/{tid}" in r.text  # sigue: se recarga sola
+    assert 'class="avance-trabajo"' in r.text and 'class="pct-trabajo">' in r.text  # su barra con porcentaje
+    assert tid in client.portal.call(lanzar).body.decode() and corridas == [1]  # doble clic: el mismo trabajo
+
+    client.portal.call(sigue["evento"].set)
+    client.portal.call(asyncio.wait, {panel._trabajos[tid].tarea})
+    r = client.get(f"/panel/trabajo/{tid}")
+    assert "Listo." in r.text and f'content="0;url={BASE}/7"' in r.text
+    monkeypatch.setattr(panel._trabajos[tid], "slug", "otra-cuenta")
+    assert client.get(f"/panel/trabajo/{tid}", follow_redirects=False).headers["location"] == BASE
+    assert client.get("/panel/trabajo/no-existe", follow_redirects=False).status_code == 303
+
+
+def test_un_trabajo_en_segundo_plano_no_pisa_lo_que_cambiaste(cliente):
+    """Mientras se genera un post, el dueño movió otro: guardar el primero no deshace el cambio del segundo."""
+    client, c, *_ = cliente
+    posts = [{"k": k, "tipo": "dato", "formato": "texto", "dia": LUNES.isoformat(), "hora": "09:00",
+              "titulo": f"Post {k}", "caption": "c", "idea": "", "post_id": None} for k in (1, 2)]
+    camp = {"id": 8, "nombre": "Dos", "inicio": LUNES.isoformat(), "semanas": 1, "publicar": "lmv", "creada": 1.0,
+            "modo": "explorar", "posts": posts}
+    client.portal.call(campanas.guardar, c, camp)
+    vieja = json.loads(json.dumps(camp))  # la copia con la que arrancó el trabajo
+
+    movida = client.portal.call(campanas.leer, c, 8)
+    campanas.buscar_post(movida, 2)["hora"] = "20:00"  # lo que cambió el dueño mientras tanto
+    client.portal.call(campanas.guardar, c, movida)
+
+    p = campanas.buscar_post(vieja, 1)
+    p["caption"] = "Texto nuevo"
+    client.portal.call(campanas.guardar_post, c, vieja, p)
+    ahora = client.portal.call(campanas.leer, c, 8)
+    assert campanas.buscar_post(ahora, 1)["caption"] == "Texto nuevo"
+    assert campanas.buscar_post(ahora, 2)["hora"] == "20:00"

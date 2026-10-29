@@ -9,6 +9,7 @@ mensajes sin contestar no se pierden.
 """
 import asyncio
 import json
+import secrets
 import time
 from datetime import datetime
 from pathlib import Path
@@ -160,6 +161,15 @@ CREATE TABLE IF NOT EXISTS metricas_dia (
     datos TEXT NOT NULL DEFAULT '{}'
 );
 
+-- Estadísticas de cada post publicado (alcance, likes...), como las dio Instagram la última vez que se
+-- pidieron. Las refresca metricas.py cada día (posts de los últimos 30 días); `datos` es JSON o null si
+-- Instagram no las dio. Así Campañas, Pasadas y Resultados no le preguntan a Instagram al abrirse.
+CREATE TABLE IF NOT EXISTS insights_post (
+    media_id TEXT PRIMARY KEY,
+    datos    TEXT,
+    leido    REAL NOT NULL
+);
+
 -- Chats con Skandi (la ayuda del panel y de la web), en la base de la cuenta principal.
 -- origen: "panel" o "web"; quien: la carpeta de la cuenta (panel) o la cookie del visitante (web).
 CREATE TABLE IF NOT EXISTS skandi_chats (
@@ -173,6 +183,40 @@ CREATE TABLE IF NOT EXISTS skandi_chats (
     soporte     INTEGER NOT NULL DEFAULT 0  -- 1 si se pasó a soporte
 );
 CREATE INDEX IF NOT EXISTS skandi_quien ON skandi_chats (origen, quien, actualizado);
+
+-- El anuncio por el que llegó cada chat (anuncios de "Enviar mensaje": Meta lo manda con el primer
+-- mensaje). Una fila por persona y anuncio; si vuelve por otro anuncio, se suma otra.
+CREATE TABLE IF NOT EXISTS anuncios_chat (
+    user_id    TEXT NOT NULL,
+    ad_id      TEXT NOT NULL,
+    titulo     TEXT NOT NULL DEFAULT '',
+    foto       TEXT NOT NULL DEFAULT '',
+    created_at REAL NOT NULL,
+    PRIMARY KEY (user_id, ad_id)
+);
+
+-- Ventas ligadas a un chat o a un anuncio (por ahora, los pedidos de la tienda Shopify conectada).
+-- user_id vacío = la venta vino de un anuncio pero no de un chat; ad_id vacío = de un chat sin anuncio.
+CREATE TABLE IF NOT EXISTS ventas (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    origen     TEXT NOT NULL,              -- 'shopify'
+    externo    TEXT NOT NULL,              -- id del pedido en su origen
+    user_id    TEXT NOT NULL DEFAULT '',
+    ad_id      TEXT NOT NULL DEFAULT '',
+    monto      REAL NOT NULL,
+    moneda     TEXT NOT NULL DEFAULT '',
+    detalle    TEXT NOT NULL DEFAULT '{}', -- JSON: folio, productos
+    created_at REAL NOT NULL,
+    UNIQUE (origen, externo)
+);
+CREATE INDEX IF NOT EXISTS ventas_user ON ventas (user_id);
+
+-- El código corto de cada chat que va en los enlaces a la tienda (?sk=...), para saber de qué chat
+-- vino un pedido.
+CREATE TABLE IF NOT EXISTS codigos_chat (
+    codigo  TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL UNIQUE
+);
 
 CREATE TABLE IF NOT EXISTS kv (
     key   TEXT PRIMARY KEY,
@@ -504,8 +548,8 @@ class Store:
         Del lado "Tú" (el chat está en pausa: lo atiende una persona):
           "nuevo"  el asistente te lo pasó (pasar_a_humano) y aún no le contestas a mano;
           "tu_sin" el último mensaje es del cliente;  "tu" lo demás.
-        Del lado del asistente: "revisar" (el cliente escribió hace rato y no hubo respuesta, o tocó el
-        límite del plan) y "asistente"."""
+        "revisar": el asistente sigue encendido pero el cliente escribió hace rato y no hubo respuesta, o
+        tocó el límite del plan; sale del lado "Tú", en Sin contestar. "asistente": lo demás."""
         sql = (
             "WITH ult AS (SELECT user_id, MAX(id) AS id FROM messages WHERE user_id NOT LIKE 'admin:%'"
             " GROUP BY user_id"
@@ -528,12 +572,13 @@ class Store:
                      "limite": aviso_limite}
 
     # Cuántos hay en cada pestaña de Conversaciones (sin la búsqueda).
-    _CUANTOS = ("SELECT SUM(est = 'nuevo'), SUM(est = 'tu_sin'), SUM(est IN ('nuevo', 'tu_sin', 'tu')),"
-                " SUM(est IN ('asistente', 'revisar') AND t >= :curso), SUM(est = 'revisar'),"
-                " SUM(est IN ('asistente', 'revisar')) FROM c")
-    FILTROS_CHATS = {"nuevos": "est = 'nuevo'", "sin": "est = 'tu_sin'", "tuyas": "est IN ('nuevo', 'tu_sin', 'tu')",
-                     "curso": "est IN ('asistente', 'revisar') AND t >= :curso", "revisar": "est = 'revisar'",
-                     "bot": "est IN ('asistente', 'revisar')"}
+    # Los que el asistente no pudo contestar ("revisar") también te esperan a ti: salen en Sin contestar.
+    _CUANTOS = ("SELECT SUM(est = 'nuevo'), SUM(est IN ('tu_sin', 'revisar')),"
+                " SUM(est IN ('nuevo', 'tu_sin', 'tu', 'revisar')),"
+                " SUM(est = 'asistente' AND t >= :curso), SUM(est = 'asistente') FROM c")
+    FILTROS_CHATS = {"nuevos": "est = 'nuevo'", "sin": "est IN ('tu_sin', 'revisar')",
+                     "tuyas": "est IN ('nuevo', 'tu_sin', 'tu', 'revisar')",
+                     "curso": "est = 'asistente' AND t >= :curso", "bot": "est = 'asistente'"}
 
     async def chats_page(self, now: float, curso_desde: float, humano_desde: float, revisar_antes: float,
                          aviso_limite: str, ver: str, buscar: str, limit: int,
@@ -560,10 +605,10 @@ class Store:
             " ORDER BY id DESC LIMIT :limit OFFSET :offset", args)
         return list(await cur.fetchall()), cuantos, total
 
-    async def pendientes_tuyos(self, now: float, humano_desde: float) -> int:
+    async def pendientes_tuyos(self, now: float, humano_desde: float, revisar_antes: float, aviso_limite: str) -> int:
         """Chats del lado "Tú" que esperan tu respuesta (nuevos y sin contestar), para el punto del menú."""
-        base, args = self._chats(now, humano_desde, 0, "")
-        cur = await self.db.execute(base + "SELECT COUNT(*) FROM c WHERE est IN ('nuevo', 'tu_sin')", args)
+        base, args = self._chats(now, humano_desde, revisar_antes, aviso_limite)
+        cur = await self.db.execute(base + "SELECT COUNT(*) FROM c WHERE est IN ('nuevo', 'tu_sin', 'revisar')", args)
         return (await cur.fetchone())[0]
 
     async def chat_messages(self, user_id: str, limit: int) -> tuple[list[tuple[str, str, float]], bool]:
@@ -887,6 +932,21 @@ class Store:
             (dia, json.dumps(datos)))
         await self.db.commit()
 
+    # --- estadísticas de cada post ---
+
+    async def insights_post(self, media_id: str) -> tuple[dict | None, float] | None:
+        """(estadísticas o None si Instagram no las dio, cuándo se leyeron), o None si nunca se pidieron."""
+        cur = await self.db.execute("SELECT datos, leido FROM insights_post WHERE media_id = ?", (media_id,))
+        row = await cur.fetchone()
+        return (json.loads(row[0]) if row[0] else None, row[1]) if row else None
+
+    async def guardar_insights_post(self, media_id: str, datos: dict | None, leido: float) -> None:
+        await self.db.execute(
+            "INSERT INTO insights_post (media_id, datos, leido) VALUES (?, ?, ?)"
+            " ON CONFLICT (media_id) DO UPDATE SET datos = excluded.datos, leido = excluded.leido",
+            (media_id, json.dumps(datos) if datos is not None else None, leido))
+        await self.db.commit()
+
     # --- chats con Skandi ---
 
     @staticmethod
@@ -933,6 +993,63 @@ class Store:
             " WHERE id = ?", (chat_id,))
         row = await cur.fetchone()
         return self._skandi(row) if row else None
+
+    # --- anuncios y ventas ---
+
+    async def guardar_anuncio(self, user_id: str, ad_id: str, titulo: str, foto: str) -> None:
+        await self.db.execute(
+            "INSERT OR IGNORE INTO anuncios_chat (user_id, ad_id, titulo, foto, created_at) VALUES (?, ?, ?, ?, ?)",
+            (user_id, ad_id, titulo, foto, time.time()))
+        await self.db.commit()
+
+    async def anuncios_de(self, user_ids: list[str]) -> dict[str, dict]:
+        """El último anuncio por el que llegó cada uno: {user_id: {ad_id, titulo, foto, created_at}}."""
+        if not user_ids:
+            return {}
+        marcas = ",".join("?" * len(user_ids))
+        cur = await self.db.execute(
+            f"SELECT user_id, ad_id, titulo, foto, created_at FROM anuncios_chat WHERE user_id IN ({marcas})"
+            " ORDER BY created_at", user_ids)
+        return {u: {"ad_id": a, "titulo": t, "foto": f, "created_at": c} for u, a, t, f, c in await cur.fetchall()}
+
+    async def codigo_chat(self, user_id: str) -> str:
+        """El código de este chat para los enlaces a la tienda (se crea la primera vez)."""
+        cur = await self.db.execute("SELECT codigo FROM codigos_chat WHERE user_id = ?", (user_id,))
+        if row := await cur.fetchone():
+            return row[0]
+        while True:
+            codigo = secrets.token_urlsafe(6).replace("-", "x").replace("_", "z")
+            cur = await self.db.execute("INSERT OR IGNORE INTO codigos_chat (codigo, user_id) VALUES (?, ?)",
+                                        (codigo, user_id))
+            if cur.rowcount:
+                await self.db.commit()
+                return codigo
+
+    async def usuario_de_codigo(self, codigo: str) -> str:
+        cur = await self.db.execute("SELECT user_id FROM codigos_chat WHERE codigo = ?", (codigo,))
+        row = await cur.fetchone()
+        return row[0] if row else ""
+
+    async def add_venta(self, origen: str, externo: str, user_id: str, ad_id: str, monto: float, moneda: str,
+                        detalle: dict, created_at: float) -> bool:
+        """False si ya estaba (el mismo pedido no se cuenta dos veces)."""
+        cur = await self.db.execute(
+            "INSERT OR IGNORE INTO ventas (origen, externo, user_id, ad_id, monto, moneda, detalle, created_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (origen, externo, user_id, ad_id, monto, moneda, json.dumps(detalle, ensure_ascii=False), created_at))
+        await self.db.commit()
+        return bool(cur.rowcount)
+
+    async def borrar_venta(self, origen: str, externo: str) -> None:
+        await self.db.execute("DELETE FROM ventas WHERE origen = ? AND externo = ?", (origen, externo))
+        await self.db.commit()
+
+    async def ventas_de(self, user_id: str) -> list[dict]:
+        cur = await self.db.execute(
+            "SELECT origen, externo, ad_id, monto, moneda, detalle, created_at FROM ventas WHERE user_id = ?"
+            " ORDER BY created_at", (user_id,))
+        return [{"origen": o, "externo": e, "ad_id": a, "monto": m, "moneda": mo, "detalle": json.loads(d),
+                 "created_at": t} for o, e, a, m, mo, d, t in await cur.fetchall()]
 
     # --- valores sueltos (token de Instagram, etc.) ---
 

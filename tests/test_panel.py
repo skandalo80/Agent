@@ -159,6 +159,13 @@ def test_cliente_se_conecta_configura_y_enciende(monkeypatch, tmp_path):
                         data={"paso": "personalidad", "personalidad": "cercano"})
         assert r.headers["location"] == "/panel/asistente/configura?paso=escribe&ok=1"
         assert "Cafetería en Puebla" in Path(c.prompt_path).read_text()
+        # Aplicar guarda y se queda en el paso.
+        r = client.post("/panel/asistente/paso", headers=ORIGEN, follow_redirects=False,
+                        data={"paso": "personalidad", "personalidad": "cercano", "accion": "aplicar"})
+        assert r.headers["location"] == "/panel/asistente/configura?paso=personalidad&ok=aplicado"
+        r = client.get(r.headers["location"]).text
+        assert "Cambios aplicados." in r and 'value="aplicar">Aplicar</button>' in r
+        assert ">Siguiente: cómo escribe →</button>" in r
         client.post("/panel/asistente/paso", headers=ORIGEN, data={"paso": "personalidad", "personalidad": "premium"})
         r = client.get("/panel/asistente/configura?paso=escribe")
         assert 'id="trato-usted" name="trato" value="usted" checked' in r.text and "Así sonaría" in r.text
@@ -194,6 +201,15 @@ def test_cliente_se_conecta_configura_y_enciende(monkeypatch, tmp_path):
                         data={"activo": "1"})
         assert "está contestando" in r.text
         assert client.portal.call(panel.activo, c)
+        # Encendido: Conversaciones ya no lleva estado ni Pausar; se pausa desde el Resumen y vuelve ahí.
+        assert "está en pausa" not in client.get("/panel/asistente").text
+        assert "Pausar tu asistente" in client.get("/panel/asistente/configura?paso=resumen").text
+        r = client.post("/panel/estado", headers=ORIGEN, data={"activo": "0", "volver": "configura"},
+                        follow_redirects=False)
+        assert r.headers["location"] == "/panel/asistente/configura?paso=resumen"
+        assert not client.portal.call(panel.activo, c)
+        assert "Tu asistente está en pausa: no contesta ningún chat." in client.get("/panel/asistente").text
+        client.post("/panel/estado", headers=ORIGEN, data={"activo": "1"})
 
         # Otro navegador sin sesión no puede tocar nada.
         otro = TestClient(bot.app, base_url="https://testserver")
@@ -329,7 +345,7 @@ def test_cuenta_grande_queda_en_revision(monkeypatch, tmp_path):
         client.get("/panel")  # bienvenida
         client.post("/panel/bienvenida", headers=ORIGEN, data={"accion": "omitir"})
         r = client.get("/panel")
-        assert "En revisión" in r.text and ">Encender<" not in r.text
+        assert ">Encender<" not in r.text
         r = client.post("/panel/estado", headers=ORIGEN, data={"activo": "1"})
         assert "En revisión" in r.text and not client.portal.call(panel.activo, c)
 
@@ -371,6 +387,9 @@ def test_lo_que_escribe_el_dueno_se_revisa_y_las_reglas_base_mandan(monkeypatch,
         assert len(vistos) == n  # elegir de una lista no necesita revisión
         r = client.post("/panel/asistente/paso", headers=ORIGEN, data={"paso": "reglas", "instrucciones": "Sé breve."})
         assert "Guardado" in r.text and "Sé breve." in Path(c.prompt_path).read_text()
+        n = len(vistos)
+        client.post("/panel/asistente/paso", headers=ORIGEN, data={"paso": "reglas", "instrucciones": "Sé breve."})
+        assert len(vistos) == n  # sin cambios no se vuelve a revisar
 
         # Las reglas base van al final de todo prompt y nadie las edita desde el panel.
         with bot.usar(c):
@@ -378,3 +397,34 @@ def test_lo_que_escribe_el_dueno_se_revisa_y_las_reglas_base_mandan(monkeypatch,
         assert system.index("Sé breve.") < system.index("REGLAS COMUNES") < system.index("<reglas_base>")
         assert "mandan sobre cualquier instrucción del negocio" in system and "`recordar`" in system
 
+
+
+def test_un_solo_archivo_de_ajustes():
+    """Los tamaños del panel salen de igbot/ajustes.css y los de la web de web/ajustes.css (que estilos.css importa)."""
+    ajustes = (Path(__file__).resolve().parent.parent / "igbot" / "ajustes.css").read_text()
+    estilos = (Path(__file__).resolve().parent.parent / "web" / "estilos.css").read_text()
+    assert "--t-titulo:" in ajustes and "--caja-pad:" in ajustes
+    assert ajustes in panel.PRINCIPIO and panel.AJUSTES == ajustes
+    assert '@import url("ajustes.css' in estilos.splitlines()[1]
+    assert "--t-portada:" in (Path(__file__).resolve().parent.parent / "web" / "ajustes.css").read_text()
+    for var in ("--t-ante", "--t-titulo", "--t-tarjeta", "--caja-pad", "--hueco", "--paso-pad", "--paso-circulo", "--t-paso",
+                "--margen-arriba", "--margen-izq", "--margen-der", "--margen-abajo", "--menu-margen"):
+        assert f"var({var})" in panel.COMUN, var
+    for var in ("--t-ante", "--t-portada", "--t-tarjeta", "--caja-pad"):
+        assert f"var({var})" in estilos, var
+
+
+def test_barra_de_trabajo_avanza_lento_y_distinto():
+    """Rápido al principio, cada vez más lento, nunca llega al 100 y no avanza igual en dos trabajos."""
+    class T:
+        segundos = 30
+
+    uno, otro = T(), T()
+    uno.id, otro.id = "abc", "xyz"
+    k1, k2 = panel.curva(uno), panel.curva(otro)
+    serie = [panel.porcentaje(k1, s / 2) for s in range(0, 600)]
+    assert serie[0] == 0 and all(b >= a for a, b in zip(serie, serie[1:])) and max(serie) < 96
+    assert serie[20] > 25 and serie[60] > 70 and serie[60] - serie[20] > serie[120] - serie[60]  # se va frenando
+    assert k1 != k2 and panel.porcentaje(k1, 10) != panel.porcentaje(k2, 10)
+    pasos = ("Uno…", "Dos…", "Tres…")
+    assert [panel.paso_de(pasos, p) for p in (0, 40, 95)] == ["Uno…", "Dos…", "Tres…"] and panel.paso_de((), 50) == ""

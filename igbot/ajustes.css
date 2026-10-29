@@ -1,0 +1,54 @@
+/* Ajustes de diseño del panel (console.skandar.online). Todas las páginas del panel leen sus tamaños de aquí:
+   cambia un número y cambia en todas. La web tiene los suyos en web/ajustes.css. */
+:root {
+  /* Letras */
+  --t-ante: .75rem;            /* antetítulo: RESUMEN, PASO 1 DE 4, UNA SOLA PLATAFORMA */
+  --t-titulo: 1.75rem;         /* título de cada paso o página */
+  --t-bajada: 1rem;            /* texto gris bajo el título */
+  --t-tarjeta: 1.125rem;       /* título de cada tarjeta */
+  --t-texto-tarjeta: .9375rem; /* texto dentro de las tarjetas */
+  --peso-titulo: 600;          /* grosor de los títulos */
+  --peso-tarjeta: 700;         /* grosor del título de tarjeta */
+  --peso-ante: 700;            /* grosor del antetítulo */
+  --espaciado-ante: .12em;     /* separación entre letras del antetítulo */
+
+  /* Espacios y bordes */
+  --hoja-pad: 2rem 2.25rem;    /* relleno de la hoja grande de cada paso (arriba y abajo, lados) */
+  --caja-pad: 1.5rem;          /* relleno de cada tarjeta: más grande = el texto más lejos del borde */
+  --hueco: 1rem;               /* espacio entre tarjetas */
+  --caja-radio: 1.25rem;       /* redondeo de las esquinas de las tarjetas */
+
+  /* Márgenes de la página en computadora (opción B, 2026-10-28) */
+  --menu-margen: 1rem;         /* espacio entre el menú lateral y la orilla de la ventana */
+  --menu-ancho: 17rem;         /* ancho del menú abierto */
+  --menu-ancho-plegado: 5.25rem; /* ancho del menú plegado (solo íconos) */
+  --margen-arriba: var(--menu-margen); /* arriba: la primera tarjeta empieza a la altura del menú */
+  --margen-izq: 2.25rem;       /* entre el menú y las tarjetas */
+  --margen-der: 1.75rem;       /* de las tarjetas a la orilla derecha */
+  --margen-abajo: 3rem;        /* debajo de la última tarjeta */
+
+  /* Barra de pasos de arriba (las tres páginas de Configuración y Crear campaña) */
+  --paso-pad: .55rem .6rem;    /* relleno de cada paso */
+  --paso-hueco: .65rem;        /* espacio entre el círculo y el texto */
+  --paso-circulo: 1.75rem;     /* tamaño del círculo con el número */
+  --t-paso-num: .78rem;        /* número dentro del círculo */
+  --t-paso: .9rem;             /* nombre del paso */
+  --t-paso-sub: .76rem;        /* texto gris bajo el nombre */
+  --peso-paso: 600;            /* grosor del nombre del paso */
+  --paso-activo: #2E3035;      /* fondo del paso en el que estás */
+
+  /* Pie de cada paso de las tres páginas de Configuración: ← Anterior, Aplicar y Siguiente */
+  --pie-arriba: 2rem;          /* espacio entre la última tarjeta y la línea del pie */
+  --pie-linea: 1.25rem;        /* espacio entre la línea y los botones */
+  --pie-hueco: .6rem;          /* espacio entre botones */
+  --boton-pad: .7rem 1.4rem;   /* relleno de cada botón del pie (arriba y abajo, lados) */
+  --t-boton: .95rem;           /* letra de los botones del pie */
+  --boton-mini-pad: .35rem .8rem; /* botón chico junto a un campo (Llenar con mi sitio web) */
+  --t-boton-mini: .8rem;       /* su letra */
+
+  /* Conversaciones */
+  --punto-chat: .6rem;         /* punto lima de no leído en cada chat, debajo de la hora */
+}
+@media (max-width: 560px) {
+  :root { --t-titulo: 1.5rem; --hoja-pad: 1.4rem 1.1rem; --caja-pad: 1.1rem; }
+}

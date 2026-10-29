@@ -1,6 +1,6 @@
 """Perfil de empresa: lo que el asistente y el contenido saben del negocio.
 
-console.skandar.online/panel/empresa, desde el menú de perfil (abajo a la izquierda).
+console.skandar.online/panel/empresa, desde Configuración (abajo en el menú lateral).
 Es un proceso corto de cinco pasos y un resumen: sencillo por fuera, con los datos
 bien separados por dentro. Cada paso se guarda al pasar al siguiente (o al saltar a
 otro desde el riel de la izquierda), así que no se pierde nada a medias.
@@ -9,6 +9,8 @@ Se guarda en la tabla kv de la cuenta:
 - "empresa": los campos de los pasos 1, 2, 4 y 5 (ver CAMPOS) y "terminado".
 - "productos": el catálogo, una lista de {id, nombre, descripcion, precio, moneda,
   desde, imagenes, url, tipo, destacado}; las fotos van en data/<slug>/media.
+- "shopify_lista": los productos leídos de su tienda Shopify mientras elige cuáles importar (shopify.py).
+- "empresa_sugerencias": lo que se leyó del sitio web del cliente (sitio.py), para que elija qué usar.
 - "campana_opciones": lo que se ofrece al crear una campaña, escrito por Claude para
   esta empresa: los objetivos (qué conseguir) y, dentro de cada uno, sus mensajes (qué
   comunicar). Se vuelve a escribir en segundo plano solo cuando cambia el perfil
@@ -30,7 +32,7 @@ from html import escape
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from . import config, contenido, panel, posicionamiento
+from . import config, contenido, panel, posicionamiento, shopify, sitio
 from .cuenta import Cuenta, usar
 
 log = logging.getLogger("igbot.empresa")
@@ -82,6 +84,21 @@ PASOS = {
     5: ("Preguntas frecuentes", "Lo que más te preguntan"),
 }
 ORDEN = [1, 3, 4, 5, 2]
+# Título y bajada de cada paso, como en Tu asistente y Tu marca.
+TITULOS = {
+    1: ("Empecemos por tu empresa",
+        "Cuéntanos quién eres y qué haces. No necesitas escribirlo perfecto: tu asistente y tus campañas lo usan tal cual."),
+    2: ("Tus clientes y lo que te hace distinto",
+        "Con esto tus campañas le hablan a la persona correcta y tu asistente sabe qué destacar."),
+    3: ("Tus productos y servicios",
+        "Agrega lo que vendes. Tu asistente lo usa para contestar precios y mandar el enlace; tus campañas, para"
+        " promocionarlo con sus fotos."),
+    4: ("Cómo te compran",
+        "Lo práctico: cuándo y dónde atiendes, cómo te pagan y tus políticas. Tu asistente no inventa nada de esto."),
+    5: ("Lo que más te preguntan",
+        "Escribe las preguntas que más te hacen y cómo las contestas. Las vacías no se usan."),
+}
+CORTOS = {3: "Productos", 5: "Preguntas"}  # en la barra de pasos, para que quepan en una línea
 RESUMEN = 6
 
 MAX_PRODUCTOS, MAX_FOTOS_PRODUCTO = 60, 5
@@ -95,6 +112,9 @@ AVISOS = {
     "tope": f"Tu catálogo ya tiene {MAX_PRODUCTOS} productos: quita uno para agregar otro.",
     "sin_nombre": "Ponle nombre a tu producto para agregarlo.",
     "listo": "Guardado. En unos segundos tu asistente y tus campañas usan tu perfil.",
+    "aplicado": "Cambios aplicados.",
+    "web": "Listo: agregamos lo que elegiste de tu sitio. Revísalo en cada paso.",
+    "shopify": "Listo: agregamos a tu catálogo los productos que elegiste de tu tienda.",
 }
 
 
@@ -202,6 +222,8 @@ def secciones(e: dict, prods: list[dict], para_contenido: bool) -> list[tuple[st
             linea += f": {precio}"
         if desc := p.get("descripcion", "").strip():
             linea += f". {desc}"
+        if opciones := p.get("opciones"):
+            linea += f" Opciones: {', '.join(opciones)}."
         if p.get("url") and not para_contenido:
             linea += f" Enlace: {p['url']}"
         catalogo.append(linea)
@@ -334,13 +356,14 @@ async def antes_de_guardar(c: Cuenta) -> None:
 
 async def revisar_y_aplicar(c: Cuenta) -> None:
     e, prods = await de(c), await productos(c)
-    if not (motivo := await revisar(c, e, prods)):
+    aprobado = json.loads(await c.store.get(CLAVE_APROBADO) or "{}")
+    igual = texto_asistente(e, prods) == texto_asistente(aprobado.get("empresa", {}), aprobado.get("productos", []))
+    if igual or not (motivo := await revisar(c, e, prods)):  # lo que lee el asistente no cambió: no se revisa
         await c.store.set(CLAVE_APROBADO, json.dumps({"empresa": e, "productos": prods}, ensure_ascii=False))
         await c.store.set(CLAVE_RECHAZO, "")
         await aplicar(c)
         return
     log.warning("@%s: perfil de empresa rechazado: %s", await panel.usuario(c), motivo)
-    aprobado = json.loads(await c.store.get(CLAVE_APROBADO) or "{}")
     viejos = aprobado.get("productos", [])
     nuevos = [p for p in prods if p not in viejos]
     producto = nuevos[-1] if nuevos else None
@@ -358,15 +381,39 @@ async def rechazo(c: Cuenta) -> dict:
     return json.loads(await c.store.get(CLAVE_RECHAZO) or "{}")
 
 
-def programar_revision(c: Cuenta) -> None:
-    """Una revisión a la vez por cuenta; si guarda mientras tanto, se revisa otra vez lo último."""
+ESPERA_REVISION = 45  # segundos sin guardar antes de revisar: recorrer los pasos lanza una sola revisión
+_ultimo: dict[str, float] = {}
+_ya: dict[str, asyncio.Event] = {}  # el de la revisión en curso de cada cuenta: revisar sin esperar más
+
+
+async def _esperar_calma(slug: str) -> None:
+    """Hasta que pasen ESPERA_REVISION segundos desde el último guardado, o hasta que pidan revisar ya."""
+    ya = _ya[slug]
+    while not ya.is_set() and (resto := _ultimo.get(slug, 0) + ESPERA_REVISION - time.monotonic()) > 0:
+        try:
+            await asyncio.wait_for(ya.wait(), resto)
+        except TimeoutError:
+            pass
+    ya.clear()
+
+
+def programar_revision(c: Cuenta, ya: bool = False) -> None:
+    """Revisa lo último que guardó cuando deja de guardar un rato (`ya`: al terminar, sin esperar). Una
+    revisión a la vez por cuenta; si guarda mientras tanto, se revisa otra vez lo último."""
+    _ultimo[c.slug] = time.monotonic()
     if (t := _revisiones.get(c.slug)) and not t.done():
         _otra_vez.add(c.slug)
+        if ya:
+            _ya[c.slug].set()
         return
+    _ya[c.slug] = asyncio.Event()
+    if ya:
+        _ya[c.slug].set()
 
     async def correr():
         try:
             while True:
+                await _esperar_calma(c.slug)
                 _otra_vez.discard(c.slug)
                 try:
                     await revisar_y_aplicar(c)
@@ -376,6 +423,7 @@ def programar_revision(c: Cuenta) -> None:
                     break
         finally:
             _revisiones.pop(c.slug, None)
+            _ya.pop(c.slug, None)
 
     tarea = asyncio.create_task(correr())
     _revisiones[c.slug] = tarea
@@ -384,9 +432,17 @@ def programar_revision(c: Cuenta) -> None:
 
 
 async def esperar_revision(c: Cuenta) -> None:
-    """Para las pruebas: espera la revisión en curso, si hay."""
+    """Para las pruebas: hace ya la revisión pendiente, si hay, y la espera."""
     while (t := _revisiones.get(c.slug)) and not t.done():
+        if ev := _ya.get(c.slug):
+            ev.set()
         await t
+
+
+async def revision_pendiente(c: Cuenta) -> bool:
+    """Si quedó algo guardado sin revisar (p. ej. igbot se reinició durante la espera)."""
+    aprobado = await c.store.get(CLAVE_APROBADO)
+    return bool(aprobado) and json.loads(aprobado) != {"empresa": await de(c), "productos": await productos(c)}
 
 
 SISTEMA_OPCIONES = """Preparas las opciones que verá el dueño de un negocio cuando crea una campaña de Instagram, para que tengan sentido con SU empresa.
@@ -557,13 +613,9 @@ main.emp{color:var(--claro);padding-bottom:4rem}
 .res:first-of-type{border-top:0;padding-top:0}
 .res b{font-size:1rem}.res p{grid-column:1;margin:0;color:#A8A8AE;font-size:.9rem}
 .res .mini{grid-row:1/3;grid-column:2;align-self:center}
-.ideas{display:grid;grid-template-columns:1fr 1fr;gap:1.2rem}
-.ideas h4{margin:0 0 .6rem;font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:var(--gris)}
-.idea{border:1px solid #2E3035;border-radius:.85rem;padding:.65rem .85rem;margin-bottom:.5rem;background:#18191C}
-.idea b{display:block;font-size:.92rem}.idea span{font-size:.8rem;color:var(--gris)}
 @media(max-width:860px){.mago{grid-template-columns:1fr}.cab-paso h2{font-size:1.6rem}.caja-o{padding:1.3rem 1.2rem}
 .pie-paso .der{width:100%}.pie-paso .der .boton{flex:1;text-align:center;padding:.8rem 1rem}.riel{position:static}.riel .lista{flex-direction:row;overflow-x:auto}
-.riel .paso{flex:none;width:auto}.riel .paso small{display:none}.dos,.ideas{grid-template-columns:1fr}.fotos-o{grid-template-columns:repeat(3,1fr)}
+.riel .paso{flex:none;width:auto}.riel .paso small{display:none}.dos{grid-template-columns:1fr}.fotos-o{grid-template-columns:repeat(3,1fr)}
 .prod{grid-template-columns:3.5rem 1fr}.prod .foto{width:3.5rem;height:3.5rem}.prod>div:last-child{grid-column:2}.prod .precio{text-align:left}.prod .acc{justify-content:flex-start}}
 .paso .n{color:var(--acento);border-color:rgba(255,138,61,.45)}
 .paso.on .n{visibility:hidden}
@@ -588,6 +640,31 @@ main.emp{color:var(--claro);padding-bottom:4rem}
 .uso{display:inline-grid;place-items:center;width:1.45rem;height:1.45rem;border-radius:.45rem;background:rgba(255,255,255,.07);color:#A8A8AE}
 .leyenda-usos{display:flex;flex-wrap:wrap;gap:.5rem 1.2rem;font-size:.85rem;color:#A8A8AE;margin:0 0 1.2rem}
 .leyenda-usos .l{display:inline-flex;align-items:center;gap:.45rem}
+/* Igual que Tu marca y Tu asistente: barra de pasos de la misma altura y el paso entero dentro de una tarjeta. */
+.riel{margin-bottom:0;min-height:5.25rem}
+.riel .paso{padding:.55rem .6rem;gap:.6rem}.riel .paso b{font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.riel .paso .n{width:1.75rem;height:1.75rem}
+.hoja-o{background:var(--grafito);border-radius:1.75rem;padding:2rem 2.25rem;box-shadow:var(--clay-sombra),var(--clay-luz)}
+.hoja-o .caja-o{background:#1B1C1F}.hoja-o .caja-o:last-of-type{margin-bottom:0}
+.cab-paso .antetitulo{font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;font-weight:600}
+@media(max-width:560px){.hoja-o{padding:1.4rem 1.1rem}}
+/* Llenar con el sitio web: el botón bajo el campo y la página de sugerencias. */
+.h3-der{display:inline-flex;align-items:center;gap:.6rem;flex-wrap:wrap;justify-content:flex-end}
+.emp .boton.mini-boton{padding:var(--boton-mini-pad);font-size:var(--t-boton-mini);line-height:1.2;font-weight:600;white-space:nowrap;display:inline-flex;align-items:center;gap:.35rem;background:transparent;color:var(--acento);border:1px solid var(--acento);box-shadow:none}
+.emp .boton.mini-boton:hover{background:rgba(255,138,61,.1)}
+.caja-o:has(input[name=sitio_web]:placeholder-shown) .llenar-web{display:none}
+.sug{display:grid;grid-template-columns:auto 1fr;gap:.35rem .8rem;padding:1rem 0;border-top:1px solid #2E3035}
+.sug:first-of-type{border-top:0;padding-top:0}
+.sug>input{accent-color:var(--acento);width:1.1rem;height:1.1rem;margin:.15rem 0 0}
+.sug .t{margin:0}.sug .dato{grid-column:2;display:grid;gap:.4rem}
+.sug .ahora{font-size:.8rem;color:var(--gris);margin:0}
+.sug:has(>input:not(:checked)) .dato{opacity:.55}
+.shop{display:grid;grid-template-columns:auto 1fr auto;gap:.2rem .8rem;align-items:center;padding:.75rem 0;border-top:1px solid #2E3035}
+.shop:first-of-type{border-top:0;padding-top:0}
+.shop>input{accent-color:var(--acento);width:1.1rem;height:1.1rem;margin:0}
+.shop label{font-weight:600}.shop small{grid-column:2;color:var(--gris);font-size:.8rem}
+.shop .precio{font-weight:600;white-space:nowrap}.shop.ya{opacity:.55}
+.leidas{font-size:.8rem;color:var(--gris);margin:1rem 0 0;word-break:break-all}
 """
 
 
@@ -603,6 +680,9 @@ ICONO_CAMPANAS = ('<span class="uso" title="Lo usan tus campañas">'
                          '<path d="m21 15-5-5L5 21"/>') + "</span>")
 # Quién usa cada campo (ver secciones()): "ambos", "asistente", "campanas" o "" (ninguno).
 ICONOS = {"ambos": ICONO_ASISTENTE + ICONO_CAMPANAS, "asistente": ICONO_ASISTENTE, "campanas": ICONO_CAMPANAS}
+
+
+ICONO_CHISPA = _svg('<path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.7 1.8 1.8.7-1.8.7L19 20l-.7-1.8-1.8-.7 1.8-.7z"/>')
 
 
 def _usos(usa: str) -> str:
@@ -642,15 +722,14 @@ def riel(e: dict, prods: list[dict], actual: int, con_form: bool) -> str:
     for n, (titulo, bajada) in [*((n, PASOS[n]) for n in ORDEN), (RESUMEN, ("Resumen", "Revisa y guarda"))]:
         cls = "on" if n == actual else "ok" if n in listos else ""
         marca = "★" if n == RESUMEN else "✓" if n in listos and n != actual else str(numero(n))
-        dentro = f'<span class="n">{marca}</span><span><b>{titulo}</b><small>{bajada}</small></span>'
+        dentro = f'<span class="n">{marca}</span><span><b>{CORTOS.get(n, titulo)}</b><small>{bajada}</small></span>'
         actual_ = ' aria-current="step"' if n == actual else ""
         items.append(f'<button class="paso {cls}" form="f-emp" name="accion" value="ir_{n}"{actual_}>{dentro}</button>'
                      if con_form else f'<a class="paso {cls}" href="/panel/empresa?paso={n}"{actual_}>{dentro}</a>')
     pct = round(len(listos) / len(PASOS) * 100)
     return ('<nav class="riel" aria-label="Pasos del perfil"><h2>Perfil de empresa</h2>'
             f'<div class="lista">{"".join(items)}</div>'
-            f'<div class="avance">Tu avance <span>{pct}%</span><div class="barra-av"><i style="width:{pct}%"></i></div>'
-            "Se guarda en cada paso. Puedes saltar entre secciones y volver cuando quieras.</div></nav>")
+            + panel.avance(pct) + "</nav>")
 
 
 def numero(paso: int) -> int:
@@ -659,8 +738,9 @@ def numero(paso: int) -> int:
 
 
 def cabeza_paso(paso: int) -> str:
-    return (f'<div class="cab-paso"><p class="antetitulo">Paso {numero(paso)} de {len(PASOS)}</p></div>'
-            + LEYENDA)
+    titulo, bajada = TITULOS[paso]
+    return (f'<div class="cab-paso"><p class="antetitulo">Paso {numero(paso)} de {len(PASOS)}</p><h2>{titulo}</h2>'
+            f"<p>{bajada}</p></div>" + LEYENDA)
 
 
 def pie(paso: int, nota: str = "") -> str:
@@ -669,26 +749,33 @@ def pie(paso: int, nota: str = "") -> str:
     nombre = PASOS[siguiente][0].lower() if siguiente in PASOS else "resumen"
     atras = (f'<button class="boton secundario" name="accion" value="ir_{ORDEN[i - 1]}">← Anterior</button>'
              if i else "")
-    return (f'<div class="pie-paso"><span class="nota">{nota}</span><span class="der">{atras}'
-            f'<button class="boton" name="accion" value="ir_{siguiente}">Siguiente: {nombre} →</button></span></div>')
+    return panel.pie_config(atras, f'<button class="boton" name="accion" value="ir_{siguiente}">Siguiente: {nombre} →</button>',
+                            nota)
+
+
+# Bajo el campo del sitio web; se ve en cuanto hay una dirección escrita (CSS, sin JavaScript).
+LLENAR_WEB = ('<span class="h3-der"><button class="boton mini-boton llenar-web" name="accion" value="llenar_web"'
+              ' title="Leemos tu sitio y te mostramos lo que encontramos para que elijas qué usar">'
+              + ICONO_CHISPA + "Llenar con mi sitio web</button>")
 
 
 def paso_1(e: dict) -> str:
     giros = "".join(f'<option value="{escape(g)}"{" selected" if g == e.get("giro") else ""}>{escape(g)}</option>' for g in GIROS + [OTRO])
     elige = "" if e.get("giro") else '<option value="" selected disabled>Elige una opción</option>'
     return (
-        '<div class="caja-o"><h3>Información general <span class="etq-o esencial">Esencial</span></h3>'
+        f'<div class="caja-o"><h3>Información general {LLENAR_WEB}<span class="etq-o esencial">Esencial</span></span></h3>'
         '<p class="sub">La base para que todo hable de tu negocio y no de uno genérico.</p>'
         '<div class="dos">' + _texto("nombre", "Nombre de tu empresa", e.get("nombre", ""), 80, req=True)
-        + '<div class="campo-o"><label for="e-giro" class="t">¿A qué se dedica? *</label>'
-        f'<select id="e-giro" name="giro">{elige}{giros}</select></div></div>'
-        + '<div class="si-otro">' + _texto("giro_otro", "¿Cuál es tu giro?", e.get("giro_otro", ""), 60) + "</div>"
+        + _texto("sitio_web", "Sitio web", e.get("sitio_web", ""), 200, ejemplo="tusitio.com")
+        + "</div>"
         + _texto("frase", "Tu empresa en una frase", e.get("frase", ""), 160,
                  "La que dirías si solo tuvieras cinco segundos.", ejemplo="Ej.: Espacios pequeños, hogares cálidos.")
         + _texto("descripcion", "Describe tu negocio en tus palabras", e.get("descripcion", ""), 1500,
                  "Qué haces, cómo lo haces y desde cuándo. Dos o tres frases bastan.", filas=3, req=True)
         + '<div class="dos">' + _texto("zona", "Ciudad o zona donde atiendes", e.get("zona", ""), 160)
-        + _texto("sitio_web", "Sitio web", e.get("sitio_web", ""), 200, ejemplo="tusitio.com") + "</div>"
+        + '<div class="campo-o"><label for="e-giro" class="t">¿A qué se dedica? *</label>'
+        f'<select id="e-giro" name="giro">{elige}{giros}</select></div></div>'
+        + '<div class="si-otro">' + _texto("giro_otro", "¿Cuál es tu giro?", e.get("giro_otro", ""), 60) + "</div>"
         + _opciones("atiende", "¿Cómo atiendes?", ATIENDE, e.get("atiende", []))
         + "</div>" + pie(1, "* Obligatorio. Lo demás lo puedes llenar después.")
     )
@@ -780,6 +867,13 @@ def form_producto(c: Cuenta, p: dict | None) -> str:
     return f'<div class="nuevo-o" id="editar"><h3 style="margin:0 0 1rem">Editar {escape(p.get("nombre", ""))}</h3>{cuerpo}</div>'
 
 
+TRAER_SHOPIFY = (
+    '<form class="caja-o" method="post" action="/panel/empresa/shopify"><h3>¿Tu tienda está en Shopify?</h3>'
+    '<p class="sub">Traemos tu catálogo desde tu sitio, con precios, opciones y fotos. Tú eliges qué productos'
+    " agregar.</p>"
+    '<button class="boton chico" name="accion" value="leer">Traer mis productos de Shopify</button></form>')
+
+
 def paso_3(c: Cuenta, e: dict, prods: list[dict], editando: dict | None) -> str:
     filas = "".join(fila_producto(c, p) for p in prods) or (
         '<p class="vacio-o">Aún no tienes productos. Agrega el primero: con su foto y su precio tu asistente'
@@ -793,7 +887,8 @@ def paso_3(c: Cuenta, e: dict, prods: list[dict], editando: dict | None) -> str:
         '<p class="sub">Marca como destacado lo que más quieres vender: las campañas lo proponen primero.'
         + (f" Tienes {destacados} destacado{'s' if destacados != 1 else ''}." if destacados else "")
         + f"</p>{filas}{form}</div>"
-        '<form id="f-emp" method="post" action="/panel/empresa"><input type="hidden" name="paso" value="3">'
+        + (TRAER_SHOPIFY if e.get("sitio_web") and len(prods) < MAX_PRODUCTOS else "")
+        + '<form id="f-emp" method="post" action="/panel/empresa"><input type="hidden" name="paso" value="3">'
         '<div class="caja-o"><h3>Otros precios o notas</h3><p class="sub">Paquetes, promociones vigentes o lo que no'
         " cabe en el catálogo. Lo que no pongas aquí ni en tus productos, el asistente no lo inventa.</p>"
         + _texto("precios", "Notas de precios", e.get("precios", ""), 2000, filas=3,
@@ -864,36 +959,18 @@ def _resumen_de(e: dict, prods: list[dict], n: int) -> str:
     return escape(texto) or '<i style="font-style:normal;color:var(--gris)">Sin llenar</i>'
 
 
-def ideas(opciones: dict | None, e: dict) -> str:
-    if opciones:
-        def columna(titulo, xs):
-            return (f"<div><h4>{titulo}</h4>" + "".join(
-                f'<div class="idea"><b>{escape(x["titulo"])}</b><span>{escape(x.get("descripcion", ""))}</span></div>'
-                for x in xs) + "</div>")
-        objetivos = [{**o, "descripcion": (" · ".join(m["titulo"] for m in o["mensajes"]) if o.get("mensajes")
-                                           else o.get("descripcion", ""))} for o in opciones["objetivos"]]
-        cuerpo = (f'<div class="ideas">{columna("¿Qué quieres conseguir? Y qué comunicar con cada uno", objetivos)}'
-                  "</div>" if any(o.get("mensajes") for o in opciones["objetivos"]) else
-                  f'<div class="ideas">{columna("¿Qué quieres conseguir?", opciones["objetivos"])}'
-                  f'{columna("¿Qué quieres comunicar?", opciones["mensajes"])}</div>')
-    elif lista(e) and e.get("terminado"):
-        cuerpo = '<p class="vacio-o">Las estamos preparando con tu perfil. Recarga en un momento para verlas.</p>'
-    elif lista(e):
-        cuerpo = '<p class="vacio-o">Se preparan cuando guardes tu perfil.</p>'
-    else:
-        cuerpo = '<p class="vacio-o">Llena lo esencial de tu empresa (paso 1) para prepararlas.</p>'
-    return ('<div class="caja-o"><h3>Tus campañas, a la medida <span class="etq-o">Se actualiza al guardar</span></h3>'
-            '<p class="sub">Con tu perfil preparamos las opciones que verás al crear una campaña. Se quedan fijas'
-            f" hasta que cambies tu perfil.</p>{cuerpo}</div>")
+def _editar(n: int) -> str:
+    return f'<button class="editar" name="accion" value="ir_{n}">Editar</button>'
 
 
-def resumen(e: dict, prods: list[dict], opciones: dict | None) -> str:
-    filas = "".join(f'<div class="res"><b>{PASOS[n][0]}</b><p>{_resumen_de(e, prods, n)}</p>'
-                    f'<button class="mini" name="accion" value="ir_{n}">Editar</button></div>' for n in ORDEN)
+def resumen(e: dict, prods: list[dict]) -> str:
+    filas = "".join(f'<div class="caja-o">{panel.cab_tarjeta(PASOS[n][0], boton=_editar(n))}'
+                    f'<p>{_resumen_de(e, prods, n)}</p></div>' for n in ORDEN)
     falta = "" if lista(e) else '<span class="nota">Te falta lo esencial del paso 1.</span>'
     return (
-        '<div class="cab-paso"><p class="antetitulo">Resumen</p></div>'
-        f'<div class="caja-o">{filas}</div>{ideas(opciones, e)}'
+        '<div class="cab-paso"><p class="antetitulo">Resumen</p><h2>Así te conocen tu asistente y tus campañas</h2>'
+        "<p>Revisa que todo esté bien. Con Editar regresas a ese paso.</p></div>"
+        f'<div class="resumen-tarjetas">{filas}</div>'
         f'<div class="pie-paso">{falta}<span class="der"><a class="boton secundario" href="/panel">Ir al panel</a>'
         '<button class="boton acento" name="accion" value="terminar">Guardar perfil ✓</button></span></div>'
     )
@@ -914,7 +991,7 @@ async def pagina(c: Cuenta, paso: int, e: dict | None = None, aviso: str = "", e
         cuerpo = cabeza_paso(3) + paso_3(c, e, prods, editando)
     else:
         if paso == RESUMEN:
-            dentro = resumen(e, prods, await opciones_campana(c))
+            dentro = resumen(e, prods)
         else:
             dentro = cabeza_paso(paso) + {1: paso_1, 2: paso_2, 4: paso_4}[paso](e) if paso != 5 else (
                 cabeza_paso(5) + paso_5(e, filas_extra))
@@ -923,13 +1000,13 @@ async def pagina(c: Cuenta, paso: int, e: dict | None = None, aviso: str = "", e
     avisos = "".join(f'<div class="aviso">{escape(x)}</div>' for x in (nota, aviso) if x)
     if not guardado and paso != RESUMEN and not aviso and not nota:
         avisos = ('<div class="aviso">Te precargamos lo que ya escribiste en tu asistente y en Tu marca.'
-                  " Revísalo y pulsa Siguiente para guardarlo.</div>" if e else "")
+                  " Revísalo y pulsa Aplicar o Siguiente para guardarlo.</div>" if e else "")
     return panel.pagina(
-        f"<style>{ESTILO}</style>"
+        f"<style>{ESTILO}{panel.COMUN}</style>"
         + await panel.menu_de(c, "cuenta", sub="empresa")
         + panel.encabezado("Tu cuenta · Perfil de empresa")
         + f'<main class="emp"><div class="contenedor">{avisos}<div class="mago">'
-        f'{riel(e, prods, paso, con_form=True)}<div>{cuerpo}</div></div></div></main>'
+        f'{riel(e, prods, paso, con_form=True)}<div class="hoja-o">{cuerpo}</div></div></div></main>'
     )
 
 
@@ -979,7 +1056,7 @@ async def guardar(request: Request):
         await antes_de_guardar(c)
         e["actualizado"] = int(time.time())
         await c.store.set(CLAVE, json.dumps(e, ensure_ascii=False))
-        programar_revision(c)  # revisa y, si se aprueba, el asistente y las opciones lo usan
+        programar_revision(c, ya=accion == "terminar")  # revisa y, si se aprueba, el asistente y las opciones lo usan
         log.info("@%s guardó el paso %s de su perfil de empresa", await panel.usuario(c), paso)
     if accion == "terminar":
         if not cambio:  # si cambió, se piden al aprobarse
@@ -987,6 +1064,10 @@ async def guardar(request: Request):
         if c.slug and await c.store.get("bienvenida") != "1":  # cuenta nueva: sigue al paso 2 de la bienvenida
             return RedirectResponse("/panel/bienvenida", status_code=303)
         return RedirectResponse("/panel/empresa?paso=6&aviso=listo", status_code=303)
+    if accion == "llenar_web" and paso == 1:
+        return await llenar_web(c, e)
+    if accion == "aplicar":  # guarda y se queda en el paso
+        return RedirectResponse(f"/panel/empresa?paso={paso}&aviso=aplicado", status_code=303)
     destino = _paso(accion[3:]) if accion.startswith("ir_") else 0
     return RedirectResponse(f"/panel/empresa?paso={destino or paso}", status_code=303)
 
@@ -1021,6 +1102,7 @@ async def guardar_producto(request: Request):
         "moneda": f.get("moneda") if f.get("moneda") in MONEDAS else "MXN",
         "desde": f.get("desde") == "1",
         "imagenes": list((actual or {}).get("imagenes", [])),
+        "opciones": list((actual or {}).get("opciones", [])),  # las de Shopify; aquí no se editan
         "url": url_limpia(str(f.get("url", ""))[:300]),
         "tipo": f.get("tipo") if f.get("tipo") in dict(TIPOS) else "producto",
         "destacado": f.get("destacado") == "1",
@@ -1051,3 +1133,252 @@ async def guardar_producto(request: Request):
     log.info("@%s guardó un producto de su perfil de empresa", await panel.usuario(c))
     seguir = f"&producto={nuevo['id']}#editar" if aviso == "foto_quitada" else ""
     return RedirectResponse(f"/panel/empresa?paso=3&aviso={aviso}{seguir}", status_code=303)
+
+
+# --- llenar con el sitio web (sitio.py) ---
+
+# Los campos que puede sugerir el sitio: (clave, etiqueta, paso donde vive).
+SUGERIBLES = [
+    ("nombre", "Nombre de tu empresa", 1), ("giro", "¿A qué se dedica?", 1), ("frase", "Tu empresa en una frase", 1),
+    ("descripcion", "Describe tu negocio", 1), ("zona", "Ciudad o zona donde atiendes", 1),
+    ("precios", "Notas de precios", 3), ("horarios", "Horarios", 4), ("direccion", "Dirección", 4),
+    ("pagos_nota", "Algo más sobre pagos", 4),
+    *((k, nombre, 4) for k, nombre, _ in panel.POLITICAS if k != "pagos"),
+    ("cliente_ideal", "¿Quién es tu cliente ideal?", 2), ("problema", "¿Qué problema les resuelves?", 2),
+    ("distinto", "¿Por qué te eligen a ti?", 2),
+]
+MAXIMOS = {k: n for campos in CAMPOS.values() for k, n in campos}
+
+
+async def llenar_web(c: Cuenta, e: dict) -> HTMLResponse:
+    """Lee el sitio en segundo plano y lleva a lo que encontró (lo guardado del paso 1 ya quedó)."""
+    if not e.get("sitio_web"):
+        return await pagina(c, 1, e, nota="Escribe la dirección de tu sitio web para leerlo.")
+    url = e["sitio_web"]
+
+    async def correr():
+        await sitio.llenar(c, url, GIROS)
+        yield "/panel/empresa/sitio"
+
+    return await panel.trabajo_largo(c, "sitio_web", "Leyendo tu sitio web",
+                                     "Revisamos tu página de inicio y algunas más; tarda alrededor de medio minuto.",
+                                     "/panel/empresa/sitio", correr, menu=("cuenta", "empresa"),
+                                     boton="Ver lo que encontramos")
+
+
+def _sugerencia(k: str, etiqueta: str, valor: str, ahora: str) -> str:
+    marcado = "" if ahora.strip() else " checked"  # lo que ya llenó no se toca si no lo marca
+    if k == "giro":
+        campo = f'<input type="hidden" name="s_{k}" value="{escape(valor)}"><p style="margin:0">{escape(valor)}</p>'
+    elif MAXIMOS.get(k, 0) <= 300 and len(valor) <= 120:
+        campo = (f'<input type="text" id="s-{k}" name="s_{k}" value="{escape(valor)}" maxlength="{MAXIMOS.get(k, 300)}"'
+                 f' aria-label="{escape(etiqueta)}">')
+    else:
+        campo = (f'<textarea id="s-{k}" name="s_{k}" rows="{3 if len(valor) > 160 else 2}" maxlength="{MAXIMOS.get(k, 300)}"'
+                 f' aria-label="{escape(etiqueta)}">{escape(valor)}</textarea>')
+    corto = re.sub(r"\s+", " ", ahora).strip()[:160]
+    ahora_ = f'<p class="ahora">Ahora tienes: {escape(corto)}</p>' if corto else ""
+    return (f'<div class="sug"><input type="checkbox" id="u-{k}" name="usar" value="{k}"{marcado}>'
+            f'<label for="u-{k}" class="t">{escape(etiqueta)}</label><div class="dato">{campo}{ahora_}</div></div>')
+
+
+def pagina_sugerencias(e: dict, datos: dict) -> str:
+    campos = datos["campos"]
+    cajas = []
+    for n in ORDEN:
+        filas = "".join(_sugerencia(k, etiqueta, campos[k], nombre_giro(e) if k == "giro" else str(e.get(k, "")))
+                        for k, etiqueta, paso in SUGERIBLES if paso == n and campos.get(k))
+        if n == 5 and campos.get("faq"):
+            ya = {q.get("p", "").strip().lower() for q in e.get("faq", [])}
+            filas += "".join(
+                f'<div class="sug"><input type="checkbox" id="u-faq-{i}" name="usar_faq" value="{i}"'
+                f'{"" if q["p"].strip().lower() in ya else " checked"}>'
+                f'<label for="u-faq-{i}" class="t">Pregunta {i + 1}</label><div class="dato">'
+                f'<input type="text" name="faq_p_{i}" value="{escape(q["p"])}" maxlength="300" aria-label="Pregunta {i + 1}">'
+                f'<textarea name="faq_r_{i}" rows="2" maxlength="1000" aria-label="Respuesta {i + 1}">{escape(q["r"])}'
+                "</textarea></div></div>" for i, q in enumerate(campos["faq"]))
+        if filas:
+            cajas.append(f'<div class="caja-o"><h3>{PASOS[n][0]} <span class="etq-o">Paso {numero(n)}</span></h3>{filas}</div>')
+    leidas = ", ".join(escape(re.sub(r"^https?://(www\.)?", "", u)) for u in datos.get("paginas", []))
+    return (
+        '<div class="cab-paso"><p class="antetitulo">Desde tu sitio web</p><h2>Lo que encontramos en tu sitio</h2>'
+        "<p>Revisa cada dato, corrígelo si hace falta y marca lo que quieres usar. Lo que ya tenías solo cambia si"
+        " lo marcas. Nada se guarda hasta que pulses Usar lo marcado.</p></div>"
+        + "".join(cajas) + f'<p class="leidas">Páginas que leímos: {leidas}</p>'
+        + '<div class="pie-config"><button class="boton secundario" name="accion" value="descartar">Descartar</button>'
+        '<span class="pie-nota"></span><span class="pie-der">'
+        '<button class="boton" name="accion" value="usar">Usar lo marcado</button></span></div>'
+    )
+
+
+@router.get("/sitio")
+async def ver_sitio(request: Request):
+    if not (c := panel.cuenta_de_sesion(request)):
+        return RedirectResponse("/panel", status_code=303)
+    datos = await sitio.sugerencias(c)
+    if not datos:
+        return RedirectResponse("/panel/empresa?paso=1", status_code=303)
+    e = await de(c) or await precarga(c)
+    if datos.get("error"):
+        cuerpo = (f'<div class="aviso">{escape(datos["error"])}</div>'
+                  '<div class="cab-paso"><p class="antetitulo">Desde tu sitio web</p><h2>No pudimos leer tu sitio</h2>'
+                  "<p>Puedes llenar tu perfil a mano; lo que escribas se guarda igual.</p></div>"
+                  '<div class="pie-paso"><span class="der"><a class="boton" href="/panel/empresa?paso=1">'
+                  "Volver a tu empresa</a></span></div>")
+    else:
+        cuerpo = (f'<form method="post" action="/panel/empresa/sitio">{pagina_sugerencias(e, datos)}</form>')
+    return panel.pagina(
+        f"<style>{ESTILO}{panel.COMUN}</style>"
+        + await panel.menu_de(c, "cuenta", sub="empresa")
+        + f'<main class="emp"><div class="contenedor"><div class="hoja-o">{cuerpo}</div></div></main>'
+    )
+
+
+@router.post("/sitio")
+async def usar_sitio(request: Request):
+    panel.de_aqui(request)
+    if not (c := panel.cuenta_de_sesion(request)):
+        return RedirectResponse("/panel", status_code=303)
+    f = await request.form()
+    datos = await sitio.sugerencias(c)
+    if f.get("accion") != "usar" or not datos.get("campos"):
+        await sitio.borrar(c)
+        return RedirectResponse("/panel/empresa?paso=1", status_code=303)
+    antes = await de(c)
+    e = dict(antes or await precarga(c))
+    usar = set(f.getlist("usar"))
+    for k, _, _ in SUGERIBLES:
+        if k in usar and k in datos["campos"]:
+            valor = str(f.get(f"s_{k}", "")).strip()[:MAXIMOS.get(k, 300)]
+            if k == "giro":
+                if valor in GIROS:
+                    e["giro"] = valor
+            elif valor:
+                e[k] = valor
+    faq, ya = list(e.get("faq", [])), {q.get("p", "").strip().lower() for q in e.get("faq", [])}
+    for i in sorted({int(x) for x in f.getlist("usar_faq") if str(x).isdigit()}):
+        p_, r_ = str(f.get(f"faq_p_{i}", "")).strip()[:300], str(f.get(f"faq_r_{i}", "")).strip()[:1000]
+        if r_ and p_.lower() not in ya and len(faq) < MAX_PREGUNTAS:
+            ya.add(p_.lower())
+            faq.append({"p": p_, "r": r_})
+    e["faq"] = faq
+    await sitio.borrar(c)
+    if e != antes:
+        await antes_de_guardar(c)
+        e["actualizado"] = int(time.time())
+        await c.store.set(CLAVE, json.dumps(e, ensure_ascii=False))
+        programar_revision(c)
+        log.info("@%s llenó su perfil de empresa con su sitio web", await panel.usuario(c))
+    return RedirectResponse("/panel/empresa?paso=1&aviso=web", status_code=303)
+
+
+# --- importar de Shopify (shopify.py) ---
+
+@router.post("/shopify")
+async def leer_shopify(request: Request):
+    panel.de_aqui(request)
+    if not (c := panel.cuenta_de_sesion(request)):
+        return RedirectResponse("/panel", status_code=303)
+    url = (await de(c) or {}).get("sitio_web", "")
+    if not url:
+        return RedirectResponse("/panel/empresa?paso=1", status_code=303)
+
+    async def correr():
+        await shopify.preparar(c, url, MONEDAS)
+        yield "/panel/empresa/shopify"
+
+    return await panel.trabajo_largo(c, "shopify", "Leyendo tu tienda", "Traemos la lista de tus productos;"
+                                     " tarda unos segundos.", "/panel/empresa/shopify", correr,
+                                     menu=("cuenta", "empresa"), boton="Elegir tus productos")
+
+
+def fila_shopify(p: dict, ya: bool) -> str:
+    precio = precio_texto({"precio": p["precio"], "desde": p["desde"], "moneda": ""}).strip()
+    detalles = [f"{len(p['opciones'])} opciones" if p["opciones"] else "",
+                f"{len(p['fotos'])} foto{'s' if len(p['fotos']) != 1 else ''}" if p["fotos"] else "Sin fotos",
+                "" if p["disponible"] else "Agotado", "Ya está en tu catálogo" if ya else ""]
+    sid = escape(p["sid"])
+    return (f'<div class="shop{" ya" if ya else ""}"><input type="checkbox" id="s-{sid}" name="sid" value="{sid}"'
+            f'{" disabled" if ya else ""}><label for="s-{sid}">{escape(p["nombre"])}</label>'
+            f'<span class="precio">{escape(precio)}</span>'
+            f'<small>{escape(" · ".join(x for x in detalles if x))}</small></div>')
+
+
+@router.get("/shopify")
+async def ver_shopify(request: Request):
+    if not (c := panel.cuenta_de_sesion(request)):
+        return RedirectResponse("/panel", status_code=303)
+    datos = await shopify.lista(c)
+    if not datos:
+        return RedirectResponse("/panel/empresa?paso=3", status_code=303)
+    if datos.get("error"):
+        cuerpo = (f'<div class="aviso">{escape(datos["error"])}</div>'
+                  '<div class="cab-paso"><p class="antetitulo">Desde tu tienda</p><h2>No pudimos traer tus productos</h2>'
+                  "<p>Puedes agregarlos a mano en tu catálogo.</p></div>"
+                  '<div class="pie-paso"><span class="der"><a class="boton" href="/panel/empresa?paso=3">'
+                  "Volver a tu catálogo</a></span></div>")
+    else:
+        prods = await productos(c)
+        urls = {p.get("url") for p in prods if p.get("url")}
+        cupo = MAX_PRODUCTOS - len(prods)
+        filas = "".join(fila_shopify(p, p["url"] in urls) for p in datos["productos"])
+        cuerpo = (
+            '<form method="post" action="/panel/empresa/shopify/importar">'
+            '<div class="cab-paso"><p class="antetitulo">Desde tu tienda</p><h2>Elige qué productos agregar</h2>'
+            f"<p>Encontramos {len(datos['productos'])} en tu tienda. Puedes agregar hasta {cupo} más a tu catálogo;"
+            " después los editas como cualquier otro.</p></div>"
+            f'<div class="caja-o"><h3>Tus productos de Shopify <span class="etq-o">Precios en {escape(datos["moneda"])}'
+            f"</span></h3>{filas}</div>"
+            '<div class="pie-config"><button class="boton secundario" name="accion" value="descartar">Cancelar</button>'
+            '<span class="pie-nota"></span><span class="pie-der">'
+            '<button class="boton" name="accion" value="importar">Agregar a mi catálogo</button></span></div></form>')
+    return panel.pagina(
+        f"<style>{ESTILO}{panel.COMUN}</style>"
+        + await panel.menu_de(c, "cuenta", sub="empresa")
+        + f'<main class="emp"><div class="contenedor"><div class="hoja-o">{cuerpo}</div></div></main>'
+    )
+
+
+async def importar(c: Cuenta, elegidos: list[dict], moneda: str) -> None:
+    for p in elegidos:
+        imagenes = await shopify.fotos(c, p["fotos"])
+        prods = await productos(c)  # se relee: el cliente puede guardar otro mientras bajan las fotos
+        if len(prods) >= MAX_PRODUCTOS or p["url"] in {x.get("url") for x in prods}:
+            for t in imagenes:
+                contenido.archivo(c, t).unlink(missing_ok=True)
+            continue
+        await antes_de_guardar(c)
+        prods.append({"id": secrets.token_hex(4), "nombre": p["nombre"], "descripcion": p["descripcion"],
+                      "precio": p["precio"], "moneda": moneda, "desde": p["desde"], "imagenes": imagenes,
+                      "url": p["url"], "tipo": "producto", "destacado": False, "opciones": p["opciones"]})
+        await c.store.set(CLAVE_PRODUCTOS, json.dumps(prods, ensure_ascii=False))
+    programar_revision(c)
+    log.info("@%s importó %d productos de Shopify", await panel.usuario(c), len(elegidos))
+
+
+@router.post("/shopify/importar")
+async def importar_shopify(request: Request):
+    panel.de_aqui(request)
+    if not (c := panel.cuenta_de_sesion(request)):
+        return RedirectResponse("/panel", status_code=303)
+    f = await request.form()
+    datos = await shopify.lista(c)
+    elegidos = set(f.getlist("sid"))
+    if f.get("accion") != "importar" or not datos.get("productos") or not elegidos:
+        await shopify.borrar(c)
+        return RedirectResponse("/panel/empresa?paso=3", status_code=303)
+    prods = await productos(c)
+    urls = {p.get("url") for p in prods}
+    lista_ = [p for p in datos["productos"] if p["sid"] in elegidos and p["url"] not in urls]
+    lista_ = lista_[:max(0, MAX_PRODUCTOS - len(prods))]
+    await shopify.borrar(c)
+
+    async def correr():
+        for i in range(0, len(lista_), 5):
+            yield f"Producto {i + 1} de {len(lista_)}…"
+            await importar(c, lista_[i:i + 5], datos.get("moneda", MONEDAS[0]))
+        yield "/panel/empresa?paso=3&aviso=shopify"
+
+    return await panel.trabajo_largo(c, "shopify_importar", "Agregando tus productos",
+                                     "Bajamos sus fotos y los agregamos a tu catálogo.", "/panel/empresa?paso=3",
+                                     correr, menu=("cuenta", "empresa"), boton="Ver tu catálogo")

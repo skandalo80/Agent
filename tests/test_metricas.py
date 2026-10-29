@@ -107,7 +107,7 @@ def test_resultados_muestra_tarjetas(cliente, monkeypatch):  # noqa: F811
     assert "+14" in html and "7 dejaron de seguirte · neto +7" in html
     assert ">700<" in html and ">63<" in html  # vistas e interacciones (9 × 7)
     assert "7 clics al enlace" in html and "Mujeres" in html and "Guadalajara<b>50" in html
-    assert "25-34 años: 60" in html
+    assert "<span><b>60</b></span>" in html and "<title>" not in html.split("<main")[1]
 
 
 def test_curva_no_se_sale():
@@ -153,11 +153,10 @@ def test_publicaciones_con_numeros(cliente, monkeypatch):  # noqa: F811
     numeros = {"m1": {"reach": 200, "views": 400, "likes": 10, "comments": 2, "saved": 4, "shares": 4},
                "m2": {"reach": 100, "views": 150, "likes": 3, "comments": 0, "saved": 1, "shares": 0}}
 
-    async def insights(c, media_id):
+    async def insights(c, media_id, publicado=None):
         return numeros.get(media_id)
 
     monkeypatch.setattr(informe, "numeros", insights)
-    monkeypatch.setattr(informe, "_insights", {})
 
     async def publicar():
         for n, (texto, media) in enumerate((("Post flojo", "m2"), ("Post bueno", "m1"), ("Post nuevo", ""))):
@@ -173,3 +172,39 @@ def test_publicaciones_con_numeros(cliente, monkeypatch):  # noqa: F811
     assert html.index("Post bueno") < html.index("Post flojo") < html.index("Post nuevo")  # de mejor a peor
     assert "10%" in html and "4%" in html and "Interacción promedio: 7.0%" in html
     assert html.count("Instagram aún no da sus números") == 1
+
+
+def test_estadisticas_de_cada_post_se_guardan_una_vez_al_dia(cliente, monkeypatch):  # noqa: F811
+    """El guardado de las 6:00 refresca los posts de los últimos 30 días; después las páginas leen de la base."""
+    import time
+
+    from igbot import informe
+    client, c = cliente
+    ig = InstagramConInsights()
+    pedidos = []
+
+    async def media_insights(media_id):
+        pedidos.append(media_id)
+        return {"reach": 50, "likes": 5}
+    ig.media_insights = media_insights
+    monkeypatch.setattr(c, "instagram", ig)
+    zona = ZoneInfo(c.timezone)
+    monkeypatch.setattr(tools, "now", lambda: datetime(2026, 10, 28, 7, tzinfo=zona))
+    client.portal.call(c.store.set, metricas.CLAVE_INTENTO, "")
+
+    async def publicar():
+        for n, dias in enumerate((5, 40)):  # uno de hace 5 días y otro de hace 40
+            post = await c.store.add_post("panel", [], f"Post {n}", time.time() - dias * 86400)
+            link = f"https://www.instagram.com/p/P{n}/"
+            await c.store.set_post(post, "publicada", permalink=link)
+            await c.store.set(f"media_de:{link}", f"m{n}")
+    client.portal.call(publicar)
+
+    client.portal.call(metricas.tick, c)
+    assert pedidos == ["m0"]  # el de hace 40 días ya no cambia: no se refresca
+    hace = time.time() - 5 * 86400
+    assert client.portal.call(informe.numeros, c, "m0", hace) == {"reach": 50, "likes": 5} and pedidos == ["m0"]
+    # El de hace 40 días nunca se pidió: se pide una vez y desde ahí sale de la base.
+    for _ in range(2):
+        assert client.portal.call(informe.numeros, c, "m1", time.time() - 40 * 86400) == {"reach": 50, "likes": 5}
+    assert pedidos == ["m0", "m1"]

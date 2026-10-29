@@ -78,6 +78,14 @@ PERSONALIDADES = {
                  " sin exagerar."),
                 ("usted", "equilibrada", "nunca")),
 }
+# Reglas que pasan a tu equipo y pueden llevar un mensaje propio al transferir:
+# regla: (campo en kv perfil, a quién se lo dice en el prompt, ejemplo)
+AL_TRANSFERIR = {
+    "quejas": ("msg_quejas", "Antes de pasar una queja a una persona",
+               "Ej. Lamento lo que pasó. Le paso tu caso a alguien del equipo para que lo resuelva contigo."),
+    "enojado": ("msg_enojado", "Antes de pasar a una persona molesta",
+                "Ej. Entiendo tu molestia. Le pido a alguien del equipo que te atienda en un momento."),
+}
 MAX_NOMBRE = 40  # nombre del asistente
 MAX_TOQUE = 500  # "¿Quieres darle un toque más personal?" en Personalidad
 TRATOS = {"tu": ("De tú", "Tuteas a las personas."),
@@ -158,9 +166,10 @@ def tono_prompt(perfil: dict) -> list[str]:
     reglas = [si if activas[k] else no for k, _, _, _, si, no in REGLAS if (si if activas[k] else no)]
     if reglas:
         out += ["", "CÓMO ATIENDES", *(f"- {r}" for r in reglas)]
-    if activas["enojado"] and (aviso := perfil.get("msg_enojado", "").strip()):
-        out += ["Antes de pasar a una persona molesta, dile esto (puedes ajustar las palabras):",
-                f"<mensaje_al_transferir>\n{escape(aviso)}\n</mensaje_al_transferir>"]
+    for k, (campo, cuando, _) in AL_TRANSFERIR.items():
+        if activas[k] and (aviso := perfil.get(campo, "").strip()):
+            out += [f"{cuando}, dile esto (puedes ajustar las palabras):",
+                    f"<mensaje_al_transferir>\n{escape(aviso)}\n</mensaje_al_transferir>"]
     # Lo que escribe el dueño va escapado y entre etiquetas: son datos, no instrucciones nuevas.
     if no_hacer := perfil.get("no_hacer", "").strip():
         out += ["", "LO QUE NO DEBES DECIR NI HACER (además de las reglas base)",
@@ -201,8 +210,8 @@ def _lista(actual: str, perfil: dict, hechos: set[str]) -> str:
     return ('<nav class="as-pasos" aria-label="Pasos"><p class="as-t">Tus pasos</p>' + "".join(items)
             + f'<a class="as-paso{" on" if actual == "resumen" else ""}" href="{_href("resumen")}">'
             '<span class="as-n">★</span><span><b>Resumen</b><small>Revisa y enciéndelo</small></span></a>'
-            f'<div class="as-barra"><i style="width:{listos / len(ORDEN) * 100:.0f}%"></i></div>'
-            f'<small class="as-nota">{listos} de {len(ORDEN)} listos. Puedes volver a cualquier paso cuando'
+            + panel.avance(listos * 100 // len(ORDEN))
+            + f'<small class="as-nota">{listos} de {len(ORDEN)} listos. Puedes volver a cualquier paso cuando'
             " quieras.</small></nav>")
 
 
@@ -214,11 +223,11 @@ def _cabeza(paso: str, titulo: str, bajada: str) -> str:
     return f'<p class="as-num">{antes}</p><h2 class="as-h">{titulo}</h2><p class="as-baj">{bajada}</p>'
 
 
-def _pie(paso: str, siguiente: str = "Siguiente") -> str:
+def _pie(paso: str) -> str:
     i = ORDEN.index(paso)
-    atras = f'<a class="boton secundario" href="{_href(ORDEN[i - 1])}">Atrás</a>' if i else "<span></span>"
-    return (f'<div class="as-pie">{atras}<button class="boton" name="accion" value="siguiente">'
-            f"{siguiente}</button></div>")
+    atras = f'<a class="boton secundario" href="{_href(ORDEN[i - 1])}">← Anterior</a>' if i else ""
+    nombre = PASOS[i + 1][1].lower() if i + 1 < len(ORDEN) else "resumen"
+    return panel.pie_config(atras, f'<button class="boton" name="accion" value="siguiente">Siguiente: {nombre} →</button>')
 
 
 def _radios(nombre: str, opciones: dict, actual: str, pregunta: str, ayuda: str) -> str:
@@ -298,11 +307,11 @@ def _reglas(perfil: dict) -> str:
         filas += (f'<label class="as-fila"><span><b>{titulo}</b><small>{ayuda}</small></span>'
                   f'<input type="checkbox" class="as-sw" name="r_{k}" value="1"{" checked" if activas[k] else ""}>'
                   "</label>")
-        if k == "enojado":  # solo se ve con la regla encendida
-            filas += ('<div class="as-sub">' + _opcional(
-                "msg_enojado", "Mensaje al transferir", "Lo que le dice antes de pasar la conversación a tu equipo.",
-                "Ej. Entiendo tu molestia. Le pido a alguien del equipo que te atienda en un momento.",
-                perfil.get("msg_enojado", ""), MAX_TEXTO) + "</div>")
+        if k in AL_TRANSFERIR:  # solo se ve con la regla encendida
+            campo, _, ejemplo = AL_TRANSFERIR[k]
+            filas += (f'<div class="as-sub as-sub-{k}">' + _opcional(
+                campo, "Mensaje al transferir", "Lo que le dice antes de pasar la conversación a tu equipo.",
+                ejemplo, perfil.get(campo, ""), MAX_TEXTO) + "</div>")
     extra = perfil.get("instrucciones", "")
     return (_cabeza("reglas", "Reglas y límites", "Qué puede hacer por su cuenta y qué no.")
             + f'<div class="as-caja">{filas}</div>'
@@ -326,7 +335,7 @@ def _equipo(c: Cuenta, perfil: dict) -> str:
             + '<div class="as-caja">' + panel.caja("humano", "Cuando alguien pide hablar con una persona, ¿qué le dice?",
                                                    ayuda, perfil.get("humano", ""), filas)
             + "</div>" + f'<div class="as-caja">{ajustes.campos(c)}</div>'
-            + _pie("equipo", "Siguiente: ver resumen"))
+            + _pie("equipo"))
 
 
 async def _resumen(c: Cuenta, perfil: dict) -> str:
@@ -336,8 +345,7 @@ async def _resumen(c: Cuenta, perfil: dict) -> str:
 
     def caja(titulo: str, paso: str, lineas: list[str]) -> str:
         lis = "".join(f"<li>{escape(x)}</li>" for x in lineas if x)
-        return (f'<div class="as-caja as-res"><div class="as-top"><h3>{titulo}</h3>'
-                f'<a class="as-ed" href="{_href(paso)}">Editar</a></div><ul>{lis}</ul></div>')
+        return f'<div class="as-caja as-res">{panel.cab_tarjeta(titulo, _href(paso))}<ul>{lis}</ul></div>'
 
     from . import empresa  # empresa importa panel
     datos_empresa, catalogo = await empresa.de(c), await empresa.productos(c)
@@ -353,9 +361,14 @@ async def _resumen(c: Cuenta, perfil: dict) -> str:
     if c.en_revision:
         boton = f'<p class="ayuda">{panel.REVISION}</p>'
     elif encendido:
-        boton = '<a class="boton" href="/panel/asistente">Ir a tus conversaciones</a>'
+        # Aquí se pausa al asistente completo (para todos los chats); en Conversaciones solo se pausa cada chat.
+        boton = ('<form method="post" action="/panel/estado"><input type="hidden" name="activo" value="0">'
+                 '<input type="hidden" name="volver" value="configura">'
+                 '<button class="boton secundario">Pausar tu asistente</button></form>'
+                 '<a class="boton" href="/panel/asistente">Ir a tus conversaciones</a>')
     else:
         boton = ('<form method="post" action="/panel/estado"><input type="hidden" name="activo" value="1">'
+                 '<input type="hidden" name="volver" value="configura">'
                  '<button class="boton">Encender tu asistente</button></form>')
     faltan = [t for k, t, _ in PASOS if k not in _hechos(perfil)]
     titulo = ("Tu asistente está contestando" if encendido else
@@ -413,7 +426,7 @@ async def pagina(c: Cuenta, paso: str = "", aviso: str = "", nota: str = "", per
                   "Siguiente</button>"
                   f'<input type="hidden" name="paso" value="{paso}">{cuerpo}</form>')
     return panel.pagina(
-        f"<style>{ESTILO}</style>"
+        f"<style>{ESTILO}{panel.COMUN}</style>"
         + await panel.menu_de(c, "asistente", sub="configura")
         + panel.encabezado("Tu asistente · Configura")
         + '<main class="as-main"><div class="contenedor">'
@@ -429,7 +442,7 @@ async def ver(request: Request):
     if not (c := panel.cuenta_de_sesion(request)):
         return panel.entrar()
     q = request.query_params
-    return await pagina(c, q.get("paso", ""), aviso="Guardado." if q.get("ok") == "1" else "")
+    return await pagina(c, q.get("paso", ""), aviso={"1": "Guardado.", "aplicado": "Cambios aplicados."}.get(q.get("ok", ""), ""))
 
 
 def _texto(f: dict, campo: str, maximo: int) -> str:
@@ -468,7 +481,8 @@ async def guardar(request: Request):
                 datos[campo] = f[campo]
     elif paso == "reglas":
         datos["reglas"] = {k: f.get(f"r_{k}") == "1" for k, *_ in REGLAS}
-        datos["msg_enojado"] = _texto(f, "msg_enojado", MAX_TEXTO)
+        for campo, *_ in AL_TRANSFERIR.values():
+            datos[campo] = _texto(f, campo, MAX_TEXTO)
         datos["no_hacer"] = _texto(f, "no_hacer", MAX_TEXTO)
         datos["pasar_equipo"] = _texto(f, "pasar_equipo", MAX_TEXTO)
         datos["instrucciones"] = _texto(f, "instrucciones", panel.MAX_INSTRUCCIONES)
@@ -477,7 +491,10 @@ async def guardar(request: Request):
     datos["pasos"] = sorted(set(datos.get("pasos") or []) | {paso})
     nombre = await panel.usuario(c)
     prompt = panel.generar(nombre, datos, await panel.negocio_de_empresa(c))
-    if (paso in ESCRITOS or (paso == "personalidad" and (datos["toque"] or datos["nombre_asistente"]))) and (motivo := await panel.revisar_instrucciones(c, prompt)):
+    destino = c.prompt_destino()
+    igual = destino.is_file() and destino.read_text(encoding="utf-8") == prompt  # ya se revisó al guardarlo
+    if (not igual and (paso in ESCRITOS or (paso == "personalidad" and (datos["toque"] or datos["nombre_asistente"])))
+            and (motivo := await panel.revisar_instrucciones(c, prompt))):
         log.warning("@%s: no se guardó %s: %s", nombre, paso, motivo)
         return await pagina(c, paso, nota=f"No se guardó: {motivo} Corrígelo y vuelve a intentar.", perfil=datos)
     if paso == "equipo":
@@ -488,6 +505,8 @@ async def guardar(request: Request):
     c.prompt_destino().write_text(prompt, encoding="utf-8")
     await c.store.set("asistente_listo", "1")
     log.info("@%s guardó %s de su asistente desde el panel", nombre, paso)
+    if f.get("accion") == "aplicar":  # guarda y se queda en el paso
+        return RedirectResponse(f"{_href(paso)}&ok=aplicado", status_code=303)
     siguiente = ORDEN[ORDEN.index(paso) + 1] if paso != ORDEN[-1] else "resumen"
     return RedirectResponse(f"{_href(siguiente)}&ok=1", status_code=303)
 
@@ -550,7 +569,7 @@ fieldset.as-caja legend{float:left;width:100%;padding:0;font-weight:600;font-siz
 .as-optc input{width:1.15rem;height:1.15rem;flex:none;margin:0;accent-color:var(--acento)}
 .as-optb{display:none;margin-top:.7rem}
 .as-sub{padding:0 0 .9rem}
-.as-caja:has(input[name=r_enojado]:not(:checked)) .as-sub{display:none}
+.as-caja:has(input[name=r_quejas]:not(:checked)) .as-sub-quejas,.as-caja:has(input[name=r_enojado]:not(:checked)) .as-sub-enojado{display:none}
 .as-nombre>.as-opt{margin-top:1rem;padding-top:1rem;border-top:1px solid var(--linea-oscura)}
 .as-opt:has(.as-optc input:checked) .as-optb{display:block}
 .as-lbl{display:block;margin-bottom:.35rem;font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--gris)}
@@ -613,4 +632,5 @@ form:has(#emojis-nunca:checked) .v-emoji{display:none}form:has(#emojis-seguido:c
 .as-paso>span:last-child{min-width:0}
 .as-paso small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media(max-width:900px){.as-paso{flex:none}}
+.as-pasos{min-height:5.25rem;box-sizing:border-box}
 """

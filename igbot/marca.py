@@ -170,23 +170,25 @@ def menu_pasos(actual: str, hechos_: set[str]) -> str:
         items += (f'<a href="{BASE}?paso={i}" class="{clase}"><b>{marca}</b>'
                   f'<span>{nombre}<small>{desc}</small></span></a>')
     clase = "actual" if actual == RESUMEN else ""
-    items += (f'<div class="sep"></div><a href="{BASE}?paso={RESUMEN}" class="{clase}"><b>★</b>'
+    items += (f'<a href="{BASE}?paso={RESUMEN}" class="{clase}"><b>★</b>'
               "<span>Resumen<small>Revisa y edita</small></span></a>")
+    avance = len(hechos_ & set(CLAVES)) * 100 // len(CLAVES)
     return ('<details class="wiz-pasos" open><summary><span class="hamb"><i></i><i></i><i></i></span>Tu marca</summary>'
-            f'<nav>{items}</nav><div class="mrc-tip"><b>Tú eliges, la IA diseña</b>Entra a cualquier paso cuando'
+            f'<nav>{items}</nav>{panel.avance(avance)}<div class="mrc-tip"><b>Tú eliges, la IA diseña</b>Entra a cualquier paso cuando'
             " quieras. Lo que eliges aquí se aplica a todas tus campañas.</div></details>")
 
 
 def cabeza(i: int) -> str:
     _, _, _, titulo, bajada = PASOS[i - 1]
     return (f'<div class="wiz-cab"><p class="ante">Paso {i} de {len(PASOS)}</p><h2>{titulo}</h2>'
-            f'<p class="baj">{bajada}</p></div><div class="wiz-barra"><i style="width:{i * 100 // len(PASOS)}%"></i></div>')
+            f'<p class="baj">{bajada}</p></div>')
 
 
-def pie(i: int, siguiente: str = "Guardar y continuar →") -> str:
-    anterior = f'<a class="boton secundario" href="{BASE}?paso={i - 1}">← Anterior</a> ' if i > 1 else ""
-    return (f'<div class="wiz-pie"><span>Puedes cambiarlo cuando quieras.</span><span class="mrc-botones">{anterior}'
-            f'<button class="boton mrc-sigue" name="accion" value="guardar">{siguiente}</button></span></div>')
+def pie(i: int) -> str:
+    anterior = f'<a class="boton secundario" href="{BASE}?paso={i - 1}">← Anterior</a>' if i > 1 else ""
+    nombre = PASOS[i][1].lower() if i < len(PASOS) else "resumen"
+    return panel.pie_config(anterior, f'<button class="boton mrc-sigue" name="accion" value="guardar">'
+                                      f"Siguiente: {nombre} →</button>", "Puedes cambiarlo cuando quieras.")
 
 
 def paso_estilo(marca: dict) -> str:
@@ -333,8 +335,8 @@ def resumen(c: Cuenta, marca: dict) -> str:
         k = CLAVES[i - 1]
         boton = "Editar" if k in hechos_ else "Completar"
         pendiente = "" if k in hechos_ else '<p class="ayuda">Aún no lo completas.</p>'
-        return (f'<div class="wiz-res mrc-res{" ancho" if ancho else ""}"><h4>{i:02d} · {titulo}</h4>'
-                f'<p>{desc}</p><a href="{BASE}?paso={i}">{boton}</a>{pendiente or cuerpo}</div>')
+        return (f'<div class="wiz-res mrc-res{" ancho" if ancho else ""}">'
+                f'{panel.cab_tarjeta(titulo, f"{BASE}?paso={i}", boton)}<p>{desc}</p>{pendiente or cuerpo}</div>')
 
     estilos = "".join(
         f'<div class="mrc-fila"><span class="num">{n}</span>{imagen_tarjeta(k, TARJETA_ESTILO[k][2])}'
@@ -357,7 +359,7 @@ def resumen(c: Cuenta, marca: dict) -> str:
     return (
         '<div class="wiz-cab"><p class="ante">Resumen</p><h2>Así se verá tu contenido</h2>'
         '<p class="baj">Esta es tu identidad visual. La usamos cada vez que creamos contenido para ti. Toca Editar para'
-        " cambiar cualquier parte.</p></div><div class=\"wiz-barra\"><i style=\"width:100%\"></i></div>"
+        " cambiar cualquier parte.</p></div>"
         '<div class="wiz-resumen">'
         + caja(1, "Estilo visual", "Tus estilos, en orden de preferencia.", estilos)
         + caja(2, "Colores", escape(nombre_colores), franja)
@@ -385,13 +387,11 @@ async def pagina_marca(c: Cuenta, paso: str, marca: dict | None = None, aviso: s
                      # Enter en un campo de texto guarda y sigue (el primer botón del formulario).
                      '<button class="oculto" name="accion" value="guardar" tabindex="-1" aria-hidden="true">Guardar</button>'
                      + cabeza(i) + hacer()
-                     # Ya completa (entró a cambiar algo desde el resumen): guarda y vuelve al resumen.
-                     + pie(i, "Guardar cambios" if completa(marca) else
-                           "Ver resumen →" if i == len(PASOS) else "Guardar y continuar →") + "</form>")
+                     + pie(i) + "</form>")
     # El aviso de lo que falta va dentro del paso, para que los pasos queden a la altura de las demás páginas.
     falta = await panel.pendiente(c, "marca")
     cuerpo = f'<div class="wiz mrc">{menu_pasos(actual, hechos_)}<div class="wiz-main">{falta}{contenido}</div></div>'
-    # Tu marca es de la cuenta (menú de perfil, abajo), no una sección de Contenido.
+    # Tu marca es de la cuenta (Configuración, abajo en el menú), no una sección de Contenido.
     return panel.pagina(
         await panel.menu_de(c, "cuenta", sub="marca")
         + panel.encabezado("Tu cuenta · Tu marca")
@@ -467,8 +467,7 @@ async def guardar_marca(request: Request):
         por = (f"para un negocio de {giro.lower()}" if giro in RECOMENDADOS else
                "(llena el giro en tu Perfil de empresa para una recomendación a tu medida)")
         return await pagina_marca(c, "1", {**antes, "estilos": elegidos},
-                                  f"Te recomendamos {nombres} {por}. Cámbialos si quieres y pulsa"
-                                  f" {'Guardar cambios' if completa(antes) else 'Guardar y continuar'}.")
+                                  f"Te recomendamos {nombres} {por}. Cámbialos si quieres y pulsa Aplicar.")
     datos, aviso = guardar_paso(f, antes, paso)
     if aviso:
         return await pagina_marca(c, str(i), aviso=aviso)
@@ -489,8 +488,8 @@ async def guardar_marca(request: Request):
 
     await c.store.set("marca", json.dumps(datos, ensure_ascii=False))
     log.info("@%s guardó Tu marca: %s", await panel.usuario(c), paso)
-    if accion != "guardar" or aviso:  # subió o quitó el logo: se queda en el paso para verlo
+    if accion == "aplicar" and not aviso:
+        aviso = "Cambios aplicados."
+    if accion != "guardar" or aviso:  # Aplicar, o subió o quitó el logo: se queda en el paso para verlo
         return await pagina_marca(c, str(i), datos, aviso)
-    if completa(antes):
-        return RedirectResponse(f"{BASE}?paso={RESUMEN}&guardado=1", status_code=303)
     return RedirectResponse(f"{BASE}?paso={i + 1 if i < len(PASOS) else RESUMEN}", status_code=303)

@@ -80,7 +80,8 @@ def test_duracion():
 
 def test_barras_sin_datos_no_truenan():
     svg = resultados.barras([0, 0, 0], ["a", "", "c"], ["1", "2", "3"], descripcion="vacía")
-    assert svg.count("<rect") == 3 and 'aria-label="vacía"' in svg and svg.count("<span>") == 3
+    assert svg.count("<rect") == 3 and 'aria-label="vacía"' in svg and svg.count('class="mh') == 3
+    assert svg.split('class="ejex"')[1].count("<span>") == 3 and "<title>" not in svg
 
 
 @pytest.fixture
@@ -153,7 +154,7 @@ def test_inicio_del_panel(cliente, monkeypatch):
     # Lo omite: paso 2, una sola vez (Básico: un solo camino y seguir explorando).
     r = client.post("/panel/bienvenida", headers=ORIGEN, data={"accion": "omitir"})
     assert "¿Por dónde seguimos?" in r.text and "Tu plan Asistente virtual" in r.text and "Tu marca" not in r.text
-    assert "te espera en el menú de tu cuenta" in r.text and "Seguir explorando" in r.text
+    assert "te espera en Configuración" in r.text and "Seguir explorando" in r.text
     assert "Te falta llenar tu <b>Perfil de empresa</b>" in client.get("/panel/asistente").text
     lista["empresa"] = True
     assert "Te falta llenar tu" not in client.get("/panel/asistente").text

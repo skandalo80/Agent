@@ -1,4 +1,4 @@
-"""Errores inesperados, doble clic en trabajos largos y texto de clientes dentro de los prompts."""
+"""Errores inesperados y texto de clientes dentro de los prompts."""
 import os
 
 os.environ.update(IG_VERIFY_TOKEN="vt", IG_APP_SECRET="secreto", IG_ACCESS_TOKEN="tok", DB_PATH=":memory:")
@@ -6,7 +6,7 @@ os.environ.update(IG_VERIFY_TOKEN="vt", IG_APP_SECRET="secreto", IG_ACCESS_TOKEN
 from fastapi.testclient import TestClient  # noqa: E402
 
 import app as bot  # noqa: E402
-from igbot import agent, errores, panel  # noqa: E402
+from igbot import agent, errores  # noqa: E402
 
 
 def test_el_texto_del_cliente_no_cierra_etiquetas():
@@ -51,15 +51,3 @@ def test_tope_de_correos_de_error(monkeypatch):
     assert not errores.toca_avisar(("/panel/a", "ValueError"), 2000)  # dentro de la hora
     assert errores.toca_avisar(("/panel/a", "ValueError"), 1000 + errores.REPETIR_CADA)
     assert errores.toca_avisar(("/panel/b", "ValueError"), 1000 + errores.REPETIR_CADA)
-
-
-def test_un_trabajo_largo_no_corre_dos_veces(monkeypatch):
-    monkeypatch.setattr(panel, "_en_curso", {})
-    c = bot.principal
-    assert panel.empezar_trabajo(c, "generar")
-    assert not panel.empezar_trabajo(c, "generar")  # doble clic
-    assert panel.empezar_trabajo(c, "otra cosa")
-    panel.terminar_trabajo(c, "generar")
-    assert panel.empezar_trabajo(c, "generar")
-    panel._en_curso[(c.slug, "viejo")] = 0  # se quedó marcado hace mucho: se libera solo
-    assert panel.empezar_trabajo(c, "viejo")

@@ -30,8 +30,10 @@ import hashlib
 import hmac
 import json
 import logging
+import math
 import os
 import re
+import secrets
 import time
 from collections.abc import Awaitable, Callable
 from html import escape
@@ -316,7 +318,7 @@ html.menu-plegado .lateral .logo-largo{display:none}html.menu-plegado .lateral .
 .lat-item.on{color:var(--naranja-t);background:rgba(255,138,61,.12);font-weight:600;box-shadow:inset 3px 0 0 var(--acento)}
 .lat-pie{border-top:1px solid #34363B;padding-top:.75rem;margin:0}
 /* Abajo, antes de tu cuenta: los pasos iniciales (un anillo con el avance) y Ayuda. */
-.lat-abajo{display:flex;flex-direction:column;gap:.2rem;padding:.6rem 0 .5rem}
+.lat-etiqueta{font-size:.72rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6E7077;padding:.75rem .9rem .3rem;border-top:1px solid #34363B;margin-top:.2rem}html.menu-plegado .lat-etiqueta{padding:.3rem 0 0}.lat-abajo [data-abrir-skandi]{border-top:1px solid #34363B;border-radius:0 0 .85rem .85rem;margin-top:.35rem;padding-top:1.05rem}.lat-abajo{display:flex;flex-direction:column;gap:.2rem;padding:.6rem 0 .5rem}
 .pasos-ini>summary{background:rgba(255,138,61,.08);border:1px solid rgba(255,138,61,.22);margin-bottom:.35rem;padding:.6rem .75rem}
 .pasos-ini>summary:hover{background:rgba(255,138,61,.14)}
 .pasos-ini .txt{color:var(--claro);font-weight:600;font-size:.95rem}
@@ -583,6 +585,8 @@ input[type=file]{font:inherit;font-size:.9rem;margin-top:.75rem;max-width:100%}
 .ideas{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin:.6rem 0 .2rem}.ideas .ayuda{margin:0}.ideas input[type=file]{width:auto;max-width:100%}
 .boton[disabled]{opacity:.45;cursor:not-allowed}
 .generando{display:flex;gap:1rem;align-items:center}
+/* La espera de un trabajo largo: porcentaje y barra lima (panel.js la mueve). */
+#generando{padding:var(--caja-pad);border-radius:var(--caja-radio)}.trabajo-cab{display:flex;justify-content:space-between;align-items:baseline;gap:var(--hueco)}.trabajo-cab h2{margin:0;font-size:var(--t-tarjeta);font-weight:var(--peso-tarjeta)}.pct-trabajo{font-size:var(--t-tarjeta);font-weight:var(--peso-tarjeta);color:var(--acento);font-variant-numeric:tabular-nums}.avance-trabajo{height:.5rem;margin:1rem 0 .9rem;border-radius:999px;background:#2E3035;overflow:hidden;box-shadow:inset 2px 2px 4px rgba(0,0,0,.4)}.avance-trabajo i{display:block;height:100%;border-radius:999px;background:var(--neon)}.paso-trabajo{margin:0 0 .35rem;font-size:var(--t-texto-tarjeta);color:var(--t-color,#F5F5F4)}#generando .ayuda{margin:0;font-size:var(--t-texto-tarjeta)}
 .extra{border:1px solid var(--acento);background:rgba(255,138,61,.12)}
 .kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(10.5rem,1fr));gap:.75rem;margin-bottom:1.25rem}
 .kpi{background:var(--blanco);border-radius:1.25rem;padding:1.25rem 1.4rem}
@@ -600,7 +604,7 @@ input[type=file]{font:inherit;font-size:.9rem;margin-top:.75rem;max-width:100%}
 label.check input[type=email]{flex:1;max-width:22rem;margin:0}
 .si-fijo{display:none;margin-top:.75rem}form:has(input[name=fuera][value=fijo]:checked) .si-fijo{display:block}
 .semaforo{width:.65rem;height:.65rem;border-radius:50%;flex:none;margin:0 .4rem;background:#C6FA2C}
-.semaforo.sem-aviso{background:#ff9f0a}.semaforo.sem-mal{background:#ff453a}
+.semaforo.sem-aviso{background:#ff9f0a}.semaforo.sem-mal{background:#ff453a}.semaforo.sem-no{background:var(--linea-oscura)}
 .caminos{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem}
 .camino{background:var(--blanco);border-radius:1.5rem;padding:2rem;display:flex;flex-direction:column;border:2px solid transparent}
 .camino h2{margin:.25rem 0 .5rem}.camino ul{margin:1rem 0 1.5rem;padding:0;list-style:none;color:#E4E4E2}
@@ -1053,8 +1057,6 @@ img.mrc-logo-mini{background:#fff}
 .wiz-abre input{width:1.15rem;height:1.15rem;margin:0;accent-color:var(--acento)}
 .wiz-bloque:has(>.wiz-abre input:checked)>.wiz-si.abre{display:block}
 .ideas-cam:has(input[name=funciona]:checked) .wiz-si.mezcla{display:block}
-.listo-cam{display:inline-flex;width:fit-content;gap:.45rem;align-items:center;padding:.35rem .85rem;border:1px solid rgba(255,255,255,.2);border-radius:2rem;font-size:.82rem;color:#E4E4E2;margin-top:.9rem}
-.listo-cam i{width:.45rem;height:.45rem;border-radius:50%;background:#C6FA2C}
 .bloqueo-cam{max-width:52rem}.bloq-cam{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1.5rem}
 .bloq-cam>div{border:1px solid var(--linea-clara);border-radius:1rem;padding:1.25rem;background:var(--suave,var(--blanco))}
 .bloq-cam b{display:block;font-size:1.05rem}.bloq-cam small{display:block;color:var(--texto2,#A8A8AE);margin:.3rem 0 1rem}
@@ -1074,6 +1076,7 @@ img.mrc-logo-mini{background:#fff}
 .modal-cam .top h2{margin:.45rem 0 0;font-size:1.35rem}.modal-cam .top p{margin:.15rem 0 0;color:var(--gris);font-size:.9rem}
 .modal-cam .etqs-cam{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap}
 .modal-cam .x{font-size:1.7rem;text-decoration:none;color:var(--gris);line-height:1}
+.modal-cam .cierre{display:flex;align-items:center;gap:1.1rem;flex:none}.modal-cam .ir-cam{margin:0;white-space:nowrap}
 .modal-cam .cuerpo{display:grid;grid-template-columns:18rem minmax(0,1fr);gap:1.5rem;padding:1.4rem 1.6rem}
 .modal-cam .img-modal{display:block;width:100%;aspect-ratio:4/5;object-fit:cover;border-radius:1rem;background:var(--claro)}
 .modal-cam .img-modal.vacia{border:1px dashed #46484F;display:grid;place-content:center;text-align:center;color:var(--gris);font-size:.95rem;padding:1rem}
@@ -1103,9 +1106,14 @@ img.mrc-logo-mini{background:#fff}
 .camp .acc{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}.camp .acc .boton{padding:.4rem .95rem;font-size:.88rem}
 .camp .sel{position:absolute;top:1.1rem;right:1rem;width:1.1rem;height:1.1rem;accent-color:var(--acento-claro);margin:0}
 .rapida-cam .wiz-campos.dos-r{grid-template-columns:repeat(2,minmax(0,14rem))}.rapida-extra{margin:1.2rem 0 0}.rapida-extra textarea{width:100%;box-sizing:border-box;margin-top:.6rem;font:inherit;padding:.65rem .8rem;border:1px solid var(--linea-clara);border-radius:.8rem;background:var(--claro);color:var(--negro)}.rapida-cam .wiz-pie .boton svg,.boton-ia svg{vertical-align:-3px;margin-right:.2rem}.botones-nueva{display:flex;gap:.6rem;flex-wrap:wrap}
-.boton.peligro{background:#1F2024;color:var(--neon);box-shadow:5px 7px 14px rgba(12,11,16,.5),inset 2px 3px 4px rgba(255,255,255,.08)}.boton.peligro:hover{background:#2E3035;color:var(--neon)}.volver-cam{display:inline-block;margin:0 0 .9rem;color:var(--neon);text-decoration:underline;text-underline-offset:3px;font-size:.95rem}.volver-cam:hover{opacity:.8}.botones-cab{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;justify-content:flex-end}.menu-desc{position:relative}.menu-desc summary{list-style:none;cursor:pointer}.menu-desc summary::-webkit-details-marker{display:none}.menu-desc>div{position:absolute;right:0;top:calc(100% + .4rem);z-index:20;min-width:12rem;display:flex;flex-direction:column;padding:.4rem;border-radius:1rem;background:#1F2024;box-shadow:var(--clay-sombra)}.menu-desc>div a{padding:.6rem .8rem;border-radius:.7rem;color:#F5F5F4;text-decoration:none;font-size:.92rem}.menu-desc>div a:hover{background:rgba(255,255,255,.06)}
-.camp .borrar{position:absolute;top:.9rem;right:.9rem;display:flex;padding:.35rem;border-radius:.6rem;color:var(--gris)}.camp .borrar:hover{color:var(--neon);background:rgba(198,250,44,.14)}.camp .borrar.con-sel{right:2.6rem}.camp:has(.borrar) h3{padding-right:2.2rem}.camp:has(.con-sel) h3{padding-right:3.8rem}
+.boton.peligro{background:#1F2024;color:var(--acento);box-shadow:5px 7px 14px rgba(12,11,16,.5),inset 2px 3px 4px rgba(255,255,255,.08)}.boton.peligro:hover{background:#2E3035;color:var(--acento)}.barra-camps .botones-nueva{margin-left:auto}.cal-sw.tabs-cam{gap:.2rem;padding:.25rem;margin:0}.cal-sw.tabs-cam a{display:block;padding:.35rem .8rem;border:0;margin:0;border-radius:.65rem;font-size:.85rem;font-weight:600}.cal-sw.tabs-cam a.on{background:var(--acento);color:var(--tinta)}.cal-sw.tabs-cam a:not(.on){background:none;color:#A8A8AE}.cal-sw.tabs-cam small{background:none;padding:0;margin-left:.35rem;font-size:inherit;color:inherit;opacity:.75}
+/* Campañas: rellenos, huecos y letras de ajustes.css, como Resultados y Tu asistente. */
+.pag-camp>.tarjeta:not(.cal){padding:var(--caja-pad);border-radius:var(--caja-radio)}.pag-camp>.tarjeta{margin-bottom:var(--hueco)}.pag-camp .titulo-sec h2{font-size:var(--t-tarjeta);font-weight:var(--peso-tarjeta);line-height:1.3;margin:0}.pag-camp>.tarjeta>.ayuda,.pag-camp>.plegable>.ayuda{font-size:var(--t-texto-tarjeta);color:var(--texto2);line-height:1.55;margin:.4rem 0 .8rem}.cab-camp{display:flex;justify-content:space-between;align-items:center;gap:var(--hueco);flex-wrap:wrap}.cab-camp h2{font-size:var(--t-titulo);font-weight:var(--peso-titulo);letter-spacing:-.02em;line-height:1.2;margin:0 0 .4rem}.cab-camp .ayuda{font-size:var(--t-bajada);color:var(--texto2);line-height:1.55;margin:0}.cab-camp .prueba-cam{margin:.6rem 0 0}.cab-camp .volver-cam{margin:0 0 .6rem}
+.volver-cam{display:inline-block;margin:0 0 .9rem;color:var(--neon);text-decoration:underline;text-underline-offset:3px;font-size:var(--t-texto-tarjeta)}.volver-cam:hover{opacity:.8}.botones-cab{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;justify-content:flex-end}.menu-desc{position:relative}.menu-desc summary{list-style:none;cursor:pointer}.menu-desc summary::-webkit-details-marker{display:none}.menu-desc>div{position:absolute;right:0;top:calc(100% + .4rem);z-index:20;min-width:12rem;display:flex;flex-direction:column;padding:.4rem;border-radius:1rem;background:#1F2024;box-shadow:var(--clay-sombra)}.menu-desc>div a{padding:.6rem .8rem;border-radius:.7rem;color:#F5F5F4;text-decoration:none;font-size:.92rem}.menu-desc>div a:hover{background:rgba(255,255,255,.06)}
+.camp .borrar{position:absolute;top:.9rem;right:.9rem;display:flex;padding:.35rem;border-radius:.6rem;color:var(--gris)}.camp .borrar:hover{color:var(--acento);background:rgba(243,154,54,.14)}.camp .borrar.con-sel{right:2.6rem}.camp:has(.borrar) h3{padding-right:2.2rem}.camp:has(.con-sel) h3{padding-right:3.8rem}
 .camp.apagada{opacity:.6}
+/* La lista de campañas: una por fila a lo ancho, en tres columnas (medidas de ajustes.css). */
+.camps{display:flex;flex-direction:column;gap:var(--hueco);margin-top:0}.camp{display:grid;grid-template-columns:minmax(14rem,.9fr) minmax(0,2fr) minmax(12rem,.75fr);gap:1.5rem;align-items:start;padding:var(--caja-pad);border:0;border-radius:var(--caja-radio);background:var(--caja-fondo);box-shadow:6px 9px 18px rgba(12,11,16,.45),var(--clay-luz)}.camp h3{font-size:var(--t-tarjeta);font-weight:var(--peso-tarjeta);line-height:1.3;margin:0 0 .3rem}.camp .f{display:block;font-size:var(--t-texto-tarjeta);color:var(--texto2)}.camp .f b{color:var(--t-color);font-weight:600}.camp .obj{margin:.7rem 0 0}.camp .prog{height:.3rem;border-radius:999px;background:#2E3035;margin:1rem 0 .2rem;overflow:hidden}.camp .prog i{display:block;height:100%;border-radius:999px;background:var(--neon)}.camp .puntos{display:flex;flex-wrap:wrap;gap:.35rem .9rem;margin:.55rem 0 0;font-size:.8rem;color:var(--texto2)}.camp .puntos i{display:inline-block;width:.5rem;height:.5rem;border-radius:50%;margin-right:.35rem;vertical-align:1px}.camp .e-pub{background:var(--neon)}.camp .e-prog{background:var(--acento)}.camp .e-bor,.camp .e-sin{background:#A8A8AE}.camp .e-fallo{background:#FF8A78}.camp .hora-est{display:flex;align-items:center;flex-wrap:wrap;gap:.1rem .35rem;min-width:0;white-space:nowrap}.camp .hora-est small{display:flex;align-items:center;gap:.25rem;min-width:0;font-size:.72rem;color:var(--texto2)}.camp .hora-est i{flex:none;width:.45rem;height:.45rem;border-radius:50%}.camp .acc{margin-top:1.1rem}.camp .lbl{display:block;font-size:var(--t-ante);font-weight:var(--peso-ante);letter-spacing:var(--espaciado-ante);text-transform:uppercase;color:var(--texto2);margin:0 0 .75rem}.camp:has(.borrar) .col-c .lbl{padding-right:2.2rem}.camp:has(.borrar) h3{padding-right:0}.camp .prox{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.5rem}.camp .pp{display:flex;flex-direction:column;gap:.15rem;min-width:0;padding:.45rem;border-radius:.9rem;background:#24252A;color:var(--texto2);font-size:.78rem;text-decoration:none}a.pp:hover{background:#2E3035}.camp .col-b .pp{display:inline-flex;width:calc(25% - .45rem);margin:0 .6rem .6rem 0;vertical-align:top}.camp .col-b .prox .pp{width:auto;margin:0}.camp .pp .mini{display:grid;place-items:center;width:100%;aspect-ratio:4/5;object-fit:cover;border-radius:.6rem;margin:0 0 .35rem;background:#2E3035;font-size:.7rem;color:#85858C}.camp .mini.sin{background:repeating-linear-gradient(135deg,#2A2B30 0 8px,#24252A 8px 16px)}.camp .pp b{color:var(--t-color);font-size:.82rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.descarga-cam{display:flex;gap:.8rem;align-items:center;flex-wrap:wrap;margin:var(--hueco) 0}.descarga-cam .ayuda{margin:0;flex:1 1 20rem}.camp .prox .pp>span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.camp .pp em{font-style:normal;font-weight:600;color:var(--acento)}.camp .mets{grid-template-columns:repeat(2,minmax(0,1fr));gap:.9rem .6rem;padding:0;border:0}.camp .mets b{display:block;font-size:1.25rem;font-weight:700;color:var(--t-color)}.camp .mets span{font-size:.78rem;color:var(--texto2)}.camp .mejor{display:flex;gap:.7rem;align-items:center;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--linea-clara);font-size:.8rem;color:var(--texto2)}.camp .mejor .mini{width:2.8rem;aspect-ratio:4/5;object-fit:cover;border-radius:.5rem;flex:none;background:#2E3035;font-size:0}.camp .mejor b{display:block;color:var(--t-color);font-size:.85rem}.camp .nada{margin:0;font-size:var(--t-texto-tarjeta);color:var(--texto2)}@media(min-width:1101px) and (max-width:1700px){.camp .prox{grid-template-columns:repeat(3,minmax(0,1fr))}.camp .prox .pp:nth-child(4){display:none}}@media(max-width:1100px){.camp{grid-template-columns:1fr 1fr}.camp .col-b{grid-column:1/-1;grid-row:2}}@media(max-width:640px){.camp{grid-template-columns:1fr}.camp .col-b{grid-row:auto}.camp .prox{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .filtros-cam{display:flex;flex-wrap:wrap;align-items:flex-end;gap:.75rem;margin-top:.5rem;padding:1rem;border-radius:1rem;background:var(--suave);border:1px solid var(--linea-clara)}
 .filtros-cam label{font-size:.8rem;font-weight:600;margin:0 0 .25rem;display:block}
 .filtros-cam input[type=date]{font:inherit;padding:.45rem .6rem;border:1px solid var(--linea-clara);border-radius:.7rem}
@@ -1178,7 +1186,6 @@ input[type=text],input[type=search],textarea,select,.inbox input[type=search],.e
 .estado-mini{display:flex;align-items:center;gap:.75rem;font-size:.9rem;color:var(--gris)}
 .estado-mini .luz{margin-right:0}.estado-mini form{margin:0}
 .der-cam{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;justify-content:flex-end}
-.der-cam .listo-cam{margin:0}
 /* Post o historia: en las tarjetas de la campaña y en su ventana (PR de historias). La historia en naranja. */
 .medio-cam{align-self:flex-start;font-size:.68rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:.12rem .5rem;border-radius:999px;background:#2E3035;color:#F5F5F4}
 .medio-cam.m-historia{background:rgba(255,138,61,.16);color:var(--naranja-t)}
@@ -1208,7 +1215,6 @@ input[type=text],input[type=search],textarea,select,.inbox input[type=search],.e
 .met-eje{padding-left:2rem}
 .met-linea .guia{stroke:var(--linea-clara)}.met-linea .area{fill:rgba(255,138,61,.12)}
 .met-linea .trazo{fill:none;stroke:var(--acento);stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}
-.met-linea .zona{fill:transparent}.met-linea .zona:hover{fill:rgba(255,255,255,.05)}
 .met-dona{display:flex;align-items:center;justify-content:center;gap:1.75rem;flex-wrap:wrap;margin:auto 0}
 .met-dona .aro{position:relative;width:11rem;height:11rem}
 .met-dona svg{width:100%;height:100%;transform:rotate(-90deg)}
@@ -1268,6 +1274,90 @@ h1,h2,h3{text-wrap:balance}
 .pp-grid .pp-foto{aspect-ratio:1}
 .pp-vs{margin-left:.5rem;background:rgba(243,154,54,.14);color:var(--naranja-t)!important;border-radius:999px;padding:.15rem .6rem;font-weight:700}
 @media(max-width:700px){.pp-grid{grid-template-columns:1fr 1fr;gap:.6rem}.pp-grid .pp-cuerpo{padding:.75rem}.pp-grid .pp-nums{grid-template-columns:1fr 1fr}.pp-grid .pp-texto{display:none}.pp-grid .pp-tasa small{display:none}.pp-grid .pp-nums span{font-size:.68rem}.pp-tasa{flex-wrap:wrap}.res-posts .met-cab{flex-direction:column;gap:.2rem}.pp.mejor{flex-direction:column}.pp.mejor .pp-foto{width:100%}.pp.mejor .pp-nums{grid-template-columns:repeat(3,1fr)}}
+/* Configuración (asistente, marca y empresa): la barra de pasos mide lo mismo en las tres páginas. */
+.wiz.mrc>.wiz-pasos{min-height:5.25rem;box-sizing:border-box}
+/* Gráficas de Resultados: al pasar el cursor, un puntito sobre la línea (o la barra) y la etiqueta
+   con el valor dentro de la gráfica. Columnas HTML encima del SVG (metricas.puntos_hover). */
+.met-graf.barras{position:relative}
+.met-hover{position:absolute;inset:0 0 0 2rem;display:flex}
+.met-graf.barras .met-hover{left:0}
+.mh{flex:1;position:relative;cursor:default}
+.mh::before{content:"";position:absolute;left:50%;top:var(--y);bottom:0;border-left:1px dashed rgba(247,245,250,.22);opacity:0;transition:opacity .12s}
+.mh i{position:absolute;left:50%;top:var(--y);width:.75rem;height:.75rem;margin:-.375rem 0 0 -.375rem;border-radius:50%;background:var(--acento);box-shadow:0 0 0 3px #302D3A,0 0 0 5px rgba(243,154,54,.35);opacity:0;transition:opacity .12s}
+.mh span{position:absolute;left:50%;top:var(--y);z-index:3;transform:translate(-50%,calc(-100% - .8rem));background:#1E1C26;border:1px solid rgba(243,154,54,.35);border-radius:.7rem;padding:.4rem .7rem;white-space:nowrap;font-size:.8rem;line-height:1.3;color:var(--negro);opacity:0;pointer-events:none;box-shadow:0 8px 20px rgba(0,0,0,.35);transition:opacity .12s}
+.mh span b{font-weight:800;color:var(--naranja-t)}
+.mh span small{display:block;color:var(--gris);font-size:.72rem}
+.mh.izq span{left:0;transform:translate(0,calc(-100% - .8rem))}.mh.der span{left:auto;right:0;transform:translate(0,calc(-100% - .8rem))}
+.mh.abajo span{transform:translate(-50%,.8rem)}.mh.izq.abajo span,.mh.der.abajo span{transform:translate(0,.8rem)}
+.met-graf.barras .mh.abajo span,.met-graf.barras .mh.izq.abajo span{left:50%;right:auto;transform:translate(1rem,-.3rem)}
+.met-graf.barras .mh.der.abajo span{transform:translate(calc(-100% - 1rem),-.3rem)}
+.mh:hover::before,.mh:hover i,.mh:hover span{opacity:1}
+.met-graf.barras .mh::before{display:none}
+"""
+
+# Los tamaños (letras, rellenos, huecos, esquinas) salen de igbot/ajustes.css: se cambian ahí y cambian
+# en todo el panel. La web tiene los suyos en web/ajustes.css.
+AJUSTES = (Path(__file__).resolve().parent / "ajustes.css").read_text(encoding="utf-8")
+
+# Un solo estilo para todo el panel. Va al final de todo (también después del CSS propio de Tu asistente y
+# Tu empresa), así manda sobre las reglas viejas de cada página: antetítulo, título, bajada, tarjetas,
+# cabecera de tarjeta con Editar, rejilla del resumen y la barra de avance bajo los pasos.
+COMUN = AJUSTES + """
+:root{--caja-fondo:#1B1C1F;--t-color:#F5F5F4}
+/* Antetítulo: chico, en mayúsculas y naranja, en todas las páginas. */
+:is(.antetitulo,.wiz-cab .ante,.as-num,.cab-paso .antetitulo,.camino>.num){display:block;font-size:var(--t-ante);font-weight:var(--peso-ante);letter-spacing:var(--espaciado-ante);text-transform:uppercase;color:var(--acento);line-height:1.4;margin:0 0 .5rem}
+.titulo-fila .antetitulo{margin:0}
+/* Título del paso o de la página y su bajada. */
+:is(.wiz-cab h2,.as-cont .as-h,.cab-paso h2,.camino>h2){font-size:var(--t-titulo);font-weight:var(--peso-titulo);letter-spacing:-.02em;line-height:1.2;margin:0 0 .4rem}
+:is(.wiz-cab .baj,.as-cont .as-baj,.cab-paso p:not(.antetitulo)){font-size:var(--t-bajada);line-height:1.55;color:var(--texto2);margin:0 0 1.5rem;max-width:52rem}
+/* La hoja de cada paso de configuración y de Crear campaña, y las tarjetas de adentro. */
+:is(.wiz-main,.as-cont,.hoja-o){padding:var(--hoja-pad);border:0}
+:is(.as-cont .as-caja,.hoja-o .caja-o,.wiz-res,.wiz-bloque,.bloq-cam>div){background:var(--caja-fondo);padding:var(--caja-pad);border:0;border-radius:var(--caja-radio)!important;box-shadow:6px 9px 18px rgba(12,11,16,.45),var(--clay-luz)}
+.bloqueo-cam{max-width:none}
+/* Título de tarjeta: el mismo en todas (cabecera de resumen, cajas de pasos, Resultados). */
+:is(.cab-tarjeta h3,.as-caja h3,.caja-o h3,.wiz-bloque h3,.wiz-sub,.bloq-cam b,.met-cab>span){font-size:var(--t-tarjeta);font-weight:var(--peso-tarjeta);letter-spacing:0;text-transform:none;color:var(--t-color);line-height:1.3}
+.cab-tarjeta{display:flex;justify-content:space-between;align-items:center;gap:1rem;margin:0 0 .5rem}
+.cab-tarjeta h3{margin:0}
+/* Editar: el mismo botón chico con borde naranja en cada resumen. */
+.cab-tarjeta .editar,.editar{flex:none;font:inherit;font-size:.82rem;font-weight:600;line-height:1.3;color:var(--acento);background:none;border:1px solid rgba(255,138,61,.45);border-radius:999px;padding:.25rem .8rem;text-decoration:none;cursor:pointer;position:static}
+.editar:hover{background:rgba(255,138,61,.1);border-color:var(--acento)}
+/* Pie de cada paso de Configuración: ← Anterior a la izquierda; Aplicar (guarda y te quedas) y Siguiente (guarda y
+   avanza) a la derecha, en naranja. Igual en las tres páginas de Configuración (medidas en ajustes.css). */
+.pie-config{display:flex;align-items:center;gap:var(--pie-hueco) 1rem;flex-wrap:wrap;margin-top:var(--pie-arriba);padding-top:var(--pie-linea);border-top:1px solid rgba(255,255,255,.08)}
+.pie-config .pie-nota{font-size:.85rem;color:var(--texto2)}
+.pie-config .pie-der{display:flex;gap:var(--pie-hueco);margin-left:auto;flex-wrap:wrap}
+.pie-config .boton{padding:var(--boton-pad);font-size:var(--t-boton);line-height:1.2;text-align:center}
+.pie-config .boton.aplicar{background:transparent;color:var(--acento);border:1px solid var(--acento);box-shadow:none}
+.pie-config .boton.aplicar:hover{background:rgba(255,138,61,.1)}
+@media(max-width:560px){.pie-config .pie-der{width:100%}.pie-config .pie-der .boton{flex:1}}
+/* Resumen: dos columnas de tarjetas, con el mismo hueco. */
+:is(.as-resumen,.wiz-resumen,.resumen-tarjetas){display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--hueco)}
+.resumen-tarjetas .caja-o{margin:0}
+.wiz-res>p,.resumen-tarjetas .caja-o>p{margin:0;font-size:var(--t-texto-tarjeta);color:#E4E4E2;line-height:1.55}
+/* Barra de avance: siempre dentro de la barra de pasos, abajo, en lima. */
+:is(.as-pasos,.riel,.wiz-pasos){position:relative!important;top:auto;padding:.6rem .7rem 1.05rem}
+.avance-pasos{position:absolute;left:1.3rem;right:1.3rem;bottom:.45rem;height:.3rem;border-radius:999px;background:#2E3035;overflow:hidden;box-shadow:inset 2px 2px 4px rgba(0,0,0,.4)}
+.avance-pasos i{display:block;height:100%;border-radius:999px;background:var(--neon)}
+.wiz-pasos .sep{display:none}
+/* Cada paso de la barra: mismo relleno, círculo y letras en las cuatro páginas (tamaños en ajustes.css). */
+:is(.as-pasos,.riel,.wiz-pasos) :is(.as-paso,.paso,a,.wiz-paso){display:flex;align-items:center;align-self:flex-start;gap:var(--paso-hueco);padding:var(--paso-pad);line-height:1.2;color:var(--t-color);font-size:var(--t-paso);font-weight:400}
+:is(.as-paso.on,.riel .paso.on,.wiz-pasos a.actual,.wiz-pasos .wiz-paso.actual){background:var(--paso-activo)}
+:is(.as-paso:not(.on),.riel .paso:not(.on),.wiz-pasos a:not(.actual),.wiz-pasos .wiz-paso:not(.actual)):hover{background:rgba(255,255,255,.04)}
+:is(.as-paso b,.riel .paso b,.wiz-pasos a>span,.wiz-pasos .wiz-paso){font-size:var(--t-paso);font-weight:var(--peso-paso);color:var(--t-color);line-height:1.2}
+:is(.as-pasos,.riel,.wiz-pasos) :is(.as-paso,.paso,a,.wiz-paso) small{display:block;margin:.1rem 0 0;font-size:var(--t-paso-sub);font-weight:400;color:var(--texto2);line-height:1.3}
+:is(.as-pasos .as-n,.riel .paso .n,.wiz-pasos a>b,.wiz-pasos .wiz-paso>b){width:var(--paso-circulo);height:var(--paso-circulo);font-size:var(--t-paso-num);font-weight:700}
+/* Márgenes de la página (ajustes.css): el menú y el contenido, en computadora. En el celular siguen los de antes. */
+@media(min-width:901px){
+.lateral{inset:var(--menu-margen) auto var(--menu-margen) var(--menu-margen);width:var(--menu-ancho)}
+html.menu-plegado .lateral{width:var(--menu-ancho-plegado)}
+body:has(>.lateral){padding-left:calc(var(--menu-margen) + var(--menu-ancho) + var(--margen-izq))}
+html.menu-plegado body:has(>.lateral){padding-left:calc(var(--menu-margen) + var(--menu-ancho-plegado) + var(--margen-izq))}
+body:has(>.lateral) .contenedor{padding-left:0;padding-right:var(--margen-der)}
+body:has(>.lateral) main{padding-top:var(--margen-arriba);padding-bottom:var(--margen-abajo)}
+body:has(>.lateral) .compacta{padding-top:var(--margen-arriba)}
+body:has(>.lateral) :is(.compacta+main,.compacta.delgada~main,.compacta.delgada~.oscuro-pag>main){padding-top:1.5rem}
+}
+@media(max-width:900px){:is(.as-resumen,.wiz-resumen,.resumen-tarjetas){grid-template-columns:1fr}.avance-pasos{display:none}}
 """
 
 
@@ -1292,7 +1382,7 @@ PRINCIPIO = (
     '<link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" href="/favicon-32.png" sizes="32x32">'
     '<link rel="apple-touch-icon" href="/apple-touch-icon.png">'
     '<title>Tu asistente · Skandar</title>'
-    f"<style>{ESTILO}{conversaciones.CSS}{skandi.CSS}{FUENTES_CSS}</style>"
+    f"<style>{ESTILO}{conversaciones.CSS}{skandi.CSS}{FUENTES_CSS}{COMUN}</style>"
     # Solo JavaScript propio (CSP script-src 'self'): la vista previa al momento en Contenido.
     # menu.js sin defer: pliega el menú antes de pintar la página (si no, se ve abrirse y cerrarse).
     f'<script src="/panel/static/menu.js?v={VERSION_MENU}"></script>'
@@ -1309,10 +1399,14 @@ ACTIVA = ' class="on"'
 # El menú lateral, sin grupos: cada sección con su ícono. (clave, nombre, dirección, grupo al que pertenece)
 MENU = [("resultados", "Resultados", "/panel/resultados", "resultados"),
         ("chats", "Conversaciones", "/panel/asistente", "asistente"),
-        ("configura", "Configura tu asistente", "/panel/asistente/configura", "asistente"),
         ("probar", "Probar tu asistente", "/panel/probar#ultimo", "asistente"),
         ("campanas", "Campañas", "/panel/contenido/campanas", "contenido"),
         ("calendario", "Calendario", "/panel/contenido", "contenido")]
+# Abajo, bajo la etiqueta "Configuración" (arriba de Ayuda): lo que se configura una vez. (clave, nombre, dirección)
+# Tu marca solo con contenido en el plan.
+CONFIGURACION = [("empresa", "Tu empresa", "/panel/empresa"),
+                 ("configura", "Tu asistente", "/panel/asistente/configura"),
+                 ("marca", "Tu marca", "/panel/contenido/marca")]
 # La sección que se marca si la página no dice cuál (`sub`) dentro de su grupo (`menu`).
 POR_GRUPO = {"resultados": "resultados", "asistente": "chats", "contenido": "calendario"}
 
@@ -1334,6 +1428,12 @@ ICONOS = {
     "campanas": _icono('<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>'),
     "calendario": _icono('<rect width="18" height="18" x="3" y="4" rx="2"/><path d="M8 2v4M16 2v4M3 10h18'
                          'M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01"/>'),
+    "marca": _icono('<path d="M12 22a10 10 0 1 1 10-10c0 3-2.5 5-5.5 5H15a1.7 1.7 0 0 0-1.3 2.8c.3.3.4.7.4 1.1'
+                    ' 0 .9-.7 1.6-1.6 1.6z"/><circle cx="13.5" cy="6.5" r=".6" fill="currentColor"/>'
+                    '<circle cx="17.5" cy="10.5" r=".6" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".6" fill="currentColor"/>'
+                    '<circle cx="6.5" cy="12.5" r=".6" fill="currentColor"/>'),
+    "empresa": _icono('<path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18zM6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2'
+                      'M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M10 6h4M10 10h4M10 14h4M10 18h4"/>'),
     "ayuda": _icono('<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/>'),
     "salir": _icono('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>'),
     "plegar": _icono('<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18M16 15l-3-3 3-3"/>'),
@@ -1349,9 +1449,9 @@ async def pasos_iniciales(c: Cuenta) -> list[tuple[str, str, bool]]:
              ("Pruébalo como cliente", "/panel/probar#ultimo", await c.store.get("probo") == "1"),
              ("Enciende tu asistente", "/panel/asistente", await activo(c))]
     if c.imagenes_mes > 0:
-        from .campanas import todas_las  # campanas importa este módulo
+        from .campanas import hay_campanas  # campanas importa este módulo
         pasos += [("Define tu marca", "/panel/contenido/marca", await marca_lista(c)),
-                  ("Crea tu primera campaña", "/panel/contenido/campanas", bool(await todas_las(c)))]
+                  ("Crea tu primera campaña", "/panel/contenido/campanas", await hay_campanas(c))]
     return pasos
 
 
@@ -1377,8 +1477,11 @@ def tarjeta_pasos(pasos: list[tuple[str, str, bool]]) -> str:
 
 async def menu_de(c: Cuenta, menu: str, sub: str = "", luces: dict[str, str] | None = None) -> str:
     """El menú lateral de una página con sesión: con su @usuario, su logo y los pasos iniciales.
-    Conversaciones lleva un punto amarillo si hay chats del lado "Tú" esperando tu respuesta."""
-    if await c.store.pendientes_tuyos(time.time(), time.time() - c.human_pause_hours * 3600 - 60):
+    Conversaciones lleva un punto lima si hay chats del lado "Tú" esperando tu respuesta."""
+    from .limites import LIMIT_NOTICE
+    ahora = time.time()
+    if await c.store.pendientes_tuyos(ahora, ahora - c.human_pause_hours * 3600 - 60,
+                                      ahora - conversaciones.SIN_RESPUESTA, LIMIT_NOTICE):
         luces = {**(luces or {}), "chats": "pendiente"}
     return cabecera(salir=True, menu=menu, cuenta=c, sub=sub, perfil=await usuario(c), foto=await foto_perfil(c),
                     luces=luces, pasos=await pasos_iniciales(c))
@@ -1391,7 +1494,7 @@ def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None, 
     botón de hamburguesa en el celular. Contenido sale solo si el plan de `cuenta` lo tiene.
     Con `perfil` (su @usuario), abajo va su menú de perfil en vez de solo Salir.
     `luces`: un semáforo junto a una parte del submenú o del menú de perfil (p. ej. {"conexion": "ok"}).
-    `sub` también marca la parte activa del menú de perfil (Conexión vive ahí).
+    `sub` también marca la parte activa de Configuración o del menú de perfil (Conexión vive ahí).
     Abajo, como en otras plataformas: los pasos iniciales (`pasos`, mientras falte alguno), Ayuda y tu cuenta.
     Sin menú (la entrada y las páginas de espera): la barra de arriba de siempre."""
     boton = ('<form method="post" action="/panel/salir"><button class="salir">Salir</button></form>'
@@ -1401,7 +1504,8 @@ def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None, 
     if not menu:
         return (f'<header><div class="contenedor"><a class="marca" href="{inicio_marca}"><img class="logo-largo" src="/logo-skandar.svg" alt="Skandar" width="132" height="36"></a>'
                 f"{boton}</div></header>")
-    activa = sub if any(k == sub for k, *_ in MENU) else POR_GRUPO.get(menu, "")
+    en_config = any(k == sub for k, *_ in CONFIGURACION)
+    activa = sub if any(k == sub for k, *_ in MENU) else "" if en_config else POR_GRUPO.get(menu, "")
     secciones = []
     for k, nombre, href, grupo in MENU:
         if grupo == "contenido" and cuenta is not None and cuenta.imagenes_mes <= 0:
@@ -1412,6 +1516,10 @@ def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None, 
         luz = "" if punto else luz
         secciones.append(f'<a class="lat-item{" on" if k == activa else ""}" href="{href}" title="{nombre}">'
                          f'{ICONOS[k]}{punto}<span class="txt">{nombre}{luz}</span></a>')
+    ajustes = "".join(
+        f'<a class="lat-item{" on" if k == sub else ""}" href="{href}" title="{nombre}">{ICONOS[k]}'
+        f'<span class="txt">{nombre}</span></a>' for k, nombre, href in CONFIGURACION
+        if k != "marca" or cuenta is None or cuenta.imagenes_mes > 0)
     # Sin JavaScript también abre en el celular: la hamburguesa apunta a #lateral (:target).
     return (
         '<header class="movil"><a class="hamburguesa" href="#lateral" aria-label="Abrir menú">'
@@ -1424,6 +1532,7 @@ def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None, 
         f'{ICONOS["plegar"]}</button><a class="cerrar" href="#" aria-label="Cerrar menú">×</a></div>'
         f'<nav class="lat-nav">{"".join(secciones)}</nav>'
         + '<div class="lat-abajo">' + tarjeta_pasos(pasos or [])
+        + (f'<div class="lat-etiqueta"><span class="txt">Configuración</span></div>{ajustes}' if cuenta is not None else "")
         # Ayuda abre a Skandi (la ventanita de abajo).
         + (f'<a class="lat-item" href="#skandi" data-abrir-skandi title="Ayuda">{ICONOS["ayuda"]}'
            '<span class="txt">Ayuda</span></a>' if cuenta is not None else "") + '</div>'
@@ -1440,8 +1549,6 @@ def menu_perfil(perfil: str, cuenta: Cuenta | None, foto: str = "", sub: str = "
     if not perfil:
         return salir.format(' class="lat-pie"', "lat-item", f'{ICONOS["salir"]}<span class="txt">Salir</span>')
     usuario_ = escape(perfil)
-    marca = (f'<a href="/panel/contenido/marca"{ACTIVA if sub == "marca" else ""}>Tu marca</a>'
-             if cuenta is not None and cuenta.imagenes_mes > 0 else "")
     # El logo de Tu marca si ya subió uno; si no, la inicial.
     avatar = (f'<img class="lat-avatar" src="{escape(foto)}" alt="">' if foto else
               f'<span class="lat-avatar">{usuario_[:1].upper()}</span>')
@@ -1450,15 +1557,12 @@ def menu_perfil(perfil: str, cuenta: Cuenta | None, foto: str = "", sub: str = "
     return ('<div class="lat-pie"><details class="perfil">'
             f'<summary class="lat-item" title="@{usuario_}">{avatar}'
             f'<span class="txt">@{usuario_}<small>Tu cuenta</small></span></summary>'
-            # Tres grupos: quién eres; tu empresa y tu marca; la cuenta (conexión, Instagram y salir).
+            # Quién eres y la cuenta (conexión, Instagram y salir); tu empresa y tu marca están en Configuración.
             f'<div class="perfil-menu"><div class="quien">Conectado como @{usuario_}</div>'
-            f'<a href="/panel/empresa"{ACTIVA if sub == "empresa" else ""}>Información de empresa</a>'
-            f'{marca}'
             # Solo la cuenta principal (Skandar): los chats de clientes y visitantes con Skandi.
-            + (f'<a href="/panel/skandi"{ACTIVA if sub == "skandi" else ""}>Chats de Skandi</a>'
+            + (f'<a href="/panel/skandi"{ACTIVA if sub == "skandi" else ""}>Chats de Skandi</a><div class="sep"></div>'
                if cuenta is not None and not cuenta.slug else "")
-            + '<div class="sep"></div>'
-            f'<a href="/panel/conexion"{ACTIVA if sub == "conexion" else ""}>Conexión{luz}</a>'
+            + f'<a href="/panel/conexion"{ACTIVA if sub == "conexion" else ""}>Conexión{luz}</a>'
             f'<a href="https://www.instagram.com/{usuario_}/" target="_blank" rel="noopener">Ver mi Instagram</a>'
             + salir.format("", "", "Salir") + "</div></details></div>")
 
@@ -1487,7 +1591,6 @@ async def panel_de(c: Cuenta, aviso: str = "", ver: str = "", vista: str = "", a
     "configura" (los pasos de asistente.py, /panel/asistente/configura) y "conexion". `aviso` sale arriba."""
     if not vista and abrir:
         vista = "configura"
-    encendido = await activo(c)
     from . import ajustes  # ajustes usa este módulo
     estado_conexion, tarjeta_conexion = await ajustes.conexion(c)
 
@@ -1507,22 +1610,16 @@ async def panel_de(c: Cuenta, aviso: str = "", ver: str = "", vista: str = "", a
                   + ("" if estado_conexion == "ok" else
                      '<div class="aviso">Hay algo que revisar en tu conexión.'
                      ' <a class="enlace" href="/panel/conexion">Ver conexión</a></div>')
+                  # Solo si está apagado: el estado y Pausar/Encender viven en el Resumen de Configura.
+                  + ("" if c.en_revision or await activo(c) else
+                     '<div class="aviso">Tu asistente está en pausa: no contesta ningún chat.'
+                     ' <a class="enlace" href="/panel/asistente/configura?paso=resumen">Encenderlo</a></div>')
                   + await conversaciones.bandeja(c, ver, buscar, hoja, chat, n))
     return pagina(
         # Conexión es de tu cuenta (está en el menú de perfil), no de una sección.
         await menu_de(c, "cuenta" if vista == "conexion" else "asistente", sub=vista or "chats", luces={"conexion": estado_conexion})
-        # Sin la barra de estado: solo una luz y Pausar/Encender a la derecha del antetítulo, como los
-        # botones de las demás páginas, para que todas arranquen a la misma altura.
-        + (encabezado(f"Tu cuenta · {titulo}") if titulo else
-           encabezado("Tu asistente", (
-               f'<div class="estado-mini"><span class="luz{" on" if encendido else ""}"></span>'
-               f'{"Contestando tus mensajes" if encendido else "En revisión" if c.en_revision else "Está en pausa"}'
-               + ("" if c.en_revision else
-                  '<form method="post" action="/panel/estado">'
-                  f'<input type="hidden" name="activo" value="{"0" if encendido else "1"}">'
-                  f'<button class="boton chico{" secundario" if encendido else ""}">{"Pausar" if encendido else "Encender"}</button>'
-                  "</form>")
-               + "</div>")))
+        # Sin estado ni Pausar arriba: el asistente completo se pausa en el Resumen de Configura tu asistente.
+        + encabezado(f"Tu cuenta · {titulo}" if titulo else "Tu asistente")
         + '<main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
         + cuerpo + "</div></main>"
@@ -1538,6 +1635,26 @@ def hace(t: float) -> str:
     if s < 86400:
         return f"hace {int(s // 3600)} h"
     return "ayer" if s < 2 * 86400 else f"hace {int(s // 86400)} días"
+
+
+def avance(pct: int) -> str:
+    """La barra de avance que va abajo de la barra de pasos (Tu asistente, Tu marca, Tu empresa, Crear campaña)."""
+    return f'<div class="avance-pasos" aria-hidden="true"><i style="width:{pct}%"></i></div>'
+
+
+def pie_config(atras: str, siguiente: str, nota: str = "") -> str:
+    """El pie de cada paso de Configuración (Tu empresa, Tu asistente, Tu marca), igual en las tres: `atras` (el
+    ← Anterior, o nada en el paso 1) y `nota` a la izquierda; Aplicar y `siguiente` (el botón naranja) a la derecha.
+    Aplicar manda accion=aplicar: guarda y se queda en el mismo paso."""
+    return (f'<div class="pie-config">{atras}<span class="pie-nota">{nota}</span><span class="pie-der">'
+            '<button class="boton aplicar" name="accion" value="aplicar">Aplicar</button>'
+            f"{siguiente}</span></div>")
+
+
+def cab_tarjeta(titulo: str, href: str = "", texto: str = "Editar", boton: str = "") -> str:
+    """Cabecera de una tarjeta de resumen: su título y el botón Editar, igual en todo el panel."""
+    accion = boton or (f'<a class="editar" href="{href}">{texto}</a>' if href else "")
+    return f'<div class="cab-tarjeta"><h3>{titulo}</h3>{accion}</div>'
 
 
 def encabezado(ante: str = "", botones: str = "", extra: str = "") -> str:
@@ -1664,7 +1781,7 @@ async def bienvenida(c: Cuenta) -> HTMLResponse:
     else:
         empresa = await empresa_lista(c)
         nota = ("Tu perfil de empresa quedó guardado." if empresa else
-                "Tu perfil de empresa te espera en el menú de tu cuenta.")
+                "Tu perfil de empresa te espera en Configuración, abajo en el menú.")
         asistente_desc = "El que contesta tus mensajes directos por ti, de día y de noche."
         if c.imagenes_mes > 0:
             cuerpo = ('<div class="caminos">'
@@ -1769,32 +1886,119 @@ async def no_encontrada(request: Request) -> HTMLResponse:
 
 
 # --- trabajos largos (generar campaña, imágenes, otra idea) ---
-# Uno a la vez por cuenta y tipo: un doble clic o recargar la página de "Generando…" no lo repite ni
-# gasta cupo doble. Si algo se quedó marcado (la página nunca empezó), se libera solo a los 10 minutos.
-TRABAJO_MAX = 600
-_en_curso: dict[tuple[str, str], float] = {}
+# Corren en segundo plano, aparte de la página: si el dueño cierra la pestaña o se le bloquea el celular,
+# siguen. La página de espera se recarga sola (sin JavaScript) y muestra el avance; al terminar, lleva al
+# resultado. Uno a la vez por cuenta y tipo: un doble clic o recargar no lo repite ni gasta cupo doble.
+# Viven en memoria: si igbot se reinicia a la mitad, lo que ya salió se queda guardado y el resto se pide otra vez.
+ESPERA_TRABAJO = 2.0  # segundos que la respuesta espera: lo rápido llega ya terminado, sin página de espera
+RECARGA_TRABAJO = 3  # cada cuánto se recarga la página de espera
+GUARDAR_TRABAJO = 3600  # los terminados se olvidan después de esto
+_trabajos: dict[str, "Trabajo"] = {}
 
 
-def empezar_trabajo(c: Cuenta, clave: str) -> bool:
-    """True si se puede empezar; False si ese mismo trabajo ya está corriendo para esta cuenta."""
-    k, ahora = (c.slug, clave), time.time()
-    if ahora - _en_curso.get(k, 0) < TRABAJO_MAX:
-        return False
-    _en_curso[k] = ahora
-    return True
+class Trabajo:
+    """Un trabajo largo: `correr` es un generador async que va dando líneas de avance ("Pieza 2 de 9…") y,
+    si quiere, la dirección a la que lleva al terminar (una línea que empieza con "/")."""
+
+    def __init__(self, c: Cuenta, clave: str, titulo: str, nota: str, destino: str, menu: tuple[str, str],
+                 boton: str, correr, segundos: float = 30, pasos: tuple[str, ...] = ()):
+        self.id = secrets.token_urlsafe(9)
+        self.slug, self.clave, self.titulo, self.nota = c.slug, clave, titulo, nota
+        self.destino, self.menu, self.boton = destino, menu, boton
+        self.segundos, self.pasos, self.inicio = max(segundos, 3), pasos, time.time()
+        self.avance: list[str] = []
+        self.error = ""
+        self.hecho = False
+        self.fin = 0.0
+        self.tarea = asyncio.create_task(self._correr(c, correr))
+
+    async def _correr(self, c: Cuenta, correr) -> None:
+        try:
+            async for linea in correr():
+                if linea.startswith("/"):
+                    self.destino = linea
+                else:
+                    self.avance.append(linea)
+        except imagenes.ErrorImagen as e:
+            self.error = str(e)
+        except Exception:
+            log.exception("Trabajo «%s» de %s", self.titulo, c.slug or "la principal")
+            self.error = "No se pudo terminar esta vez. Lo que no salió no usó tu cupo; intenta de nuevo en un momento."
+        finally:
+            self.hecho, self.fin = True, time.time()
 
 
-def terminar_trabajo(c: Cuenta, clave: str) -> None:
-    _en_curso.pop((c.slug, clave), None)
+def curva(t: Trabajo) -> dict:
+    """Cómo avanza la barra de un trabajo: rápido al principio y cada vez más lento, sin llegar al 100 hasta que
+    termina. El tiempo se estira y se encoge con una onda propia de cada trabajo (sale de su id), así que nunca
+    avanza igual dos veces. panel.js hace la misma cuenta para moverla sin recargar."""
+    h = int(hashlib.sha256(t.id.encode()).hexdigest()[:12], 16)
+    parte = lambda i: (h >> (10 * i)) % 1000 / 1000  # noqa: E731
+    return {"tau": round(t.segundos * (0.85 + 0.3 * parte(0)) / 2.3, 3), "a": round(0.45 + 0.4 * parte(1), 3),
+            "w": round(2 * math.pi / (6 + 8 * parte(2)), 4), "f": round(2 * math.pi * parte(3), 3)}
 
 
-def ya_en_curso(destino: str) -> str:
-    """Lo que ve el segundo clic: el primero sigue trabajando."""
-    return ('<div class="tarjeta"><h2>Ya lo estamos haciendo.</h2>'
-            '<p class="ayuda">Esto ya se está generando con tu primer clic (o en otra pestaña). Espera a que termine;'
-            ' no se cobra dos veces.</p>'
-            f'<div class="acciones"><a class="boton" href="{escape(destino)}">Ir a ver</a></div></div></div></main>'
-            + FINAL)
+def porcentaje(k: dict, segundos: float) -> float:
+    tiempo = segundos + k["a"] * (math.sin(k["w"] * segundos + k["f"]) - math.sin(k["f"])) / k["w"]
+    return 96 * (1 - math.exp(-tiempo / k["tau"]))
+
+
+def paso_de(pasos: tuple[str, ...], pct: float) -> str:
+    return pasos[min(len(pasos) - 1, int(pct / 100 * len(pasos) * 1.08))] if pasos else ""
+
+
+def en_curso(c: Cuenta, clave: str) -> Trabajo | None:
+    return next((t for t in _trabajos.values() if t.slug == c.slug and t.clave == clave and not t.hecho), None)
+
+
+async def trabajo_largo(c: Cuenta, clave: str, titulo: str, nota: str, destino: str, correr,
+                        menu: tuple[str, str] = ("contenido", ""), boton: str = "Ver el resultado",
+                        segundos: float = 30, pasos: tuple[str, ...] = ()) -> HTMLResponse:
+    """Lanza `correr` en segundo plano (o se suma al mismo trabajo si ya corre) y contesta con su página: el
+    resultado si terminó en ESPERA_TRABAJO, o la de espera que se recarga sola."""
+    ahora = time.time()
+    for k in [k for k, t in _trabajos.items() if t.hecho and ahora - t.fin > GUARDAR_TRABAJO]:
+        del _trabajos[k]
+    if not (t := en_curso(c, clave)):
+        t = Trabajo(c, clave, titulo, nota, destino, menu, boton, correr, segundos, pasos)
+        _trabajos[t.id] = t
+    await asyncio.wait({t.tarea}, timeout=ESPERA_TRABAJO)
+    return await pagina_trabajo(c, t)
+
+
+async def pagina_trabajo(c: Cuenta, t: Trabajo) -> HTMLResponse:
+    if not t.hecho:
+        recarga = f'<meta http-equiv="refresh" content="{RECARGA_TRABAJO};url=/panel/trabajo/{t.id}">'
+        k, pasado = curva(t), time.time() - t.inicio
+        pct = porcentaje(k, pasado)
+        # Lo que va haciendo: sus pasos según el avance o, si no tiene, lo último que contó el trabajo.
+        paso = paso_de(t.pasos, pct) or (t.avance[-1] if t.avance else "")
+        datos = " ".join(f'data-{n}="{v}"' for n, v in k.items())
+        cuerpo = (recarga + '<div class="tarjeta" id="generando"><div class="trabajo-cab">'
+                  f'<h2>{escape(t.titulo)}</h2><b class="pct-trabajo">{int(pct)}%</b></div>'
+                  f'<div class="avance-trabajo" {datos} data-t="{pasado:.2f}"'
+                  f' data-pasos="{escape(json.dumps(t.pasos, ensure_ascii=False))}"><i style="width:{pct:.1f}%"></i></div>'
+                  f'<p class="paso-trabajo">{escape(paso)}</p>'
+                  f'<p class="ayuda">{escape(t.nota)} Puedes cerrar esta página: seguimos trabajando y lo verás al'
+                  " volver.</p></div>")
+    elif t.error:
+        cuerpo = (f'<div class="aviso">{escape(t.error)}</div><div class="tarjeta"><h2>{escape(t.titulo)}</h2>'
+                  '<p class="ayuda">No se terminó.</p>'
+                  f'<div class="acciones"><a class="boton" href="{escape(t.destino)}">{escape(t.boton)}</a></div></div>')
+    else:
+        cuerpo = (f'<meta http-equiv="refresh" content="0;url={escape(t.destino)}">'
+                  f'<div class="tarjeta"><h2>{escape(t.titulo)}</h2><p class="ayuda">Listo.</p>'
+                  f'<div class="acciones"><a class="boton" href="{escape(t.destino)}">{escape(t.boton)}</a></div></div>')
+    return pagina(await menu_de(c, t.menu[0], sub=t.menu[1]) + f'<main><div class="contenedor">{cuerpo}</div></main>')
+
+
+@router.get("/trabajo/{tid}")
+async def ver_trabajo(request: Request, tid: str):
+    if not (c := cuenta_de_sesion(request)):
+        return RedirectResponse("/panel", status_code=303)
+    if not (t := _trabajos.get(tid)) or t.slug != c.slug:  # ya se olvidó, o igbot se reinició
+        return RedirectResponse("/panel/contenido/campanas", status_code=303)
+    return await pagina_trabajo(c, t)
 
 
 async def error_inesperado(request: Request) -> HTMLResponse:
@@ -1838,11 +2042,14 @@ async def estado(request: Request):
     de_aqui(request)
     if not (c := cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
-    encender = (await form(request)).get("activo") == "1"
+    f = await form(request)
+    encender = f.get("activo") == "1"
     if encender and c.en_revision:
         return await panel_de(c, REVISION)
     await c.store.set("bot_activo", "1" if encender else "0")
     log.info("@%s %s su asistente desde el panel", await usuario(c), "encendió" if encender else "pausó")
+    if f.get("volver") == "configura":
+        return RedirectResponse("/panel/asistente/configura?paso=resumen", status_code=303)
     return await panel_de(c, "Tu asistente ya está contestando." if encender else "Tu asistente quedó en pausa.")
 
 

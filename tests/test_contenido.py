@@ -127,9 +127,9 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     assert "Paso 1 de 4" in r.text and '<main class="oscuro-pag">' in r.text and r.text.count('name="estilos"') == 12
     assert "¿Cómo quieres que se vean los diseños de tu marca?" in r.text and 'class="antetitulo"' not in r.text
     assert "Sensación: Rebelde · Directo · Impactante" in r.text and "1.º · Estilo principal:" in r.text
-    # Tu marca vive en el menú de perfil (abajo), no en el submenú de Contenido.
-    assert '<a href="/panel/contenido/marca" class="on">Tu marca</a>' in r.text
-    assert 'title="Calendario"><svg' in r.text and r.text.count('href="/panel/contenido/marca"') == 2  # su cuenta y los pasos iniciales
+    # Tu marca vive abajo, en Configuración, no en el submenú de Contenido.
+    assert 'class="lat-item on" href="/panel/contenido/marca" title="Tu marca"' in r.text
+    assert 'title="Calendario"><svg' in r.text and r.text.count('href="/panel/contenido/marca"') == 2  # Configuración y los pasos iniciales
     r = client.post(MARCA, headers=ORIGEN, data={"paso": "1"})
     assert "Elige al menos un estilo" in r.text and client.portal.call(contenido.marca_de, c) == {}
     r = client.post(MARCA, headers=ORIGEN, follow_redirects=False,
@@ -203,11 +203,13 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     assert "Colores propios · Natural / Sin protagonismo de marca" in r.text and "Playfair Display + Inter" in r.text
     assert "Firma visible" in r.text and "Recursos visuales" not in r.text
     assert '<a class="boton secundario" href="/panel/contenido/campanas/nueva">Crear una campaña</a>' in r.text
-    # Ya completa: entrar a cambiar algo guarda y vuelve al resumen (no al paso siguiente ni a Crear campaña).
-    assert ">Guardar cambios</button>" in client.get(f"{MARCA}?paso=3").text
+    # Cada paso: Aplicar guarda y se queda en el paso; Siguiente guarda y avanza.
+    r = client.get(f"{MARCA}?paso=3").text
+    assert 'value="aplicar">Aplicar</button>' in r and ">Siguiente: logotipo →</button>" in r
+    r = client.post(MARCA, headers=ORIGEN, data={"paso": "3", "usar": "1", "accion": "aplicar"}, follow_redirects=False)
+    assert r.status_code == 200 and "Cambios aplicados." in r.text and "Paso 3 de 4" in r.text
     r = client.post(MARCA, headers=ORIGEN, data={"paso": "3", "usar": "1"}, follow_redirects=False)
-    assert r.headers["location"] == f"{MARCA}?paso=resumen&guardado=1"
-    assert "Guardamos tus cambios." in client.get(r.headers["location"]).text
+    assert r.headers["location"] == f"{MARCA}?paso=4"
     assert client.get("/panel/static/fuentes/CormorantGaramond-Bold.ttf").status_code == 200
     # Las fotos del negocio que ya tenía (Tu marca ya no las pide) se conservan y se siguen usando.
     tokens, _ = client.portal.call(contenido.guardar_fotos, c, [Subida()], 1)
@@ -447,11 +449,15 @@ def test_conversaciones_y_tomar_un_chat(cliente):
     assert 'class="on" aria-current="page">En curso<b class="gris">2</b>' in r.text
     assert "@caro" in r.text and "Hola, ¿precios?" in r.text and "Asistente: Sí, a las 5." in r.text
     assert r.text.index("@caro") < r.text.index("@beto") and "Nuevos" not in r.text
-    # Si el asistente no le contestó a caro en 2 minutos, pasa a Para revisar y la página abre ahí.
+    # Si el asistente no le contestó a caro en 2 minutos, pasa a "Tú", Sin contestar, con su etiqueta.
     client.portal.call(store.db.execute, "UPDATE messages SET created_at = created_at - 200 WHERE user_id = 'caro'")
     r = client.get("/panel/asistente")
-    assert 'class="on" aria-current="page">Para revisar<b class="">1</b>' in r.text
-    assert "@caro" in r.text and "@beto" not in r.text and "Para revisar: no tuvo respuesta" in r.text
+    assert 'class="on" aria-current="true">Tú<b>1</b></a>' in r.text and "Para revisar" not in r.text
+    assert 'class="on" aria-current="page">Sin contestar<b class="">1</b>' in r.text
+    assert '<span class="razon">El asistente no respondió</span>Sin contestar' in r.text and "@beto" not in r.text
+    assert '<span class="punto-menu"' in r.text
+    r = client.get("/panel/asistente?ver=curso")
+    assert 'En curso<b class="gris">1</b>' in r.text and "@caro" not in r.text
     r = client.get("/panel/asistente?ver=bot")
     assert "@beto" in r.text and 'href="/panel/asistente?ver=bot&amp;chat=beto#chats"' in r.text
     # El chat abierto: los mensajes en orden y el interruptor en Asistente.
@@ -711,10 +717,13 @@ def test_insights_de_un_post(cliente, monkeypatch):
     assert "Alcance" in r.text and "1,520" in r.text and "Guardados" in r.text and pedidos == ["1"]
     assert client.get("/panel/contenido/insights/999").status_code == 404
     assert client.get("/panel/contenido/insights/abc").status_code == 404
+    assert "1,520" in client.get("/panel/contenido/insights/1").text and pedidos == ["1"]  # ya guardadas
 
     async def sin_permiso(media_id):
         raise RuntimeError("Instagram respondió 400")
     monkeypatch.setattr(c.instagram, "media_insights", sin_permiso, raising=False)
+    from igbot import informe
+    monkeypatch.setattr(informe, "CACHE_SEG", 0)  # ya pasó la hora: se vuelven a pedir
     r = client.get("/panel/contenido/insights/1")
     assert r.status_code == 200 and "vuelve a conectarla" in r.text
 
@@ -831,7 +840,7 @@ def test_encabezados_sin_titulo_ni_numeros(cliente, monkeypatch):
         texto = client.get(ruta).text
         assert 'class="antetitulo"' not in texto.split("<main")[0] and "<h1>" not in texto and 'class="bajada"' not in texto, ruta
     r = client.get("/panel/asistente")
-    assert "Mensajes restantes" not in r.text and 'class="hoy kpis"' not in r.text and 'class="estado-mini"' in r.text
+    assert "Mensajes restantes" not in r.text and 'class="hoy kpis"' not in r.text and 'class="estado-mini"' not in r.text
 
 
 def test_crear_post_con_ajustes_solo_para_ese_post(cliente, monkeypatch):
@@ -869,7 +878,8 @@ def test_configura_tu_asistente_en_su_propia_pagina(cliente):
     assert 'class="lat-item on" href="/panel/asistente" title="Conversaciones"' in r.text
     r = client.get("/panel/asistente/configura")
     assert 'class="asis"' in r.text and 'id="chats"' not in r.text 
-    assert 'class="lat-item on" href="/panel/asistente/configura" title="Configura tu asistente"' in r.text
+    assert 'class="lat-item on" href="/panel/asistente/configura" title="Tu asistente"' in r.text
+    assert r.text.count('class="lat-item on"') == 1  # Conversaciones no se marca
     # Sin configurar: las conversaciones invitan a configurarlo.
     client.portal.call(c.store.set, "asistente_listo", "0")
     client.portal.call(c.store.set, "perfil", "")
@@ -988,14 +998,24 @@ def test_menu_lateral_sin_grupos(cliente, monkeypatch):
     r = client.get("/panel/asistente").text
     # Cada sección es un renglón con su ícono, como Resultados; sin Tu asistente ni Contenido como grupos.
     nav = r.split('<nav class="lat-nav">')[1].split("</nav>")[0]
-    titulos = ["Resultados", "Conversaciones", "Configura tu asistente", "Probar tu asistente", "Campañas", "Calendario"]
+    titulos = ["Resultados", "Conversaciones", "Probar tu asistente", "Campañas", "Calendario"]
     assert [nav.index(f'title="{t}"') for t in titulos] == sorted(nav.index(f'title="{t}"') for t in titulos)
-    assert nav.count("<svg") == 6 and "lat-sub" not in nav and "data-sub" not in nav
+    assert nav.count("<svg") == 5 and "lat-sub" not in nav and "data-sub" not in nav
     assert 'title="Tu asistente"' not in nav and 'title="Contenido"' not in nav
     assert nav.count('class="lat-item on"') == 1 and 'class="lat-item on" href="/panel/asistente"' in nav
     # Sin contenido en el plan, no salen Campañas ni Calendario.
     monkeypatch.setattr(c, "imagenes_mes", 0)
-    assert 'title="Campañas"' not in client.get("/panel/asistente").text
+    r = client.get("/panel/asistente").text
+    assert 'title="Campañas"' not in r and 'title="Tu marca"' not in r
+
+
+def test_configuracion_abajo_arriba_de_ayuda(cliente, monkeypatch):
+    client, c, *_ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 5)
+    abajo = client.get("/panel/resultados").text.split('<div class="lat-abajo">')[1].split('<div class="lat-pie">')[0]
+    orden = [abajo.index(t) for t in ("Pasos iniciales", ">Configuración<", 'title="Tu empresa"', 'title="Tu asistente"',
+                                      'title="Tu marca"', 'title="Ayuda"')]
+    assert orden == sorted(orden)
 
 
 def test_abajo_del_menu_pasos_iniciales_y_ayuda(cliente, monkeypatch):
@@ -1078,14 +1098,14 @@ def test_reglas_opcionales_plegadas_y_casilla_vacia_las_borra(cliente):
     assert perfil["no_hacer"] == "No hablar de precios." and perfil["pasar_equipo"] == "" and perfil["instrucciones"] == ""
 
 
-def test_menu_de_tu_cuenta_en_tres_grupos(cliente, monkeypatch):
+def test_menu_de_tu_cuenta_solo_la_cuenta(cliente, monkeypatch):
     client, c, *_ = cliente
     monkeypatch.setattr(c, "imagenes_mes", 5)
     # El último: el de tu cuenta (antes van los pasos iniciales).
     menu = client.get("/panel/contenido").text.split('class="perfil-menu"')[-1].split("</details>")[0]
-    orden = [menu.index(t) for t in ("Conectado como", "Información de empresa", "Tu marca", 'class="sep"',
-                                     "Conexión", "Ver mi Instagram", "Salir")]
+    orden = [menu.index(t) for t in ("Conectado como", "Conexión", "Ver mi Instagram", "Salir")]
     assert orden == sorted(orden)
+    assert "Información de empresa" not in menu and "Tu marca" not in menu  # están en Configuración
 
 
 def test_nombre_ia_y_transferir_si_esta_enojado(cliente):
@@ -1125,3 +1145,17 @@ def test_el_logo_se_sirve_y_el_menu_plegado_lleva_solo_el_icono(cliente):
     for nombre in ("logo-skandar.svg", "logo-sk.svg"):
         logo = client.get(f"/{nombre}")
         assert logo.status_code == 200 and logo.headers["content-type"].startswith("image/svg+xml")
+
+
+def test_mensaje_al_pasar_una_queja(cliente):
+    client, c, *_ = cliente
+    r = client.get("/panel/asistente/configura?paso=reglas")
+    assert 'class="as-sub as-sub-quejas"' in r.text and 'name="msg_quejas_on" value="1">' in r.text
+    client.post("/panel/asistente/paso", headers=ORIGEN, data={
+        "paso": "reglas", "opcionales": "1", "r_quejas": "1", "msg_quejas_on": "1", "msg_quejas": "Lo siento <mucho>."})
+    prompt = Path(c.prompt_path).read_text()
+    assert "Antes de pasar una queja a una persona, dile esto" in prompt and "Lo siento &lt;mucho&gt;." in prompt
+    # Con la regla apagada no va.
+    client.post("/panel/asistente/paso", headers=ORIGEN, data={
+        "paso": "reglas", "opcionales": "1", "msg_quejas_on": "1", "msg_quejas": "Lo siento."})
+    assert "pasar una queja" not in Path(c.prompt_path).read_text()

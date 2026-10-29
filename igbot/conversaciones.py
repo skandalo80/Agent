@@ -1,8 +1,8 @@
 """Tu asistente > Conversaciones: la bandeja de DMs del panel.
 
 A la izquierda, los chats de 10 en 10 con buscador, arriba quién los atiende (Tú: Nuevos, Sin
-contestar y Todas, con la razón por la que te los pasó el asistente; Tu asistente: En curso, Para
-revisar y Todas); a la derecha, el chat abierto con el interruptor
+contestar y Todas, con la razón por la que te los pasó el asistente o por la que no pudo contestar;
+Tu asistente: En curso y Todas); a la derecha, el chat abierto con el interruptor
 Asistente / Tú y la caja para contestar desde aquí. Solo DMs: los comentarios no salen.
 Todo es HTML que arma el servidor; el buscador se manda solo mientras escribes con
 panel.js (sin fetch: recarga la página), y sin JS se busca con Enter.
@@ -27,11 +27,10 @@ MAX_RESPUESTA = 1000
 VENTANA = 24 * 3600
 # Arriba, quién atiende: "Tú" (el chat está en pausa) o "Tu asistente"; debajo, sus pestañas.
 # Sin `ver` se abre "Tú" si algo espera tu respuesta; si no, "Tu asistente".
-FILTROS = {"nuevos": "Nuevos", "sin": "Sin contestar", "tuyas": "Todas",
-           "curso": "En curso", "revisar": "Para revisar", "bot": "Todas"}
-LADO = {"nuevos": "tu", "sin": "tu", "tuyas": "tu", "curso": "bot", "revisar": "bot", "bot": "bot"}
-AVISAN = {"nuevos", "sin", "revisar"}  # las pestañas cuyo número sale en naranja
-# Un mensaje del cliente sin respuesta del asistente después de esto pasa a "Para revisar".
+FILTROS = {"nuevos": "Nuevos", "sin": "Sin contestar", "tuyas": "Todas", "curso": "En curso", "bot": "Todas"}
+LADO = {"nuevos": "tu", "sin": "tu", "tuyas": "tu", "curso": "bot", "bot": "bot"}
+AVISAN = {"nuevos", "sin"}  # las pestañas cuyo número sale en naranja
+# Un mensaje del cliente sin respuesta del asistente después de esto pasa a "Tú", en Sin contestar.
 SIN_RESPUESTA = 120
 
 
@@ -39,7 +38,7 @@ def primero(cuantos: dict, lado: str) -> str:
     """La pestaña con la que abre un lado: la primera que pide atención y tiene algo; si no, En curso / Todas."""
     if lado == "tu":
         return "nuevos" if cuantos["nuevos"] else "sin" if cuantos["sin"] else "tuyas"
-    return "revisar" if cuantos["revisar"] else "curso" if cuantos["curso"] else "bot"
+    return "curso" if cuantos["curso"] else "bot"
 DIAS = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"]
 MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
 MESES_LARGOS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre",
@@ -67,18 +66,20 @@ CSS = """
 .conv .arriba b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .conv .arriba small{color:var(--gris);font-size:.75rem;white-space:nowrap}
 .conv .ult{display:block;font-size:.85rem;color:var(--texto2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:.1rem 0 .25rem}
-.conv.sin .ult{color:var(--negro);font-weight:600}
+.conv.sin .ult{color:var(--negro);font-weight:600;padding-right:1.25rem}
 .conv .lo-tiene{display:block;font-size:.7rem;color:var(--gris)}
 .conv .lo-tiene.rojo{color:var(--naranja-t);font-weight:600}
 .lados{display:flex;gap:.25rem;margin:0 1rem .5rem;padding:.2rem;border-radius:999px;background:var(--claro)}
-.lados a{flex:1;text-align:center;padding:.45rem .75rem;border-radius:999px;color:var(--gris);text-decoration:none;font-weight:600;font-size:.9rem}
+.lados a{flex:1;display:flex;align-items:center;justify-content:center;padding:.45rem .75rem;border-radius:999px;color:var(--gris);text-decoration:none;font-weight:600;font-size:.9rem}
 .lados a.on{background:var(--acento);color:var(--tinta)}
-.lados b{display:inline-block;min-width:1.1rem;margin-left:.35rem;padding:0 .3rem;border-radius:999px;background:#C6FA2C;color:#1B1C1F;font-size:.7rem;line-height:1.1rem}
+.lados b{display:inline-block;min-width:1.1rem;margin-left:.35rem;padding:0 .3rem;border-radius:999px;background:var(--neon);color:#1B1C1F;text-align:center;font-size:.7rem;line-height:1.1rem}
 .conv .razon{display:inline-block;margin-right:.4rem;padding:0 .45rem;border-radius:999px;background:var(--claro);color:var(--gris);font-weight:600}
+.conv .razon.anuncio{background:rgba(255,138,61,.16);color:var(--naranja-t)}
 .conv .razon.molesto{background:rgba(255,69,58,.18);color:#ff8a80}
 .lat-item{position:relative}
-.punto-menu{position:absolute;width:.5rem;height:.5rem;border-radius:50%;background:#FFD60A;margin:-1.1rem 0 0 1rem;box-shadow:0 0 0 2px #18191C}
-.punto-sin{position:absolute;left:.35rem;top:50%;width:.4rem;height:.4rem;border-radius:50%;background:var(--neon)}
+.punto-menu{position:absolute;width:.5rem;height:.5rem;border-radius:50%;background:var(--neon);margin:-1.1rem 0 0 1rem;box-shadow:0 0 0 2px #18191C}
+/* Como en WhatsApp: el punto de no leído va a la derecha, debajo de la hora. */
+.punto-sin{position:absolute;right:1rem;top:2.5rem;width:var(--punto-chat);height:var(--punto-chat);border-radius:50%;background:var(--neon)}
 .inbox .vacio{padding:1.5rem 1rem;font-size:.9rem;color:var(--gris)}
 .inbox .lista-vivo .paginas{margin:auto 0 0;padding:.75rem;justify-content:center}
 .hilo{display:flex;flex-direction:column;min-width:0}
@@ -196,10 +197,13 @@ async def partes(c: Cuenta, ver: str = "", buscar: str = "", hoja: int = 1, chat
     # Por qué te lo pasó el asistente (la etiqueta de cada chat del lado "Tú").
     pasados = {f[0] for f in filas if f[6]}
     razones = {u: d for u, d, _ in await c.store.events("humano", humano_desde, ahora + 1) if u in pasados} if pasados else {}
+    # Los que llegaron por un anuncio de "Enviar mensaje".
+    anuncios = await c.store.anuncios_de([f[0] for f in filas])
 
     conv = []
     for (u, t, rol, texto, hasta, est, paso), nombre in zip(filas, nombres):
         nombre = nombre if nombre.startswith("@") else "Cliente de Instagram"
+        limite = texto == LIMIT_NOTICE
         if rol == "assistant":
             manual = texto.startswith(MANUAL)
             texto = ("Tú: " + texto[len(MANUAL):].strip()) if manual else "Asistente: " + texto
@@ -210,9 +214,13 @@ async def partes(c: Cuenta, ver: str = "", buscar: str = "", hoja: int = 1, chat
                         f'{RAZONES.get(razon, "Te lo pasó el asistente") if paso else "Lo tomaste tú"}</span>')
             quien = {"nuevo": "Nuevo", "tu_sin": "Sin contestar"}.get(est, "Lo atiendes tú")
             quien += f" · {max(1, round((hasta - ahora) / 3600))} h"
+        elif est == "revisar":
+            etiqueta = f'<span class="razon">{"Límite del plan" if limite else "El asistente no respondió"}</span>'
+            quien = "Sin contestar"
         else:
-            etiqueta = ""
-            quien = "Para revisar: no tuvo respuesta" if est == "revisar" else "Asistente"
+            etiqueta, quien = "", "Asistente"
+        if u in anuncios:
+            etiqueta = '<span class="razon anuncio">Anuncio</span>' + etiqueta
         aviso = est in ("nuevo", "tu_sin", "revisar")
         conv.append(
             f'<a class="conv{" sin" if aviso else ""}{" on" if u == chat else ""}"'
@@ -235,7 +243,6 @@ async def partes(c: Cuenta, ver: str = "", buscar: str = "", hoja: int = 1, chat
              "sin": "Ninguno: ya contestaste todos los chats que atiendes tú.",
              "tuyas": "Ninguno: tu asistente está atendiendo todos tus chats.",
              "curso": "Nadie ha escrito en las últimas 24 horas.",
-             "revisar": "Nada que revisar: tu asistente contestó todo.",
              "bot": "Aún no te escribe nadie. Aquí vas a ver tus chats en cuanto lleguen."}[ver]
     if buscar:
         vacio = f"No encontramos chats con «{escape(buscar)}»."
@@ -276,6 +283,11 @@ async def _hilo(c: Cuenta, u: str, ver: str, buscar: str, hoja: int, n: int, aho
 
     from . import panel
     sub = (f"Último mensaje {panel.hace(ultimo_cliente)}" if ultimo_cliente else "Aún no te escribe")
+    if anuncio := (await c.store.anuncios_de([u])).get(u):
+        sub += " · Llegó por " + (f"el anuncio «{escape(anuncio['titulo'][:80])}»" if anuncio["titulo"] else "un anuncio")
+    if ventas := await c.store.ventas_de(u):
+        from .tienda_shopify import monto
+        sub += f" · Compró {monto(sum(v['monto'] for v in ventas), ventas[-1]['moneda'])} en tu tienda"
     if nombre.startswith("@"):
         sub += (f' · <a class="enlace" href="https://ig.me/m/{escape(nombre[1:])}" target="_blank" rel="noopener">'
                 "Abrir en Instagram</a>")

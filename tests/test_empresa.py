@@ -1,4 +1,5 @@
 """Perfil de empresa: pasos, catálogo, prompt del asistente y opciones de campaña."""
+import asyncio
 import json
 import os
 from pathlib import Path
@@ -34,8 +35,8 @@ def test_pasos_guardan_y_el_asistente_usa_el_perfil(cliente):
     assert "Paso 1 de 5" in r.text and "Café en Puebla" in r.text and "Te precargamos" in r.text
     assert "¿Cómo es tu empresa?" not in r.text and 'class="leyenda-usos"' in r.text
     # Tus clientes va al final: el riel lo numera 5 y el paso 1 sigue a productos.
-    assert "Siguiente: productos y servicios" in r.text and r.text.index("Tus clientes") > r.text.index("Preguntas frecuentes")
-    assert 'href="/panel/empresa" class="on"' in r.text  # el menú de perfil la marca
+    assert "Siguiente: productos y servicios" in r.text and r.text.index("<b>Tus clientes") > r.text.index("<b>Preguntas")
+    assert 'class="lat-item on" href="/panel/empresa" title="Tu empresa"' in r.text  # Configuración la marca
     campos_con_nombre(r.text)
     assert client.portal.call(empresa.de, c) == {}
     assert not client.portal.call(empresa.empresa_lista, c)
@@ -49,6 +50,12 @@ def test_pasos_guardan_y_el_asistente_usa_el_perfil(cliente):
     assert e["horarios"] == "L a V 8 a 20"  # lo precargado de los otros pasos también queda
     assert client.portal.call(empresa.empresa_lista, c)
 
+    # Aplicar guarda y se queda en el mismo paso.
+    r = client.post("/panel/empresa", headers=ORIGEN, follow_redirects=False,
+                    data={"paso": "2", "clientes_tipo": "personas", "distinto": "Tostamos.", "accion": "aplicar"})
+    assert r.headers["location"] == "/panel/empresa?paso=2&aviso=aplicado"
+    r = client.get(r.headers["location"]).text
+    assert "Cambios aplicados." in r and 'value="aplicar">Aplicar</button>' in r and "Tostamos." in r
     # Paso 2 y 4; el riel guarda y salta a cualquier paso.
     r = client.post("/panel/empresa", headers=ORIGEN, follow_redirects=False,
                     data={"paso": "2", "clientes_tipo": "personas", "distinto": "Tostamos aquí.", "accion": "ir_4"})
@@ -74,7 +81,7 @@ def test_pasos_guardan_y_el_asistente_usa_el_perfil(cliente):
     assert "Café Lunar" in Path(c.prompt_path).read_text() and "Elegante y premium" in Path(c.prompt_path).read_text()
 
     r = client.get("/panel/empresa")  # con lo esencial lleno abre el resumen
-    assert ">Resumen</p>" in r.text and "Se preparan cuando guardes" in r.text
+    assert '<div class="hoja-o"><form' in r.text and ">Resumen</p>" in r.text  # el título va dentro de la tarjeta
     assert 'class="antetitulo"' not in r.text.split("<main")[0] and "Café Lunar<span" not in r.text  # sin título arriba
 
 
@@ -209,7 +216,8 @@ def test_opciones_de_campana_al_terminar(cliente, monkeypatch):
     client.portal.call(empresa.generar_opciones, c)  # sin cambios en el perfil no se vuelve a pedir
     assert len(respuestas) == 1
     r = client.get("/panel/empresa?paso=6&aviso=listo")
-    assert "Objetivo 0" in r.text and "Mensaje 5.3" in r.text and "tus campañas usan tu perfil" in r.text
+    assert "tus campañas usan tu perfil" in r.text
+    assert "Tus campañas, a la medida" not in r.text and "Objetivo 0" not in r.text  # se ven al crear la campaña
     # Ya terminado, cambiar un paso vuelve a pedirlas (en segundo plano).
     client.post("/panel/empresa", headers=ORIGEN, data={"paso": "2", "distinto": "Nuevo", "accion": "ir_3"})
     client.portal.call(empresa.esperar_revision, c)
@@ -270,7 +278,7 @@ def test_iconos_de_quien_usa_cada_campo_y_caracter_guardado(cliente):
     def iconos(html: str, etiqueta: str) -> str:
         return html.split(etiqueta, 1)[1].split("</label>", 1)[0].split("</legend>", 1)[0]
     p1 = client.get("/panel/empresa?paso=1").text
-    assert "<h2>" not in p1.split('class="cab-paso"')[1].split("</div>")[0]
+    assert "<h2>Empecemos por tu empresa</h2>" in p1.split('class="cab-paso"')[1].split("</div>")[0]  # título y bajada, como Tu asistente y Tu marca
     assert iconos(p1, "Tu empresa en una frase").count('class="uso"') == 2
     p2 = client.get("/panel/empresa?paso=2").text
     assert "Paso 5 de 5" in p2 and "Siguiente: resumen" in p2
@@ -281,3 +289,40 @@ def test_iconos_de_quien_usa_cada_campo_y_caracter_guardado(cliente):
     assert "Lo usan tus campañas" in p3.split("Fotos <i", 1)[1].split('class="fotos-o"', 1)[0]
     p5 = client.get("/panel/empresa?paso=5").text
     assert iconos(p5, "Pregunta 1").count('class="uso"') == 1 and "Lo usa tu asistente" in iconos(p5, "Pregunta 1")
+
+
+def test_una_sola_revision_al_recorrer_los_pasos(cliente, monkeypatch):
+    """Guardar varios pasos seguidos lanza una revisión, cuando deja de guardar; Terminar no espera; y si lo que lee
+    el asistente no cambió, no se le pregunta a la IA."""
+    client, c, *_ = cliente
+    revisiones = []
+
+    async def revisar(c, texto):
+        revisiones.append(texto)
+        return ""
+
+    monkeypatch.setattr(panel, "revisar_instrucciones", revisar)
+    monkeypatch.setattr(empresa, "ESPERA_REVISION", 0.3)
+    client.post("/panel/empresa", headers=ORIGEN, data=PASO_1)
+    client.post("/panel/empresa", headers=ORIGEN, data={"paso": "4", "horarios": "Diario 8 a 22", "accion": "ir_5"})
+    assert not revisiones and client.portal.call(empresa.revision_pendiente, c)  # todavía está guardando
+    client.portal.call(empresa.esperar_revision, c)
+    assert len(revisiones) == 1 and "Diario 8 a 22" in revisiones[0]
+    assert not client.portal.call(empresa.revision_pendiente, c)
+
+    monkeypatch.setattr(empresa, "ESPERA_REVISION", 3600)
+    client.post("/panel/empresa", headers=ORIGEN, data={"paso": "4", "horarios": "Diario 9 a 21", "accion": "terminar"})
+    for _ in range(50):  # Terminar revisa sin esperar la hora
+        if not empresa._revisiones.get(c.slug):
+            break
+        client.portal.call(asyncio.sleep, 0.05)
+    assert len(revisiones) == 2 and "Diario 9 a 21" in Path(c.prompt_path).read_text()
+
+    client.post("/panel/empresa", headers=ORIGEN, data={"paso": "4", "horarios": "Diario 9 a 21", "pagos": ["tarjeta"],
+                                                        "accion": "terminar"})
+    client.portal.call(empresa.esperar_revision, c)
+    assert len(revisiones) == 3  # los pagos sí llegan al asistente
+    e = client.portal.call(empresa.de, c)
+    client.portal.call(c.store.set, empresa.CLAVE, json.dumps({**e, "actualizado": 1}))
+    client.portal.call(empresa.revisar_y_aplicar, c)
+    assert len(revisiones) == 3  # cambió algo que el asistente no lee: no se revisa

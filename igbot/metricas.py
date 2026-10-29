@@ -9,9 +9,11 @@ Cada día, desde las HORA, el bucle de fondo de app.py (tick) guarda por cuenta:
   dos últimos, que Instagram todavía ajusta.
 - Una vez por semana, el público: edades, género y ciudades (Instagram solo lo da a
   cuentas con 100 seguidores o más).
+- Las estadísticas de cada post publicado en los últimos 30 días (informe.refrescar_numeros), para que
+  Campañas, Pasadas y Resultados las lean de la base sin preguntarle a Instagram.
 
-Son unas 5 llamadas al día por cuenta (15 la primera vez) y una fila al día en
-metricas_dia. Las métricas que Instagram no da (cuenta chica, permiso que falta) se
+Son unas 5 llamadas al día por cuenta (15 la primera vez) más una por post de esos 30 días, y una
+fila al día en metricas_dia. Las métricas que Instagram no da (cuenta chica, permiso que falta) se
 saltan sin romper las demás.
 
 La sección de Resultados son tarjetas con números, líneas y donas en SVG hechas aquí
@@ -23,7 +25,7 @@ from datetime import date, datetime, timedelta
 from html import escape
 from zoneinfo import ZoneInfo
 
-from . import tools
+from . import informe, tools
 from .cuenta import Cuenta, usar
 
 log = logging.getLogger("igbot.metricas")
@@ -106,6 +108,11 @@ async def guardar(c: Cuenta, hoy: date) -> None:
         if atras <= 2 or "alcance" not in guardados.get(dia.isoformat(), {}):
             if valores := await insights_del_dia(c, dia):
                 await store.guardar_metricas(dia.isoformat(), valores)
+    try:
+        log.info("Estadísticas de %d posts refrescadas para %s", await informe.refrescar_numeros(c),
+                 c.slug or "la principal")
+    except Exception:  # no deja sin público ni seguidores a la cuenta
+        log.exception("No se pudieron refrescar las estadísticas de los posts de %s", c.slug or "la principal")
     semana = f"{hoy.isocalendar()[0]}-{hoy.isocalendar()[1]}"
     anterior = json.loads(await store.get(CLAVE_PUBLICO) or "{}")
     if anterior.get("semana") != semana:
@@ -196,6 +203,22 @@ def suave(puntos: list[tuple[float, float]]) -> str:
     return camino
 
 
+def puntos_hover(columnas: list[tuple[float | None, str, str]], punto: bool = True) -> str:
+    """Una columna por dato encima de la gráfica (HTML, porque el SVG se estira y deformaría el punto y
+    el texto): al pasar el cursor sale un puntito en `y` (% desde arriba) y la etiqueta con el valor y
+    la fecha, dentro de la gráfica. Sin JavaScript (el CSP no lo deja): solo :hover."""
+    n = len(columnas)
+    partes = []
+    for i, (y, valor, cuando) in enumerate(columnas):
+        if y is None:
+            partes.append('<div class="mh"></div>')
+            continue
+        lado = (" izq" if i < n * .2 else " der" if i >= n * .8 else "") + (" abajo" if y < 35 else "")
+        partes.append(f'<div class="mh{lado}" style="--y:{y:.1f}%">' + ('<i></i>' if punto else "")
+                      + f'<span>{valor}' + (f"<small>{cuando}</small>" if cuando else "") + '</span></div>')
+    return f'<div class="met-hover">{"".join(partes)}</div>'
+
+
 def linea(valores: list[int | None], fechas: list[date], nombre: str) -> str:
     """Línea por día con su relleno; los días sin dato se saltan. Al pasar el cursor sale el valor."""
     ancho, alto = 10 * len(valores), 100
@@ -211,18 +234,16 @@ def linea(valores: list[int | None], fechas: list[date], nombre: str) -> str:
     relleno = f"{camino}L{puntos[-1][0]:.1f},{alto}L{puntos[0][0]:.1f},{alto}Z"
     guias = "".join(f'<line class="guia" x1="0" x2="{ancho}" y1="{g}" y2="{g}" vector-effect="non-scaling-stroke"/>'
                     for g in (8, 50, 92))
-    zonas = "".join(
-        f'<rect class="zona" x="{i * 10}" y="0" width="10" height="{alto}"><title>'
-        f'{escape(f"{tools.DAYS[f.weekday()]} {f:%d/%m}: " + ("sin dato" if v is None else f"{cifra(v)} {nombre}"))}'
-        "</title></rect>"
-        for i, (f, v) in enumerate(zip(fechas, valores)))
+    zonas = puntos_hover([(None, "", "") if v is None else
+                          (y(v), f"<b>{cifra(v)}</b>", "")
+                          for f, v in zip(fechas, valores)])
     cada = 1 if len(fechas) <= 7 else 7 if len(fechas) <= 30 else 15
     eje = "".join(f"<span>{f:%d/%m}</span>" if (len(fechas) - 1 - i) % cada == 0 else "<span></span>"
                   for i, f in enumerate(fechas))
     return (f'<div class="met-graf"><div class="met-escala"><span>{cifra(tope)}</span><span>{cifra(bajo)}</span></div>'
             f'<svg class="met-linea" viewBox="0 0 {ancho} {alto}" preserveAspectRatio="none" role="img"'
             f' aria-label="{escape(nombre)} por día">{guias}<path class="area" d="{relleno}"/>'
-            f'<path class="trazo" d="{camino}" vector-effect="non-scaling-stroke"/>{zonas}</svg></div>'
+            f'<path class="trazo" d="{camino}" vector-effect="non-scaling-stroke"/></svg>{zonas}</div>'
             f'<div class="ejex met-eje">{eje}</div>')
 
 
@@ -234,7 +255,7 @@ def dona(partes: list[tuple[str, int]], centro: str, debajo: str) -> str:
         largo = v / suma * vuelta
         if largo:
             arcos.append(f'<circle class="c{i}" r="{r}" cx="50" cy="50" stroke-dasharray="{largo:.2f} {vuelta:.2f}"'
-                         f' stroke-dashoffset="{-avance:.2f}"><title>{escape(nombre)}: {cifra(v)}</title></circle>')
+                         f' stroke-dashoffset="{-avance:.2f}"/>')
         avance += largo
     leyenda = "".join(f'<li><i class="c{i}"></i>{escape(nombre)}<b>{cifra(v)}</b></li>'
                       for i, (nombre, v) in enumerate(partes))

@@ -35,9 +35,9 @@ ACCIONES = ("likes", "comments", "saved", "shares")
 MADURO = 3 * 86400  # publicado hace al menos esto para contar en "qué funcionó"
 MAX_HISTORIAL = 30
 MAX_REPORTE = 6  # campañas por PDF
-CACHE_SEG = 3600
+CACHE_SEG = 3600  # un post de menos de MADURO (aún junta interacciones) se pide otra vez después de esto
 PAGINAS_BUSQUEDA = 4  # páginas de 50 de "me/media" para hallar posts viejos sin id guardado
-_insights: dict[tuple[str, str], tuple[float, dict | None]] = {}
+DIAS_REFRESCO = 30  # metricas.py refresca cada día las estadísticas de los posts de estos últimos días
 
 CONCLUSIONES = """Eres analista de redes sociales. Lees los resultados de unas campañas de Instagram y escribes 3 conclusiones cortas para el dueño del negocio, en español y de tú.
 - Usa solo los números de <datos> (la tasa es la tasa de interacción por alcance, en %); no inventes cifras ni causas que no se vean ahí.
@@ -132,18 +132,38 @@ async def ids_de_instagram(c: Cuenta, posts: list[dict]) -> dict[int, str]:
     return ids
 
 
-async def numeros(c: Cuenta, media_id: str) -> dict | None:
-    """Los Insights de un post, o None si Instagram no los dio (p. ej. falta el permiso)."""
-    clave = (c.slug, media_id)
-    if (guardado := _insights.get(clave)) and guardado[0] > time.time() - CACHE_SEG:
-        return guardado[1]
+async def pedir_numeros(c: Cuenta, media_id: str) -> dict | None:
+    """Le pregunta a Instagram los Insights de un post y los guarda (None si no los dio, p. ej. falta el permiso)."""
     try:
         datos = await c.instagram.media_insights(media_id)
     except Exception as e:
         log.warning("Sin insights de %s para %s: %s", media_id, c.slug, e)
         datos = None
-    _insights[clave] = (time.time(), datos)
+    await c.store.guardar_insights_post(media_id, datos, time.time())
     return datos
+
+
+async def numeros(c: Cuenta, media_id: str, publicado: float | None = None) -> dict | None:
+    """Los Insights de un post, de la base. Solo se le pregunta a Instagram si nunca se pidieron, o si tienen más
+    de CACHE_SEG y el post es reciente (`publicado` hace menos de MADURO, o no se sabe) o no se tenían; los demás
+    los refresca metricas.py una vez al día."""
+    guardado = await c.store.insights_post(media_id)
+    if guardado:
+        datos, leido = guardado
+        reciente = publicado is None or time.time() - publicado < MADURO
+        if leido > time.time() - CACHE_SEG or (datos is not None and not reciente):
+            return datos
+    return await pedir_numeros(c, media_id)
+
+
+async def refrescar_numeros(c: Cuenta) -> int:
+    """Las estadísticas de los posts publicados en los últimos DIAS_REFRESCO días (lo llama metricas.py cada día).
+    Devuelve cuántos se pidieron."""
+    posts = await c.store.posts(("publicada",), desde=time.time() - DIAS_REFRESCO * 86400)
+    ids = await ids_de_instagram(c, posts)
+    for media_id in ids.values():
+        await pedir_numeros(c, media_id)
+    return len(ids)
 
 
 async def filas(c: Cuenta, camps: list[dict]) -> list[dict]:
@@ -159,7 +179,7 @@ async def filas(c: Cuenta, camps: list[dict]) -> list[dict]:
         if post["id"] not in ids:
             return None
         async with turno:
-            return await numeros(c, ids[post["id"]])
+            return await numeros(c, ids[post["id"]], post["publish_at"])
 
     datos = await asyncio.gather(*(leer(post) for *_, post in publicados))
     ahora = time.time()
@@ -382,6 +402,13 @@ class Propuesta(Cotizacion):
 async def propuesta(c: Cuenta, camp: dict, marca: dict, cuenta: str) -> bytes:
     """La campaña que se está armando, para mandarla a la marca antes de publicar: qué sale cada día,
     con su imagen si ya la tiene, y su texto."""
+    posts = camp.get("posts", [])
+    publicados = await c.store.posts_by_id([p["post_id"] for p in posts if p.get("post_id")])
+    medias = {k: await c.store.media(post["media_ids"][0]) for k, post in publicados.items() if post["media_ids"]}
+    return await asyncio.to_thread(_propuesta, c, camp, marca, cuenta, publicados, medias)
+
+
+def _propuesta(c: Cuenta, camp: dict, marca: dict, cuenta: str, publicados: dict, medias: dict) -> bytes:
     from .campanas import FORMATOS, MESES, PUBLICAR, fecha_larga, formato_de, tema_de
 
     inicio, fin = date.fromisoformat(camp["inicio"]), fin_de(camp)
@@ -397,7 +424,6 @@ async def propuesta(c: Cuenta, camp: dict, marca: dict, cuenta: str) -> bytes:
     formatos = {formato_de(p) for p in posts}
     doc.datos([("Posts", cifra(len(posts))), ("Publica", PUBLICAR.get(camp.get("publicar"), ("",))[0] or "—"),
                ("Temas", cifra(len(temas))), ("Formatos", cifra(len(formatos)))])
-    publicados = await c.store.posts_by_id([p["post_id"] for p in posts if p.get("post_id")])
     semana_actual = None
     for n, p in enumerate(sorted(posts, key=lambda p: (p["dia"], p["hora"])), 1):
         dia = date.fromisoformat(p["dia"])
@@ -416,7 +442,7 @@ async def propuesta(c: Cuenta, camp: dict, marca: dict, cuenta: str) -> bytes:
                      align="R", new_x="LMARGIN", new_y="NEXT")
             doc.rule(NEGRO, 0.3)
         post = publicados.get(p.get("post_id"))
-        media = await c.store.media(post["media_ids"][0]) if post and post["media_ids"] else None
+        media = medias.get(p.get("post_id")) if post else None
         foto = Path(c.media_dir) / f"{media[0]}.jpg" if media else None
         etiquetas = f"{tema_de(p['tipo'])[0]} · {FORMATOS[formato_de(p)][0]}" + (
             f" · Responde: {p['responde']}" if p.get("responde") else "")
@@ -437,6 +463,10 @@ class PlanCalendario(Propuesta):
 async def calendario_pdf(c: Cuenta, titulo: str, ini: date, fin: date, items: list, marca: dict, cuenta: str) -> bytes:
     """Lo que se ve en Calendario (mes, semana o día, con sus filtros): cada post e historia por día, con su
     imagen, hora, estado y texto. `items` son calendario.Item."""
+    return await asyncio.to_thread(_calendario_pdf, c, titulo, ini, fin, items, marca, cuenta)
+
+
+def _calendario_pdf(c: Cuenta, titulo: str, ini: date, fin: date, items: list, marca: dict, cuenta: str) -> bytes:
     from .calendario import DIAS_LARGOS, ESTADOS
     from .campanas import MEDIOS
 
@@ -477,6 +507,10 @@ class Brief(Cotizacion):
 
 async def brief_pdf(c: Cuenta, camp: dict, marca: dict, cuenta: str) -> bytes:
     """El brief de la campaña (la idea que eligió y ajustó), para guardarlo o compartirlo con su equipo."""
+    return await asyncio.to_thread(_brief_pdf, c, camp, marca, cuenta)
+
+
+def _brief_pdf(c: Cuenta, camp: dict, marca: dict, cuenta: str) -> bytes:
     from . import brief  # import tardío: brief importa contenido
 
     b = camp["brief"]
@@ -514,6 +548,21 @@ async def pdf(c: Cuenta, camps: list[dict], marca: dict, cuenta: str) -> bytes:
     nombres = {"tema": {k: tema_de(k)[0] for k in {*TEMAS, *(f["tema"] for f in renglones)}},
                "formato": {k: v[0] for k, v in FORMATOS.items()},
                "franja": {k: f"{v[0]} ({v[1]})" for k, v in HORARIOS.items()}}
+    con_datos = [f for f in renglones if f["datos"]]
+    grupos = {k: por(renglones, k) for k in ("tema", "formato", "franja")}
+    lista = []
+    if con_datos:
+        resumen = {"posts_con_resultados": sum(1 for f in renglones if f["maduro"] and f["tasa"] is not None),
+                   **{f"tasa_por_{k}": [(nombres[k].get(g, g), v, n) for g, v, n in lista_]
+                      for k, lista_ in grupos.items()},
+                   "mejores": [(f["titulo"], nombres["tema"].get(f["tema"]), nombres["formato"].get(f["formato"]),
+                                f["tasa"], f["datos"]) for f in renglones[:3]]}
+        lista = await conclusiones(c, resumen)
+    return await asyncio.to_thread(_pdf, c, camps, marca, cuenta, renglones, nombres, grupos, lista)
+
+
+def _pdf(c: Cuenta, camps: list[dict], marca: dict, cuenta: str, renglones: list[dict], nombres: dict, grupos: dict,
+         lista: list[str]) -> bytes:
     inicio = min(date.fromisoformat(x["inicio"]) for x in camps)
     fin = max(fin_de(x) for x in camps)
     hoy = tools.now().date()
@@ -541,15 +590,8 @@ async def pdf(c: Cuenta, camps: list[dict], marca: dict, cuenta: str) -> bytes:
             "Casi siempre es porque la cuenta se conectó antes de que pidiéramos ese permiso. Vuelve a conectarla"
             " en Conectar Instagram y acepta el permiso de estadísticas."])
 
-    grupos = {k: por(renglones, k) for k in ("tema", "formato", "franja")}
-    if con_datos:
-        resumen = {"posts_con_resultados": sum(1 for f in renglones if f["maduro"] and f["tasa"] is not None),
-                   **{f"tasa_por_{k}": [(nombres[k].get(g, g), v, n) for g, v, n in lista]
-                      for k, lista in grupos.items()},
-                   "mejores": [(f["titulo"], nombres["tema"].get(f["tema"]), nombres["formato"].get(f["formato"]),
-                                f["tasa"], f["datos"]) for f in renglones[:3]]}
-        if lista := await conclusiones(c, resumen):
-            doc.seccion("Lo más importante", lista)
+    if lista:
+        doc.seccion("Lo más importante", lista)
 
     doc.font(11, bold=True, color=NEGRO)
     doc.cell(doc.epw, 7, "Posts de mayor a menor interacción", new_x="LMARGIN", new_y="NEXT")
@@ -613,7 +655,14 @@ async def resultados_pdf(c: Cuenta, titulo: str, d: dict, m: dict, cuenta: str, 
     """Lo que se ve en Resultados para un periodo: en Instagram, sus números, día por día y el público; en
     Conversaciones, los mensajes, los comentarios y las ciudades. `d` sale de resultados.numeros_de y `m` de
     metricas.numeros."""
-    from . import contenido, metricas
+    from . import contenido
+
+    marca = await contenido.marca_de(c)
+    return await asyncio.to_thread(_resultados_pdf, c, titulo, d, m, cuenta, vista, marca)
+
+
+def _resultados_pdf(c: Cuenta, titulo: str, d: dict, m: dict, cuenta: str, vista: str, marca: dict) -> bytes:
+    from . import metricas
     from .resultados import duracion
 
     def signo(n: float | None) -> str:
@@ -624,7 +673,6 @@ async def resultados_pdf(c: Cuenta, titulo: str, d: dict, m: dict, cuenta: str, 
         return ", ".join(f"{(nombres or {}).get(k, k.split(',')[0])} {v / total:.0%}"
                          for k, v in sorted(grupo.items(), key=lambda x: -x[1])[:n])
 
-    marca = await contenido.marca_de(c)
     doc = ReporteResultados(f"@{cuenta.lstrip('@')}", titulo, fecha(tools.now().date()), marca.get("acento", ""))
     doc.alias_nb_pages()
     poner_logo(doc, c, marca)

@@ -27,6 +27,7 @@ cada campaña y una miniatura de cada post (mes()).
 Lo que escribe el cliente son datos, no instrucciones: va entre etiquetas.
 """
 import json
+from collections import Counter
 import logging
 import os
 import random
@@ -37,15 +38,15 @@ from datetime import date, datetime, timedelta
 from html import escape
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from PIL import Image
 
 from . import brief, config, empresa, imagenes, informe, openai_texto, panel, semana, tools
 from .admin import PANEL
-from .contenido import (ESTADOS, ESTILO_REFERENCIA, IMAGEN, MAX_CAPTION, archivo, contexto_marca, cuando, estilo_foto,
-                        estilos_de, falta_cupo,
+from .contenido import (DESDE, ESTADOS, ESTILO_REFERENCIA, IMAGEN, MAX_CAPTION, archivo, contexto_marca, cuando, estilo_foto,
+                        campo_desde, cerrar_a, con_desde, estilos_de, falta_cupo, ir_a_campana,
                         guardar_pieza, kit, libre, marca_de, modo_de, negocio_de, notas_estilo, pieza, plantilla_de,
-                        reglas_de, sin_plan, texto_imagen, url_imagen, usos_color, visual_marca)
+                        reglas_de, sin_plan, texto_imagen, tomar_desde, url_imagen, usos_color, visual_marca, vista_desde)
 from .cuenta import Cuenta, usar
 from .estilos import ESTILO_INICIAL, ESTILOS, USO_COLOR
 
@@ -259,6 +260,22 @@ async def todas_las(c: Cuenta) -> list[dict]:
     return [{**vieja, "id": int(vieja.get("creada", 0) * 1000)}]
 
 
+async def escribir_todas(c: Cuenta, lista: list[dict]) -> None:
+    await c.store.set("campanas", json.dumps(lista, ensure_ascii=False))
+    await c.store.set(HAY_CAMPANAS, "1" if lista else "0")
+
+
+HAY_CAMPANAS = "hay_campanas"  # para el menú: saber si tiene alguna sin leer todas
+
+
+async def hay_campanas(c: Cuenta) -> bool:
+    """Si tiene al menos una campaña (Pasos iniciales, en cada página). Las cuentas de antes lo calculan una vez."""
+    if (guardado := await c.store.get(HAY_CAMPANAS)) is None:
+        guardado = "1" if await todas_las(c) else "0"
+        await c.store.set(HAY_CAMPANAS, guardado)
+    return guardado == "1"
+
+
 async def leer(c: Cuenta, cid) -> dict:
     """Una campaña por su id, o {}."""
     return next((x for x in await todas_las(c) if str(x["id"]) == str(cid)), {})
@@ -273,7 +290,7 @@ async def guardar(c: Cuenta, camp: dict) -> None:
         vieja = min(lista, key=lambda x: informe.fin_de(x))
         await informe.archivar(c, vieja)
         lista.remove(vieja)
-    await c.store.set("campanas", json.dumps(lista, ensure_ascii=False))
+    await escribir_todas(c, lista)
 
 
 async def borrar(c: Cuenta, camp: dict) -> int:
@@ -283,8 +300,7 @@ async def borrar(c: Cuenta, camp: dict) -> int:
     for p in camp.get("posts", []):
         if (post := await estado_post(c, p)) and post["status"] in ("borrador", "programada", "fallida"):
             descartados += await c.store.set_post(post["id"], "cancelada", only_if=post["status"])
-    await c.store.set("campanas", json.dumps([x for x in await todas_las(c) if x["id"] != camp["id"]],
-                                             ensure_ascii=False))
+    await escribir_todas(c, [x for x in await todas_las(c) if x["id"] != camp["id"]])
     return descartados
 
 
@@ -876,6 +892,27 @@ async def estado_post(c: Cuenta, p: dict) -> dict | None:
         p["post_id"] = None  # lo descartaron: vuelve a ser propuesta
         return None
     return post
+
+
+async def guardar_post(c: Cuenta, camp: dict, p: dict) -> None:
+    """Guarda solo ese post, sobre la campaña recién leída: los trabajos largos corren en segundo plano y mientras
+    tanto el dueño pudo mover o editar otros posts. Si ya no está (borró el post o la campaña), no guarda nada."""
+    if not (fresca := await leer(c, camp["id"])):
+        return
+    fresca["posts"] = [p if str(x["k"]) == str(p["k"]) else x for x in fresca["posts"]]
+    await guardar(c, fresca)
+
+
+async def guardar_descartados(c: Cuenta, camp: dict, antes: dict) -> None:
+    """Si al pintar la campaña salió algún post descartado en Calendario (estado_post lo vuelve propuesta), lo
+    guarda; si no, no escribe nada. Sobre la campaña recién leída: otra pestaña pudo cambiarla mientras tanto."""
+    descartados = {p["k"]: antes[p["k"]] for p in camp["posts"] if antes.get(p["k"]) and not p.get("post_id")}
+    if not descartados or not (fresca := await leer(c, camp["id"])):
+        return
+    for p in fresca["posts"]:
+        if p.get("post_id") and descartados.get(p["k"]) == p["post_id"]:
+            p["post_id"] = None
+    await guardar(c, fresca)
 
 
 async def sincronizar(c: Cuenta, p: dict) -> None:
@@ -1508,7 +1545,7 @@ async def detalle(c: Cuenta, camp: dict, p: dict, quedan_ia: int) -> str:
         f' value="{escape(r.get("dm", ""))}" placeholder="La información que pidió: precio, cómo comprar…"{solo}></div>'
         "</div></div>")
     if fija:
-        botones = f'<a class="boton secundario chico" href="/panel/contenido/post/{post["id"]}">Ver el post</a>'
+        botones = f'<a class="boton secundario chico" href="{con_desde(f"/panel/contenido/post/{post["id"]}")}">Ver el post</a>'
     else:
         botones = (("" if post else f'<button class="boton secundario chico" name="accion" value="otra"'
                     f'{"" if quedan_ia else " disabled"}>Otra idea</button>')
@@ -1516,15 +1553,16 @@ async def detalle(c: Cuenta, camp: dict, p: dict, quedan_ia: int) -> str:
                    + ('<button class="boton chico" name="accion" value="aprobar">Aprobar</button>'
                       if post and post["status"] == "borrador" else ""))
     return (
-        f'<a class="velo-cam" href="{url_de(camp)}" aria-label="Cerrar"></a>'
+        f'<a class="velo-cam" href="{cerrar_a(url_de(camp))}" aria-label="Cerrar"></a>'
         f'<div class="modal-cam" id="detalle" role="dialog" aria-labelledby="d-nombre">'
         f'<form method="post" action="{url_de(camp)}" id="f-cam" enctype="multipart/form-data">'
-        f'<input type="hidden" name="k" value="{p["k"]}">'
+        f'<input type="hidden" name="k" value="{p["k"]}">{campo_desde()}'
         '<div class="top"><div>'
         f'<div class="etqs-cam"><span class="medio-cam m-{medio_de(p)}">{MEDIOS[medio_de(p)][0]}</span>{marca_estado}</div>'
         f'<h2 id="d-nombre">{escape(p["titulo"])}</h2><p>{fecha_larga(p["dia"])} · {p["hora"]}</p>'
         + (f'<p class="cli-cam">Responde a lo que te preguntan: {escape(p["responde"])}</p>' if p.get("responde") else "")
-        + f'</div><a class="x" href="{url_de(camp)}" aria-label="Cerrar">×</a></div>'
+        + f'</div><div class="cierre">{ir_a_campana(url_de(camp))}'
+        f'<a class="x" href="{cerrar_a(url_de(camp))}" aria-label="Cerrar">×</a></div></div>'
         f'<div class="cuerpo"><div class="izq">{imagen}{botones_img}</div><div>{plan_de_post(p)}'
         + ('<p class="ayuda">Es una historia: se ve 24 horas a pantalla completa y no lleva texto publicado. Lo que'
            " se lee va en la imagen.</p>" if historia else
@@ -1567,12 +1605,8 @@ def cabeza(boton: str = "", pasos: str = "", donde: str = "") -> str:
 
 def botones_nueva() -> str:
     """Crear campaña (el asistente paso por paso) y Crear con IA (solo objetivo y fechas)."""
-    return (f'<span class="botones-nueva"><a class="boton secundario ajuste" href="{BASE}/nueva">Crear campaña</a>'
-            f'<a class="boton ajuste boton-ia" href="{BASE}/rapida">{BRILLOS_IA} Crear con IA</a></span>')
-
-
-def boton_todas(ver: str = "") -> str:
-    return (f'<a class="boton secundario ajuste" href="{BASE}{f"?ver={ver}" if ver else ""}">‹ Todas las campañas</a>')
+    return (f'<span class="botones-nueva"><a class="boton secundario chico" href="{BASE}/nueva">Crear campaña</a>'
+            f'<a class="boton chico boton-ia" href="{BASE}/rapida">{BRILLOS_IA} Crear con IA</a></span>')
 
 
 async def barra(c: Cuenta, camp: dict) -> str:
@@ -1658,28 +1692,32 @@ async def pagina_campana(c: Cuenta, camp: dict, aviso: str = "", sel: str = "", 
     with usar(c):
         hoy = tools.now().date()
     quedan_ia = await ia_restantes(c)
+    antes = {p["k"]: p.get("post_id") for p in camp["posts"]}
     with usar(c):
         cuerpo = (tarjeta_borrar(camp, volver) if confirmar == "borrar" else
                   tarjeta_extra(confirmar, k, url_de(camp)) if confirmar else "")
         cuerpo += await calendario(c, camp, sel) + await barra(c, camp) + ver_brief(camp) + editar(camp)
         p = buscar_post(camp, sel) if sel else None
         modal = await detalle(c, camp, p, quedan_ia) if p else ""
-        await guardar(c, camp)  # por si se descartó algún post en Calendario
+        await guardar_descartados(c, camp, antes)
+    if p and DESDE.get():  # abierto desde Calendario: la ventana va sobre esa misma vista
+        from . import calendario as cal, contenido
+        return await contenido.pagina(c, "calendario", await cal.seccion(c, **vista_desde()) + modal, aviso)
     u = url_de(camp)
     descargas = (f'<a href="{u}/propuesta">Planeación (PDF)</a>'
                  + (f'<a href="{u}/brief">Brief (PDF)</a>' if camp.get("brief") else ""))
     botones = ('<span class="botones-cab">'
-               f'<a class="boton secundario ajuste" href="{BASE}/nueva?editar={camp["id"]}">Editar estrategia</a>'
-               f'<details class="menu-desc"><summary class="boton secundario ajuste">↓ Descargar</summary>'
+               f'<a class="boton secundario chico" href="{BASE}/nueva?editar={camp["id"]}">Editar estrategia</a>'
+               f'<details class="menu-desc"><summary class="boton secundario chico">↓ Descargar</summary>'
                f'<div>{descargas}</div></details>'
-               f'<a class="boton ajuste peligro" href="{u}?borrar=1">Borrar campaña</a></span>')
-    volver = f'<a class="volver-cam" href="{BASE}?ver={estado(camp, hoy)}">‹ Volver a campañas</a>'
+               f'<a class="boton chico peligro" href="{u}?borrar=1">Borrar campaña</a></span>')
+    cab = cabecera_campana(camp, hoy, botones)
     return panel.pagina(
         await panel.menu_de(c, "contenido", sub="campanas")
-        + cabeza(botones, donde=escape(camp["nombre"]))
-        + '<div class="oscuro-pag"><main><div class="contenedor">'
+        + cabeza(donde=escape(camp["nombre"]))
+        + '<div class="oscuro-pag"><main><div class="contenedor pag-camp">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
-        + await panel.pendiente(c, "campanas") + volver + cuerpo + "</div></main>" + modal + "</div>")
+        + await panel.pendiente(c, "campanas") + cab + cuerpo + "</div></main>" + modal + "</div>")
 
 
 async def pagina_nueva(c: Cuenta, aviso: str = "", form: dict | None = None) -> HTMLResponse:
@@ -1691,13 +1729,22 @@ async def pagina_nueva(c: Cuenta, aviso: str = "", form: dict | None = None) -> 
 PESTANAS = {"activa": "Activas", "proxima": "Próximas", "pasada": "Pasadas"}
 
 
-async def numeros_de(c: Cuenta, camp: dict) -> tuple[int, int, float | None]:
-    """Publicados, alcance y tasa de interacción de la campaña (de Instagram, con su caché de 1 hora)."""
-    renglones = await informe.filas(c, [camp])
-    con = [f["datos"] for f in renglones if f["datos"]]
-    alcance = sum(d.get("reach", 0) for d in con)
-    tasa = round(sum(informe.interacciones(d) for d in con) / alcance * 100, 1) if alcance else None
-    return len(renglones), alcance, tasa
+def cabecera_campana(camp: dict, hoy: date, botones: str) -> str:
+    """La tarjeta de arriba de una campaña: volver, su nombre, fechas y objetivo, y sus botones."""
+    ini, fin = date.fromisoformat(camp["inicio"]), informe.fin_de(camp)
+    cual = estado(camp, hoy)
+    cuando = (f"día {(hoy - ini).days + 1} de {(fin - ini).days + 1}" if cual == "activa" else
+              f"empieza {'mañana' if (ini - hoy).days == 1 else f'en {(ini - hoy).days} días'}" if cual == "proxima"
+              else "terminó")
+    historias = sum(1 for p in camp["posts"] if es_historia(p))
+    cuenta = cuantos(len(camp["posts"]) - historias, "post") + (f" y {cuantos(historias, 'historia')}" if historias else "")
+    obj = objetivo_corto(camp)
+    return (f'<div class="tarjeta cab-camp"><div class="cab-camp-txt">'
+            f'<a class="volver-cam" href="{BASE}?ver={cual}">‹ Volver a campañas</a>'
+            f'<h2>{escape(camp["nombre"])}</h2>'
+            f'<p class="ayuda">{de_a(ini, fin)} · {cuando} · {cuenta}</p>'
+            + (f'<p class="prueba-cam"><span class="etq-cam">{escape(obj)}</span></p>' if obj else "")
+            + f"</div>{botones}</div>")
 
 
 def objetivo_corto(camp: dict) -> str:
@@ -1707,8 +1754,9 @@ def objetivo_corto(camp: dict) -> str:
 
 async def tarjeta_campana(c: Cuenta, camp: dict, cual: str, hoy: date, marcar: bool | None = None,
                           completa: bool = True) -> str:
-    """Una campaña en la lista: fechas, objetivo, sus números en miniatura y sus botones. En Pasadas, con su
-    casilla para el reporte (marcar)."""
+    """Una campaña en la lista, a lo ancho: a la izquierda sus fechas, objetivo, avance y botones; en medio sus
+    próximos posts (en Pasadas, los que mejor funcionaron); a la derecha sus números y su mejor post. En Pasadas,
+    con su casilla para el reporte (marcar)."""
     ini, fin = date.fromisoformat(camp["inicio"]), informe.fin_de(camp)
     n = len(camp["posts"]) if completa else 0
     fechas = de_a(ini, fin) + (f" {fin.year}" if cual == "pasada" else "")
@@ -1722,13 +1770,21 @@ async def tarjeta_campana(c: Cuenta, camp: dict, cual: str, hoy: date, marcar: b
         avance = 0
     else:
         avance = 100
-    publicados, alcance, tasa = await numeros_de(c, camp) if cual != "proxima" else (0, 0, None)
+    renglones = await informe.filas(c, [camp]) if cual != "proxima" and completa else []
+    con = [f["datos"] for f in renglones if f["datos"]]
+    publicados, alcance = len(renglones), sum(d.get("reach", 0) for d in con)
+    tasa = round(sum(informe.interacciones(d) for d in con) / alcance * 100, 1) if alcance else None
     total_posts = n or len(camp["posts"])
-    mets = (("Publicados", f"{publicados} de {total_posts}" if cual == "activa" else str(publicados)),
-            ("Alcance", informe.cifra(alcance) if alcance else "—"),
-            ("Interacción", informe.pct(tasa) if tasa is not None else "—")) if cual != "proxima" else (
-        ("Posts", str(total_posts)), ("Con imagen", str(sum(1 for p in camp["posts"] if p.get("post_id")))),
-        ("Formatos", str(len({formato_de(p) for p in camp["posts"]}))))
+    if cual == "proxima":
+        mets = (("Posts", str(total_posts)), ("Con imagen", str(sum(1 for p in camp["posts"] if p.get("post_id")))),
+                ("Formatos", str(len({formato_de(p) for p in camp["posts"]}))),
+                ("Historias", str(sum(1 for p in camp["posts"] if es_historia(p)))))
+    else:
+        mets = (("Publicados", f"{publicados} de {total_posts}" if cual == "activa" else str(publicados)),
+                ("Alcance", informe.cifra(alcance) if alcance else "—"),
+                ("Interacción", informe.pct(tasa) if tasa is not None else "—"),
+                ("Comentarios", str(sum(d.get("comments", 0) for d in con)) if con else "—"))
+    estados = await estados_de(c, camp) if completa else {}
     obj = objetivo_corto(camp)
     casilla = ("" if marcar is None else
                f'<input class="sel" type="checkbox" name="c" value="{camp["id"]}" form="tus-campanas"'
@@ -1741,12 +1797,77 @@ async def tarjeta_campana(c: Cuenta, camp: dict, cual: str, hoy: date, marcar: b
                + (f'<a class="boton secundario chico" href="{url_de(camp)}/brief">Brief</a>' if camp.get("brief") else ""))
     tacho = (f'<a class="borrar{" con-sel" if casilla else ""}" href="{url_de(camp)}?borrar=lista"'
               f' title="Borrar campaña" aria-label="Borrar campaña">{PAPELERA}</a>' if completa else "")
+    puntos = "".join(f'<span><i class="{clase}"></i>{v} {uno if v == 1 else varios}</span>' for (uno, varios, clase), v in
+                     ((("publicado", "publicados", "e-pub"), estados.get("publicados", 0)),
+                      (("programado", "programados", "e-prog"), estados.get("programados", 0)),
+                      (("en borrador", "en borrador", "e-bor"), estados.get("borradores", 0)),
+                      (("sin imagen", "sin imagen", "e-sin"), estados.get("sin", 0)),
+                      (("no salió", "no salieron", "e-fallo"), estados.get("fallidos", 0))) if v)
+    if cual == "pasada":
+        medio = ("Lo que mejor funcionó", "".join(mini_mejor(c, f) for f in renglones[:4])
+                 or '<p class="nada">Ningún post de esta campaña se publicó.</p>')
+    else:
+        medio = ("Próximos posts", await proximos(c, camp, hoy) if completa else "")
+    mejor = renglones[0] if cual == "activa" and renglones and renglones[0]["tasa"] is not None else None
     return (f'<div class="camp{"" if publicados or cual != "pasada" else " apagada"}">'
             f'{casilla}{tacho}'
-            f'<div><h3>{escape(camp["nombre"])}</h3><span class="f">{fechas}</span></div>'
+            f'<div class="col-a"><h3>{escape(camp["nombre"])}</h3><span class="f">{fechas}</span>'
             + (f'<div><span class="obj">{escape(obj)}</span></div>' if obj else "")
-            + '<div class="mets">' + "".join(f"<div><b>{v}</b><span>{t}</span></div>" for t, v in mets) + "</div>"
-            f'<div class="prog"><i style="width:{avance}%"></i></div><div class="acc">{botones}</div></div>')
+            + f'<div class="prog"><i style="width:{avance}%"></i></div>'
+            + (f'<div class="puntos">{puntos}</div>' if puntos else "")
+            + f'<div class="acc">{botones}</div></div>'
+            f'<div class="col-b"><span class="lbl">{medio[0]}</span>{medio[1]}</div>'
+            f'<div class="col-c"><span class="lbl">{"Resultados" if cual == "pasada" else "Lista para salir" if cual == "proxima" else "Cómo va"}</span>'
+            '<div class="mets">' + "".join(f"<div><b>{v}</b><span>{t}</span></div>" for t, v in mets) + "</div>"
+            + (f'<div class="mejor">{mini_img(c, mejor["token"])}<div>Mejor post<b>{escape(mejor["titulo"] or "Sin título")}</b>'
+               f'{informe.pct(mejor["tasa"])} de interacción</div></div>' if mejor else "")
+            + "</div></div>")
+
+
+async def estados_de(c: Cuenta, camp: dict) -> dict:
+    """Cuántos posts de la campaña están publicados, programados, en borrador, sin imagen o no salieron."""
+    posts = await c.store.posts_by_id([p["post_id"] for p in camp["posts"] if p.get("post_id")])
+    cuenta = Counter()
+    for p in camp["posts"]:
+        st = posts.get(p.get("post_id"), {}).get("status") if p.get("post_id") else None
+        cuenta[{"publicada": "publicados", "publicando": "programados", "programada": "programados",
+                "borrador": "borradores", "fallida": "fallidos"}.get(st, "sin")] += 1
+    return cuenta
+
+
+def mini_img(c: Cuenta, token: str) -> str:
+    return (f'<img class="mini" src="{url_imagen(c, token)}" alt="" loading="lazy">' if token
+            else '<span class="mini sin">sin imagen</span>')
+
+
+def mini_mejor(c: Cuenta, f: dict) -> str:
+    return (f'<div class="pp">{mini_img(c, f["token"])}<b>{escape(f["titulo"] or "Sin título")}</b>'
+            f'<span>{informe.pct(f["tasa"]) + " de interacción" if f["tasa"] is not None else "sin números aún"}</span></div>')
+
+
+ESTADO_MINI = {"borrador": ("e-bor", "Borrador"), "programada": ("e-prog", "Programado"),  # junto a la hora
+               "fallida": ("e-fallo", "No salió")}
+
+
+async def proximos(c: Cuenta, camp: dict, hoy: date, cuantos_: int = 4) -> str:
+    """Los siguientes posts que salen (de hoy en adelante, sin los ya publicados), con su miniatura, día y hora."""
+    posts = await c.store.posts_by_id([p["post_id"] for p in camp["posts"] if p.get("post_id")])
+    sig = sorted((p for p in camp["posts"] if p["dia"] >= hoy.isoformat()
+                  and posts.get(p.get("post_id"), {}).get("status") not in ("publicada", "publicando")),
+                 key=lambda p: (p["dia"], p.get("hora") or ""))[:cuantos_]
+    if not sig:
+        return '<p class="nada">Ya no quedan posts por salir.</p>'
+    piezas = []
+    for p in sig:
+        post = posts.get(p.get("post_id"))
+        media = await c.store.media(post["media_ids"][0]) if post and post.get("media_ids") else None
+        d = date.fromisoformat(p["dia"])
+        clase, nombre = ESTADO_MINI.get(post["status"] if post else "", ("", ""))
+        piezas.append(f'<a class="pp" href="{url_de(camp)}?post={p["k"]}#detalle">{mini_img(c, media[0] if media else "")}'
+                      f'<b>{escape(p["titulo"])}</b><span>{DIAS[d.weekday()]} {d.day}</span>'
+                      f'<span class="hora-est"><em>{escape(p.get("hora") or "")}</em>'
+                      + (f'<small><i class="{clase}"></i>{nombre}</small>' if nombre else "") + "</span></a>")
+    return f'<div class="prox">{"".join(piezas)}</div>'
 
 
 PERIODOS = {"mes": ("Último mes", 31), "dos": ("Últimos 2 meses", 62), "rango": ("Rango de fechas", 0)}
@@ -1815,7 +1936,7 @@ async def pagina_lista(c: Cuenta, ver: str = "", aviso: str = "", q: dict | None
     if ver not in PESTANAS:
         ver = next((k for k in ("activa", "proxima") if grupos[k]), "pasada")
     n_pasadas = len(await informe.todas(c, grupos["pasada"]))
-    pestanas = '<nav class="tabs-cam">' + "".join(
+    pestanas = '<nav class="cal-sw tabs-cam">' + "".join(
         f'<a href="{BASE}?ver={k}"{panel.ACTIVA if k == ver else ""}>{v}'
         f'<small>{n_pasadas if k == "pasada" else len(grupos[k])}</small></a>' for k, v in PESTANAS.items()) + "</nav>"
     if ver == "pasada":
@@ -1832,11 +1953,11 @@ async def pagina_lista(c: Cuenta, ver: str = "", aviso: str = "", q: dict | None
                    "</a></div>")
     return panel.pagina(
         await panel.menu_de(c, "contenido", sub="campanas")
-        + cabeza(botones_nueva())
-        + '<div class="oscuro-pag"><main><div class="contenedor">'
+        + '<div class="oscuro-pag"><main><div class="contenedor pag-camp">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
         + await panel.pendiente(c, "campanas")
-        + f'<div class="tarjeta">{pestanas}{cuerpo}</div></div></main></div>')
+        + f'<div class="tarjeta cal barra-camps"><div class="cal-cab">{pestanas}{botones_nueva()}</div></div>'  # la barra, como la de Resultados
+        + f'<div class="tarjeta">{cuerpo}</div></div></main></div>')
 
 
 # --- meses ---
@@ -1856,47 +1977,20 @@ def tarjeta_extra(accion: str, k: str, destino: str) -> str:
             f'<a class="boton secundario" href="{destino}">Cancelar</a></div></form>')
 
 
-def trabajando(c: Cuenta, titulo: str, nota: str, trabajo, destino: str = BASE, clave: str = "") -> StreamingResponse:
-    """Sin JavaScript: "trabajando…" mientras tanto y, al terminar, de vuelta a la campaña. Si ese mismo
-    trabajo (`clave`, o el título y el destino) ya está corriendo por un doble clic o al recargar, no se
-    repite (panel.empezar_trabajo)."""
-    ver = BASE if clave else destino  # con clave propia, el destino aún no existe (campaña nueva)
-    clave = clave or f"{titulo} {destino}"
-    libre = panel.empezar_trabajo(c, clave)
+# Lo que va diciendo la espera, según avanza la barra (panel.paso_de).
+PASOS_ARMAR = ("Leyendo tu brief…", "Repartiendo los posts en el calendario…", "Generando el plan de cada post…",
+               "Generando contenido…", "Escribiendo los textos…", "Generando dirección visual…",
+               "Revisando que todo cuadre…")
 
-    async def partes():
-        try:
-            menu = (panel.PRINCIPIO + await panel.menu_de(c, "contenido", sub="campanas")
-                    + '<main><div class="contenedor">')
-            if not libre:
-                yield menu + panel.ya_en_curso(ver)
-                return
-            yield (menu + '<div class="tarjeta" id="generando"><div class="generando">'
-                   '<div class="escribiendo"><span></span><span></span><span></span></div>'
-                   f'<div><h2>{escape(titulo)}</h2><p class="ayuda">{escape(nota)} No cierres esta página.</p></div></div></div>')
-            ir, error = destino, ""
-            try:
-                async for linea in trabajo():
-                    if linea.startswith("/"):
-                        ir = linea
-                    else:
-                        yield f'<p class="ayuda">{escape(linea)}</p>'
-            except imagenes.ErrorImagen as e:
-                error = str(e)
-            except Exception:
-                log.exception("Campaña de %s", c.slug)
-                error = "No se pudo terminar esta vez. Lo que no salió no usó tu cupo; intenta de nuevo en un momento."
-        finally:
-            if libre:
-                panel.terminar_trabajo(c, clave)
-        yield ('<style>#generando{display:none}</style>'
-               + ("" if error else f'<meta http-equiv="refresh" content="0;url={ir}">')
-               + (f'<div class="aviso">{escape(error)}</div>' if error else "")
-               + f'<div class="tarjeta"><h2>{"Listo." if not error else "No se terminó."}</h2>'
-               f'<div class="acciones"><a class="boton" href="{ir}">Ver tu campaña</a></div></div></div></main>'
-               + panel.FINAL)
 
-    return StreamingResponse(partes(), media_type="text/html; charset=utf-8")
+async def trabajando(c: Cuenta, titulo: str, nota: str, trabajo, destino: str = BASE, clave: str = "",
+                     segundos: float = 30, pasos: tuple[str, ...] = ()) -> HTMLResponse:
+    """En segundo plano (panel.trabajo_largo): sigue aunque cierre la página y, al terminar, lleva de vuelta a la
+    campaña. Si ese mismo trabajo (`clave`, o el título y el destino) ya está corriendo por un doble clic o al
+    recargar, no se repite."""
+    return await panel.trabajo_largo(c, clave or f"{titulo} {destino}", titulo, nota, destino, trabajo,
+                                     menu=("contenido", "campanas"), boton="Ver tu campaña", segundos=segundos,
+                                     pasos=pasos)
 
 
 # --- rutas ---
@@ -1947,6 +2041,7 @@ async def ver_campana(request: Request, cid: str):
         return RedirectResponse(BASE, status_code=303)
     if (b := request.query_params.get("borrar")) in ("1", "lista"):  # "lista": Cancelar vuelve a Tus campañas
         return await pagina_campana(c, camp, confirmar="borrar", volver=BASE if b == "lista" else "")
+    tomar_desde(request.query_params.get("desde"))
     return await pagina_campana(c, camp, sel=request.query_params.get("post", ""))
 
 
@@ -2083,8 +2178,8 @@ async def armar(c: Cuenta, datos: dict, camp: dict, borrador: bool = False):
                 await c.store.set(nueva_campana.BORRADOR, "{}")
         yield url_de(nueva)
 
-    return trabajando(c, "Armando tu campaña…", "Tarda alrededor de medio minuto.", trabajo, url_de(nueva),
-                      clave="armar campaña")
+    return await trabajando(c, "Armando tu campaña…", "Tarda alrededor de medio minuto.", trabajo, url_de(nueva),
+                      clave="armar campaña", segundos=40, pasos=PASOS_ARMAR)
 
 
 @router.post("/campanas")
@@ -2111,6 +2206,7 @@ async def accion(request: Request, cid: str):
     subida = datos.get("imagen")
     f = {k: v for k, v in datos.items() if isinstance(v, str)}
     que = f.get("accion", "")
+    tomar_desde(f.get("desde"))
     if not (camp := await leer(c, cid)) or not camp.get("posts"):
         return RedirectResponse(BASE, status_code=303)
     url = url_de(camp)
@@ -2166,13 +2262,17 @@ async def accion(request: Request, cid: str):
         async def todas():
             for i, p in enumerate(pendientes, 1):
                 yield f"Pieza {i} de {len(pendientes)}: {p['titulo']}…"
-                with usar(c):
-                    await generar_imagen(c, camp, p, extra)
-                    await guardar(c, camp)
+                with usar(c):  # lo último de ese post: mientras tanto pudo moverlo, editarlo o borrarlo
+                    fresca = await leer(c, camp["id"])
+                    p = buscar_post(fresca, p["k"]) if fresca else None
+                    if not p or await estado_post(c, p):
+                        continue
+                    await generar_imagen(c, fresca, p, extra)
+                    await guardar_post(c, fresca, p)
             yield url
 
-        return trabajando(c, "Generando las imágenes…", f"Tarda alrededor de {len(pendientes) * 20} segundos.", todas,
-                          url)
+        return await trabajando(c, "Generando las imágenes…", f"Tarda alrededor de {len(pendientes) * 20} segundos.", todas,
+                          url, segundos=len(pendientes) * 20)
 
     if que == "aprobar_todas":
         n = 0
@@ -2236,7 +2336,7 @@ async def accion(request: Request, cid: str):
             return await pagina_campana(c, camp, str(e), sel=k)
         with usar(c):
             await guardar(c, camp)
-        return RedirectResponse(f"{url}?post={k}#detalle", status_code=303)
+        return RedirectResponse(con_desde(f"{url}?post={k}#detalle"), status_code=303)
 
     if que == "otra":
         if not await ia_restantes(c):
@@ -2248,20 +2348,20 @@ async def accion(request: Request, cid: str):
                 await otra_idea(c, camp, p)
                 if camp.get("brief"):
                     await prompts_de(c, camp, [p])
-                await guardar(c, camp)
-            yield f"{url}?post={k}#detalle"
+                await guardar_post(c, camp, p)
+            yield con_desde(f"{url}?post={k}#detalle")
 
-        return trabajando(c, "Pensando otra idea…", "Tarda unos segundos.", otra, url)
+        return await trabajando(c, "Pensando otra idea…", "Tarda unos segundos.", otra, url, segundos=10)
 
     if que == "prompt" and camp.get("brief"):
         async def escribir_prompt():
             with usar(c):
                 p.pop("prompt", None)
                 await prompt_de(c, camp, p, await marca_de(c))
-                await guardar(c, camp)
-            yield f"{url}?post={k}#detalle"
+                await guardar_post(c, camp, p)
+            yield con_desde(f"{url}?post={k}#detalle")
 
-        return trabajando(c, "Escribiendo el prompt…", "Tarda unos segundos.", escribir_prompt, url)
+        return await trabajando(c, "Escribiendo el prompt…", "Tarda unos segundos.", escribir_prompt, url, segundos=10)
 
     if que == "generar":
         extra = f.get("extra") == "1"
@@ -2271,11 +2371,12 @@ async def accion(request: Request, cid: str):
         async def una():
             with usar(c):
                 await generar_imagen(c, camp, p, extra)
-                await guardar(c, camp)
-            yield f"{url}?post={k}#detalle"
+                await guardar_post(c, camp, p)
+            yield con_desde(f"{url}?post={k}#detalle")
 
-        return trabajando(c, "Generando la imagen…" if costo(p) else "Armando la pieza…",
-                          "Tarda alrededor de medio minuto." if costo(p) else "Tarda unos segundos.", una, url)
+        return await trabajando(c, "Generando la imagen…" if costo(p) else "Armando la pieza…",
+                          "Tarda alrededor de medio minuto." if costo(p) else "Tarda unos segundos.", una, url,
+                          segundos=30 if costo(p) else 8)
 
     if que == "aprobar":
         with usar(c):
