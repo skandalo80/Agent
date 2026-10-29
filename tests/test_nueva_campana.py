@@ -100,7 +100,7 @@ def test_el_asistente_de_punta_a_punta(cliente, monkeypatch):
     assert "caben hasta 6 posts" in r.text
     llenar(client)
     r = client.get(f"{URL}?paso=8")
-    assert "Revisa tu campaña antes de generarla" in r.text and "Latte de calabaza · Promoción con descuento 20 %" in r.text
+    assert "Revisa tu campaña antes de generarla" in r.text and "Latte de calabaza · Promoción 20 % de descuento" in r.text
     assert r.text.count("Editar</button>") == 8 and "Crear el brief" in r.text
     assert "Consejos e ideas útiles · Historias y situaciones cotidianas" in r.text
     assert 'class="cruce"' not in r.text  # Qué se ve está oculto: no hay cruce que mostrar
@@ -983,7 +983,14 @@ def test_campana_de_producto_con_anuncios(cliente, monkeypatch):
     r = client.get(f"{URL}?paso={O}")
     assert "Latte de calabaza · $75 MXN" in r.text and 'name="versiones" value="4" checked' in r.text
     assert "Escribe el porcentaje de descuento" in paso(client, O, ir=6, accion="promo").text
-    paso(client, O, ir=6, accion="promo", descuento="15", desde="2099-01-05", hasta="2099-01-11", versiones="2")
+    # 2x1, 3x2 u otra: sin porcentaje; la otra se escribe.
+    assert 'name="promo" value="2x1"' in r.text and 'name="promo" value="pct" checked' in r.text
+    assert "Escribe cuál es la promoción." in paso(client, O, ir=6, accion="promo", promo="otra").text
+    paso(client, O, ir=6, accion="promo", promo="2x1", versiones="2")
+    b = json.loads(client.portal.call(c.store.get, nueva_campana.BORRADOR))
+    assert nueva_campana.promo_texto(b) == "2x1" and nueva_campana.nombre_producto(b, [PRODUCTO]) == "Latte de calabaza · 2x1"
+    paso(client, O, ir=6, accion="promo", promo="pct", descuento="15", desde="2099-01-05", hasta="2099-01-11",
+         versiones="2")
     b = json.loads(client.portal.call(c.store.get, nueva_campana.BORRADOR))
     assert b["inicio"] == "2099-01-05" and b["semanas"] == 1  # salen mientras dura la promoción
     assert "¿Cómo quieres que se vean tus anuncios?" in client.get(f"{URL}?paso=6").text
@@ -993,13 +1000,13 @@ def test_campana_de_producto_con_anuncios(cliente, monkeypatch):
     paso(client, 7, ir=8, nombre="", inicio="2099-01-05", semanas="1", dias=["0", "2"], horarios=["manana"])
     r = client.get(f"{URL}?paso=8")
     assert "Revisa tu campaña" in r.text and "Versiones del anuncio" in r.text and "2 posts" in r.text
-    assert "Latte de calabaza · Promoción con descuento 15 %" in r.text and "Enfoque del contenido" not in r.text
+    assert "Latte de calabaza · Promoción 15 % de descuento" in r.text and "Enfoque del contenido" not in r.text
     assert "Paso 1 de 5 · Tipo de campaña" in client.get(f"{URL}?paso=3").text  # un paso de la otra campaña
 
     generar(client)
     camp = leer(client, c)
     assert len(camp["posts"]) == 2 and {p["formato"] for p in camp["posts"]} == {"anuncio"}
-    assert camp["nombre"] == "Latte de calabaza · Promoción con descuento" and camp["producto_id"] == "p1"
+    assert camp["nombre"] == "Latte de calabaza · 15 % de descuento" and camp["producto_id"] == "p1"
     assert "15 % de descuento" in camp["producto"] and camp["n_historias"] == 0
     p = camp["posts"][0]
     p["prompt"], p["idea_base"] = "The pumpkin latte on a calm cream background", p["idea"]
