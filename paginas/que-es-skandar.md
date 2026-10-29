@@ -21,7 +21,7 @@ Sobre todo para negocios que ya pagan anuncios en Instagram o Facebook y quieren
 
 ## Planes y precios
 
-- **Asistente virtual:** US$29 al mes más IVA. Incluye 1,000 respuestas al mes.
+- **Asistente virtual:** US$49 al mes más IVA. Incluye 1,500 respuestas al mes.
 - **Community Manager:** US$79 al mes más IVA. Incluye el Asistente virtual, 2,500 respuestas y 12 publicaciones al mes.
 - Sin costo de instalación y sin plazo forzoso. Pago anual: dos meses sin costo. Respuestas adicionales: US$15 por cada 500.
 

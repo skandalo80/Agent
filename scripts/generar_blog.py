@@ -52,7 +52,7 @@ MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
 
 CTAS = {
     "asistente": ("Tu asistente contesta mientras tú trabajas.",
-                  "Asistente virtual desde US$29 al mes más IVA. Sin instalación.",
+                  "Asistente virtual desde US$49 al mes más IVA. Sin instalación.",
                   "https://ig.me/m/skandar.online?text=Me%20interesa%20el%20Asistente%20virtual",
                   "Quiero el Asistente virtual"),
     "community": ("Tu perfil activo, con tu marca.",
@@ -341,8 +341,8 @@ PLANES = f"""  <section class="banda centro" id="planes">
         <article class="plan">
           <h3>Asistente virtual</h3>
           <p class="resumen">Contesta cada mensaje al instante.</p>
-          <p class="precio">US$29 <small>+ IVA al mes</small></p>
-          <p class="instalacion">Sin instalación · 1,000 respuestas al mes</p>
+          <p class="precio">US$49 <small>+ IVA al mes</small></p>
+          <p class="instalacion">Sin instalación · 1,500 respuestas al mes</p>
           <ul>
             <li>Respuesta a mensajes directos 24/7</li>
             <li>Tu información, tus precios y tus preguntas frecuentes</li>
@@ -419,7 +419,7 @@ def pagina_giro(g, todos):
                 "areaServed": "MX",
                 "provider": {"@type": "Organization", "name": "Skandar", "url": f"{SITIO}/"},
                 "offers": [
-                    {"@type": "Offer", "name": "Asistente virtual", "price": "29", "priceCurrency": "USD",
+                    {"@type": "Offer", "name": "Asistente virtual", "price": "49", "priceCurrency": "USD",
                      "url": f"{url}#planes"},
                     {"@type": "Offer", "name": "Community Manager", "price": "79", "priceCurrency": "USD",
                      "url": f"{url}#planes"},
@@ -619,7 +619,7 @@ def llms_txt(todos, giros, paginas):
         "",
         "- Línea: Tus redes sociales, trabajando. Sobre todo para negocios que pagan anuncios en Instagram o Facebook.",
         "- Hecho en México, en español. Funciona solo con Instagram, con la API oficial de Meta.",
-        "- Asistente virtual: US$29 al mes más IVA, 1,000 respuestas al mes.",
+        "- Asistente virtual: US$49 al mes más IVA, 1,500 respuestas al mes.",
         "- Community Manager: US$79 al mes más IVA, incluye el Asistente virtual, 2,500 respuestas y 12 publicaciones al mes.",
         "- Sin costo de instalación ni plazo forzoso. Contacto: hola@skandar.online, Instagram @skandar.online.",
         "",

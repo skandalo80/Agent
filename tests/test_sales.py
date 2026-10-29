@@ -36,7 +36,7 @@ def test_precios_salen_del_catalogo():
     assert not any("Instalación" in c for c, _ in q.lineas)
     assert "Después: US$1,090 + IVA al año" in q.texto()
     q = catalog.quote("basico")
-    assert (q.primer_pago, q.recurrente) == (29, 29)
+    assert (q.primer_pago, q.recurrente) == (49, 49)
     # También por nombre
     assert catalog.quote("Community Manager").paquete == "community"
     assert catalog.quote("Asistente virtual").paquete == "basico"
