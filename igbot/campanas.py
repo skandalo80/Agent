@@ -125,6 +125,7 @@ MAX_POSTS_DIA = 2  # con más posts que días, algunos días llevan dos
 MEDIOS = {"post": ("Post", "Posts"), "historia": ("Historia", "Historias")}
 MAX_HISTORIAS_DIA = 3
 MIN_FOTOS_COLLAGE = 2
+RETIRADOS = ("collage",)  # ya no se ofrecen en campañas nuevas (Bento grid lo cubre); lo que ya lo usa sigue igual
 CON_RESULTADOS = 12  # posts publicados hace 3 días o más para "Repetir lo que funcionó"
 MIN_PROBADO = 3  # veces que se probó algo para que cuente como ganador
 MEZCLAS = {  # clave: (cómo se le dice, % de lo que ganó, % del segundo lugar, % de algo nuevo)
@@ -482,7 +483,7 @@ def repetir(n: int, gano: dict, universo: dict, mezcla: str, semilla: int = 0) -
 def universo(fotos: int, gano: dict) -> dict:
     """Lo que se puede usar en cada dimensión al repetir (los temas extra solo si ya se probaron)."""
     temas = list(TEMAS_INICIALES) + [k for k, *_ in gano.get("tema", []) if k in TEMAS and k not in TEMAS_INICIALES]
-    return {"tema": temas, "formato": [k for k in FORMATOS if k != "collage" or fotos >= MIN_FOTOS_COLLAGE],
+    return {"tema": temas, "formato": [k for k in FORMATOS if k not in RETIRADOS],
             "franja": list(HORARIOS)}
 
 

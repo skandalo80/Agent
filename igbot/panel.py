@@ -1041,7 +1041,7 @@ img.mrc-logo-mini{background:#fff}
 .wiz-pasos .wiz-paso.actual{background:var(--claro);color:var(--negro);font-weight:600}.wiz-pasos .wiz-paso.actual b{border-color:var(--acento-claro);color:var(--acento-claro)}
 .wiz-pasos .wiz-paso:hover{background:var(--claro)}.wiz-pasos .wiz-paso.apagado{opacity:.5}
 .wiz-res .enlace{position:absolute;top:.85rem;right:1rem;font:inherit;font-size:.85rem;color:var(--acento-claro);background:none;border:0;padding:0;cursor:pointer;font-weight:600}
-.wiz-ops.dos{grid-template-columns:repeat(2,minmax(0,1fr))}
+.wiz-ops.dos{grid-template-columns:repeat(2,minmax(0,1fr))}.ops-variedad .wiz-img.alta{aspect-ratio:16/10;background-position:center}
 .wiz-pie .boton{padding:.65rem 1.3rem}
 .wiz-bloque .opc{font-weight:400;color:var(--gris)}
 .prod-cam:has(input[name=accion][value=promo]:checked) .wiz-si.promo{display:grid}

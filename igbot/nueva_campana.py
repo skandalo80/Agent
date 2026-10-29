@@ -135,8 +135,6 @@ FORMATOS = {  # clave: (título, descripción, color)
                 "#33302a"),
     "texto": ("Diseño de texto", "Una frase, consejo o mensaje destacado con los colores y la tipografía de la marca.",
               "#26262a"),
-    "collage": ("Collage", "Varias fotografías reunidas en una composición para mostrar opciones, detalles o"
-                " distintos aspectos de algo.", "#1f3029"),
     "bento": ("Bento grid", "Varios recuadros de distintos tamaños en una sola imagen: el producto, sus detalles y su"
               " uso, ordenados como una cuadrícula.", "#2a2833"),
 }
@@ -259,9 +257,9 @@ async def a_campana(c: Cuenta, b: dict) -> dict:
     if enfoques := [ENFOQUES[k][2] for k in b.get("enfoques", []) if k in ENFOQUES]:
         temas = enfoques + [t for t in temas if t not in enfoques][:max(0, campanas.MIN_TEMAS - len(enfoques))]
     temas = temas[:campanas.MAX_TEMAS]
-    formatos = [k for k in b["formatos"] if k in campanas.FORMATOS]
+    formatos = [k for k in b["formatos"] if k in campanas.FORMATOS and k not in campanas.RETIRADOS]
     if "ia" in b["formatos"] or not formatos:
-        formatos = list(campanas.FORMATOS)  # el collage también lo genera la IA: no necesita fotos subidas
+        formatos = [k for k in campanas.FORMATOS if k not in campanas.RETIRADOS]
     horarios = [k for k in b["horarios"] if k in campanas.HORARIOS]
     if "ia" in b["horarios"] or not horarios:
         horarios = list(campanas.HORARIOS)
@@ -511,7 +509,7 @@ def paso_3(b: dict, objetivos: list[dict]) -> str:
     obj = next((o for o in objetivos if o["k"] == b["objetivo"]), None)
     van = sugeridos(obj) if obj else set()
     ops = "".join(op("enfoques", k, v[0], v[1], "checkbox", k in b.get("enfoques", []),
-                     img("enfoque", k, v[3], v[0], alta=True), em="Va con tu objetivo" if k in van else "")
+                     em="Va con tu objetivo" if k in van else "")  # sin foto: solo el texto
                   for k, v in ENFOQUES.items())
     return (cab(3, "¿De qué van a tratar tus posts?",
                 f"Elige uno o varios (hasta {MAX_ENFOQUES}). Los posts de la campaña se reparten entre ellos.")
@@ -564,7 +562,7 @@ def paso_6(b: dict, candidatos: list[tuple[str, str]] = ()) -> str:
                 "Solo cambia esta campaña. Tus colores, tu tipografía y tu logo siguen siendo los de Tu marca.")
             + '<h3 class="wiz-sub">Variedad visual</h3><p class="ayuda">Qué tan distintas se ven las fotos entre'
             ' sí: el lugar, el encuadre y la luz.</p>'
-            f'<div class="wiz-ops cuatro">{variedad}</div>' + referencias(b, candidatos) + pie(6))
+            f'<div class="wiz-ops dos ops-variedad">{variedad}</div>' + referencias(b, candidatos) + pie(6))
 
 
 def referencias(b: dict, candidatos: list[tuple[str, str]]) -> str:

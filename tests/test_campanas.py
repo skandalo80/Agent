@@ -351,7 +351,7 @@ def test_collage_con_fotos_de_tu_marca(cliente, monkeypatch):
     client.portal.call(c.store.set, "marca", json.dumps({"fotos": tokens}))
     listo(client, c)
     r = client.get(f"{BASE}/nueva?paso=4")
-    assert 'value="collage"' in r.text and 'value="collage" disabled' not in r.text
+    assert 'value="collage"' not in r.text and 'value="bento"' in r.text  # Collage ya no se ofrece: lo cubre Bento grid
 
     client.post("/panel/contenido/campanas", headers=ORIGEN,
                 data=datos_campana(f_titular="", f_texto="", f_foto="", f_collage="1"))

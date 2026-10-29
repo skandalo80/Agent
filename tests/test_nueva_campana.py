@@ -83,11 +83,12 @@ def test_el_asistente_de_punta_a_punta(cliente, monkeypatch):
     paso(client, 1, ir=1, objetivo="interaccion")
     r = client.get(f"{URL}?paso=3")
     assert "Paso 3 de 6 · Enfoque del contenido" in r.text and r.text.count('name="enfoques"') == 7
-    assert "tarjetas/campana/enfoque-consejos.webp" in r.text and r.text.count("Va con tu objetivo") == 3
+    assert "enfoque-consejos.webp" not in r.text and r.text.count("Va con tu objetivo") == 3
     assert "Elige al menos un enfoque." in paso(client, 3).text
     # Qué se ve está fuera: de Formatos se sigue a Estilo y variedad.
     r = client.get(f"{URL}?paso=4")
     assert 'name="ir" value="6">Continuar' in r.text and ">Qué se ve<" not in r.text
+    assert 'value="collage"' not in r.text and 'value="bento"' in r.text  # Collage ya no se ofrece
     assert "Paso 5 de 6 · Estilo y variedad" in client.get(f"{URL}?paso=5").text
 
     # Cantidad: no caben más de dos por día.
@@ -449,6 +450,7 @@ def test_la_variedad_llega_al_brief_al_plan_y_a_los_posts(cliente, monkeypatch):
     r = llenar(client)
     paso_6 = client.get(f"{URL}?paso=6").text
     assert "Variedad visual" in paso_6 and "Apariencia de las fotos" not in paso_6
+    assert '<div class="wiz-ops dos ops-variedad"><label class="wiz-op' in paso_6  # dos por renglón
     assert all(t in paso_6 for t in ("Consistente", "Equilibrado", "Diverso", "Creativo"))
     assert "tarjetas/campana/variedad-diverso.webp" in paso_6
     assert "Texto dentro de la imagen" not in paso_6 and "Cómo se arman" not in paso_6
