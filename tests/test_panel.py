@@ -40,7 +40,7 @@ def test_404_sin_sesion():
         assert client.get("/apple-touch-icon.png").headers["content-type"] == "image/png"
         assert client.get("/", follow_redirects=False).headers["location"] == "/panel"
         assert 'rel="icon" href="/favicon.ico"' in client.get("/panel").text
-        assert "privacidad" in client.get("/privacy").text
+        assert client.get("/privacy", follow_redirects=False).headers["location"] == "https://skandar.online/privacidad"
         r = client.get("/panel/contenido/nada")
         assert r.status_code == 404 and "Esta página no existe" in r.text and "Entrar a mi panel" in r.text
         assert client.get("/otra-cosa").json() == {"detail": "Not Found"}  # fuera del panel, igual que antes

@@ -151,3 +151,32 @@ def test_token_queda_en_la_base(monkeypatch):
         await store.close()
 
     asyncio.run(main())
+
+
+def firmado(datos: dict, secreto: str = "secreto") -> str:
+    import base64
+    import hashlib
+    import hmac
+    import json
+    b64 = lambda b: base64.urlsafe_b64encode(b).rstrip(b"=").decode()  # noqa: E731
+    carga = b64(json.dumps(datos).encode())
+    return b64(hmac.new(secreto.encode(), carga.encode(), hashlib.sha256).digest()) + "." + carga
+
+
+def test_quitar_app_y_borrar_datos(monkeypatch):
+    avisos = setup(monkeypatch)
+    with TestClient(bot.app, base_url="https://testserver") as client:
+        datos = {"algorithm": "HMAC-SHA256", "user_id": "1784", "issued_at": int(time.time())}
+        # Sin firma válida no se acepta nada.
+        r = client.post("/conectar/borrar-datos", data={"signed_request": firmado(datos, "otro")})
+        assert r.status_code == 400 and not avisos
+
+        r = client.post("/conectar/desautorizar", data={"signed_request": firmado(datos)})
+        assert r.status_code == 200 and "quitó a Skandar" in avisos[-1][1]
+
+        r = client.post("/conectar/borrar-datos", data={"signed_request": firmado(datos)})
+        j = r.json()
+        assert j["url"] == f"https://console.skandar.online/conectar/borrado?codigo={j['confirmation_code']}"
+        assert "borremos sus datos" in avisos[-1][1]
+        assert "Recibimos tu solicitud" in client.get(f"/conectar/borrado?codigo={j['confirmation_code']}").text
+        assert "No encontramos" in client.get("/conectar/borrado?codigo=0000000000000000").text
