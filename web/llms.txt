@@ -1,16 +1,17 @@
 # Skandar
 
-> Skandar es una plataforma de inteligencia artificial para el Instagram de negocios: un asistente que contesta los mensajes directos las 24 horas y un Community Manager que crea y publica contenido con lo que pasa en la cuenta.
+> Skandar es una plataforma para que las redes sociales de un negocio trabajen: un asistente que contesta cada mensaje al instante y lo lleva a la venta, contenido de la marca para que el perfil se vea activo y la medición de qué anuncio trajo a cada cliente.
 
+- Línea: Tus redes sociales, trabajando. Sobre todo para negocios que pagan anuncios en Instagram o Facebook.
 - Hecho en México, en español. Funciona solo con Instagram, con la API oficial de Meta.
-- Asistente virtual: US$29 al mes más IVA, 1,000 respuestas al mes.
+- Asistente virtual: US$49 al mes más IVA, 1,500 respuestas al mes.
 - Community Manager: US$79 al mes más IVA, incluye el Asistente virtual, 2,500 respuestas y 12 publicaciones al mes.
 - Sin costo de instalación ni plazo forzoso. Contacto: hola@skandar.online, Instagram @skandar.online.
 
 ## Sobre Skandar
 
 - [Inicio](https://skandar.online/): qué hace la plataforma, planes y preguntas frecuentes.
-- [Qué es Skandar](https://skandar.online/que-es-skandar): Skandar es una plataforma de inteligencia artificial para el Instagram de negocios: un asistente que contesta los mensajes directos las 24 horas y un Community Manager que crea y publica contenido con lo que pasa en la cuenta.
+- [Qué es Skandar](https://skandar.online/que-es-skandar): Skandar es una plataforma para que las redes sociales de un negocio trabajen: un asistente que contesta cada mensaje al instante y lo lleva a la venta, contenido de la marca para que el perfil se vea activo y la medición de qué anuncio trajo a cada cliente.
 
 ## Por giro
 

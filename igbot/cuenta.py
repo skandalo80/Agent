@@ -194,7 +194,7 @@ class Cuenta:
 # negocio/catalogo.yaml). Cualquier valor escrito en el .env gana sobre esto, para
 # darle a un cliente algo distinto a su plan.
 PLANES = {
-    "basico": {"IMAGES_PER_MONTH": "0", "MESSAGES_PER_MONTH": "1000", "POSTS_PER_MONTH": "0"},  # Asistente virtual
+    "basico": {"IMAGES_PER_MONTH": "0", "MESSAGES_PER_MONTH": "1500", "POSTS_PER_MONTH": "0"},  # Asistente virtual
     "community": {"IMAGES_PER_MONTH": "40", "MESSAGES_PER_MONTH": "2500", "POSTS_PER_MONTH": "12"},
 }
 PLANES["pro_crm"] = PLANES["community"]  # el Pro CRM ya no se vende: las cuentas que lo tengan quedan como Community
