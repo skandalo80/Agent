@@ -1044,7 +1044,7 @@ img.mrc-logo-mini{background:#fff}
 .wiz-ops.dos{grid-template-columns:repeat(2,minmax(0,1fr))}/* Crear campaña › Producto: la foto de cada producto, cuadrada. */.prods-cam .wiz-img{aspect-ratio:1/1}/* Variedad visual: la cuadrícula completa, como el perfil de Instagram, a la izquierda y el texto a la derecha. */.ops-variedad .wiz-op{flex-direction:row;align-items:center}.ops-variedad .wiz-img.alta{flex:none;width:38%;max-width:15rem;aspect-ratio:2/3;background-size:cover;background-position:center}.ops-variedad .cuerpo{padding:var(--caja-pad)}@media(max-width:560px){.ops-variedad .wiz-img.alta{width:42%}}
 .wiz-pie .boton{padding:.65rem 1.3rem}
 .wiz-bloque .opc{font-weight:400;color:var(--gris)}
-.prod-cam:has(input[name=accion][value=promo]:checked) .wiz-si.promo{display:grid}
+.prod-cam:has(input[name=accion][value=promo]:checked) .wiz-si.promo{display:block}.prod-cam .solo-pct,.prod-cam .solo-otra{display:none}.prod-cam:has(input[name=promo][value=pct]:checked) .solo-pct,.prod-cam:has(input[name=promo][value=otra]:checked) .solo-otra{display:block}
 .formatos-cam:has(input[name=formatos][value=titular]:checked) .wiz-si.titular{display:block}
 .refs-cam{display:grid;grid-template-columns:repeat(auto-fill,minmax(6.5rem,1fr));gap:.6rem;margin:.2rem 0 .8rem}
 .ref-cam{position:relative;display:block;aspect-ratio:1/1;border-radius:12px;overflow:hidden;cursor:pointer;border:2px solid transparent}
