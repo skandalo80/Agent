@@ -146,7 +146,9 @@ async def conexion(c: Cuenta) -> tuple[str, str]:
                               f"<b>{titulo}</b><span>{detalle}</span></div>{accion}</div>"))
     reconectar = '<a class="boton secundario chico" href="/conectar/instagram">Volver a conectar</a>'
     renovado = float(await c.store.get("ig_token_refreshed_at") or 0)
-    if renovado:
+    if c.ig_via == "facebook":  # va con el token de su página, que no vence
+        fila("ok", "Instagram conectado", f"@{escape(await panel.usuario(c))} · a través de tu página de Facebook")
+    elif renovado:
         dias = int((ahora - renovado) // 86400)
         quedan = TOKEN_DIAS - dias
         fila("ok" if quedan > 7 else "mal", "Instagram conectado",
@@ -181,6 +183,15 @@ async def conexion(c: Cuenta) -> tuple[str, str]:
         else:  # no es un problema: no colorea el botón Conexión
             fila("no", "Tienda Shopify", "Sin conectar: tu asistente vería el inventario y tú, qué ventas dejan tus chats",
                  ir.format("Conectar tu Shopify"))
+    from . import facebook, pagina_fb
+    if facebook.enabled():
+        ir = '<a class="boton secundario chico" href="/panel/facebook">{}</a>'
+        if await pagina_fb.conectada(c.store):
+            fila("ok", "Página de Facebook", f"{escape(await c.store.get('fb_page_name') or '')} · Messenger,"
+                 " comentarios" + (" y publicar" if await c.store.get("fb_publicar") != "0" else ""), ir.format("Ver"))
+        else:  # no es un problema: no colorea el botón Conexión
+            fila("no", "Página de Facebook", "Sin conectar: tu asistente contestaría también Messenger y tus"
+                 " campañas saldrían en tu página", ir.format("Conectar tu página"))
     if not c.slug:
         with usar(c):
             gasto = await limites.spent_today(c.store)
