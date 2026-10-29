@@ -1240,6 +1240,9 @@ input[type=text],input[type=search],textarea,select,.inbox input[type=search],.e
 .res-info .cal-bajar{margin-left:auto}
 .cal-nav .off{display:grid;place-items:center;min-width:2.1rem;height:2.1rem;border-radius:.7rem;background:#18191C;color:#64646B;font-weight:600}
 .res-kpis{margin-bottom:1rem}
+.ads-tabla{overflow-x:auto}.ads-tabla table{width:100%;min-width:40rem;border-collapse:collapse;font-size:.88rem}
+.ads-tabla th{text-align:left;font-weight:600;color:var(--gris);padding:.5rem .6rem;border-bottom:1px solid var(--linea-clara)}
+.ads-tabla td{padding:.6rem;border-bottom:1px solid var(--linea-clara)}.ads-tabla td:first-child{max-width:16rem}
 @media(max-width:700px){.res-barra .cal-sw.modo{margin-left:0}.res-info .cal-bajar{margin-left:0}}
 .res-vista a{font-size:.95rem;padding:.45rem 1.1rem}
 .res-barra .cal-sw a.on{background:var(--acento);color:var(--tinta)}

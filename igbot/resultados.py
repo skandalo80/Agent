@@ -26,7 +26,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
-from . import metricas, panel
+from . import anuncios_meta, metricas, panel
 from .comentarios import SPAM
 from .cuenta import Cuenta
 
@@ -333,7 +333,7 @@ def titulo_periodo(ini: date, fin: date) -> str:
     return f"{ini.day} de {MESES[ini.month - 1]} al {fin.day} de {MESES[fin.month - 1]} de {fin.year}"
 
 
-VISTAS = {"instagram": "Instagram", "conversaciones": "Conversaciones"}
+VISTAS = {"instagram": "Instagram", "conversaciones": "Conversaciones", "anuncios": "Anuncios"}
 
 
 def enlace(rango: str, fin: date, hoy: date, vista: str = "instagram", base: str = "/panel/resultados") -> str:
@@ -370,9 +370,12 @@ async def barra(c: Cuenta, rango: str, fin: date, hoy: date, vista: str) -> str:
         + (f'<span><i class="punto"></i>{instagram}</span>'
            '<span class="res-comp">Seguidores vs. 7 y 30 días antes</span>'
            if vista == "instagram" else
+           '<span><i class="punto"></i>Anuncios: números de Meta y de tus chats, cada 10 minutos</span>'
+           if vista == "anuncios" else
            '<span><i class="punto"></i>Mensajes: se actualizan cada 10 minutos</span>')
-        + f'<a class="boton secundario chico cal-bajar" href="{enlace(rango, fin, hoy, vista, "/panel/resultados/descargar")}"'
-        ' title="Este periodo, en PDF">↓ Descargar</a></div></div>'
+        + ("" if vista == "anuncios" else  # el PDF tiene Instagram y Conversaciones
+           f'<a class="boton secundario chico cal-bajar" href="{enlace(rango, fin, hoy, vista, "/panel/resultados/descargar")}"'
+           ' title="Este periodo, en PDF">↓ Descargar</a>') + "</div></div>"
     )
 
 
@@ -403,10 +406,79 @@ def conversaciones_html(c: Cuenta, d: dict, publico: dict) -> str:
     return cuerpo
 
 
+def dinero(v: float, moneda: str) -> str:
+    return f"${v:,.0f}" + (f" {moneda}" if moneda else "")
+
+
+async def anuncios_html(c: Cuenta, ini: date, fin: date) -> str:
+    """Por anuncio: lo de Meta (gasto, clics, compras en su página) junto a lo de sus chats (chats y ventas)."""
+    zona = ZoneInfo(c.timezone)
+    desde = datetime(ini.year, ini.month, ini.day, tzinfo=zona).timestamp()
+    hasta = datetime(fin.year, fin.month, fin.day, tzinfo=zona).timestamp() + 86400
+    nuestros = await c.store.por_anuncio(desde, hasta)
+    datos = await anuncios_meta.conexion(c)
+    meta = await anuncios_meta.por_anuncio(c, ini, fin)
+    moneda = datos.get("moneda", "")
+    filas: dict[str, dict] = {}
+    for x in meta or []:
+        if x["gasto"] or x["clics"] or x["compras"] or x["ad_id"] in nuestros:
+            filas[x["ad_id"]] = {**x}
+    for ad, x in nuestros.items():
+        filas.setdefault(ad, {"ad_id": ad, "nombre": x["titulo"] or f"Anuncio {ad[-6:]}"})
+        filas[ad].update(chats=x["chats"], ventas=x["ventas"], monto=x["monto"], moneda_ventas=x["moneda"])
+    aviso = ""
+    if anuncios_meta.enabled() and (not datos.get("token") or anuncios_meta.vencida(datos)):
+        aviso = ('<div class="tarjeta"><h2>Conecta tu cuenta de anuncios</h2><p class="ayuda">Suma aquí lo que ya'
+                 " mide Meta de cada anuncio: el gasto, los clics y las compras en tu página que registra tu Pixel."
+                 '</p><div class="acciones"><a class="boton" href="/panel/anuncios">Conectar tu cuenta de anuncios</a>'
+                 "</div></div>")
+    elif anuncios_meta.enabled() and meta is None:
+        aviso = ('<div class="tarjeta"><p class="ayuda">Meta no nos dio tus números de anuncios esta vez. Intenta en'
+                 ' unos minutos o revisa tu conexión en <a class="enlace" href="/panel/anuncios">Tu cuenta de'
+                 " anuncios</a>.</p></div>")
+    if not filas:
+        return aviso + ('<div class="tarjeta"><h2>Sin anuncios en este periodo</h2><p class="ayuda">Cuando tengas'
+                        " anuncios activos, aquí verás lo que dejó cada uno: en tu página y en tus chats.</p></div>")
+    con_meta = meta is not None
+    gasto = sum(x.get("gasto", 0) for x in filas.values())
+    compras = sum(x.get("compras", 0) for x in filas.values())
+    valor = sum(x.get("valor_compras", 0) for x in filas.values())
+    chats = sum(x.get("chats", 0) for x in filas.values())
+    ventas = sum(x.get("ventas", 0) for x in filas.values())
+    monto = sum(x.get("monto", 0) for x in filas.values())
+    moneda_ventas = next((x["moneda_ventas"] for x in filas.values() if x.get("moneda_ventas")), "")
+    kpis = '<div class="hoy kpis res-kpis">'
+    if con_meta:
+        kpis += (kpi("Gasto en anuncios", dinero(gasto, moneda))
+                 + kpi("Compras en tu página", compras, dinero(valor, moneda) + " según tu Pixel"))
+    kpis += kpi("Chats de anuncios", chats) + kpi("Ventas por chat", ventas, dinero(monto, moneda_ventas))
+    kpis += "</div>"
+    cabeza = (["Anuncio"] + (["Gasto", "Clics", "Compras en tu página"] if con_meta else [])
+              + ["Chats", "Ventas por chat"])
+    orden = sorted(filas.values(), key=lambda x: (x.get("gasto", 0), x.get("chats", 0)), reverse=True)
+    cuerpo = ""
+    for x in orden:
+        celdas = [escape(x.get("nombre") or "")]
+        if con_meta:
+            celdas += [dinero(x.get("gasto", 0), moneda), f'{x.get("clics", 0):,}',
+                       f'{x.get("compras", 0)} · {dinero(x.get("valor_compras", 0), moneda)}' if x.get("compras") else "0"]
+        celdas += [str(x.get("chats", 0)),
+                   f'{x["ventas"]} · {dinero(x["monto"], x.get("moneda_ventas", ""))}' if x.get("ventas") else "0"]
+        cuerpo += "<tr>" + "".join(f"<td>{v}</td>" for v in celdas) + "</tr>"
+    tabla = ('<div class="tarjeta"><span class="num">Por anuncio</span><h2>Lo que dejó cada anuncio</h2>'
+             '<div class="ads-tabla"><table><tr>' + "".join(f"<th>{h}</th>" for h in cabeza) + "</tr>"
+             + cuerpo + "</table></div>"
+             '<p class="ayuda">Compras en tu página: las que registró tu Pixel de Meta. Chats y ventas por chat: las'
+             " conversaciones que llegaron de cada anuncio y lo que se vendió en ellas.</p></div>")
+    return aviso + kpis + tabla
+
+
 async def pagina(c: Cuenta, rango: str, fin: date | None = None, vista: str = "instagram") -> HTMLResponse:
     hoy = datetime.now(ZoneInfo(c.timezone)).date()
     fin = min(fin or hoy, hoy)
-    if vista == "conversaciones":
+    if vista == "anuncios":
+        cuerpo = await anuncios_html(c, fin - timedelta(days=int(rango) - 1), fin)
+    elif vista == "conversaciones":
         publico = json.loads(await c.store.get(metricas.CLAVE_PUBLICO) or "{}")
         cuerpo = conversaciones_html(c, await numeros_de(c, rango, fin), publico)
     else:
@@ -439,6 +511,7 @@ async def descargar(request: Request, dias: str = "7", fin: str = "", ver: str =
     if not (c := panel.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     from . import informe
+    ver = ver if ver in ("instagram", "conversaciones") else "instagram"
     rango = dias if dias in RANGOS else "7"
     hoy = datetime.now(ZoneInfo(c.timezone)).date()
     fin_ = min(leer_fin(fin) or hoy, hoy)

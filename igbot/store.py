@@ -1018,6 +1018,23 @@ class Store:
             " ORDER BY created_at", user_ids)
         return {u: {"ad_id": a, "titulo": t, "foto": f, "created_at": c} for u, a, t, f, c in await cur.fetchall()}
 
+    async def por_anuncio(self, desde: float, hasta: float) -> dict[str, dict]:
+        """Por anuncio, en el periodo: los chats que llegaron de él y las ventas ligadas a él.
+        {ad_id: {"titulo", "chats", "ventas", "monto", "moneda"}}."""
+        out: dict[str, dict] = {}
+        cur = await self.db.execute(
+            "SELECT ad_id, MAX(titulo), COUNT(DISTINCT user_id) FROM anuncios_chat"
+            " WHERE created_at >= ? AND created_at < ? GROUP BY ad_id", (desde, hasta))
+        for ad, titulo, chats in await cur.fetchall():
+            out[ad] = {"titulo": titulo or "", "chats": chats, "ventas": 0, "monto": 0.0, "moneda": ""}
+        cur = await self.db.execute(
+            "SELECT ad_id, COUNT(*), SUM(monto), MAX(moneda) FROM ventas"
+            " WHERE ad_id != '' AND created_at >= ? AND created_at < ? GROUP BY ad_id", (desde, hasta))
+        for ad, n, monto, moneda in await cur.fetchall():
+            fila = out.setdefault(ad, {"titulo": "", "chats": 0, "ventas": 0, "monto": 0.0, "moneda": ""})
+            fila.update(ventas=n, monto=float(monto or 0), moneda=moneda or "")
+        return out
+
     async def codigo_chat(self, user_id: str) -> str:
         """El código de este chat para los enlaces a la tienda (se crea la primera vez)."""
         cur = await self.db.execute("SELECT codigo FROM codigos_chat WHERE user_id = ?", (user_id,))

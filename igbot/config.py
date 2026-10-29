@@ -84,6 +84,9 @@ FB_SCOPES = os.getenv("FB_SCOPES", "").replace(" ", "")
 # El "ID de configuración" del login de Facebook para empresas (Meta > Inicio de sesión con Facebook para empresas >
 # Configuraciones). Si está, se usa en vez de la lista de permisos.
 FB_CONFIG_ID = os.getenv("FB_CONFIG_ID", "").strip()
+# Conecta tu cuenta de anuncios (anuncios_meta.py): otra configuración del mismo login, solo con ads_read.
+# Sin ella se piden los permisos por nombre (ads_read y business_management).
+FB_ADS_CONFIG_ID = os.getenv("FB_ADS_CONFIG_ID", "").strip()
 
 # --- Imágenes para contenido (igbot/imagenes.py) ---
 # Quién pinta las imágenes: "openai" (desde 2026-10-23) o "gemini" (el de antes, por si se vuelve).
