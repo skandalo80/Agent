@@ -104,11 +104,17 @@ FORMATOS = {
     "bento": ("Bento grid", 1, "Una sola imagen armada como cuadrícula bento: recuadros de distintos tamaños con el"
               " producto, sus detalles y su uso, sin nada escrito. \"titulo\" solo sirve para reconocerlo en el"
               " calendario. \"idea\": qué muestra cada recuadro."),
+    "anuncio": ("Anuncio", 1, "Un anuncio limpio del producto o servicio de la campaña, como los de una marca premium:"
+                " una sola idea, el producto real (o su resultado, si es un servicio) de protagonista y mucho aire."
+                " \"titulo\" es el titular (máximo 6 palabras) y \"subtitulo\" una línea corta con la oferta o el"
+                " precio, solo si están en el producto o en la campaña (nunca inventes descuentos)."),
     "vs": ("Esto o aquello", 1, "Dos opciones lado a lado para que la gente elija en comentarios. \"titulo\" es la"
            " pregunta (\"¿A o B?\"). \"idea\": una sola foto dividida a la mitad, A a la izquierda y B a la derecha."),
 }
 SIN_IDEA = ("texto",)  # formatos que no necesitan idea de imagen (sin plan visual)
-CON_TEXTO = ("titular", "texto", "vs")  # con plan visual, la IA los diseña con su texto dentro (estilo infografía)
+CON_TEXTO = ("titular", "texto", "vs", "anuncio")  # con plan visual, la IA los diseña con su texto dentro
+CON_SUBTITULO = ("titular", "texto", "anuncio")
+APARTE = ("anuncio",)  # solo en las campañas de producto (Crear campaña › Promocionar un producto), nunca en la mezcla
 FIJOS = ("foto", "texto", "collage", "bento")  # piezas sin título que se pueda cambiar en el editor
 FORMATO_VIEJO = "titular"  # el de los posts de antes, que no lo tenían
 HORARIOS = {"manana": ("Mañana", "09:00"), "mediodia": ("Mediodía", "14:00"), "noche": ("Noche", "20:00")}
@@ -483,7 +489,7 @@ def repetir(n: int, gano: dict, universo: dict, mezcla: str, semilla: int = 0) -
 def universo(fotos: int, gano: dict) -> dict:
     """Lo que se puede usar en cada dimensión al repetir (los temas extra solo si ya se probaron)."""
     temas = list(TEMAS_INICIALES) + [k for k, *_ in gano.get("tema", []) if k in TEMAS and k not in TEMAS_INICIALES]
-    return {"tema": temas, "formato": [k for k in FORMATOS if k not in RETIRADOS],
+    return {"tema": temas, "formato": [k for k in FORMATOS if k not in RETIRADOS and k not in APARTE],
             "franja": list(HORARIOS)}
 
 
@@ -1132,6 +1138,17 @@ async def pieza_con_ia(c: Cuenta, camp: dict, p: dict, marca: dict, pieza_: dict
     estilo = [archivo(c, t).read_bytes() for t in camp.get("referencias", [])[:brief.MAX_REFERENCIAS]
               if archivo(c, t).is_file()]
     producto = []
+    anuncio = formato == "anuncio"
+    if anuncio and camp.get("producto_id"):  # el anuncio: el producto real va primero y manda
+        tokens = await fotos_producto(c, camp)
+        producto = [archivo(c, t).read_bytes() for t in tokens[:2] if archivo(c, t).is_file()]
+        if producto:
+            idea += (f"\nThe first {len(producto)} reference image{'s show' if len(producto) > 1 else ' shows'} the real"
+                     " product: keep it exactly as it is." + (f" The other {len(estilo)} are the visual style to follow"
+                                                              " (light, palette, mood), not their content." if estilo else ""))
+        return await imagenes.crear_pieza(c.store, PANEL, idea, imagenes.LIBRE, texto_imagen(pieza_, usuario),
+                                          producto + estilo, permitir_extra=extra, marca=kit(marca),
+                                          historia=es_historia(p), anuncio=True, con_producto=bool(producto))
     if p.get("ve") == "productos" or (not p.get("ve") and camp.get("producto_id")):
         tokens = (await fotos_producto(c, camp))[:2] or (
             marca.get("fotos", []) if camp.get("variedad") == "reconocible" and not estilo else [])
@@ -1161,6 +1178,7 @@ Reglas:
 - Si el post trae "escena", ese encuadre y esa luz son obligatorios. Si trae "producto", el producto real es el protagonista.
 - El estilo es un tratamiento de luz, color, textura y composición, nunca objetos de arcilla, cristal, neón u otro material dentro de la escena.
 - Si la "pieza" es un diseño estilo infografía, el prompt describe la pieza gráfica terminada: la jerarquía, dónde va cada uno de sus "textos del diseño" (cítalos tal cual, en español y entre comillas, sin agregar otros), los íconos o gráficos simples que los acompañan, los bloques de color de la marca y la foto o ilustración que la completa. Si es una imagen sin texto, ni una letra, número o logo dentro. Fotografía realista y creíble salvo que el formato o el plan pidan ilustración o gráfico.
+- Si la "pieza" es un anuncio limpio, el prompt describe una pieza publicitaria de marca premium: el producto real de "producto" como protagonista (o su resultado, si es un servicio), una sola idea, un tercio del lienzo vacío y en calma, sus "textos del diseño" (tal cual, entre comillas) con un titular grande y una línea chica, a lo más dos colores de la marca, y nada de íconos, sellos, explosiones, salpicaduras ni objetos volando.
 - En "Collage", una sola imagen con varias fotos nuevas en recuadros de distintos tamaños, todas de esta campaña (nada de fotos viejas).
 - Contexto: el negocio de <empresa> es real. Lo que se ve sale del plan visual y de <empresa>; no inventes productos, negocios, clientes, locales ni datos que no estén ahí.
 - Diferenciación: antes de contestar, compara los prompts entre sí y con <otros_posts> (protagonista, escenario, acción, composición y metáfora). Si dos se parecen aunque cambie el encuadre, ajusta el que tenga más margen dentro de su plan; nunca cambies lo que pide una idea del dueño. No repitas superficies o muebles de catálogo (repisa o mesa de madera) salvo que sean del lugar real.
@@ -1256,7 +1274,11 @@ def textos_del_diseno(p: dict) -> list[str]:
     if not (ia_completa(p) and formato_de(p) in CON_TEXTO):
         return ["pieza: imagen sin texto" if ia_completa(p) else "",
                 f"texto encima: {escape(p.get('titulo', ''))}" if formato_de(p) == "titular" else ""]
-    textos = [p.get("titulo", ""), p.get("subtitulo", "") if formato_de(p) in ("titular", "texto") else "",
+    if formato_de(p) == "anuncio":  # solo su titular y su línea: nada de puntos
+        return ["pieza: anuncio limpio con el texto dentro",
+                "textos del diseño: " + " | ".join(f"«{escape(t)}»" for t in (p.get("titulo", ""), p.get("subtitulo", ""))
+                                                    if t)]
+    textos = [p.get("titulo", ""), p.get("subtitulo", "") if formato_de(p) in CON_SUBTITULO else "",
               *p["plan"]["foto"].get("textos", [])]
     return ["pieza: diseño completo estilo infografía, con el texto dentro",
             "textos del diseño: " + " | ".join(f"«{escape(t)}»" for t in textos if t)]
@@ -1355,7 +1377,7 @@ def pieza_de(camp: dict, p: dict, plantilla: str) -> dict:
     formato = formato_de(p)
     return {"objetivo": tema_de(p["tipo"])[1], "tema": p["idea"], "fotos": [], "plantilla": plantilla,
             "titulo": "" if formato in ("foto", "collage", "bento") else p["titulo"],
-            "subtitulo": p.get("subtitulo", "") if formato in ("titular", "texto") else "",
+            "subtitulo": p.get("subtitulo", "") if formato in CON_SUBTITULO else "",
             "precio": "", "imagen": p["idea"], "campana": p["k"], "campana_id": camp["id"],
             "formato": formato, "medio": medio_de(p),
             "reglas": [] if es_historia(p) else [r for r in [regla_lista(p)] if r]}

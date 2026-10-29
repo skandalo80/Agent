@@ -57,8 +57,10 @@ def test_el_asistente_de_punta_a_punta(cliente, monkeypatch):
     assert "Necesitamos conocer tu negocio" in r.text and 'href="/panel/empresa"' in r.text
     listo(client, c)
     client.portal.call(c.store.set, "productos", json.dumps([PRODUCTO]))
-    r = client.get(URL)
-    assert "Paso 1 de 6" in r.text and 'name="objetivo" value="interaccion"' in r.text
+    r = client.get(URL)  # primero el tipo de campaña: la de contenido, ya marcada
+    assert "Paso 1 de 7 · Tipo de campaña" in r.text and 'name="tipo" value="contenido" checked' in r.text
+    r = client.get(f"{URL}?paso=1")
+    assert "Paso 2 de 7" in r.text and 'name="objetivo" value="interaccion"' in r.text
     assert 'class="wiz-img' not in r.text  # el objetivo va sin miniaturas
     assert 'class="enter-cam" name="ir" value="2"' in r.text  # Enter sigue al paso 2, no salta en el riel
 
@@ -82,14 +84,14 @@ def test_el_asistente_de_punta_a_punta(cliente, monkeypatch):
     # Enfoque del contenido: tarjetas con imagen, las que van con el objetivo marcadas; al menos una.
     paso(client, 1, ir=1, objetivo="interaccion")
     r = client.get(f"{URL}?paso=3")
-    assert "Paso 3 de 6 · Enfoque del contenido" in r.text and r.text.count('name="enfoques"') == 7
+    assert "Paso 4 de 7 · Enfoque del contenido" in r.text and r.text.count('name="enfoques"') == 7
     assert "enfoque-consejos.webp" not in r.text and r.text.count("Va con tu objetivo") == 3
     assert "Elige al menos un enfoque." in paso(client, 3).text
     # Qué se ve está fuera: de Formatos se sigue a Estilo y variedad.
     r = client.get(f"{URL}?paso=4")
     assert 'name="ir" value="6">Continuar' in r.text and ">Qué se ve<" not in r.text
     assert 'value="collage"' not in r.text and 'value="bento"' in r.text  # Collage ya no se ofrece
-    assert "Paso 5 de 6 · Estilo y variedad" in client.get(f"{URL}?paso=5").text
+    assert "Paso 6 de 7 · Estilo y variedad" in client.get(f"{URL}?paso=5").text
 
     # Cantidad: no caben más de dos por día.
     llenar(client)
@@ -99,7 +101,7 @@ def test_el_asistente_de_punta_a_punta(cliente, monkeypatch):
     llenar(client)
     r = client.get(f"{URL}?paso=8")
     assert "Revisa tu campaña antes de generarla" in r.text and "Latte de calabaza · Promoción con descuento 20 %" in r.text
-    assert r.text.count("Editar</button>") == 7 and "Crear el brief" in r.text
+    assert r.text.count("Editar</button>") == 8 and "Crear el brief" in r.text
     assert "Consejos e ideas útiles · Historias y situaciones cotidianas" in r.text
     assert 'class="cruce"' not in r.text  # Qué se ve está oculto: no hay cruce que mostrar
 
@@ -955,3 +957,59 @@ def test_crear_con_ia_solo_pide_objetivo_y_fechas(cliente, monkeypatch):
     assert not any(p.get("post_id") for p in camp["posts"])  # sin imágenes
     assert "20 % de descuento en noviembre" in llamadas[0][0]  # lo que escribió llega al brief
     assert camp["asistente"]["objetivo"] == "vender" and camp["asistente"]["mensajes"]
+
+
+def test_campana_de_producto_con_anuncios(cliente, monkeypatch):
+    """Promocionar un producto o servicio: Producto, La oferta, Estilo y Fechas; salen anuncios limpios del
+    producto real (su foto va primero y se respeta al máximo), uno por versión."""
+    client, c, _, proveedor = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 10)
+    import app as bot
+    monkeypatch.setattr(bot.agent, "run_claude", claude_de_campana([]))
+    listo(client, c)
+    token = "f" * 24
+    os.makedirs(c.media_dir, exist_ok=True)
+    Image.new("RGB", (40, 40), "orange").save(contenido.archivo(c, token), "JPEG")
+    servicio = {**PRODUCTO, "id": "s1", "nombre": "Taller de barismo", "tipo": "servicio", "imagenes": []}
+    client.portal.call(c.store.set, "productos", json.dumps([{**PRODUCTO, "imagenes": [token]}, servicio]))
+    T, P, O = nueva_campana.TIPO, nueva_campana.PRODUCTO, nueva_campana.OFERTA
+
+    assert paso(client, T, ir=P, tipo="producto").headers["location"] == f"{URL}?paso={P}"
+    r = client.get(f"{URL}?paso={P}")
+    assert "Paso 2 de 5 · Producto" in r.text and r.text.count('name="producto"') == 2
+    assert token in r.text and "Servicio" in r.text and ">Fechas<" in r.text and ">Objetivo<" not in r.text
+    assert "Elige qué quieres promocionar." in paso(client, P, ir=O).text
+    paso(client, P, ir=O, producto="p1")
+    r = client.get(f"{URL}?paso={O}")
+    assert "Latte de calabaza · $75 MXN" in r.text and 'name="versiones" value="4" checked' in r.text
+    assert "Escribe el porcentaje de descuento" in paso(client, O, ir=6, accion="promo").text
+    paso(client, O, ir=6, accion="promo", descuento="15", desde="2099-01-05", hasta="2099-01-11", versiones="2")
+    b = json.loads(client.portal.call(c.store.get, nueva_campana.BORRADOR))
+    assert b["inicio"] == "2099-01-05" and b["semanas"] == 1  # salen mientras dura la promoción
+    assert "¿Cómo quieres que se vean tus anuncios?" in client.get(f"{URL}?paso=6").text
+    paso(client, 6, ir=7, variedad="coherencia")
+    r = client.get(f"{URL}?paso=7")
+    assert "¿Cuándo salen tus anuncios?" in r.text and 'name="n_posts"' not in r.text
+    paso(client, 7, ir=8, nombre="", inicio="2099-01-05", semanas="1", dias=["0", "2"], horarios=["manana"])
+    r = client.get(f"{URL}?paso=8")
+    assert "Revisa tu campaña" in r.text and "Versiones del anuncio" in r.text and "2 posts" in r.text
+    assert "Latte de calabaza · Promoción con descuento 15 %" in r.text and "Enfoque del contenido" not in r.text
+    assert "Paso 1 de 5 · Tipo de campaña" in client.get(f"{URL}?paso=3").text  # un paso de la otra campaña
+
+    generar(client)
+    camp = leer(client, c)
+    assert len(camp["posts"]) == 2 and {p["formato"] for p in camp["posts"]} == {"anuncio"}
+    assert camp["nombre"] == "Latte de calabaza · Promoción con descuento" and camp["producto_id"] == "p1"
+    assert "15 % de descuento" in camp["producto"] and camp["n_historias"] == 0
+    p = camp["posts"][0]
+    p["prompt"], p["idea_base"] = "The pumpkin latte on a calm cream background", p["idea"]
+    client.portal.call(c.store.set, "campanas", json.dumps([camp]))
+    client.post(campanas.url_de(camp), headers=ORIGEN, data={"accion": "generar", "k": str(p["k"])})
+    prompt, fotos = proveedor.llamadas[-1]
+    assert "clean, premium advertising" in prompt and "infographic-style" not in prompt and "No icons" in prompt
+    assert f'Headline (largest, the only big text): "{p["titulo"]}"' in prompt
+    assert "reproduce it exactly" in prompt and len(fotos) == 1 and proveedor.fiel
+
+
+def test_el_anuncio_no_entra_en_las_campanas_de_contenido():
+    assert "anuncio" not in campanas.universo(0, {})["formato"] and "anuncio" not in nueva_campana.FORMATOS

@@ -60,7 +60,8 @@ class OpenAI:
     def __init__(self, api_key: str, model: str, size: str = "1024x1536", quality: str = "medium"):
         self.api_key, self.model, self.size, self.quality = api_key, model, size, quality
 
-    async def generar(self, prompt: str, fotos: list[bytes] = ()) -> bytes:
+    async def generar(self, prompt: str, fotos: list[bytes] = (), fiel: bool = False) -> bytes:
+        """Con `fiel`, las fotos se respetan al máximo (input_fidelity high): el producto real del anuncio."""
         if not self.api_key:
             raise ErrorImagen("Falta OPENAI_API_KEY en la configuración del servidor.")
         campos = {"model": self.model, "prompt": prompt, "size": self.size, "quality": self.quality,
@@ -68,8 +69,11 @@ class OpenAI:
         cabeceras = {"Authorization": f"Bearer {self.api_key}"}
         async with httpx.AsyncClient(timeout=180) as http:
             if fotos:
-                r = await http.post(f"{self.API}/images/edits", headers=cabeceras, data=campos,
-                                    files=[("image[]", (f"ref{i}.jpg", f, "image/jpeg")) for i, f in enumerate(fotos)])
+                archivos = [("image[]", (f"ref{i}.jpg", f, "image/jpeg")) for i, f in enumerate(fotos)]
+                r = await http.post(f"{self.API}/images/edits", headers=cabeceras,
+                                    data={**campos, "input_fidelity": "high"} if fiel else campos, files=archivos)
+                if fiel and r.status_code == 400 and "input_fidelity" in r.text:  # el modelo no lo acepta: sin él
+                    r = await http.post(f"{self.API}/images/edits", headers=cabeceras, data=campos, files=archivos)
             else:
                 r = await http.post(f"{self.API}/images/generations", headers=cabeceras,
                                     json={**campos, "n": 1})
@@ -105,7 +109,7 @@ class Gemini:
     def __init__(self, api_key: str, model: str):
         self.api_key, self.model = api_key, model
 
-    async def generar(self, prompt: str, fotos: list[bytes] = ()) -> bytes:
+    async def generar(self, prompt: str, fotos: list[bytes] = (), fiel: bool = False) -> bytes:
         if not self.api_key:
             raise ErrorImagen("Falta GEMINI_API_KEY en la configuración del servidor.")
         partes = [{"inline_data": {"mime_type": "image/jpeg", "data": base64.b64encode(f).decode()}}
@@ -232,6 +236,37 @@ def prompt_infografia(idea: str, texto: "Texto", marca: "Marca | None" = None, h
         f"Typography: in the spirit of the {m.fuente} typeface, readable on a phone, generous margins.\n"
         f"Brand colors: main {m.principal}, accent {m.acento}, background {m.fondo}.\n"
         "No logos, watermarks or fake buttons."
+    )
+
+
+def prompt_anuncio(idea: str, texto: "Texto", marca: "Marca | None" = None, historia: bool = False,
+                   con_producto: bool = False) -> str:
+    """Campañas de producto: un anuncio limpio, de marca premium (una sola idea, mucho aire, el producto real)."""
+    m = marca or Marca()
+    lineas = [f'- Headline (largest, the only big text): "{texto.titulo}"'] if texto.titulo else []
+    if texto.subtitulo:
+        lineas.append(f'- One short line (small): "{texto.subtitulo}"')
+    que = "full-screen Instagram story" if historia else "vertical Instagram post"
+    recorte = (f"{RECORTE_HISTORIA} Keep all text inside the central area." if historia
+               else f"{RECORTE} Keep all text inside the central 4:5 area.")
+    producto = ("The product in the reference photos is the hero: reproduce it exactly as it is (shape, colors,"
+                " label, proportions), photographed for real, never redrawn or replaced by a similar one.\n"
+                if con_producto else "")
+    return (
+        f"Design a clean, premium advertising {que}, the kind a top brand would publish: one single message,"
+        " readable in two seconds, not an infographic and not a busy flyer.\n"
+        f"{recorte}\n{producto}\n"
+        f"Art direction: {idea.strip()}\n\n"
+        "Layout rules: a clear grid, generous empty space (about a third of the canvas left calm and empty),"
+        " one focal point, aligned text, nothing crowded. No icons, no badges, no bursts, no splashes, no flying"
+        " objects, no extra decorations.\n"
+        "Write exactly these texts in the design, in Spanish, spelled exactly as given (keep every accent and"
+        " punctuation mark), and no other words, letters or numbers:\n" + "\n".join(lineas) + "\n\n"
+        f"Typography: elegant editorial headline in the spirit of the {m.fuente} typeface, strong size contrast"
+        " between the headline and the small line.\n"
+        f"Brand colors, used with restraint (at most two plus neutrals): main {m.principal}, accent {m.acento},"
+        f" background {m.fondo}.\n"
+        "Realistic, believable photography with soft, natural light. No logos, watermarks or fake buttons."
     )
 
 
@@ -511,19 +546,23 @@ def _jpg(data: bytes, historia: bool = False) -> bytes:
 
 async def crear_pieza(store: Store, user_id: str, idea: str, plantilla: str, texto: Texto,
                       fotos: list[bytes] = (), permitir_extra: bool = False, marca: Marca | None = None,
-                      historia: bool = False, infografia: bool = False, puntos: list[str] = ()) -> dict:
+                      historia: bool = False, infografia: bool = False, puntos: list[str] = (),
+                      anuncio: bool = False, con_producto: bool = False) -> dict:
     """Genera la imagen, la rotula y la deja en la tabla media (lista para publicar). Con `historia`, en 9:16.
-    Con `infografia` (y plantilla LIBRE), la IA diseña la pieza con su texto y sus `puntos` dentro."""
+    Con `infografia` (y plantilla LIBRE), la IA diseña la pieza con su texto y sus `puntos` dentro; con `anuncio`,
+    un anuncio limpio con su titular, y si `con_producto`, las fotos del producto real se respetan al máximo."""
     if plantilla not in PLANTILLAS and plantilla != LIBRE:
         raise ErrorImagen(f"Plantilla desconocida: {plantilla}")
     tipo = await reservar(store, permitir_extra)
     try:
         # La espera al generador va aparte: mientras tanto, las vistas previas siguen rotulando.
         async with _generando:
-            prompt = (prompt_infografia(idea, texto, marca, historia, puntos) if plantilla == LIBRE and infografia
+            prompt = (prompt_anuncio(idea, texto, marca, historia, con_producto) if plantilla == LIBRE and anuncio
+                      else prompt_infografia(idea, texto, marca, historia, puntos) if plantilla == LIBRE and infografia
                       else prompt_libre(idea, texto, marca, historia) if plantilla == LIBRE
                       else prompt_final(idea, plantilla, historia))
-            crudo = await proveedor.generar(prompt, list(fotos))
+            fiel = {"fiel": True} if anuncio and con_producto and fotos else {}
+            crudo = await proveedor.generar(prompt, list(fotos), **fiel)
         async with _turno:
             base = await asyncio.to_thread(_jpg, crudo, historia)
             # En diseño libre el texto ya viene en el diseño, y una foto sin título va tal cual: no se rotula.

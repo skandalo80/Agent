@@ -1,7 +1,9 @@
 """Contenido › Campañas › Nueva campaña: el asistente por pasos (sencillo por fuera, dimensiones claras por dentro).
 
-Siete pasos y un resumen: Objetivo, Mensaje (con el producto, si es sobre uno), Enfoque del contenido (de qué
-tratan los posts), Formatos, Qué se ve, Estilo y variedad, y Cantidad y fechas.
+Primero el tipo de campaña: "Promocionar un producto o servicio" (Producto, La oferta, Estilo y Fechas: anuncios
+limpios del producto real, en varias versiones) o "Contenido para tu cuenta", con sus pasos: Objetivo, Mensaje
+(con el producto, si es sobre uno), Enfoque del contenido (de qué tratan los posts), Formatos, Qué se ve, Estilo y
+variedad, y Cantidad y fechas. Al final, un resumen.
 Sin JavaScript: cada paso es ?paso=N y cada botón (también los del riel de pasos) es un formulario normal que
 guarda el borrador (kv "campana_borrador") y lleva al paso que se tocó. En el resumen, "Crear el brief" le pide a
 Claude tres ideas de campaña (brief.conceptos); en el paso Brief elige una, la ajusta y "Escribir los posts" arma la
@@ -35,16 +37,45 @@ PASOS = ("Objetivo", "Mensaje", "Enfoque del contenido", "Formatos", "Qué se ve
 RESUMEN = len(PASOS) + 1
 OCULTOS = {5}  # Qué se ve: fuera del asistente (el plan de cada imagen sale del ángulo del post y del perfil)
 VISIBLES = [i for i in range(1, RESUMEN) if i not in OCULTOS]
-
-
-def vecino(n: int, paso: int) -> int:
-    """El paso visible siguiente (paso=1) o anterior (paso=-1); RESUMEN después del último."""
-    i = n + paso
-    while i in OCULTOS:
-        i += paso
-    return i
-
 BRIEF = RESUMEN + 1  # después del resumen: elegir la idea de la campaña y ajustar su brief
+# El primer paso y los del camino de producto (números aparte: los de siempre no cambian de URL).
+TIPO, PRODUCTO, OFERTA = 10, 11, 12
+TIPOS = {  # clave: (título, descripción, color de respaldo)
+    "producto": ("Promocionar un producto o servicio", "Eliges uno de tus productos o servicios y lo que quieres hacer"
+                 " con él: lanzarlo, darlo a conocer o una promoción. Salen anuncios limpios, con tu producto real, en"
+                 " varias versiones para elegir.", "#4a2312"),
+    "contenido": ("Contenido para tu cuenta", "Una campaña de varias semanas para atraer, enseñar, crear comunidad o"
+                  " fortalecer tu marca. Es la campaña de siempre.", "#2d2640"),
+}
+DE_PRODUCTO = [TIPO, PRODUCTO, OFERTA, 6, 7]
+NOMBRES_PRODUCTO = {TIPO: "Tipo de campaña", PRODUCTO: "Producto", OFERTA: "La oferta", 6: "Estilo", 7: "Fechas"}
+VERSIONES = (2, 4, 6)  # cuántas versiones del anuncio (cada una es un post de la campaña)
+
+
+def de_producto(b: dict) -> bool:
+    return b.get("tipo") == "producto"
+
+
+def visibles(b: dict) -> list[int]:
+    """Los pasos que ve, en orden, según el tipo de campaña."""
+    return DE_PRODUCTO if de_producto(b) else [TIPO, *VISIBLES]
+
+
+def nombre_paso(b: dict, n: int) -> str:
+    return NOMBRES_PRODUCTO[n] if de_producto(b) else NOMBRES_PRODUCTO[TIPO] if n == TIPO else PASOS[n - 1]
+
+
+def orden(b: dict, n: int) -> int:
+    """Dónde va el paso n en el camino (el resumen y el brief al final)."""
+    lista = [*visibles(b), RESUMEN, BRIEF]
+    return lista.index(n) if n in lista else 0
+
+
+def vecino(b: dict, n: int, paso: int) -> int:
+    """El paso visible siguiente (paso=1) o anterior (paso=-1); RESUMEN después del último."""
+    lista = visibles(b)
+    i = (lista.index(n) if n in lista else 0) + paso
+    return RESUMEN if i >= len(lista) else lista[max(i, 0)]
 MAX_MENSAJES = 2
 MAX_TEXTO, MAX_CONDICION = 400, 120
 
@@ -174,7 +205,8 @@ MAX_CANDIDATOS_REF = 18  # fotos para elegir como referencia en el paso Estilo y
 
 def inicial(marca: dict) -> dict:
     lunes = campanas.lunes_que_viene()
-    return {"objetivo": "", "mensajes": [], "producto": "", "accion": "conocer", "descuento": "", "desde": "",
+    return {"tipo": "contenido", "versiones": 4,
+            "objetivo": "", "mensajes": [], "producto": "", "accion": "conocer", "descuento": "", "desde": "",
             "hasta": "", "condicion": "", "texto": "", "con_producto": False, "con_texto": False, "preguntan": True, "funciona": False,
             "mezcla": campanas.MEZCLA_INICIAL, "formatos": ["foto", "titular"],
             "visual": ["productos", "personas", "propias"], "textos_img": ["titular"],
@@ -197,7 +229,7 @@ def de_campana(camp: dict) -> dict:
     b.update(nombre=camp.get("nombre", ""), inicio=camp["inicio"], semanas=camp.get("semanas", 2),
              n_posts=camp.get("n_posts") or len(camp.get("posts", [])) or 8,
              n_historias=camp.get("n_historias") or 0, cid=camp["id"],
-             hechos=list(range(1, RESUMEN)))
+             hechos=[*range(1, RESUMEN), TIPO, PRODUCTO, OFERTA])
     if camp.get("brief") and not b.get("brief"):  # campañas armadas antes de guardar las tres ideas
         b["brief"] = {"conceptos": [camp["brief"]], "elegido": 0}
     if not b.get("dias"):
@@ -245,6 +277,8 @@ async def lista_para_empezar(c: Cuenta) -> tuple[bool, bool]:
 
 async def a_campana(c: Cuenta, b: dict) -> dict:
     """Lo que necesita campanas.proponer, sacado del borrador."""
+    if de_producto(b):
+        return await a_campana_producto(c, b)
     objetivos, mensajes = await opciones(c, b["objetivo"])
     obj = next((o for o in objetivos if o["k"] == b["objetivo"]), objetivos[0])
     base = base_de(obj, OBJETIVOS, PALABRAS_OBJETIVO)
@@ -257,26 +291,15 @@ async def a_campana(c: Cuenta, b: dict) -> dict:
     if enfoques := [ENFOQUES[k][2] for k in b.get("enfoques", []) if k in ENFOQUES]:
         temas = enfoques + [t for t in temas if t not in enfoques][:max(0, campanas.MIN_TEMAS - len(enfoques))]
     temas = temas[:campanas.MAX_TEMAS]
-    formatos = [k for k in b["formatos"] if k in campanas.FORMATOS and k not in campanas.RETIRADOS]
+    fuera = (*campanas.RETIRADOS, *campanas.APARTE)  # el anuncio es de las campañas de producto
+    formatos = [k for k in b["formatos"] if k in campanas.FORMATOS and k not in fuera]
     if "ia" in b["formatos"] or not formatos:
-        formatos = [k for k in campanas.FORMATOS if k not in campanas.RETIRADOS]
+        formatos = [k for k in campanas.FORMATOS if k not in fuera]
     horarios = [k for k in b["horarios"] if k in campanas.HORARIOS]
     if "ia" in b["horarios"] or not horarios:
         horarios = list(campanas.HORARIOS)
     prod = next((p for p in await productos(c) if p["id"] == b["producto"]), None)
-    producto = ""
-    if prod:
-        producto = f"{prod['nombre']}" + (f" ({precio_de(prod)})" if precio_de(prod) else "")
-        if prod.get("descripcion"):
-            producto += f": {prod['descripcion']}"
-        producto += f". Qué quiere: {ACCIONES.get(b['accion'], ACCIONES['conocer']).lower()}"
-        if b["accion"] == "promo" and b["descuento"]:
-            producto += f", {b['descuento']} % de descuento"
-            if b["desde"] and b["hasta"]:
-                producto += f" del {campanas.fecha_larga(b['desde'])} al {campanas.fecha_larga(b['hasta'])}"
-            if b["condicion"]:
-                producto += f" ({b['condicion']})"
-        producto += "."
+    producto = texto_producto(b, prod)
     # Qué se ve solo cuenta si el dueño lo eligió: con el paso oculto, lo decide el plan con los datos de su perfil.
     ves = [] if 5 in OCULTOS else [k for k in b["visual"] if k in VISUAL and k != "propias"]
     visual = ", ".join(VISUAL[k][0] for k in ves)
@@ -304,6 +327,54 @@ async def a_campana(c: Cuenta, b: dict) -> dict:
             "asistente": {k: v for k, v in b.items() if k not in ("cid", "hechos", "adn")}}
 
 
+def texto_producto(b: dict, prod: dict | None) -> str:
+    """El producto elegido y lo que quiere hacer con él, como lo lee Claude."""
+    if not prod:
+        return ""
+    producto = f"{prod['nombre']}" + (f" ({precio_de(prod)})" if precio_de(prod) else "")
+    if prod.get("descripcion"):
+        producto += f": {prod['descripcion']}"
+    producto += f". Qué quiere: {ACCIONES.get(b['accion'], ACCIONES['conocer']).lower()}"
+    if b["accion"] == "promo" and b["descuento"]:
+        producto += f", {b['descuento']} % de descuento"
+        if b["desde"] and b["hasta"]:
+            producto += f" del {campanas.fecha_larga(b['desde'])} al {campanas.fecha_larga(b['hasta'])}"
+        if b["condicion"]:
+            producto += f" ({b['condicion']})"
+    return producto + "."
+
+
+def nombre_producto(b: dict, prods: list[dict]) -> str:
+    """El nombre que lleva una campaña de producto si no le pone uno: el producto y lo que quiere hacer."""
+    prod = next((p for p in prods if p["id"] == b["producto"]), None)
+    accion = ACCIONES.get(b["accion"], ACCIONES["conocer"])
+    return (f"{prod['nombre']} · {accion}" if prod else accion)[:campanas.MAX_NOMBRE]
+
+
+async def a_campana_producto(c: Cuenta, b: dict) -> dict:
+    """Promocionar un producto o servicio: solo anuncios de ese producto, una pieza por versión."""
+    prod = next((p for p in await productos(c) if p["id"] == b["producto"]), None)
+    accion = ACCIONES.get(b["accion"], ACCIONES["conocer"])
+    horarios = [k for k in b["horarios"] if k in campanas.HORARIOS]
+    if "ia" in b["horarios"] or not horarios:
+        horarios = list(campanas.HORARIOS)
+    return {"nombre": b["nombre"].strip()[:campanas.MAX_NOMBRE] or nombre_producto(b, [prod] if prod else []),
+            "inicio": b["inicio"], "semanas": b["semanas"], "publicar": "lun-sab", "dias_semana": sorted(b["dias"]),
+            "n_posts": b["versiones"], "n_historias": 0, "tema": b["texto"], "modo": "explorar", "mezcla": b["mezcla"],
+            "temas": ["promo", "producto"] if b["accion"] == "promo" else ["producto", "beneficios"],
+            "formatos": ["anuncio"], "horarios": horarios, "clientes": False,
+            "objetivo": f"{TIPOS['producto'][0]}: {accion.lower()}",
+            "mensaje": f"Un solo producto o servicio: {prod['nombre']}" if prod else "",
+            "producto": texto_producto(b, prod), "producto_id": prod["id"] if prod else "", "visual": "",
+            "estilo": f"Anuncios limpios. Variedad visual: {VARIEDAD[b['variedad']][0]} ({VARIEDAD[b['variedad']][1]})",
+            "fotos_propias": True, "modo_img": "libre", "regla": False, "ves": [], "variedad": b["variedad"],
+            "referencias": b.get("referencias", []),
+            "adn_visual": (b.get("adn") or {}).get("texto", "") if (b.get("adn") or {}).get("fotos") == b.get(
+                "referencias") else "",
+            "semilla": b.get("semilla") or 0,
+            "asistente": {k: v for k, v in b.items() if k not in ("cid", "hechos", "adn")}}
+
+
 # --- guardar cada paso ---
 
 def _lista(f, nombre: str, validas) -> list[str]:
@@ -320,6 +391,31 @@ def _fecha(texto: str) -> str:
 def del_form(f, paso: int, b: dict, objetivos: list[dict], mensajes: list[dict], prods: list[dict]) -> str:
     """Pasa al borrador lo que vino del paso; devuelve '' o lo que falta (el paso no se da por hecho)."""
     g = lambda k: str(f.get(k, "")).strip()  # noqa: E731
+    if paso == TIPO:
+        b["tipo"] = g("tipo") if g("tipo") in TIPOS else b.get("tipo", "contenido")
+        return ""
+    if paso == PRODUCTO:
+        b["producto"] = g("producto") if g("producto") in {p["id"] for p in prods} else ""
+        b["con_producto"] = bool(b["producto"])
+        return "" if b["producto"] else "Elige qué quieres promocionar."
+    if paso == OFERTA:
+        b["accion"] = g("accion") if g("accion") in ACCIONES else "conocer"
+        b["descuento"] = g("descuento") if g("descuento").isdigit() and 1 <= int(g("descuento")) <= 90 else ""
+        b["desde"], b["hasta"] = _fecha(g("desde")), _fecha(g("hasta"))
+        b["condicion"] = g("condicion")[:MAX_CONDICION]
+        b["versiones"] = int(g("versiones")) if g("versiones").isdigit() and int(g("versiones")) in VERSIONES else 4
+        b["con_texto"] = g("con_texto") == "1"
+        b["texto"] = g("texto")[:MAX_TEXTO] if b["con_texto"] else ""
+        if b["accion"] == "promo" and not b["descuento"]:
+            return "Escribe el porcentaje de descuento (de 1 a 90)."
+        if b["desde"] and b["hasta"] and b["hasta"] < b["desde"]:
+            return "La promoción no puede terminar antes de empezar."
+        if b["accion"] == "promo" and b["desde"]:  # los anuncios salen mientras dura la promoción
+            b["inicio"] = b["desde"]
+            if b["hasta"]:
+                dias = (date.fromisoformat(b["hasta"]) - date.fromisoformat(b["desde"])).days + 1
+                b["semanas"] = max(1, min(-(-dias // 7), max(campanas.SEMANAS)))
+        return ""
     if paso == 1:
         if g("objetivo") in {o["k"] for o in objetivos} and g("objetivo") != b["objetivo"]:
             b["objetivo"] = g("objetivo")
@@ -362,10 +458,13 @@ def del_form(f, paso: int, b: dict, objetivos: list[dict], mensajes: list[dict],
         b["semanas"] = int(g("semanas")) if g("semanas").isdigit() and int(g("semanas")) in campanas.SEMANAS else 2
         b["dias"] = sorted({int(d) for d in f.getlist("dias") if d.isdigit() and 0 <= int(d) <= 6})
         b["horarios"] = _lista(f, "horarios", HORARIOS)
-        n = int(g("n_posts")) if g("n_posts").isdigit() else 0
-        b["n_posts"] = max(1, min(n, MAX_POSTS)) if n else b["n_posts"]
-        h = g("n_historias")
-        b["n_historias"] = min(int(h), MAX_HISTORIAS) if h.isdigit() else 0
+        if de_producto(b):  # una pieza por versión del anuncio, sin historias
+            b["n_posts"], b["n_historias"] = b["versiones"], 0
+        else:
+            n = int(g("n_posts")) if g("n_posts").isdigit() else 0
+            b["n_posts"] = max(1, min(n, MAX_POSTS)) if n else b["n_posts"]
+            h = g("n_historias")
+            b["n_historias"] = min(int(h), MAX_HISTORIAS) if h.isdigit() else 0
         if not b["dias"]:
             return "Elige al menos un día para publicar."
         if not b["horarios"]:
@@ -382,7 +481,8 @@ def del_form(f, paso: int, b: dict, objetivos: list[dict], mensajes: list[dict],
 
 
 def faltan(b: dict) -> list[int]:
-    return [i for i in VISIBLES if i not in b.get("hechos", [])]
+    """Los pasos que faltan (el tipo de campaña siempre trae uno elegido)."""
+    return [i for i in visibles(b) if i != TIPO and i not in b.get("hechos", [])]
 
 
 # --- páginas ---
@@ -429,10 +529,10 @@ def riel(b: dict, actual: int) -> str:
     hechos = set(b.get("hechos", []))
     filas = "".join(
         f'<button class="wiz-paso{" hecho" if i in hechos and i != actual else ""}{" actual" if i == actual else ""}"'
-        f' name="ir" value="{i}"><b>{"✓" if i in hechos and i != actual else n}</b>{PASOS[i - 1]}</button>'
-        for n, i in enumerate(VISIBLES, 1))
+        f' name="ir" value="{i}"><b>{"✓" if i in hechos and i != actual else n}</b>{nombre_paso(b, i)}</button>'
+        for n, i in enumerate(visibles(b), 1))
     listo = not faltan(b)
-    avance = 100 if actual in (RESUMEN, BRIEF) else len(hechos & set(VISIBLES)) * 100 // len(VISIBLES)
+    avance = 100 if actual in (RESUMEN, BRIEF) else len(hechos & set(visibles(b))) * 100 // len(visibles(b))
     return (f'<nav class="wiz-pasos" aria-label="Pasos de la campaña"><p>Tu campaña</p>{filas}'
             f'<button class="wiz-paso{" actual" if actual == RESUMEN else ""}{"" if listo else " apagado"}" name="ir"'
             f' value="{RESUMEN}"><b>✓</b>Resumen</button>'
@@ -440,33 +540,88 @@ def riel(b: dict, actual: int) -> str:
                "</button>" if b.get("brief") else "") + panel.avance(avance) + "</nav>")
 
 
-def cab(n: int, titulo: str, bajada: str) -> str:
-    v = VISIBLES.index(n) + 1  # el número que ve: sin contar los pasos ocultos
-    return (f'<div class="wiz-cab"><p class="ante">Paso {v} de {len(VISIBLES)} · {PASOS[n - 1]}</p><h2>{titulo}</h2>'
-            f'<p class="baj">{bajada}</p></div>')
+def cab(b: dict, n: int, titulo: str, bajada: str) -> str:
+    lista = visibles(b)  # el número que ve: sin contar los pasos ocultos
+    v = lista.index(n) + 1 if n in lista else n
+    return (f'<div class="wiz-cab"><p class="ante">Paso {v} de {len(lista)} · {nombre_paso(b, n)}</p>'
+            f'<h2>{titulo}</h2><p class="baj">{bajada}</p></div>')
 
 
-def pie(n: int) -> str:
-    siguiente = "Ver resumen" if n == VISIBLES[-1] else "Continuar"
+def pie(b: dict, n: int) -> str:
+    lista = visibles(b)
+    siguiente = "Ver resumen" if n == lista[-1] else "Continuar"
     return ('<div class="wiz-pie">'
-            + (f'<button class="boton secundario" name="ir" value="{vecino(n, -1)}">‹ Anterior</button>'
-               if n > VISIBLES[0] else f'<a class="boton secundario" href="{campanas.BASE}">Cancelar</a>')
-            + f'<span>Paso {VISIBLES.index(n) + 1} de {len(VISIBLES)}</span>'
-            f'<button class="boton" name="ir" value="{vecino(n, 1)}">{siguiente} ›</button></div>')
+            + (f'<button class="boton secundario" name="ir" value="{vecino(b, n, -1)}">‹ Anterior</button>'
+               if n != lista[0] else f'<a class="boton secundario" href="{campanas.BASE}">Cancelar</a>')
+            + f'<span>Paso {lista.index(n) + 1 if n in lista else n} de {len(lista)}</span>'
+            f'<button class="boton" name="ir" value="{vecino(b, n, 1)}">{siguiente} ›</button></div>')
 
 
 def nota(titulo: str, texto: str) -> str:
     return f'<p class="wiz-nota"><b>{titulo}</b> {texto}</p>'
 
 
+def paso_tipo(b: dict) -> str:
+    ops = "".join(op("tipo", k, t, d, marcada=b.get("tipo", "contenido") == k, imagen=img("tipo", k, color, t))
+                  for k, (t, d, color) in TIPOS.items())
+    return (cab(b, TIPO, "¿Qué tipo de campaña quieres?", "Según lo que elijas cambian los pasos que siguen.")
+            + f'<div class="wiz-ops dos">{ops}</div>' + pie(b, TIPO))
+
+
+def paso_producto(b: dict, prods: list[tuple[dict, str]]) -> str:
+    """Sus productos y servicios (Tu empresa o Shopify) como tarjetas con su foto y su precio."""
+    if not prods:
+        return (cab(b, PRODUCTO, "¿Qué quieres promocionar?", "Sale de los productos y servicios de tu perfil de empresa.")
+                + nota("Todavía no tienes productos.", 'Agrégalos en <a href="/panel/empresa">Tu empresa</a> (o tráelos de'
+                       " tu Shopify) con su foto y su precio, y vuelve aquí.") + pie(b, PRODUCTO))
+    ops = "".join(
+        op("producto", x["id"], x["nombre"], " · ".join(v for v in (precio_de(x), dict(empresa.TIPOS).get(x.get("tipo"), "")) if v),
+           marcada=x["id"] == b["producto"],
+           imagen=f'<span class="wiz-img" style="--fondo:#26262a{f" url({u})" if u else ""}">'
+                  f'{"" if u else "Sin foto"}</span>')
+        for x, u in prods)
+    return (cab(b, PRODUCTO, "¿Qué quieres promocionar?",
+                "Salen de los productos y servicios de tu perfil de empresa (y de tu Shopify, si lo conectaste), con su"
+                " foto y su precio. Con foto, el anuncio muestra tu producto real.")
+            + f'<div class="wiz-ops cuatro prods-cam">{ops}</div>'
+            + '<p class="ayuda" style="margin-top:1rem">¿No está? Agrégalo en <a href="/panel/empresa">Tu empresa</a>.</p>'
+            + pie(b, PRODUCTO))
+
+
+def paso_oferta(b: dict, prods: list[dict]) -> str:
+    prod = next((p for p in prods if p["id"] == b["producto"]), None)
+    nombre = escape(prod["nombre"]) + (f" · {escape(precio_de(prod))}" if precio_de(prod) else "") if prod else ""
+    return (cab(b, OFERTA, "¿Qué quieres hacer con él?",
+                "Con esto escribimos el mensaje del anuncio: una sola idea, clara en dos segundos.")
+            + '<div class="wiz-bloque prod-cam">' + (f'<label class="t">{nombre}</label>' if nombre else "")
+            + '<label class="t" style="margin-top:1rem">¿Qué quieres hacer?</label><div class="wiz-chips">'
+            + "".join(chip("accion", k, v, b["accion"] == k) for k, v in ACCIONES.items())
+            + '</div><div class="wiz-si promo wiz-campos">'
+            f'<div><label for="w-desc">Descuento (%)</label><input type="number" id="w-desc" name="descuento" min="1"'
+            f' max="90" value="{escape(b["descuento"])}" placeholder="20"></div>'
+            f'<div><label for="w-desde">Desde</label><input type="date" id="w-desde" name="desde" value="{b["desde"]}"></div>'
+            f'<div><label for="w-hasta">Hasta</label><input type="date" id="w-hasta" name="hasta" value="{b["hasta"]}"></div>'
+            f'<div><label for="w-cond">Condición (opcional)</label><input type="text" id="w-cond" name="condicion"'
+            f' maxlength="{MAX_CONDICION}" value="{escape(b["condicion"])}" placeholder="Ej. solo en sucursal"></div></div></div>'
+            '<div class="wiz-bloque"><label class="t">¿Cuántas versiones del anuncio?</label><p class="ayuda">Cada'
+            " versión es una imagen distinta del mismo anuncio y sale como un post de la campaña. Así ves cuál"
+            ' funciona mejor; las que no te gusten las borras.</p><div class="wiz-chips">'
+            + "".join(chip("versiones", n, str(n), b.get("versiones", 4) == n) for n in VERSIONES) + "</div></div>"
+            + '<div class="wiz-bloque">' + abre("con_texto", "Cuéntalo en tus palabras", b.get("con_texto") or b["texto"])
+            + '<p class="ayuda">Un dato que no debe faltar en el anuncio (opcional).</p>'
+            f'<textarea name="texto" rows="2" maxlength="{MAX_TEXTO}" aria-label="Tu idea" placeholder="Ej. Solo esta'
+            f' semana, o envío gratis.">{escape(b["texto"])}</textarea></div></div>'
+            + pie(b, OFERTA))
+
+
 def paso_1(b: dict, objetivos: list[dict]) -> str:
     ops = "".join(op("objetivo", o["k"], o["titulo"], o.get("descripcion", ""), marcada=o["k"] == b["objetivo"],
                      sugerido=bool(o.get("sugerido"))) for o in objetivos)  # sin miniatura: cada opción es de su negocio
-    return (cab(1, "¿Qué quieres lograr con esta campaña?",
+    return (cab(b, 1, "¿Qué quieres lograr con esta campaña?",
                 "Elige el resultado que buscas. Las opciones salen de tu perfil de empresa, así que hablan de tu"
                 " negocio.")
             + f'<div class="wiz-ops">{ops}</div>'
-            + pie(1))
+            + pie(b, 1))
 
 
 def paso_2(b: dict, mensajes: list[dict], prods: list[dict], objetivos: list[dict]) -> str:
@@ -494,7 +649,7 @@ def paso_2(b: dict, mensajes: list[dict], prods: list[dict], objetivos: list[dic
            " uno para lanzarlo, darlo a conocer o hacerle una promoción.</p>")
         + "</div></div>")
     obj = next((o["titulo"] for o in objetivos if o["k"] == b["objetivo"]), "")
-    return (cab(2, "¿Qué quieres comunicar?",
+    return (cab(b, 2, "¿Qué quieres comunicar?",
                 (f"Ideas pensadas para «{escape(obj)}». " if obj else "")
                 + f"Es el tema de la campaña: lo que la gente se va a llevar en la cabeza. Elige hasta {MAX_MENSAJES}.")
             + f'<div class="wiz-ops">{ops}</div>'
@@ -502,7 +657,7 @@ def paso_2(b: dict, mensajes: list[dict], prods: list[dict], objetivos: list[dic
             + '<p class="ayuda">Un dato, una fecha o una idea que no debe faltar.</p>'
             f'<textarea name="texto" rows="2" maxlength="{MAX_TEXTO}" aria-label="Tu idea" placeholder="Ej. Temporada'
             f' de otoño: queremos más visitas entre semana.">{escape(b["texto"])}</textarea></div></div>' + producto
-            + pie(2))
+            + pie(b, 2))
 
 
 def paso_3(b: dict, objetivos: list[dict]) -> str:
@@ -511,17 +666,17 @@ def paso_3(b: dict, objetivos: list[dict]) -> str:
     ops = "".join(op("enfoques", k, v[0], v[1], "checkbox", k in b.get("enfoques", []),
                      em="Va con tu objetivo" if k in van else "")  # sin foto: solo el texto
                   for k, v in ENFOQUES.items())
-    return (cab(3, "¿De qué van a tratar tus posts?",
+    return (cab(b, 3, "¿De qué van a tratar tus posts?",
                 f"Elige uno o varios (hasta {MAX_ENFOQUES}). Los posts de la campaña se reparten entre ellos.")
             + f'<div class="wiz-ops cuatro">{ops}</div>'
-            + pie(3))
+            + pie(b, 3))
 
 def paso_4(b: dict, fotos: int) -> str:
     ops = ""
     for k, (t, d, color) in FORMATOS.items():  # todas las piezas las genera la IA completas: 1 imagen cada una
         em = "1 imagen" if k in campanas.FORMATOS else ""
         ops += op("formatos", k, t, d, "checkbox", k in b["formatos"], img("formato", k, color, t, alta=True), em)
-    return (cab(4, "¿Qué formatos te gustan?",
+    return (cab(b, 4, "¿Qué formatos te gustan?",
                 "Elige uno o varios. Se reparten parejo para que veas cuál le funciona mejor a tu audiencia.")
             + f'<div class="formatos-cam"><div class="wiz-ops cinco">{ops}</div>'
             '<div class="wiz-si titular"><h3 class="wiz-sub">Texto dentro de la imagen</h3><p class="ayuda">Para'
@@ -530,17 +685,17 @@ def paso_4(b: dict, fotos: int) -> str:
             '<div class="wiz-ops tres">'
             + "".join(op("textos_img", k, t, d, "checkbox", k in textos(b), img("texto", k, color, t, alta=True))
                       for k, (t, d, color) in TEXTO.items()) + "</div></div></div>"
-            + nota("Carrusel y reel", "llegarán después. Las historias de Instagram también están en camino.") + pie(4))
+            + nota("Carrusel y reel", "llegarán después. Las historias de Instagram también están en camino.") + pie(b, 4))
 
 
 def paso_5(b: dict) -> str:
     ops = "".join(op("visual", k, t, d, "checkbox", k in b["visual"], img("visual", k, color, t))
                   for k, (t, d, color) in VISUAL.items())
-    return (cab(5, "¿Qué quieres que se vea en las imágenes?",
+    return (cab(b, 5, "¿Qué quieres que se vea en las imágenes?",
                 "No es el mensaje ni el objetivo: son las cosas que vamos a ver en cada foto. Elige las que quieras.")
             + f'<div class="wiz-ops tres">{ops}</div>'
             + nota("Tip:", "si quieres que se vea tu producto real y no uno parecido, sube sus fotos en tu perfil de"
-                   " empresa. Las usamos como referencia en cada imagen.") + pie(5))
+                   " empresa. Las usamos como referencia en cada imagen.") + pie(b, 5))
 
 
 async def candidatos_ref(c: Cuenta, b: dict) -> list[str]:
@@ -558,11 +713,11 @@ def paso_6(b: dict, candidatos: list[tuple[str, str]] = ()) -> str:
     variedad = "".join(op("variedad", k, t, d, marcada=b["variedad"] == k, imagen=img("variedad", k, color, t, alta=True),
                           em="Recomendado" if k == "coherencia" else "")
                        for k, (t, d, color) in VARIEDAD.items())
-    return (cab(6, "¿Cómo quieres que se vea esta campaña?",
+    return (cab(b, 6, "¿Cómo quieres que se vean tus anuncios?" if de_producto(b) else "¿Cómo quieres que se vea esta campaña?",
                 "Solo cambia esta campaña. Tus colores, tu tipografía y tu logo siguen siendo los de Tu marca.")
             + '<h3 class="wiz-sub">Variedad visual</h3><p class="ayuda">Qué tan distintas se ven las fotos entre'
             ' sí: el lugar, el encuadre y la luz.</p>'
-            f'<div class="wiz-ops dos ops-variedad">{variedad}</div>' + referencias(b, candidatos) + pie(6))
+            f'<div class="wiz-ops dos ops-variedad">{variedad}</div>' + referencias(b, candidatos) + pie(b, 6))
 
 
 def referencias(b: dict, candidatos: list[tuple[str, str]]) -> str:
@@ -582,26 +737,30 @@ def referencias(b: dict, candidatos: list[tuple[str, str]]) -> str:
 def paso_7(b: dict) -> str:
     semanas = "".join(f'<option value="{n}"{" selected" if b["semanas"] == n else ""}>{n} semana{"s" if n > 1 else ""}'
                       "</option>" for n in campanas.SEMANAS)
-    return (cab(7, "¿Cuánto y cuándo?", "Puedes empezar con pocos posts y estirar la campaña después desde el"
-                " calendario.")
+    cuantos = ("" if de_producto(b) else  # en una de producto, uno por versión del anuncio
+               f'<div><label for="w-n">Número de posts</label><input type="number" id="w-n" name="n_posts" min="1"'
+               f' max="{MAX_POSTS}" value="{b["n_posts"]}"></div>'
+               f'<div><label for="w-h">Número de historias</label><input type="number" id="w-h" name="n_historias" min="0"'
+               f' max="{MAX_HISTORIAS}" value="{b.get("n_historias", 0)}"></div></div>'
+               '<p class="ayuda" style="margin-top:.7rem">Las historias son verticales (9:16), se ven 24 horas y no llevan'
+               " texto publicado: lo que se lee va en la imagen. Pon 0 si no quieres historias.</p>")
+    return ((cab(b, 7, "¿Cuándo salen tus anuncios?", f"Las {b.get('versiones', 4)} versiones se reparten en estos días.")
+             if de_producto(b) else
+             cab(b, 7, "¿Cuánto y cuándo?", "Puedes empezar con pocos posts y estirar la campaña después desde el"
+                 " calendario."))
             + '<div class="wiz-campos cinco">'
             f'<div><label for="w-nombre">Nombre de la campaña</label><input type="text" id="w-nombre" name="nombre"'
             f' maxlength="{campanas.MAX_NOMBRE}" value="{escape(b["nombre"])}" placeholder="Ej. Otoño en tu negocio"></div>'
             f'<div><label for="w-inicio">Empieza</label><input type="date" id="w-inicio" name="inicio"'
             f' value="{b["inicio"]}"></div>'
             f'<div><label for="w-semanas">Duración</label><select id="w-semanas" name="semanas">{semanas}</select></div>'
-            f'<div><label for="w-n">Número de posts</label><input type="number" id="w-n" name="n_posts" min="1"'
-            f' max="{MAX_POSTS}" value="{b["n_posts"]}"></div>'
-            f'<div><label for="w-h">Número de historias</label><input type="number" id="w-h" name="n_historias" min="0"'
-            f' max="{MAX_HISTORIAS}" value="{b.get("n_historias", 0)}"></div></div>'
-            '<p class="ayuda" style="margin-top:.7rem">Las historias son verticales (9:16), se ven 24 horas y no llevan texto publicado: lo'
-            " que se lee va en la imagen. Pon 0 si no quieres historias.</p>"
-            '<h3 class="wiz-sub">Días en que publicas</h3><p class="ayuda">Los posts y las historias se reparten en'
+            + (cuantos or "</div>")
+            + '<h3 class="wiz-sub">Días en que publicas</h3><p class="ayuda">Los posts y las historias se reparten en'
             ' estos días. Si son más posts que días, algunos días llevan dos.</p><div class="wiz-chips">'
             + "".join(chip("dias", i, d, i in b["dias"], "checkbox") for i, d in enumerate(DIAS)) + "</div>"
             '<h3 class="wiz-sub">Horario</h3><p class="ayuda">Elige uno o varios para comparar.</p><div class="wiz-chips">'
             + "".join(chip("horarios", k, v, k in b["horarios"], "checkbox") for k, v in HORARIOS.items()) + "</div>"
-            + pie(7))
+            + pie(b, 7))
 
 
 async def resumen(c: Cuenta, b: dict, objetivos: list[dict], mensajes: list[dict], prods: list[dict]) -> str:
@@ -623,18 +782,27 @@ async def resumen(c: Cuenta, b: dict, objetivos: list[dict], mensajes: list[dict
     historias = b.get("n_historias", 0)
     imagenes_ = b["n_posts"] + historias  # cada pieza la genera la IA completa
     cantidad = f"{b['n_posts']} posts" + (f" y {campanas.cuantos(historias, 'historia')}" if historias else "")
+    nombre = b["nombre"]
+    if de_producto(b):
+        cantidad, imagenes_ = campanas.cuantos(b["versiones"], "post"), b["versiones"]
+        nombre = nombre or nombre_producto(b, prods)
+    fechas = (f"{escape(nombre) or 'Sin nombre'} · {cantidad} · {campanas.de_a(ini, fin)} · {dias} · {horas}")
     bloques = [
+        ("Tipo de campaña", TIPOS["producto"][0], TIPO, False), ("Producto", producto, PRODUCTO, True),
+        ("Versiones del anuncio", f"{b['versiones']} versiones" + (f" · «{b['texto']}»" if b["texto"] else ""),
+         OFERTA, False), ("Estilo", VARIEDAD[b["variedad"]][0], 6, False), ("Fechas", fechas, 7, True),
+    ] if de_producto(b) else [
+        ("Tipo de campaña", TIPOS["contenido"][0], TIPO, True),
         ("Objetivo", obj, 1, False), ("Mensaje", msgs + (f" · «{b['texto']}»" if b["texto"] else ""), 2, False),
         ("Producto", producto, 2, True), ("Enfoque del contenido", enfoques, 3, False),
         ("Formatos", " · ".join(FORMATOS[k][0] for k in b["formatos"] if k in FORMATOS)
          + (f" ({', '.join(TEXTO[k][0].lower() for k in textos(b))})" if "titular" in b["formatos"] else ""), 4, False),
         ("Estilo y variedad", VARIEDAD[b["variedad"]][0], 6, False),
-        ("Cantidad y fechas", f"{escape(b['nombre']) or 'Sin nombre'} · {cantidad} ·"
-         f" {campanas.de_a(ini, fin)} · {dias} · {horas}", 7, True)]
+        ("Cantidad y fechas", fechas, 7, True)]
     tarjetas = "".join(
         f'<div class="wiz-res{" ancho" if ancho else ""}">'
         + panel.cab_tarjeta(t, boton=f'<button class="editar" name="ir" value="{n}">Editar</button>')
-        + f'<p>{v if t == "Cantidad y fechas" else escape(v)}</p></div>' for t, v, n, ancho in bloques)
+        + f'<p>{v if t in ("Cantidad y fechas", "Fechas") else escape(v)}</p></div>' for t, v, n, ancho in bloques)
     with usar(c):
         quedan = await campanas.ia_restantes(c)
     editar = bool(b.get("cid"))
@@ -647,9 +815,11 @@ async def resumen(c: Cuenta, b: dict, objetivos: list[dict], mensajes: list[dict
             + '</p></div>'
             f'<div class="wiz-resumen">{tarjetas}</div>{await cruce(c, b)}'
             f'<div class="wiz-total"><div><b>{cantidad}</b><span>en {b["semanas"]} semana'
-            f'{"s" if b["semanas"] > 1 else ""}</span></div><div><b>{len(b["formatos"])} formato'
-            f'{"s" if len(b["formatos"]) != 1 else ""}</b><span>repartidos parejo</span></div>'
-            f'<div><b>~{imagenes_} imágenes</b><span>de tu cupo, solo al generarlas</span></div>'
+            f'{"s" if b["semanas"] > 1 else ""}</span></div>'
+            + ("<div><b>Anuncio</b><span>una sola idea, tu producto real</span></div>" if de_producto(b) else
+               f'<div><b>{len(b["formatos"])} formato{"s" if len(b["formatos"]) != 1 else ""}</b>'
+               "<span>repartidos parejo</span></div>")
+            + f'<div><b>~{imagenes_} imágenes</b><span>de tu cupo, solo al generarlas</span></div>'
             '<div><b>Tu empresa + Tu marca</b><span>como contexto de cada post</span></div></div>'
             f'<div class="wiz-pie"><button class="boton secundario" name="ir" value="{len(PASOS)}">‹ Anterior</button>'
             + (f'<span><button class="boton secundario" name="accion" value="brief"{"" if quedan else " disabled"}>'
@@ -778,10 +948,18 @@ async def pagina(c: Cuenta, paso: int, aviso: str = "", b: dict | None = None):
         if paso == BRIEF and not b.get("brief"):
             paso = RESUMEN
         if paso in OCULTOS:
-            paso = vecino(paso, 1)
-        if paso >= RESUMEN and faltan(b):
+            paso = vecino(b, paso - 1, 1)
+        if paso not in (*visibles(b), RESUMEN, BRIEF):  # un paso del otro tipo de campaña
+            paso = TIPO
+        if paso in (RESUMEN, BRIEF) and faltan(b):
             paso = faltan(b)[0]
-        if paso == 1:
+        if paso == TIPO:
+            contenido = paso_tipo(b)
+        elif paso == PRODUCTO:
+            contenido = paso_producto(b, [(x, url_imagen(c, x["imagenes"][0]) if foto_de(c, x) else "") for x in prods])
+        elif paso == OFERTA:
+            contenido = paso_oferta(b, prods)
+        elif paso == 1:
             contenido = paso_1(b, objetivos)
         elif paso == 2:
             contenido = paso_2(b, mensajes, prods, objetivos)
@@ -802,7 +980,7 @@ async def pagina(c: Cuenta, paso: int, aviso: str = "", b: dict | None = None):
         else:
             contenido = await resumen(c, b, objetivos, mensajes, prods)
         # Un solo formulario con el riel adentro; el primer botón (invisible) es el que usa Enter: seguir.
-        sigue = BRIEF if paso == BRIEF else min(vecino(paso, 1), RESUMEN)
+        sigue = BRIEF if paso == BRIEF else RESUMEN if paso == RESUMEN else vecino(b, paso, 1)
         cuerpo = (f'<form method="post" action="{URL}" class="wiz" id="wiz-form" enctype="multipart/form-data">'
                   f'<button class="enter-cam" name="ir" value="{sigue}" tabindex="-1" aria-hidden="true">Seguir</button>'
                   f'<input type="hidden" name="paso" value="{paso}">{riel(b, paso)}'
@@ -817,7 +995,13 @@ async def pagina(c: Cuenta, paso: int, aviso: str = "", b: dict | None = None):
 
 
 def _paso(valor) -> int:
-    return int(valor) if str(valor).isdigit() and 1 <= int(valor) <= BRIEF else 1
+    return int(valor) if str(valor).isdigit() and (1 <= int(valor) <= BRIEF or int(valor) in NOMBRES_PRODUCTO) else TIPO
+
+
+def foto_de(c: Cuenta, prod: dict) -> bool:
+    """El producto tiene su primera foto en disco (para su tarjeta)."""
+    fotos = [t for t in prod.get("imagenes", []) if isinstance(t, str) and TOKEN_FOTO.match(t)]
+    return bool(fotos) and fotos[0] == prod["imagenes"][0] and archivo(c, fotos[0]).is_file()
 
 
 @router.get("/campanas/nueva")
@@ -834,7 +1018,7 @@ async def ver(request: Request):
         return RedirectResponse(f"{URL}?paso={RESUMEN}", status_code=303)
     if q.get("empezar") == "1" or (not q.get("paso") and (await leer(c)).get("cid")):
         await c.store.set(BORRADOR, "{}")
-    return await pagina(c, _paso(q.get("paso", 1)))
+    return await pagina(c, _paso(q.get("paso", TIPO)))
 
 
 @router.post("/campanas/nueva")
@@ -848,7 +1032,7 @@ async def guardar(request: Request):
     paso, b = _paso(f.get("paso")), await leer(c)
     objetivos, mensajes = await opciones(c, b["objetivo"])
     b.setdefault("semilla", int(time.time()))  # el mismo cruce en el resumen y al escribir los posts
-    if paso < RESUMEN:
+    if paso not in (RESUMEN, BRIEF):
         antes = {k: v for k, v in b.items() if k not in ("hechos", "brief")}
         error = del_form(f, paso, b, objetivos, mensajes, await productos(c))
         if paso == 6:
@@ -860,7 +1044,7 @@ async def guardar(request: Request):
         b["hechos"] = sorted(hechos)
         await escribir(c, b)
         ir = _paso(f.get("ir", paso))
-        if error and ir > paso:  # adelante no se pasa con algo que falta; atrás o a otro paso, sí
+        if error and orden(b, ir) > orden(b, paso):  # adelante no se pasa con algo que falta; atrás o a otro paso, sí
             return await pagina(c, paso, error, b)
         return RedirectResponse(f"{URL}?paso={ir}", status_code=303)
     if paso == BRIEF and b.get("brief"):

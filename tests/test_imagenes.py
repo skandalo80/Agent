@@ -31,8 +31,9 @@ class Falso:
     def __init__(self, falla=None):
         self.llamadas, self.falla = [], falla
 
-    async def generar(self, prompt, fotos=()):
+    async def generar(self, prompt, fotos=(), fiel=False):
         self.llamadas.append((prompt, fotos))
+        self.fiel = fiel
         if self.falla:
             raise self.falla
         return foto()
