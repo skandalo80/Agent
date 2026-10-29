@@ -115,7 +115,16 @@ def test_skandi_contesta_y_pasa_a_soporte(monkeypatch, tmp_path):
         skandi._chats.clear()
         skandi._actual.clear()
         client.portal.call(skandi.cargar)
-        assert "Ve a Campañas" in client.get("/panel/resultados").text.split('id="sk-mensajes"')[1]
+        html = client.get("/panel/resultados").text
+        assert "Ve a Campañas" in html.split('id="sk-mensajes"')[1]
+
+        # Minimizar solo la esconde; al cerrar (×), la siguiente pregunta empieza otra conversación.
+        assert "data-minimizar-skandi" in html and 'name="nueva" value=""' in html
+        monkeypatch.setattr(skandi, "MAX_PREGUNTAS_DIA", 10)
+        respuestas.append("Claro, dime.")
+        r = client.post("/panel/ayuda", headers=ORIGEN, data={"mensaje": "Otra duda", "nueva": "1"})
+        assert "Ve a Campañas" not in r.text.split('id="sk-mensajes"')[1] and "Claro, dime." in r.text
+        assert client.portal.call(bot.principal.store.chats_skandi, "panel", "cafe_lunar")[1] == 2
 
         # Los chats de todos solo los ve la cuenta principal.
         assert client.get("/panel/skandi").status_code == 404
@@ -165,6 +174,10 @@ def test_skandi_en_la_web(monkeypatch, tmp_path):
         # Límite por visitante (con su cookie); otro visitante empieza de cero.
         r = client.post("/ayuda", headers=web, data={"mensaje": "otra"})  # sigue la redirección
         assert len(vistos) == 2 and "ya no puedo contestar" in r.text
+        # Cerrar (×) en la web: el iframe vuelve a cargar con ?nueva=1 y empieza otra conversación.
+        assert "US$29" in client.get("/ayuda").text
+        assert "US$29" not in client.get("/ayuda?nueva=1").text
+        assert client.portal.call(bot.principal.store.chats_skandi, "web")[1] == 1  # la anterior sigue guardada
         client.cookies.clear()
         assert "US$29" not in client.get("/ayuda").text
 

@@ -418,10 +418,19 @@ if (skandi) {
     // Se desactiva después de mandarse (si no, el navegador no manda el texto).
     setTimeout(() => { form.mensaje.readOnly = true; form.querySelector("button").disabled = true; }, 0);
   });
+  // Minimizar: solo se esconde. Cerrar: también limpia la ventana y la siguiente pregunta empieza
+  // una conversación nueva (la anterior sigue en el historial).
+  skandi.querySelector("[data-minimizar-skandi]").addEventListener("click", (e) => {
+    e.preventDefault();
+    skandi.classList.remove("abierta");
+    marcar("");
+  });
   skandi.querySelector("[data-cerrar-skandi]").addEventListener("click", (e) => {
     e.preventDefault();
     skandi.classList.remove("abierta");
     marcar("");
+    mensajes.querySelectorAll(".sk-msj, .sk-aviso").forEach((m, i) => { if (i > 0) m.remove(); });
+    form.nueva.value = "1";
   });
   // El botón flotante y Ayuda en el menú lateral (que en el celular se cierra al abrirla).
   document.querySelectorAll('a[href="#skandi"]').forEach((a) => a.addEventListener("click", (e) => {
