@@ -55,7 +55,7 @@ CTAS = {
                   "Asistente virtual desde US$29 al mes más IVA. Sin instalación.",
                   "https://ig.me/m/skandar.online?text=Me%20interesa%20el%20Asistente%20virtual",
                   "Quiero el Asistente virtual"),
-    "community": ("Tu contenido, con lo que pasa en tu cuenta.",
+    "community": ("Tu perfil activo, con tu marca.",
                   "Community Manager desde US$79 al mes más IVA. Incluye el Asistente virtual.",
                   "https://ig.me/m/skandar.online?text=Me%20interesa%20el%20Community%20Manager",
                   "Quiero el Community Manager"),
@@ -340,7 +340,7 @@ PLANES = f"""  <section class="banda centro" id="planes">
       <div class="planes">
         <article class="plan">
           <h3>Asistente virtual</h3>
-          <p class="resumen">Contesta tus mensajes.</p>
+          <p class="resumen">Contesta cada mensaje al instante.</p>
           <p class="precio">US$29 <small>+ IVA al mes</small></p>
           <p class="instalacion">Sin instalación · 1,000 respuestas al mes</p>
           <ul>
@@ -348,19 +348,20 @@ PLANES = f"""  <section class="banda centro" id="planes">
             <li>Tu información, tus precios y tus preguntas frecuentes</li>
             <li>Memoria por cliente</li>
             <li>Se pausa cuando tú contestas</li>
+            <li>Marca los chats que llegan de tus anuncios</li>
           </ul>
           <a class="boton contorno" href="{CTAS['asistente'][2]}">{CTAS['asistente'][3]}</a>
         </article>
         <article class="plan destacado">
           <span class="popular">Más completo</span>
           <h3>Community Manager</h3>
-          <p class="resumen">Además crea tu contenido con lo que pasa en tu cuenta.</p>
+          <p class="resumen">Además mantiene tu perfil activo con contenido de tu marca.</p>
           <p class="precio">US$79 <small>+ IVA al mes</small></p>
           <p class="instalacion">Sin instalación · 2,500 respuestas y 12 posts al mes</p>
           <ul>
             <li>Todo lo del Asistente virtual</li>
             <li>Campañas con calendario automático</li>
-            <li>Ideas a partir de tus métricas, DMs y comentarios</li>
+            <li>Campañas para promocionar tus productos</li>
             <li>Imágenes y textos con tu marca</li>
             <li>Publicación programada</li>
           </ul>
@@ -616,6 +617,7 @@ def llms_txt(todos, giros, paginas):
         "",
         f"> {que_es['descripcion']}",
         "",
+        "- Línea: Tus redes sociales, trabajando. Sobre todo para negocios que pagan anuncios en Instagram o Facebook.",
         "- Hecho en México, en español. Funciona solo con Instagram, con la API oficial de Meta.",
         "- Asistente virtual: US$29 al mes más IVA, 1,000 respuestas al mes.",
         "- Community Manager: US$79 al mes más IVA, incluye el Asistente virtual, 2,500 respuestas y 12 publicaciones al mes.",
