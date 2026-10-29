@@ -5,6 +5,7 @@ portada: Ideas desde tus DMs
 fecha: 2026-10-26
 lectura: 6
 cta: community
+modificado: 2026-10-29
 ---
 La pregunta más común de quien maneja el Instagram de un negocio es qué publicar esta semana. La respuesta suele estar en un lugar que pocos revisan con ese fin: la bandeja de mensajes y los comentarios.
 
@@ -39,6 +40,6 @@ Publicar solo promociones cansa a la audiencia. Copiar tendencias que no tienen 
 
 ## Cómo lo hacemos en la plataforma
 
-En el plan Community Manager, la plataforma revisa tus métricas, lo que te preguntan por DM y lo que comenta tu comunidad, y con eso te propone qué publicar. Arma la campaña, escribe los textos y genera las imágenes con tu marca. Tú apruebas cada post antes de que salga.
+En el plan Community Manager, la plataforma te propone qué publicar con la información de tu negocio, arma la campaña, escribe los textos y genera las imágenes con tu marca, para que quien llegue de un anuncio encuentre un perfil activo. Tú apruebas cada post antes de que salga.
 
 Si quieres organizar esas ideas en un mes completo, revisa [cómo armar un calendario de contenido en una tarde](/blog/calendario-de-contenido-instagram).
