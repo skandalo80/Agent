@@ -1041,7 +1041,7 @@ img.mrc-logo-mini{background:#fff}
 .wiz-pasos .wiz-paso.actual{background:var(--claro);color:var(--negro);font-weight:600}.wiz-pasos .wiz-paso.actual b{border-color:var(--acento-claro);color:var(--acento-claro)}
 .wiz-pasos .wiz-paso:hover{background:var(--claro)}.wiz-pasos .wiz-paso.apagado{opacity:.5}
 .wiz-res .enlace{position:absolute;top:.85rem;right:1rem;font:inherit;font-size:.85rem;color:var(--acento-claro);background:none;border:0;padding:0;cursor:pointer;font-weight:600}
-.wiz-ops.dos{grid-template-columns:repeat(2,minmax(0,1fr))}/* Variedad visual: la cuadrícula completa, como el perfil de Instagram, a la izquierda y el texto a la derecha. */.ops-variedad .wiz-op{flex-direction:row;align-items:center}.ops-variedad .wiz-img.alta{flex:none;width:38%;max-width:15rem;aspect-ratio:2/3;background-size:cover;background-position:center}.ops-variedad .cuerpo{padding:var(--caja-pad)}@media(max-width:560px){.ops-variedad .wiz-img.alta{width:42%}}
+.wiz-ops.dos{grid-template-columns:repeat(2,minmax(0,1fr))}/* Crear campaña › Producto: la foto de cada producto, cuadrada. */.prods-cam .wiz-img{aspect-ratio:1/1}/* Variedad visual: la cuadrícula completa, como el perfil de Instagram, a la izquierda y el texto a la derecha. */.ops-variedad .wiz-op{flex-direction:row;align-items:center}.ops-variedad .wiz-img.alta{flex:none;width:38%;max-width:15rem;aspect-ratio:2/3;background-size:cover;background-position:center}.ops-variedad .cuerpo{padding:var(--caja-pad)}@media(max-width:560px){.ops-variedad .wiz-img.alta{width:42%}}
 .wiz-pie .boton{padding:.65rem 1.3rem}
 .wiz-bloque .opc{font-weight:400;color:var(--gris)}
 .prod-cam:has(input[name=accion][value=promo]:checked) .wiz-si.promo{display:grid}
