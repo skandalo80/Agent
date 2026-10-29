@@ -1,7 +1,7 @@
 titulo: Asistente virtual para pastelerías en Instagram
 descripcion: Contesta sabores, tamaños, precios y pedidos por Instagram las 24 horas, y crea el contenido de tu pastelería con lo que te piden tus clientes.
 nombre: Pastelerías
-fecha: 2026-10-28
+fecha: 2026-10-29
 h1: Tu pastelería toma pedidos mientras tú horneas
 bajada: Tu asistente responde sabores, tamaños, precios y fechas de entrega por mensaje directo, y te pasa cada pedido listo para confirmar.
 cuenta: tu_pasteleria
@@ -28,5 +28,6 @@ idea_nota: Nace de la pregunta que más te repiten.
 - Fechas que se llenan: avisa con tiempo antes del 14 de febrero o del día de las madres
 ## faq
 - ¿El asistente puede tomar pedidos? | Toma el sabor, el tamaño, la fecha y los datos de entrega, y te pasa la conversación para que confirmes y cobres.
+- ¿Puede cobrar el anticipo? | Sí. Si conectas Mercado Pago o Stripe, manda un link de pago por el chat y ves en esa conversación cuándo lo pagaron.
 - ¿Puede ver fotos de referencia? | Los diseños personalizados te los pasa a ti, para que los cotices con la foto de referencia que te mandaron.
 - ¿Sabe cuándo ya no tengo cupo? | Escribes en tu información del panel las fechas que ya están llenas y deja de ofrecerlas.

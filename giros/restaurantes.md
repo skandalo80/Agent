@@ -1,7 +1,7 @@
 titulo: Asistente virtual para restaurantes en Instagram
 descripcion: Contesta reservas, menú, horarios y pedidos por Instagram las 24 horas, y crea el contenido de tu restaurante con lo que te preguntan tus clientes.
 nombre: Restaurantes
-fecha: 2026-10-28
+fecha: 2026-10-29
 h1: Tu restaurante contesta Instagram en plena hora pico
 bajada: Mientras tu equipo atiende las mesas, tu asistente responde el menú, los horarios y las reservas por mensaje directo, con tu información y tu tono.
 cuenta: tu_restaurante
@@ -28,5 +28,6 @@ idea_nota: Nace de lo que te preguntan cada fin de semana.
 - Detrás de la cocina: cómo preparan su especialidad
 ## faq
 - ¿El asistente puede tomar reservas? | Puede pedir el nombre, el día, la hora y el número de personas, y pasarte la conversación para que confirmes. Tú decides cómo se cierra cada reserva.
+- ¿Puede agendar las reservas en mi calendario? | Sí. Si conectas tu Google Calendar, revisa los horarios libres y deja la reserva en tu calendario.
 - ¿Puede compartir el menú? | Sí. Le das tu menú y tus precios en el panel, y los comparte cuando alguien los pide. Si cambias un precio, lo actualizas una vez y ya.
 - ¿Qué pasa con las quejas? | Las detecta, contesta con calma y te pasa la conversación para que tú la atiendas.

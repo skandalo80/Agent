@@ -1,7 +1,7 @@
 titulo: Asistente virtual para inmobiliarias en Instagram
 descripcion: Contesta precios, ubicación, requisitos y solicitudes de visita por Instagram las 24 horas, y crea el contenido de tu inmobiliaria.
 nombre: Inmobiliarias
-fecha: 2026-10-28
+fecha: 2026-10-29
 h1: Tu inmobiliaria responde cada interesado al momento
 bajada: Tu asistente contesta precio, ubicación y requisitos de cada propiedad por mensaje directo, filtra a los interesados y te pasa a quien quiere visitar.
 cuenta: tu_inmobiliaria
@@ -13,7 +13,7 @@ idea_nota: Nace de lo que te preguntan todos los interesados.
 - cliente: Hola, ¿sigue disponible el departamento de la Roma?
 - agente: Hola. Sí. Son dos recámaras, renta de $18,500 al mes y piden un mes de depósito y aval.
 - cliente: ¿Lo puedo ver el sábado?
-- agente: Tomo tus datos y le paso tu solicitud a Andrés para que te confirme la hora de la visita.
+- agente: El sábado hay visitas a las 11 y a la 1. ¿Cuál te agendo con Andrés?
 ## preguntas
 - ¿Sigue disponible?
 - ¿Cuál es el precio y qué incluye?
@@ -29,4 +29,5 @@ idea_nota: Nace de lo que te preguntan todos los interesados.
 ## faq
 - ¿El asistente conoce todas mis propiedades? | Conoce las que cargas en el panel con su precio, ubicación y requisitos. Cuando una se renta o se vende, la quitas y deja de ofrecerla.
 - ¿Puede filtrar a los interesados? | Sí. Puede preguntar presupuesto, fecha de mudanza y requisitos antes de pasarte la conversación.
+- ¿Puede agendar visitas? | Sí. Si conectas tu Google Calendar, agenda la visita en tu calendario dentro de tu horario de atención.
 - ¿Funciona para venta y renta? | Sí. Le das las condiciones de cada operación y contesta según la propiedad que pregunten.
