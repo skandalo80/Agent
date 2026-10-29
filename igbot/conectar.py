@@ -12,9 +12,17 @@ página skandar.online/conectar guía al cliente:
 Con ese token su cuenta se da de alta sola, en pausa, y el cliente entra a su
 panel (/panel, ver panel.py) para configurar y encender su asistente. Iniciar
 sesión en el panel es este mismo flujo.
+
+Si alguien quita la app desde su Instagram, Meta llama a /conectar/desautorizar;
+si además pide borrar sus datos, a /conectar/borrar-datos (las dos URL van en el
+panel de Meta > Instagram > Configuración del inicio de sesión para empresas).
+Se avisa al dueño, que borra a mano, y la persona consulta su solicitud en
+/conectar/borrado?codigo=... (Meta le muestra ese enlace).
 """
+import base64
 import hashlib
 import hmac
+import json
 import logging
 import re
 import secrets
@@ -23,7 +31,7 @@ from urllib.parse import parse_qs, urlencode
 
 import httpx
 from fastapi import APIRouter, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from . import config, panel
 from .cuenta import cuenta
@@ -254,3 +262,81 @@ async def callback(request: Request):
         response = back("/conectado")
     response.delete_cookie(STATE_COOKIE, path="/conectar")
     return response
+
+
+# --- la persona quita la app o pide borrar sus datos (callbacks de Meta) ---
+
+def leer_signed_request(valor: str) -> dict | None:
+    """El signed_request que manda Meta: firma.datos en base64url, firmado con el secreto de la app."""
+    try:
+        firma, datos = valor.split(".", 1)
+        relleno = lambda t: t + "=" * (-len(t) % 4)  # noqa: E731
+        recibida = base64.urlsafe_b64decode(relleno(firma))
+        info = json.loads(base64.urlsafe_b64decode(relleno(datos)))
+    except Exception:
+        return None
+    # Igual que el webhook: la app de Instagram puede tener su propio secreto.
+    for secreto in {config.APP_SECRET, config.IG_OAUTH_SECRET}:
+        esperada = hmac.new(secreto.encode(), datos.encode(), hashlib.sha256).digest()
+        if hmac.compare_digest(recibida, esperada) and str(info.get("algorithm", "")).upper() == "HMAC-SHA256":
+            return info
+    return None
+
+
+async def _de_meta(request: Request) -> tuple[str, str] | None:
+    """(ig_id, "@usuario" o el id si no la conocemos) del signed_request válido, o None."""
+    form = {k: v[0] for k, v in parse_qs((await request.body()).decode(errors="replace")).items()}
+    info = leer_signed_request(form.get("signed_request", ""))
+    if not info or not info.get("user_id"):
+        log.warning("Callback de Meta con signed_request inválido")
+        return None
+    ig_id = str(info["user_id"])
+    con = await store.conexion(ig_id)
+    return ig_id, (f"@{con[0]}" + (f" (clientes/{con[1]})" if con[1] else "") if con else f"la cuenta {ig_id}")
+
+
+@router.post("/desautorizar")
+async def desautorizar(request: Request):
+    quien = await _de_meta(request)
+    if not quien:
+        return JSONResponse({"error": "signed_request inválido"}, status_code=400)
+    log.info("%s quitó la app desde Instagram", quien[1])
+    await avisar(f"Quitaron la app: {quien[1]}",
+                 f"{quien[1]} quitó a Skandar de su Instagram. Su token ya no sirve: apaga su asistente.")
+    return {"ok": True}
+
+
+@router.post("/borrar-datos")
+async def borrar_datos(request: Request):
+    quien = await _de_meta(request)
+    if not quien:
+        return JSONResponse({"error": "signed_request inválido"}, status_code=400)
+    codigo = secrets.token_hex(8)
+    await store.set(f"borrado:{codigo}", json.dumps({"ig_id": quien[0], "cuenta": quien[1], "fecha": time.time()}))
+    log.info("%s pidió borrar sus datos (código %s)", quien[1], codigo)
+    await avisar(f"Piden borrar datos: {quien[1]}",
+                 f"{quien[1]} pidió desde Instagram que borremos sus datos (código {codigo}). "
+                 "Bórralos en máximo 20 días hábiles, como dice el aviso de privacidad.")
+    return {"url": f"{config.PUBLIC_URL}/conectar/borrado?codigo={codigo}", "confirmation_code": codigo}
+
+
+BORRADO_HTML = """<!doctype html><html lang="es"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Solicitud de borrado · Skandar</title>
+<body style="font-family:sans-serif;max-width:40rem;margin:2rem auto;padding:0 1rem;line-height:1.5">
+<h1>Solicitud de borrado de datos</h1>
+{cuerpo}
+<p>Dudas: <a href="mailto:hola@skandar.online">hola@skandar.online</a></p>
+</body></html>"""
+
+
+@router.get("/borrado", response_class=HTMLResponse)
+async def borrado(codigo: str = ""):
+    guardado = await store.get(f"borrado:{codigo}") if re.fullmatch(r"[0-9a-f]{16}", codigo) else None
+    if not guardado:
+        cuerpo = "<p>No encontramos una solicitud con ese código.</p>"
+    else:
+        fecha = time.strftime("%d/%m/%Y", time.localtime(json.loads(guardado)["fecha"]))
+        cuerpo = (f"<p>Recibimos tu solicitud el {fecha} (código <b>{codigo}</b>). Borramos tus datos de"
+                  " Skandar en un plazo máximo de 20 días hábiles.</p>")
+    return BORRADO_HTML.replace("{cuerpo}", cuerpo)

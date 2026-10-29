@@ -9,10 +9,10 @@ negocio:
   # Color del único detalle de acento en el PDF de cotización (el naranja de la marca).
   color_acento: "#C2410C"
   descripcion: >-
-    Una plataforma con inteligencia artificial para el Instagram de tu negocio.
-    Junta en un mismo lugar a un asistente virtual que contesta tus mensajes y a
-    un Community Manager que genera tu contenido sabiendo lo que pasa en tu
-    cuenta: tus métricas, tus DMs y tus comentarios.
+    Tus redes sociales, trabajando. Un asistente que contesta cada mensaje al
+    instante, también los que llegan de tus anuncios, y lo lleva a la venta; un
+    Community Manager que mantiene tu perfil activo con contenido de tu marca; y
+    la medición de qué anuncio trajo a cada cliente, todo en una sola plataforma.
 
 # Demo en vivo dentro del mismo DM: el asesor pregunta a qué se dedica el negocio
 # y contesta unos mensajes como lo haría su agente, con datos de ejemplo.
@@ -30,7 +30,7 @@ vigencia_dias: 15
 meses_pagados_en_anual: 10
 # Sin instalación y sin mes gratis: se paga desde el primer mes.
 primer_mes_gratis: false
-# Los precios no incluyen IVA: se muestran como "US$29 + IVA".
+# Los precios no incluyen IVA: se muestran como "US$49 + IVA".
 precios_mas_iva: true
 
 # Las claves (basico, community) son las mismas de PLAN= en el .env de cada cliente.
@@ -38,19 +38,20 @@ precios_mas_iva: true
 paquetes:
   basico:
     nombre: Asistente virtual
-    resumen: contesta tus mensajes directos 24/7 con la información de tu negocio
+    resumen: contesta al instante tus mensajes directos, también los de tus anuncios, con la información de tu negocio
     instalacion: 0
-    mensualidad: 29
-    respuestas_mes: 1000
+    mensualidad: 49
+    respuestas_mes: 1500
     incluye:
       - Responde tus DMs 24/7 con IA, con tu información y tu tono
       - Lo configuras tú desde el panel (tu negocio, precios, preguntas frecuentes y políticas)
       - Recuerda a cada cliente (memoria por persona)
       - Te pasa la conversación cuando el cliente pide una persona, y se calla cuando tú contestas
+      - Marca los chats que llegan de tus anuncios (y con Shopify, la venta que dejó cada anuncio)
       - Panel con tus conversaciones y tus resultados
   community:
     nombre: Community Manager
-    resumen: el asistente más un Community Manager que genera tu contenido conectado a tus métricas, DMs y comentarios
+    resumen: el asistente más un Community Manager que mantiene tu perfil activo con contenido de tu marca
     instalacion: 0
     mensualidad: 79
     respuestas_mes: 2500

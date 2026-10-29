@@ -52,7 +52,9 @@ router = APIRouter(prefix="/panel")
 # Los pone app.py al arrancar: la cuenta (ya cargada) de un id de Instagram.
 buscar: Callable[[str], Cuenta | None] = lambda ig_id: None
 # Y la que da de alta una cuenta nueva al conectarse (None si no tiene panel).
-alta: Callable[[str, str, str, bool], Awaitable[Cuenta | None]] | None = None
+alta: Callable[..., Awaitable[Cuenta | None]] | None = None
+# Y la que empieza a escuchar la página de Facebook que acaba de conectar (Messenger y comentarios).
+conectar_pagina: Callable[[Cuenta], Awaitable[None]] | None = None
 
 COOKIE = "panel"
 SESSION_DAYS = 30  # Instagram vuelve a pedir el permiso en cada inicio de sesión
@@ -175,7 +177,7 @@ async def revisar_instrucciones(c: Cuenta, texto: str) -> str:
 # --- alta de una cuenta nueva ---
 
 def preparar_carpeta(ig_id: str, usuario: str, token: str, correo: str, ocupados: set[str],
-                     revision: bool = False) -> str:
+                     revision: bool = False, via: str = "") -> str:
     """Crea clientes/<nombre>/ (.env con su token y system.md) y devuelve el nombre."""
     base = re.sub(r"[^a-z0-9_-]", "_", usuario.lower())[:30].strip("_") or f"ig_{ig_id[-8:]}"
     slug, n = base, 2
@@ -188,6 +190,8 @@ def preparar_carpeta(ig_id: str, usuario: str, token: str, correo: str, ocupados
               "GOOGLE_TOOLS=0", "PLAN=basico"]
     if correo:
         lineas.append(f"OWNER_EMAIL={correo}")  # a quién avisar cuando piden una persona
+    if via:
+        lineas.append(f"IG_VIA={via}")  # entró con el login de Facebook: su token es el de su página
     if revision:
         lineas.append("EN_REVISION=1")  # cuenta grande: se enciende cuando se quite esta línea
     env = carpeta / ".env"
@@ -1044,7 +1048,7 @@ img.mrc-logo-mini{background:#fff}
 .wiz-ops.dos{grid-template-columns:repeat(2,minmax(0,1fr))}/* Crear campaña › Producto: la foto de cada producto, cuadrada. */.prods-cam .wiz-img{aspect-ratio:1/1}/* Variedad visual: la cuadrícula completa, como el perfil de Instagram, a la izquierda y el texto a la derecha. */.ops-variedad .wiz-op{flex-direction:row;align-items:center}.ops-variedad .wiz-img.alta{flex:none;width:38%;max-width:15rem;aspect-ratio:2/3;background-size:cover;background-position:center}.ops-variedad .cuerpo{padding:var(--caja-pad)}@media(max-width:560px){.ops-variedad .wiz-img.alta{width:42%}}
 .wiz-pie .boton{padding:.65rem 1.3rem}
 .wiz-bloque .opc{font-weight:400;color:var(--gris)}
-.prod-cam:has(input[name=accion][value=promo]:checked) .wiz-si.promo{display:grid}
+.prod-cam:has(input[name=accion][value=promo]:checked) .wiz-si.promo{display:block}.prod-cam .solo-pct,.prod-cam .solo-otra{display:none}.prod-cam:has(input[name=promo][value=pct]:checked) .solo-pct,.prod-cam:has(input[name=promo][value=otra]:checked) .solo-otra{display:block}
 .formatos-cam:has(input[name=formatos][value=titular]:checked) .wiz-si.titular{display:block}
 .refs-cam{display:grid;grid-template-columns:repeat(auto-fill,minmax(6.5rem,1fr));gap:.6rem;margin:.2rem 0 .8rem}
 .ref-cam{position:relative;display:block;aspect-ratio:1/1;border-radius:12px;overflow:hidden;cursor:pointer;border:2px solid transparent}
@@ -1574,7 +1578,9 @@ def entrar() -> HTMLResponse:
         ''
         '<h1>Tu asistente<span class="punto">.</span></h1>'
         '<p class="bajada">Entra con tu cuenta de Instagram para configurar lo que responde tu asistente.</p>'
-        '<div class="acciones"><a class="boton" href="/conectar/instagram">Entrar con Instagram</a></div>'
+        '<div class="acciones"><a class="boton" href="/conectar/instagram">Entrar con Instagram</a>'
+        + ('<a class="boton secundario" href="/panel/facebook/entrar">Entrar con Facebook</a>'
+           if config.FB_APP_ID else "") + "</div>"
         f'<p class="nota">¿Aún no conectas tu Instagram? <a class="enlace" href="{config.SITE_URL}/conectar">Empieza aquí ›</a></p>'
         "</div></section>"
     )
