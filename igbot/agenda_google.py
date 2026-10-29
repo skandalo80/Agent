@@ -12,8 +12,9 @@ Permisos: calendar.events (crear y cancelar sus eventos) y calendar.freebusy (ve
 leer los eventos), más openid y email para saber con qué correo se conectó. No manda correos: la
 invitación la manda Google Calendar.
 
-Usa la misma app de Google que la cuenta principal (GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET); en Google
-Cloud hay que agregar {PUBLIC_URL}/panel/google/callback a sus URI de redireccionamiento.
+Va con un cliente OAuth tipo "Aplicación web" del mismo proyecto de Google Cloud (GOOGLE_WEB_CLIENT_ID y
+GOOGLE_WEB_CLIENT_SECRET), con {PUBLIC_URL}/panel/google/callback en sus URI de redireccionamiento. No es
+el de GOOGLE_CLIENT_ID: ese es de escritorio (el permiso de tu Gmail) y no acepta URI.
 
 kv "google_calendar": {"email", "refresh_token", "permisos", "fecha", "tipo" (presencial o video),
 "minutos", "revocado"}.
@@ -56,7 +57,7 @@ _transporte: httpx.AsyncBaseTransport | None = None  # las pruebas ponen uno fal
 
 
 def enabled() -> bool:
-    return bool(config.GOOGLE_CLIENT_ID and config.GOOGLE_CLIENT_SECRET and config.PUBLIC_URL)
+    return bool(config.GOOGLE_WEB_CLIENT_ID and config.GOOGLE_WEB_CLIENT_SECRET and config.PUBLIC_URL)
 
 
 def redirect_uri() -> str:
@@ -83,7 +84,7 @@ class Calendario(Google):
     """El Google de una cuenta: si Google ya no acepta su permiso, se marca para pedir reconectar."""
 
     def __init__(self, c: Cuenta, con: dict):
-        super().__init__(config.GOOGLE_CLIENT_ID, config.GOOGLE_CLIENT_SECRET, con["refresh_token"])
+        super().__init__(config.GOOGLE_WEB_CLIENT_ID, config.GOOGLE_WEB_CLIENT_SECRET, con["refresh_token"])
         self.cuenta = c
 
     async def token(self) -> str:
@@ -131,7 +132,7 @@ def prompt(con: dict) -> str:
 # --- conectar (OAuth de Google) ---
 
 def _firmar(texto: str) -> str:
-    return hmac.new(config.GOOGLE_CLIENT_SECRET.encode(), texto.encode(), hashlib.sha256).hexdigest()
+    return hmac.new(config.GOOGLE_WEB_CLIENT_SECRET.encode(), texto.encode(), hashlib.sha256).hexdigest()
 
 
 def nuevo_state(c: Cuenta) -> str:
@@ -169,8 +170,9 @@ def correo_de(id_token: str) -> str:
 async def cambiar_codigo(code: str) -> dict:
     async with cliente() as http:
         r = await http.post(TOKEN, data={
-            "code": code, "client_id": config.GOOGLE_CLIENT_ID, "client_secret": config.GOOGLE_CLIENT_SECRET,
-            "redirect_uri": redirect_uri(), "grant_type": "authorization_code"})
+            "code": code, "client_id": config.GOOGLE_WEB_CLIENT_ID,
+            "client_secret": config.GOOGLE_WEB_CLIENT_SECRET, "redirect_uri": redirect_uri(),
+            "grant_type": "authorization_code"})
     if r.is_error:
         log.error("Google respondió %s al cambiar el código: %s", r.status_code, r.text[:300])
     r.raise_for_status()
@@ -259,7 +261,7 @@ async def conectar(request: Request):
         return RedirectResponse("/panel/google", status_code=303)
     state = nuevo_state(c)
     url = AUTORIZAR + "?" + urlencode({
-        "client_id": config.GOOGLE_CLIENT_ID, "redirect_uri": redirect_uri(), "response_type": "code",
+        "client_id": config.GOOGLE_WEB_CLIENT_ID, "redirect_uri": redirect_uri(), "response_type": "code",
         "scope": SCOPES, "access_type": "offline", "prompt": "consent select_account",
         "include_granted_scopes": "true", "state": state})
     r = RedirectResponse(url, status_code=303)

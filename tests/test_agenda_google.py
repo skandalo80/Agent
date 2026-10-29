@@ -28,8 +28,8 @@ def id_token(email):
 @pytest.fixture
 def google(cliente, monkeypatch):
     """La app de Google configurada y un Google de mentira que cambia códigos y revoca."""
-    monkeypatch.setattr(config, "GOOGLE_CLIENT_ID", "cliente.apps.googleusercontent.com")
-    monkeypatch.setattr(config, "GOOGLE_CLIENT_SECRET", "secreto-google")
+    monkeypatch.setattr(config, "GOOGLE_WEB_CLIENT_ID", "cliente.apps.googleusercontent.com")
+    monkeypatch.setattr(config, "GOOGLE_WEB_CLIENT_SECRET", "secreto-google")
     monkeypatch.setattr(config, "PUBLIC_URL", "https://console.skandar.online")
     estado = {"scope": f"openid email {ag.EVENTOS} {ag.LIBRE}", "revocados": []}
 
@@ -60,7 +60,7 @@ def conectar(client):
 
 
 def test_sin_llaves_no_sale(cliente, monkeypatch):
-    monkeypatch.setattr(config, "GOOGLE_CLIENT_ID", "")
+    monkeypatch.setattr(config, "GOOGLE_WEB_CLIENT_ID", "")
     client, *_ = cliente
     assert "Muy pronto" in client.get("/panel/google").text
     assert "Google Calendar" not in client.get("/panel/conexion").text
