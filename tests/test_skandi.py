@@ -119,7 +119,7 @@ def test_skandi_contesta_y_pasa_a_soporte(monkeypatch, tmp_path):
         assert "Ve a Campañas" in html.split('id="sk-mensajes"')[1]
 
         # Minimizar solo la esconde; al cerrar (×), la siguiente pregunta empieza otra conversación.
-        assert "data-minimizar-skandi" in html and 'name="nueva" value=""' in html
+        assert "data-minimizar-skandi" in html and "sk-ultimo" in html and 'name="nueva" value=""' in html
         monkeypatch.setattr(skandi, "MAX_PREGUNTAS_DIA", 10)
         respuestas.append("Claro, dime.")
         r = client.post("/panel/ayuda", headers=ORIGEN, data={"mensaje": "Otra duda", "nueva": "1"})

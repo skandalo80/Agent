@@ -93,6 +93,12 @@ html:not(.js) .skandi:target~.sk-boton,.skandi.abierta~.sk-boton{display:none}
 .sk-avatar{width:2.2rem;height:2.2rem;border-radius:50%;background:var(--acento);color:var(--tinta);display:grid;place-items:center;font-weight:800}
 .sk-cabeza b{display:block;font-size:1rem}.sk-cabeza small{display:flex;align-items:center;gap:.35rem;color:#A8A8AE;font-size:.8rem}
 .sk-cabeza small::before{content:"";width:.45rem;height:.45rem;border-radius:50%;background:#C6FA2C}
+.sk-ultimo{display:none;color:#A8A8AE;font-size:.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sk-nombre{min-width:0;flex:1}
+.skandi.minimizada{height:auto;width:min(20rem,calc(100vw - 2rem));cursor:pointer}
+.skandi.minimizada .sk-mensajes,.skandi.minimizada .sk-escribir,.skandi.minimizada .sk-hist,.skandi.minimizada .sk-min,.skandi.minimizada .sk-cabeza small{display:none}
+.skandi.minimizada .sk-ultimo{display:block}
+.skandi.minimizada .sk-cabeza{padding:.75rem .9rem}
 .sk-cerrar,.sk-min{color:#A8A8AE;font-size:1.5rem;line-height:1;text-decoration:none;padding:.2rem .45rem;border-radius:.6rem;display:grid;place-items:center}
 .sk-min{padding:.35rem}
 .sk-cerrar:hover,.sk-min:hover{color:#F5F5F4;background:rgba(255,255,255,.06)}
@@ -193,9 +199,10 @@ def widget(c: Cuenta) -> str:
     return (
         '<section class="skandi" id="skandi" aria-label="Skandi, tu ayuda">'
         '<div class="sk-cabeza"><span class="sk-avatar" aria-hidden="true">S</span>'
-        '<div><b>Skandi</b><small>Tu ayuda en Skandar</small></div>'
+        # Minimizada, la cabeza queda como barrita con el último mensaje (.sk-ultimo, lo llena panel.js).
+        '<div class="sk-nombre"><b>Skandi</b><small>Tu ayuda en Skandar</small><span class="sk-ultimo"></span></div>'
         + historial(c, actual) +
-        # Minimizar: se esconde y la conversación sigue igual. Cerrar (×): con JavaScript, además la
+        # Minimizar: queda una barrita abajo a la derecha y la conversación sigue igual. Cerrar (×): con JavaScript, además la
         # siguiente pregunta empieza una conversación nueva (la anterior queda en el historial).
         f'<a class="sk-min" href="#minimizar-ayuda" data-minimizar-skandi aria-label="Minimizar" title="Minimizar">{ICONO_MIN}</a>'
         '<a class="sk-cerrar" href="#cerrar-ayuda" data-cerrar-skandi aria-label="Cerrar chat" title="Cerrar">×</a></div>'

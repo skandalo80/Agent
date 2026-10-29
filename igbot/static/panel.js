@@ -399,7 +399,18 @@ if (skandi) {
   const form = skandi.querySelector("form.sk-escribir");
   const mensajes = document.getElementById("sk-mensajes");
   const marcar = (hash) => history.replaceState(null, "", location.pathname + location.search + hash);
+  const ultimo = skandi.querySelector(".sk-ultimo");
+  // Minimizada se queda así al cambiar de página (por eso se guarda en el navegador).
+  const recordar = (min) => { try { min ? localStorage.setItem("skandi", "min") : localStorage.removeItem("skandi"); } catch {} };
+  const minimizar = () => {
+    const todos = mensajes.querySelectorAll(".sk-msj");
+    ultimo.textContent = todos.length ? todos[todos.length - 1].textContent : "";
+    skandi.classList.add("abierta", "minimizada");
+    recordar(true);
+  };
   const abrir = () => {
+    skandi.classList.remove("minimizada");
+    recordar(false);
     skandi.classList.add("abierta");
     mensajes.scrollTop = mensajes.scrollHeight;
     form.mensaje.focus({ preventScroll: true });
@@ -418,16 +429,21 @@ if (skandi) {
     // Se desactiva después de mandarse (si no, el navegador no manda el texto).
     setTimeout(() => { form.mensaje.readOnly = true; form.querySelector("button").disabled = true; }, 0);
   });
-  // Minimizar: solo se esconde. Cerrar: también limpia la ventana y la siguiente pregunta empieza
-  // una conversación nueva (la anterior sigue en el historial).
+  // Minimizar: queda la barrita con el último mensaje; al tocarla se abre igual. Cerrar: también limpia
+  // la ventana y la siguiente pregunta empieza una conversación nueva (la anterior sigue en el historial).
   skandi.querySelector("[data-minimizar-skandi]").addEventListener("click", (e) => {
     e.preventDefault();
-    skandi.classList.remove("abierta");
+    e.stopPropagation();
+    minimizar();
     marcar("");
+  });
+  skandi.querySelector(".sk-cabeza").addEventListener("click", (e) => {
+    if (skandi.classList.contains("minimizada") && !e.target.closest("[data-cerrar-skandi]")) abrir();
   });
   skandi.querySelector("[data-cerrar-skandi]").addEventListener("click", (e) => {
     e.preventDefault();
-    skandi.classList.remove("abierta");
+    skandi.classList.remove("abierta", "minimizada");
+    recordar(false);
     marcar("");
     mensajes.querySelectorAll(".sk-msj, .sk-aviso").forEach((m, i) => { if (i > 0) m.remove(); });
     form.nueva.value = "1";
@@ -439,7 +455,10 @@ if (skandi) {
     marcar("#skandi");
     abrir();
   }));
+  let guardado = null;
+  try { guardado = localStorage.getItem("skandi"); } catch {}
   if (location.hash === "#skandi") abrir();
+  else if (guardado === "min") minimizar();
 }
 
 // Formularios que guardan (POST): un segundo clic mientras se manda no lo vuelve a mandar, y si cambiaste

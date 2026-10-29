@@ -51,7 +51,7 @@ document.querySelectorAll('.filtros [data-filtro]').forEach(function (b) {
   ventana.setAttribute('role', 'dialog');
   ventana.setAttribute('aria-label', 'Skandi, asistente de Skandar');
   ventana.innerHTML = '<div class="sk-cabeza"><span class="sk-avatar" aria-hidden="true">S</span>' +
-    '<div><b>Skandi</b><small>Asistente de Skandar</small></div>' +
+    '<div class="sk-nombre"><b>Skandi</b><small>Asistente de Skandar</small><span class="sk-ultimo"></span></div>' +
     '<button class="sk-min" type="button" aria-label="Minimizar" title="Minimizar">' +
     '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2"' +
     ' stroke-linecap="round" aria-hidden="true"><path d="M6 12h12"/></svg></button>' +
@@ -63,24 +63,54 @@ document.querySelectorAll('.filtros [data-filtro]').forEach(function (b) {
   boton.setAttribute('aria-label', 'Abrir chat con Skandi');
   boton.innerHTML = icono;
   document.body.append(ventana, boton);
-  boton.addEventListener('click', function () {
+  var ultimo = ventana.querySelector('.sk-ultimo');
+  // Minimizada se queda así al cambiar de página (se guarda en el navegador, con el último mensaje).
+  var recordar = function (min, texto) {
+    try {
+      if (min) { localStorage.setItem('skandi', 'min'); localStorage.setItem('skandi-ultimo', texto); }
+      else localStorage.removeItem('skandi');
+    } catch (e) {}
+  };
+  var abrir = function () {
     if (!ventana.querySelector('iframe')) {
       var marco = document.createElement('iframe');
       marco.src = '/ayuda';
       marco.title = 'Chat con Skandi';
       ventana.append(marco);
     }
+    document.body.classList.remove('skandi-min');
     document.body.classList.add('skandi-abierta');
+    recordar(false);
+  };
+  var minimizar = function (texto) {
+    ultimo.textContent = texto || 'Toca para seguir la conversación';
+    document.body.classList.add('skandi-abierta', 'skandi-min');
+    recordar(true, ultimo.textContent);
+  };
+  var ultimoDelChat = function () {
+    try {
+      var todos = ventana.querySelector('iframe').contentDocument.querySelectorAll('.msj');
+      return todos.length ? todos[todos.length - 1].textContent : '';
+    } catch (e) { return ''; }
+  };
+  boton.addEventListener('click', abrir);
+  // Minimizar: queda una barrita con el último mensaje; al tocarla se abre igual.
+  // Cerrar: la próxima vez empieza una conversación nueva.
+  ventana.querySelector('.sk-min').addEventListener('click', function (e) {
+    e.stopPropagation();
+    minimizar(ultimoDelChat());
   });
-  // Minimizar: solo se esconde. Cerrar: la próxima vez empieza una conversación nueva.
-  ventana.querySelector('.sk-min').addEventListener('click', function () {
-    document.body.classList.remove('skandi-abierta');
-    boton.focus();
+  ventana.querySelector('.sk-cabeza').addEventListener('click', function (e) {
+    if (document.body.classList.contains('skandi-min') && !e.target.closest('.sk-cerrar')) abrir();
   });
   ventana.querySelector('.sk-cerrar').addEventListener('click', function () {
-    document.body.classList.remove('skandi-abierta');
+    document.body.classList.remove('skandi-abierta', 'skandi-min');
+    recordar(false);
     var marco = ventana.querySelector('iframe');
     if (marco) marco.src = '/ayuda?nueva=1';
     boton.focus();
   });
+  try {
+    if (localStorage.getItem('skandi') === 'min') minimizar(localStorage.getItem('skandi-ultimo'));
+  } catch (e) {}
 })();
