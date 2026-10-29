@@ -84,6 +84,10 @@ class Cuenta:
     posts_mes: int = 0
     max_comments_per_day: int = 300
     en_revision: bool = False
+    # "facebook" si se conectó con el login de Facebook (su token es el de su página; ver instagram.py).
+    ig_via: str = ""
+    # Su página de Facebook, si la conectó (Messenger y comentarios de la página); la pone app.py al arrancar.
+    fb_page_id: str = ""
     # Su base y su cliente de Instagram; los pone app.py al arrancar.
     store: Any = field(default=None, repr=False, compare=False)
     instagram: Any = field(default=None, repr=False, compare=False)
@@ -187,6 +191,7 @@ class Cuenta:
             # Cuenta grande recién conectada: no puede encender su asistente hasta que
             # se revise y se quite esta línea de su .env (ver conectar.py).
             en_revision=_bool(get("EN_REVISION")),
+            ig_via=get("IG_VIA").strip().lower(),
         )
 
 

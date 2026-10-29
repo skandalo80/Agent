@@ -17,7 +17,7 @@ ACCOUNT_KEYS = {
     "DB_PATH", "PROMPT_PATH", "CATALOG_PATH", "QUOTES_DIR",
     "SHEET_CATALOG", "SHEET_INVENTORY", "STORE_RULES_PATH", "SHEET_COMMENTS",
     "ADMIN_IG_IDS", "REPORT_EMAIL", "BUTTONS_PATH", "HIDE_SPAM", "GOOGLE_TOOLS",
-    "IMAGES_PER_MONTH", "MESSAGES_PER_MONTH", "POSTS_PER_MONTH", "PLAN", "EN_REVISION",
+    "IMAGES_PER_MONTH", "MESSAGES_PER_MONTH", "POSTS_PER_MONTH", "PLAN", "EN_REVISION", "IG_VIA",
 }
 if CLIENTE:
     load_dotenv(f"{CLIENT_DIR}/.env")
@@ -73,6 +73,9 @@ MAIL_FROM = os.getenv("MAIL_FROM", "")  # tu dirección de Gmail
 IG_APP_ID = os.getenv("IG_APP_ID", "")
 IG_OAUTH_SECRET = os.getenv("IG_OAUTH_SECRET", "") or APP_SECRET
 SITE_URL = os.getenv("SITE_URL", "https://skandar.online").rstrip("/")
+# Login de Facebook (conectar la página de Facebook y, con ella, su Instagram): el identificador de la app
+# de Meta (Configuración > Básica), no el de Instagram. Su secreto es IG_APP_SECRET. Sin esto no sale el botón.
+FB_APP_ID = os.getenv("FB_APP_ID", "")
 
 # --- Imágenes para contenido (igbot/imagenes.py) ---
 # Quién pinta las imágenes: "openai" (desde 2026-10-23) o "gemini" (el de antes, por si se vuelve).

@@ -186,6 +186,9 @@ async def publish_post(store: Store, instagram: Instagram, post: dict) -> tuple[
             link = await instagram.publish_story(urls[0])
         else:
             link = await instagram.publish(urls, post["caption"])
+            # Y en su página de Facebook, si la conectó (si falla ahí, el de Instagram ya salió).
+            from .pagina_fb import publicar_tambien
+            await publicar_tambien(store, urls, post["caption"], link)
     except Exception as e:
         log.exception("No se pudo publicar la publicación %s", post["id"])
         await store.set_post(post["id"], "fallida", error=str(e)[:500])

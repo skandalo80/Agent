@@ -202,7 +202,7 @@ async def partes(c: Cuenta, ver: str = "", buscar: str = "", hoja: int = 1, chat
 
     conv = []
     for (u, t, rol, texto, hasta, est, paso), nombre in zip(filas, nombres):
-        nombre = nombre if nombre.startswith("@") else "Cliente de Instagram"
+        nombre = nombre if nombre.startswith("@") or u.startswith("fb:") else "Cliente de Instagram"
         limite = texto == LIMIT_NOTICE
         if rol == "assistant":
             manual = texto.startswith(MANUAL)
@@ -271,7 +271,7 @@ async def _hilo(c: Cuenta, u: str, ver: str, buscar: str, hoja: int, n: int, aho
         return ""
     with usar(c):
         nombre = await c.instagram.username(u)
-    nombre = nombre if nombre.startswith("@") else "Cliente de Instagram"
+    nombre = nombre if nombre.startswith("@") or u.startswith("fb:") else "Cliente de Instagram"
     n = min(max(POR_TANDA, n), MAX_MENSAJES)
     mensajes, hay_mas = await c.store.chat_messages(u, n)
     ultimo_cliente = await c.store.last_message_from(u)

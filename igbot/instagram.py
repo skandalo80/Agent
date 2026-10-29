@@ -1,4 +1,9 @@
-"""Envío de DMs y renovación automática del token de Instagram."""
+"""Envío de DMs y renovación automática del token de Instagram.
+
+Una cuenta se conecta de dos formas: con el login de Instagram (lo normal; token de Instagram, en
+graph.instagram.com) o con el login de Facebook (IG_VIA=facebook en su .env; el token es el de su página
+y todo va por graph.facebook.com con el id de su Instagram en lugar de "me"). Los métodos son los mismos.
+"""
 import asyncio
 import hashlib
 import logging
@@ -8,6 +13,7 @@ import httpx
 
 from . import config
 from .cuenta import cuenta
+from .pagina_fb import CAMPOS as PAGINA_CAMPOS, FB_GRAPH, Pagina, es_de_facebook
 from .store import Store
 
 log = logging.getLogger("igbot.instagram")
@@ -15,12 +21,29 @@ log = logging.getLogger("igbot.instagram")
 GRAPH = "https://graph.instagram.com"
 MAX_CHARS = 1000  # límite de Instagram por mensaje de texto
 REFRESH_EVERY = 7 * 24 * 3600  # el token dura 60 días; lo renovamos cada semana
+# Con el login de Facebook, "me" es la página: estas rutas son de la página (mensajes, botones de inicio y
+# avisos); las demás (publicaciones, estadísticas, datos de la cuenta) van con el id del Instagram.
+DE_LA_PAGINA = ("me/messages", "me/messenger_profile", "me/subscribed_apps")
+
+
+def por_facebook() -> bool:
+    return cuenta().ig_via == "facebook"
+
+
+def api(path: str) -> str:
+    """La dirección de la API para `path`, según cómo se conectó la cuenta."""
+    if not por_facebook():
+        return f"{GRAPH}/{config.API_VERSION}/{path}"
+    if (path == "me" or path.startswith("me/")) and not path.startswith(DE_LA_PAGINA):
+        path = cuenta().ig_account_id + path[2:]
+    return f"{FB_GRAPH}/{config.API_VERSION}/{path}"
 
 
 class Instagram:
     def __init__(self, store: Store):
         self.store = store
         self.http = httpx.AsyncClient(timeout=15)
+        self.pagina = Pagina(store, self.http)  # Messenger, si conectó su página de Facebook
 
     async def close(self) -> None:
         await self.http.aclose()
@@ -39,8 +62,11 @@ class Instagram:
         await self._send_to({"id": recipient_id}, message)
 
     async def _send_to(self, recipient: dict, message: dict) -> None:
+        if es_de_facebook(recipient.get("id", "")):  # escribió por Messenger
+            await self.pagina.enviar(recipient, message)
+            return
         r = await self.http.post(
-            f"{GRAPH}/{config.API_VERSION}/me/messages",
+            api("me/messages"),
             headers={"Authorization": f"Bearer {await self.token()}"},
             json={"recipient": recipient, "message": message},
         )
@@ -69,7 +95,7 @@ class Instagram:
 
     async def public_reply(self, comment_id: str, text: str) -> None:
         r = await self.http.post(
-            f"{GRAPH}/{config.API_VERSION}/{comment_id}/replies",
+            api(f"{comment_id}/replies"),
             headers={"Authorization": f"Bearer {await self.token()}"},
             json={"message": text[:2000]},
         )
@@ -81,7 +107,7 @@ class Instagram:
     async def set_ice_breakers(self, questions: list[str]) -> None:
         """Botones de inicio: preguntas que salen al abrir un chat nuevo (máximo 4)."""
         r = await self.http.post(
-            f"{GRAPH}/{config.API_VERSION}/me/messenger_profile",
+            api("me/messenger_profile"),
             headers={"Authorization": f"Bearer {await self.token()}"},
             json={"platform": "instagram", "ice_breakers": [{
                 "locale": "default",
@@ -96,7 +122,7 @@ class Instagram:
         if cached := await self.store.get(key):
             return cached
         r = await self.http.get(
-            f"{GRAPH}/{config.API_VERSION}/{media_id}",
+            api(media_id),
             params={"fields": "permalink"},
             headers={"Authorization": f"Bearer {await self.token()}"},
         )
@@ -148,8 +174,11 @@ class Instagram:
 
     async def subscribe(self, fields: str) -> None:
         """Suscribe esta cuenta a los avisos del webhook (p. ej. 'messages,comments')."""
+        if por_facebook():
+            # Se suscribe la página (los de Instagram llegan por la suscripción de la app a "instagram").
+            fields = PAGINA_CAMPOS
         r = await self.http.post(
-            f"{GRAPH}/{config.API_VERSION}/me/subscribed_apps",
+            api("me/subscribed_apps"),
             params={"subscribed_fields": fields},
             headers={"Authorization": f"Bearer {await self.token()}"},
         )
@@ -158,8 +187,17 @@ class Instagram:
 
     async def account_id(self) -> str:
         """Id de la cuenta de este token (el mismo que viene en los avisos de Meta)."""
+        if por_facebook():  # el token es de la página: su Instagram es el enlazado a ella
+            r = await self.http.get(f"{FB_GRAPH}/{config.API_VERSION}/me",
+                                    params={"fields": "instagram_business_account{id,username}"},
+                                    headers={"Authorization": f"Bearer {await self.token()}"})
+            r.raise_for_status()
+            data = r.json().get("instagram_business_account") or {}
+            if data.get("username"):
+                await self.store.set("account_username", data["username"])
+            return str(data.get("id", ""))
         r = await self.http.get(
-            f"{GRAPH}/{config.API_VERSION}/me",
+            api("me"),
             params={"fields": "user_id,username"},
             headers={"Authorization": f"Bearer {await self.token()}"},
         )
@@ -172,12 +210,14 @@ class Instagram:
 
     async def username(self, user_id: str) -> str:
         """@usuario de alguien que le escribió a la cuenta (o su id si no se puede saber)."""
+        if es_de_facebook(user_id):
+            return await self.pagina.nombre(user_id)
         key = f"username:{user_id}"
         if cached := await self.store.get(key):
             return cached
         try:
             r = await self.http.get(
-                f"{GRAPH}/{config.API_VERSION}/{user_id}",
+                api(user_id),
                 params={"fields": "username"},
                 headers={"Authorization": f"Bearer {await self.token()}"},
             )
@@ -199,7 +239,7 @@ class Instagram:
 
     async def _graph(self, method: str, path: str, **data) -> dict:
         r = await self.http.request(
-            method, f"{GRAPH}/{config.API_VERSION}/{path}",
+            method, api(path),
             headers={"Authorization": f"Bearer {await self.token()}"},
             **({"data": data} if method == "POST" else {"params": data}),
         )
@@ -272,6 +312,8 @@ class Instagram:
 
     async def refresh_if_due(self) -> None:
         """Renueva el token si ya pasó una semana (lo llama el bucle de fondo de app.py)."""
+        if por_facebook():
+            return  # el token de una página no vence
         last = float(await self.store.get("ig_token_refreshed_at") or 0)
         if time.time() - last > REFRESH_EVERY:
             await self.refresh_token()

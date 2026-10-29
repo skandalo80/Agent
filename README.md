@@ -128,6 +128,15 @@ Las cuentas de `CUENTAS` (dadas de alta con `scripts/alta_cliente.py`) también 
 
 Una sola vez: en el `.env` principal pon `IG_APP_ID` (y `IG_OAUTH_SECRET` si el "Instagram app secret" no es el mismo que `IG_APP_SECRET`), y en el panel de Meta, en *API de Instagram con inicio de sesión de Instagram* → *Configurar inicio de sesión para empresas*, agrega la URL de redirección `https://console.skandar.online/conectar/callback`.
 
+### Facebook: Messenger, comentarios y publicar en la página
+
+Con el login de Facebook el cliente conecta su página (`igbot/facebook.py`, `igbot/pagina_fb.py`):
+
+- **Ya entró con Instagram:** Conexión → *Página de Facebook* → *Conectar tu página*. Su asistente contesta Messenger (los chats de Messenger se guardan como `fb:<id>`) y los comentarios de la página, con las mismas palabras clave del post de Instagram; sus publicaciones del panel salen también en la página (lo puede apagar).
+- **Entra con Facebook:** el botón *Entrar con Facebook* del panel. Si su página tiene un Instagram profesional enlazado, se conectan los dos de una vez y su cuenta queda con `IG_VIA=facebook` (su Instagram va por `graph.facebook.com` con el token de la página, que no vence).
+
+Una sola vez, en el panel de Meta: agrega el producto **Inicio de sesión con Facebook para empresas** con la URL de redirección `https://console.skandar.online/panel/facebook/callback`; en **Webhooks**, objeto **Page**, la misma URL del webhook y los campos `messages`, `messaging_postbacks`, `message_echoes` y `feed` (y en el objeto **Instagram**, `messages` y `comments`, para quien entra con Facebook); en **Messenger** → configuración de la API, el mismo webhook. Luego pon `FB_APP_ID` en el `.env` principal y reinicia. Permisos para la revisión de Meta: `pages_show_list`, `pages_manage_metadata`, `pages_messaging`, `pages_read_engagement`, `pages_manage_engagement`, `pages_read_user_content`, `pages_manage_posts`, `instagram_basic`, `instagram_manage_messages`, `instagram_manage_comments`, `instagram_content_publish` e `instagram_manage_insights`. Mientras no haya revisión, solo funcionan las páginas de quienes tengan un rol en la app.
+
 ## Comentarios: palabra clave → DM
 
 Cuando alguien comenta una publicación con una palabra clave (p. ej. PRECIO), el bot le manda un DM privado con el mensaje que tú definas, y opcionalmente responde en público. Las reglas viven en una hoja de Google Sheets (`SHEET_COMMENTS` en el `.env` de la cuenta) con tres columnas, en este orden:

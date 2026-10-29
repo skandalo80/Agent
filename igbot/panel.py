@@ -52,7 +52,9 @@ router = APIRouter(prefix="/panel")
 # Los pone app.py al arrancar: la cuenta (ya cargada) de un id de Instagram.
 buscar: Callable[[str], Cuenta | None] = lambda ig_id: None
 # Y la que da de alta una cuenta nueva al conectarse (None si no tiene panel).
-alta: Callable[[str, str, str, bool], Awaitable[Cuenta | None]] | None = None
+alta: Callable[..., Awaitable[Cuenta | None]] | None = None
+# Y la que empieza a escuchar la página de Facebook que acaba de conectar (Messenger y comentarios).
+conectar_pagina: Callable[[Cuenta], Awaitable[None]] | None = None
 
 COOKIE = "panel"
 SESSION_DAYS = 30  # Instagram vuelve a pedir el permiso en cada inicio de sesión
@@ -175,7 +177,7 @@ async def revisar_instrucciones(c: Cuenta, texto: str) -> str:
 # --- alta de una cuenta nueva ---
 
 def preparar_carpeta(ig_id: str, usuario: str, token: str, correo: str, ocupados: set[str],
-                     revision: bool = False) -> str:
+                     revision: bool = False, via: str = "") -> str:
     """Crea clientes/<nombre>/ (.env con su token y system.md) y devuelve el nombre."""
     base = re.sub(r"[^a-z0-9_-]", "_", usuario.lower())[:30].strip("_") or f"ig_{ig_id[-8:]}"
     slug, n = base, 2
@@ -188,6 +190,8 @@ def preparar_carpeta(ig_id: str, usuario: str, token: str, correo: str, ocupados
               "GOOGLE_TOOLS=0", "PLAN=basico"]
     if correo:
         lineas.append(f"OWNER_EMAIL={correo}")  # a quién avisar cuando piden una persona
+    if via:
+        lineas.append(f"IG_VIA={via}")  # entró con el login de Facebook: su token es el de su página
     if revision:
         lineas.append("EN_REVISION=1")  # cuenta grande: se enciende cuando se quite esta línea
     env = carpeta / ".env"
@@ -1574,7 +1578,9 @@ def entrar() -> HTMLResponse:
         ''
         '<h1>Tu asistente<span class="punto">.</span></h1>'
         '<p class="bajada">Entra con tu cuenta de Instagram para configurar lo que responde tu asistente.</p>'
-        '<div class="acciones"><a class="boton" href="/conectar/instagram">Entrar con Instagram</a></div>'
+        '<div class="acciones"><a class="boton" href="/conectar/instagram">Entrar con Instagram</a>'
+        + ('<a class="boton secundario" href="/panel/facebook/entrar">Entrar con Facebook</a>'
+           if config.FB_APP_ID else "") + "</div>"
         f'<p class="nota">¿Aún no conectas tu Instagram? <a class="enlace" href="{config.SITE_URL}/conectar">Empieza aquí ›</a></p>'
         "</div></section>"
     )
