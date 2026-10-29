@@ -50,4 +50,4 @@ Por eso, en nuestra plataforma, tú apruebas cada post antes de que salga y el a
 
 ## Nuestros planes
 
-El Asistente virtual cuesta US$29 al mes más IVA y contesta tus mensajes. El Community Manager cuesta US$79 al mes más IVA y además crea tus campañas, textos e imágenes con lo que pasa en tu cuenta. Sin costo de instalación y sin plazo forzoso. Consulta los detalles en [nuestros planes](/#planes).
+El Asistente virtual cuesta US$49 al mes más IVA y contesta tus mensajes. El Community Manager cuesta US$79 al mes más IVA y además crea tus campañas, textos e imágenes con lo que pasa en tu cuenta. Sin costo de instalación y sin plazo forzoso. Consulta los detalles en [nuestros planes](/#planes).

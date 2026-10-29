@@ -29,13 +29,14 @@ from fastapi.exception_handlers import http_exception_handler
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
-from igbot import (admin, agenda_google, agent, ajustes, asistente, botones, campanas, comentarios, comprimir,
-                   conectar, config, contenido, empresa, errores, lentitud, limites, marca, metricas, nueva_campana, panel, reporte,
-                   resultados, semana, skandi, sugeridos, tienda_shopify)
+from igbot import (admin, agenda_google, agent, ajustes, asistente, botones, campanas, cobros, comentarios,
+                   comprimir, conectar, config, contenido, empresa, errores, facebook, lentitud, limites, marca,
+                   metricas, nueva_campana, panel, reporte, resultados, semana, skandi, sugeridos, tienda_shopify)
 from igbot.cuenta import Cuenta, cargar, cuenta, de_carpeta, usar
 from igbot.dispatcher import Dispatcher
 from igbot.google import Google
 from igbot.instagram import Instagram
+from igbot.pagina_fb import de_facebook
 from igbot.store import Store
 
 logging.basicConfig(level=logging.INFO)
@@ -160,10 +161,22 @@ async def arrancar(c: Cuenta) -> None:
             await c.instagram.subscribe(fields)
         except Exception:
             log.exception("No se pudo suscribir la cuenta %s a los avisos", nombre(c))
+        await conectar_pagina(c)
         await botones.sync(c.store, c.instagram)
         await dispatchers[c.slug].resume_pending()
         if await empresa.revision_pendiente(c):  # guardó su perfil de empresa justo antes de reiniciar
             empresa.programar_revision(c, ya=True)
+
+
+async def conectar_pagina(c: Cuenta) -> None:
+    """Si conectó su página de Facebook: desde aquí le llegan sus avisos (Messenger y comentarios)."""
+    c.fb_page_id = await c.store.get("fb_page_id") or ""
+    if not c.fb_page_id or c.ig_via == "facebook":  # con el login de Facebook ya se suscribió arriba
+        return
+    try:
+        await c.instagram.pagina.suscribir()
+    except Exception:
+        log.exception("No se pudo suscribir la página de Facebook de %s", nombre(c))
 
 
 async def renovar_token(c: Cuenta) -> None:
@@ -217,12 +230,13 @@ def buscar(ig_id: str) -> Cuenta | None:
     return next((c for c in cuentas if ig_id and c.ig_account_id == ig_id), None)
 
 
-async def alta(ig_id: str, usuario: str, token: str, grande: bool = False) -> Cuenta | None:
+async def alta(ig_id: str, usuario: str, token: str, grande: bool = False, via: str = "") -> Cuenta | None:
     """Al conectarse por /conectar: su cuenta, que se crea (en pausa) si es nueva.
-    Si es `grande`, además queda en revisión (no puede encenderse sola)."""
+    Si es `grande`, además queda en revisión (no puede encenderse sola). `via` = "facebook" si entró con
+    el login de Facebook (entonces `token` es el de su página)."""
     if not (c := buscar(ig_id)):
         slug = panel.preparar_carpeta(ig_id, usuario, token, await store.correo_de(usuario),
-                                      {c.slug for c in cuentas}, revision=grande)
+                                      {c.slug for c in cuentas}, revision=grande, via=via)
         await store.set_conexion_slug(ig_id, slug)
         c = de_carpeta(slug)
         c.store = Store(c.db_path)
@@ -245,8 +259,9 @@ async def alta(ig_id: str, usuario: str, token: str, grande: bool = False) -> Cu
 async def lifespan(app: FastAPI):
     conectar.store, conectar.instagram, conectar.google = store, instagram, google
     panel.buscar, panel.alta = buscar, alta
+    panel.conectar_pagina = conectar_pagina
     skandi.principal = lambda: principal
-    tienda_shopify.cuentas = lambda: cuentas
+    tienda_shopify.cuentas = cobros.cuentas = lambda: cuentas
     for c in cuentas:
         await arrancar(c)
     await skandi.cargar()  # el historial de Skandi de cada cuenta, a la memoria
@@ -282,8 +297,11 @@ if not config.CLIENTE:
     app.include_router(skandi.router)
     app.include_router(skandi.web_router)
     app.include_router(tienda_shopify.router)
+    app.include_router(facebook.router)
     app.include_router(tienda_shopify.webhooks)
     app.include_router(agenda_google.router)
+    app.include_router(cobros.router)
+    app.include_router(cobros.publico)
 
     @app.exception_handler(StarletteHTTPException)
     async def pagina_404(request: Request, exc: StarletteHTTPException):
@@ -324,20 +342,10 @@ def inicio():
     return RedirectResponse("/panel", status_code=307)
 
 
-PRIVACY_HTML = """<!doctype html><html lang="es"><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Política de privacidad</title>
-<body style="font-family:sans-serif;max-width:40rem;margin:2rem auto;padding:0 1rem;line-height:1.5">
-<h1>Política de privacidad</h1>
-<p>Este servicio responde automáticamente a los mensajes directos que recibe la cuenta de Instagram asociada.</p>
-<p>Solo se procesan el identificador de Instagram de quien escribe y el contenido del mensaje, únicamente para generar la respuesta. No se venden ni se comparten estos datos con terceros.</p>
-<p>Para pedir que se borre cualquier dato, escribe un mensaje directo a la cuenta de Instagram indicándolo.</p>
-</body></html>"""
-
-
-@app.get("/privacy", response_class=HTMLResponse)
+@app.get("/privacy", include_in_schema=False)
 def privacy():
-    return PRIVACY_HTML
+    """El aviso completo vive en la web; esta URL vieja puede seguir en el panel de Meta."""
+    return RedirectResponse(f"{config.SITE_URL}/privacidad", status_code=301)
 
 
 QUOTE_NAME = re.compile(r"^[A-Za-z0-9_-]{20,40}$")
@@ -410,7 +418,7 @@ async def cuenta_de(entry_id: str) -> Cuenta | None:
         if not c.ig_account_id:
             with usar(c):
                 await resolver_id(c)
-        if c.ig_account_id == entry_id:
+        if entry_id in (c.ig_account_id, c.fb_page_id):  # su Instagram o su página de Facebook
             return c
     if not MULTI_ACCOUNT and not principal.ig_account_id:
         return principal  # una sola cuenta y no se supo su id: todo es suyo
@@ -436,10 +444,12 @@ async def forward(body: bytes, signature: str) -> None:
                 log.exception("No se pudo reenviar el aviso a %s", url)
 
 
-async def handle_comment(value: dict) -> None:
+async def handle_comment(value: dict, de_pagina: bool = False) -> None:
     c = cuenta()
+    # Los de la página de Facebook siguen las mismas reglas, pero se contestan por la página.
+    canal, propia = (c.instagram.pagina, de_facebook(c.fb_page_id)) if de_pagina else (c.instagram, c.ig_account_id)
     try:
-        await comentarios.handle(value, c.store, c.instagram, google, c.ig_account_id)
+        await comentarios.handle(value, c.store, canal, google, propia)
     except Exception:
         log.exception("Falló el comentario %s", value.get("id"))
 
@@ -480,14 +490,39 @@ async def receive(request: Request):
         in_background(forward(body, request.headers["X-Hub-Signature-256"]))
 
     data = await request.json()
+    de_pagina = data.get("object") == "page"  # de una página de Facebook (Messenger y sus comentarios)
     for entry in data.get("entry", []):
         c = await cuenta_de(str(entry.get("id")))
         if not c:
             log.debug("Aviso de otra cuenta (%s); no es de este proceso", entry.get("id"))
             continue
         with usar(c):
-            await receive_entry(c, entry)
+            await receive_entry(c, de_messenger(entry) if de_pagina else entry)
     return {"ok": True}
+
+
+def comentario_de_pagina(value: dict) -> dict | None:
+    """Un comentario nuevo en la página, con la forma de los de Instagram (lo que espera comentarios.handle)."""
+    if value.get("item") != "comment" or value.get("verb") != "add":
+        return None
+    return {"id": value.get("comment_id", ""), "from": {"id": de_facebook(str((value.get("from") or {}).get("id", "")))},
+            "media": {"id": value.get("post_id", "")}, "text": value.get("message", ""),
+            "pagina": True}
+
+
+def de_messenger(entry: dict) -> dict:
+    """Un aviso de la página: quien escribe por Messenger queda como fb:<id> (su chat no se cruza con los
+    de Instagram y al contestarle se manda por Messenger) y los comentarios, con la forma de Instagram."""
+    eventos = []
+    for event in entry.get("messaging", []):
+        event = dict(event)
+        for lado in ("sender", "recipient"):
+            if (quien := event.get(lado) or {}).get("id"):
+                event[lado] = {**quien, "id": de_facebook(str(quien["id"]))}
+        eventos.append(event)
+    cambios = [{"field": "comments", "value": v} for ch in entry.get("changes", [])
+               if ch.get("field") == "feed" and (v := comentario_de_pagina(ch.get("value") or {}))]
+    return {**entry, "messaging": eventos, "changes": cambios}
 
 
 async def receive_entry(c: Cuenta, entry: dict) -> None:
@@ -502,7 +537,7 @@ async def receive_entry(c: Cuenta, entry: dict) -> None:
         value = change.get("value") or {}
         log.info("Comentario de %s: %r", (value.get("from") or {}).get("username"), value.get("text", "")[:80])
         if google and comentarios.available() or c.hide_spam or c.imagenes_mes:
-            in_background(handle_comment(value))
+            in_background(handle_comment(value, de_pagina=bool(value.pop("pagina", False))))
         else:
             log.info("Comentarios sin configurar (falta SHEET_COMMENTS o Google); se ignora")
     for event in entry.get("messaging", []):

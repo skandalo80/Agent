@@ -202,7 +202,7 @@ async def partes(c: Cuenta, ver: str = "", buscar: str = "", hoja: int = 1, chat
 
     conv = []
     for (u, t, rol, texto, hasta, est, paso), nombre in zip(filas, nombres):
-        nombre = nombre if nombre.startswith("@") else "Cliente de Instagram"
+        nombre = nombre if nombre.startswith("@") or u.startswith("fb:") else "Cliente de Instagram"
         limite = texto == LIMIT_NOTICE
         if rol == "assistant":
             manual = texto.startswith(MANUAL)
@@ -271,7 +271,7 @@ async def _hilo(c: Cuenta, u: str, ver: str, buscar: str, hoja: int, n: int, aho
         return ""
     with usar(c):
         nombre = await c.instagram.username(u)
-    nombre = nombre if nombre.startswith("@") else "Cliente de Instagram"
+    nombre = nombre if nombre.startswith("@") or u.startswith("fb:") else "Cliente de Instagram"
     n = min(max(POR_TANDA, n), MAX_MENSAJES)
     mensajes, hay_mas = await c.store.chat_messages(u, n)
     ultimo_cliente = await c.store.last_message_from(u)
@@ -287,7 +287,8 @@ async def _hilo(c: Cuenta, u: str, ver: str, buscar: str, hoja: int, n: int, aho
         sub += " · Llegó por " + (f"el anuncio «{escape(anuncio['titulo'][:80])}»" if anuncio["titulo"] else "un anuncio")
     if ventas := await c.store.ventas_de(u):
         from .tienda_shopify import monto
-        sub += f" · Compró {monto(sum(v['monto'] for v in ventas), ventas[-1]['moneda'])} en tu tienda"
+        donde = " en tu tienda" if all(v["origen"] == "shopify" for v in ventas) else ""
+        sub += f" · Compró {monto(sum(v['monto'] for v in ventas), ventas[-1]['moneda'])}{donde}"
     if nombre.startswith("@"):
         sub += (f' · <a class="enlace" href="https://ig.me/m/{escape(nombre[1:])}" target="_blank" rel="noopener">'
                 "Abrir en Instagram</a>")

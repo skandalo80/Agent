@@ -14,7 +14,7 @@ from pathlib import Path
 import anthropic
 from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query
 
-from . import agenda_google, catalog, config, limites, tienda, tienda_shopify, tools
+from . import agenda_google, catalog, cobros, config, limites, tienda, tienda_shopify, tools
 from .cuenta import cuenta
 from .google import Google
 from .instagram import Instagram
@@ -169,6 +169,9 @@ async def reply(
     state: dict = {}
     # Con su Shopify conectado, el asistente revisa el inventario en vivo.
     extra = tienda_shopify.herramientas(cuenta()) if (await tienda_shopify.conexion(cuenta())).get("token") else []
+    # Con Mercado Pago o Stripe conectado, cobra por el chat con links de pago.
+    if await cobros.conectado(cuenta()):
+        extra += cobros.herramientas(cuenta(), user_id)
     # Con su Google Calendar conectado, agenda citas en el calendario del negocio.
     agenda, cal = await agenda_google.calendario(cuenta())
     if agenda:

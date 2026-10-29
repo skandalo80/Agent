@@ -157,8 +157,10 @@ MENSAJES_DE = {"atraer": ("distinto", "producto", "humano", "clientes"),
                "educar": ("consejos", "producto", "distinto", "humano"),
                "comunidad": ("humano", "clientes", "consejos", "novedad"),
                "marca": ("distinto", "humano", "clientes", "consejos")}
-ACCIONES = {"lanzar": "Lanzarlo", "conocer": "Darlo a conocer", "promo": "Promoción con descuento",
+ACCIONES = {"lanzar": "Lanzarlo", "conocer": "Darlo a conocer", "promo": "Promoción",
             "impulsar": "Volver a impulsarlo"}
+PROMOS = {"pct": "% de descuento", "2x1": "2x1", "3x2": "3x2", "otra": "Otra"}  # qué promoción
+MAX_PROMO = 80
 FORMATOS = {  # clave: (título, descripción, color)
     "foto": ("Foto protagonista", "Una fotografía que destaca el producto, servicio o escena sin textos gráficos"
              " añadidos.", "#3a2f25"),
@@ -206,7 +208,7 @@ MAX_CANDIDATOS_REF = 18  # fotos para elegir como referencia en el paso Estilo y
 def inicial(marca: dict) -> dict:
     lunes = campanas.lunes_que_viene()
     return {"tipo": "contenido", "versiones": 4,
-            "objetivo": "", "mensajes": [], "producto": "", "accion": "conocer", "descuento": "", "desde": "",
+            "objetivo": "", "mensajes": [], "producto": "", "accion": "conocer", "promo": "pct", "promo_otra": "", "descuento": "", "desde": "",
             "hasta": "", "condicion": "", "texto": "", "con_producto": False, "con_texto": False, "preguntan": True, "funciona": False,
             "mezcla": campanas.MEZCLA_INICIAL, "formatos": ["foto", "titular"],
             "visual": ["productos", "personas", "propias"], "textos_img": ["titular"],
@@ -327,6 +329,33 @@ async def a_campana(c: Cuenta, b: dict) -> dict:
             "asistente": {k: v for k, v in b.items() if k not in ("cid", "hechos", "adn")}}
 
 
+def promo_texto(b: dict) -> str:
+    """La promoción tal como se dice: "20 % de descuento", "2x1", "3x2" o la que escribió."""
+    tipo = b.get("promo", "pct")
+    if tipo == "pct":
+        return f"{b['descuento']} % de descuento" if b["descuento"] else ""
+    if tipo == "otra":
+        return b.get("promo_otra", "")
+    return PROMOS.get(tipo, "")
+
+
+def promo_del_form(g, b: dict) -> str:
+    """La acción y la promoción (con sus fechas) que vinieron del paso; devuelve '' o lo que falta."""
+    b["accion"] = g("accion") if g("accion") in ACCIONES else "conocer"
+    b["promo"] = g("promo") if g("promo") in PROMOS else "pct"
+    b["descuento"] = g("descuento") if g("descuento").isdigit() and 1 <= int(g("descuento")) <= 90 else ""
+    b["promo_otra"] = " ".join(g("promo_otra").split())[:MAX_PROMO]
+    b["desde"], b["hasta"] = _fecha(g("desde")), _fecha(g("hasta"))
+    b["condicion"] = g("condicion")[:MAX_CONDICION]
+    if b["accion"] == "promo" and b["promo"] == "pct" and not b["descuento"]:
+        return "Escribe el porcentaje de descuento (de 1 a 90)."
+    if b["accion"] == "promo" and b["promo"] == "otra" and not b["promo_otra"]:
+        return "Escribe cuál es la promoción."
+    if b["desde"] and b["hasta"] and b["hasta"] < b["desde"]:
+        return "La promoción no puede terminar antes de empezar."
+    return ""
+
+
 def texto_producto(b: dict, prod: dict | None) -> str:
     """El producto elegido y lo que quiere hacer con él, como lo lee Claude."""
     if not prod:
@@ -335,8 +364,8 @@ def texto_producto(b: dict, prod: dict | None) -> str:
     if prod.get("descripcion"):
         producto += f": {prod['descripcion']}"
     producto += f". Qué quiere: {ACCIONES.get(b['accion'], ACCIONES['conocer']).lower()}"
-    if b["accion"] == "promo" and b["descuento"]:
-        producto += f", {b['descuento']} % de descuento"
+    if b["accion"] == "promo" and (promo := promo_texto(b)):
+        producto += f", {promo}"
         if b["desde"] and b["hasta"]:
             producto += f" del {campanas.fecha_larga(b['desde'])} al {campanas.fecha_larga(b['hasta'])}"
         if b["condicion"]:
@@ -347,7 +376,7 @@ def texto_producto(b: dict, prod: dict | None) -> str:
 def nombre_producto(b: dict, prods: list[dict]) -> str:
     """El nombre que lleva una campaña de producto si no le pone uno: el producto y lo que quiere hacer."""
     prod = next((p for p in prods if p["id"] == b["producto"]), None)
-    accion = ACCIONES.get(b["accion"], ACCIONES["conocer"])
+    accion = (promo_texto(b) if b["accion"] == "promo" else "") or ACCIONES.get(b["accion"], ACCIONES["conocer"])
     return (f"{prod['nombre']} · {accion}" if prod else accion)[:campanas.MAX_NOMBRE]
 
 
@@ -399,17 +428,12 @@ def del_form(f, paso: int, b: dict, objetivos: list[dict], mensajes: list[dict],
         b["con_producto"] = bool(b["producto"])
         return "" if b["producto"] else "Elige qué quieres promocionar."
     if paso == OFERTA:
-        b["accion"] = g("accion") if g("accion") in ACCIONES else "conocer"
-        b["descuento"] = g("descuento") if g("descuento").isdigit() and 1 <= int(g("descuento")) <= 90 else ""
-        b["desde"], b["hasta"] = _fecha(g("desde")), _fecha(g("hasta"))
-        b["condicion"] = g("condicion")[:MAX_CONDICION]
+        error = promo_del_form(g, b)
         b["versiones"] = int(g("versiones")) if g("versiones").isdigit() and int(g("versiones")) in VERSIONES else 4
         b["con_texto"] = g("con_texto") == "1"
         b["texto"] = g("texto")[:MAX_TEXTO] if b["con_texto"] else ""
-        if b["accion"] == "promo" and not b["descuento"]:
-            return "Escribe el porcentaje de descuento (de 1 a 90)."
-        if b["desde"] and b["hasta"] and b["hasta"] < b["desde"]:
-            return "La promoción no puede terminar antes de empezar."
+        if error:
+            return error
         if b["accion"] == "promo" and b["desde"]:  # los anuncios salen mientras dura la promoción
             b["inicio"] = b["desde"]
             if b["hasta"]:
@@ -426,17 +450,11 @@ def del_form(f, paso: int, b: dict, objetivos: list[dict], mensajes: list[dict],
         b["mensajes"] = _lista(f, "mensajes", {m["k"] for m in mensajes})[:MAX_MENSAJES]
         b["con_producto"], b["con_texto"] = g("con_producto") == "1", g("con_texto") == "1"
         b["producto"] = g("producto") if b["con_producto"] and g("producto") in {p["id"] for p in prods} else ""
-        b["accion"] = g("accion") if g("accion") in ACCIONES else "conocer"
-        b["descuento"] = g("descuento") if g("descuento").isdigit() and 1 <= int(g("descuento")) <= 90 else ""
-        b["desde"], b["hasta"] = _fecha(g("desde")), _fecha(g("hasta"))
-        b["condicion"], b["texto"] = g("condicion")[:MAX_CONDICION], g("texto")[:MAX_TEXTO] if b["con_texto"] else ""
+        error = promo_del_form(g, b)
+        b["texto"] = g("texto")[:MAX_TEXTO] if b["con_texto"] else ""
         if not b["mensajes"]:
             return "Elige al menos un mensaje."
-        if b["producto"] and b["accion"] == "promo" and not b["descuento"]:
-            return "Escribe el porcentaje de descuento (de 1 a 90)."
-        if b["desde"] and b["hasta"] and b["hasta"] < b["desde"]:
-            return "La promoción no puede terminar antes de empezar."
-        return ""
+        return error if b["producto"] else ""
     if paso == 3:
         b["enfoques"] = _lista(f, "enfoques", set(ENFOQUES))[:MAX_ENFOQUES]
         return "" if b["enfoques"] else "Elige al menos un enfoque."
@@ -588,6 +606,23 @@ def paso_producto(b: dict, prods: list[tuple[dict, str]]) -> str:
             + pie(b, PRODUCTO))
 
 
+def campos_promo(b: dict) -> str:
+    """Con "Promoción": cuál (porcentaje, 2x1, 3x2 u otra que escribe), sus fechas y su condición (sin JS: :has)."""
+    tipo = b.get("promo", "pct")
+    return ('<div class="wiz-si promo"><label class="t" style="margin-top:1rem">¿Qué promoción?</label>'
+            '<div class="wiz-chips">' + "".join(chip("promo", k, v, tipo == k) for k, v in PROMOS.items()) + "</div>"
+            '<div class="wiz-campos" style="margin-top:1rem">'
+            f'<div class="solo-pct"><label for="w-desc">Descuento (%)</label><input type="number" id="w-desc"'
+            f' name="descuento" min="1" max="90" value="{escape(b["descuento"])}" placeholder="20"></div>'
+            f'<div class="solo-otra"><label for="w-otra">¿Cuál?</label><input type="text" id="w-otra" name="promo_otra"'
+            f' maxlength="{MAX_PROMO}" value="{escape(b.get("promo_otra", ""))}" placeholder="Ej. envío gratis"></div>'
+            f'<div><label for="w-desde">Desde</label><input type="date" id="w-desde" name="desde" value="{b["desde"]}"></div>'
+            f'<div><label for="w-hasta">Hasta</label><input type="date" id="w-hasta" name="hasta" value="{b["hasta"]}"></div>'
+            f'<div><label for="w-cond">Condición (opcional)</label><input type="text" id="w-cond" name="condicion"'
+            f' maxlength="{MAX_CONDICION}" value="{escape(b["condicion"])}" placeholder="Ej. solo en sucursal"></div>'
+            "</div></div>")
+
+
 def paso_oferta(b: dict, prods: list[dict]) -> str:
     prod = next((p for p in prods if p["id"] == b["producto"]), None)
     nombre = escape(prod["nombre"]) + (f" · {escape(precio_de(prod))}" if precio_de(prod) else "") if prod else ""
@@ -596,13 +631,7 @@ def paso_oferta(b: dict, prods: list[dict]) -> str:
             + '<div class="wiz-bloque prod-cam">' + (f'<label class="t">{nombre}</label>' if nombre else "")
             + '<label class="t" style="margin-top:1rem">¿Qué quieres hacer?</label><div class="wiz-chips">'
             + "".join(chip("accion", k, v, b["accion"] == k) for k, v in ACCIONES.items())
-            + '</div><div class="wiz-si promo wiz-campos">'
-            f'<div><label for="w-desc">Descuento (%)</label><input type="number" id="w-desc" name="descuento" min="1"'
-            f' max="90" value="{escape(b["descuento"])}" placeholder="20"></div>'
-            f'<div><label for="w-desde">Desde</label><input type="date" id="w-desde" name="desde" value="{b["desde"]}"></div>'
-            f'<div><label for="w-hasta">Hasta</label><input type="date" id="w-hasta" name="hasta" value="{b["hasta"]}"></div>'
-            f'<div><label for="w-cond">Condición (opcional)</label><input type="text" id="w-cond" name="condicion"'
-            f' maxlength="{MAX_CONDICION}" value="{escape(b["condicion"])}" placeholder="Ej. solo en sucursal"></div></div></div>'
+            + "</div>" + campos_promo(b) + "</div>"
             '<div class="wiz-bloque"><label class="t">¿Cuántas versiones del anuncio?</label><p class="ayuda">Cada'
             " versión es una imagen distinta del mismo anuncio y sale como un post de la campaña. Así ves cuál"
             ' funciona mejor; las que no te gusten las borras.</p><div class="wiz-chips">'
@@ -637,13 +666,7 @@ def paso_2(b: dict, mensajes: list[dict], prods: list[dict], objetivos: list[dic
            f"{opciones_prod}</select></div></div>"
            '<label class="t" style="margin-top:1rem">¿Qué quieres hacer con él?</label><div class="wiz-chips">'
            + "".join(chip("accion", k, v, b["accion"] == k) for k, v in ACCIONES.items())
-           + '</div><div class="wiz-si promo wiz-campos">'
-           f'<div><label for="w-desc">Descuento (%)</label><input type="number" id="w-desc" name="descuento" min="1"'
-           f' max="90" value="{escape(b["descuento"])}" placeholder="20"></div>'
-           f'<div><label for="w-desde">Desde</label><input type="date" id="w-desde" name="desde" value="{b["desde"]}"></div>'
-           f'<div><label for="w-hasta">Hasta</label><input type="date" id="w-hasta" name="hasta" value="{b["hasta"]}"></div>'
-           f'<div><label for="w-cond">Condición (opcional)</label><input type="text" id="w-cond" name="condicion"'
-           f' maxlength="{MAX_CONDICION}" value="{escape(b["condicion"])}" placeholder="Ej. solo en sucursal"></div></div>'
+           + "</div>" + campos_promo(b)
            if prods else
            '<p class="ayuda">Agrega tus productos en tu <a href="/panel/empresa">perfil de empresa</a> y podrás elegir'
            " uno para lanzarlo, darlo a conocer o hacerle una promoción.</p>")
@@ -770,8 +793,8 @@ async def resumen(c: Cuenta, b: dict, objetivos: list[dict], mensajes: list[dict
     producto = "Ninguno en especial"
     if prod:
         producto = f"{prod['nombre']} · {ACCIONES[b['accion']]}"
-        if b["accion"] == "promo" and b["descuento"]:
-            producto += f" {b['descuento']} %" + (f" del {campanas.fecha_larga(b['desde'])} al"
+        if b["accion"] == "promo" and (promo := promo_texto(b)):
+            producto += f" {promo}" + (f" del {campanas.fecha_larga(b['desde'])} al"
                                                    f" {campanas.fecha_larga(b['hasta'])}" if b["desde"] and b["hasta"] else "")
     enfoques = " · ".join(ENFOQUES[k][0] for k in b.get("enfoques", []) if k in ENFOQUES) or "Según tu objetivo"
     ini = date.fromisoformat(b["inicio"])

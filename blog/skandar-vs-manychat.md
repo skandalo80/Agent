@@ -23,7 +23,7 @@ Skandar se basa en **un asistente con inteligencia artificial**: le das la infor
 - **Respuestas con IA.** ManyChat: disponibles como complemento. Skandar: es la base del producto.
 - **Contenido.** ManyChat: no crea publicaciones. Skandar: el plan Community Manager crea campañas, imágenes y textos a partir de tus métricas, tus DMs y tus comentarios, y los publica.
 - **Comenta y recibe por DM.** Ambos lo tienen.
-- **Precio.** ManyChat: tiene plan gratuito y planes de pago que suben según tus contactos. Skandar: US$29 al mes más IVA el Asistente virtual y US$79 al mes más IVA el Community Manager, sin plan gratuito.
+- **Precio.** ManyChat: tiene plan gratuito y planes de pago que suben según tus contactos. Skandar: US$49 al mes más IVA el Asistente virtual y US$79 al mes más IVA el Community Manager, sin plan gratuito.
 - **Integraciones.** ManyChat: muchas, como tiendas en línea, hojas de cálculo y Zapier. Skandar: pocas, porque está enfocado en Instagram.
 
 ## Cuándo conviene ManyChat

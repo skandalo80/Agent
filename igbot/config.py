@@ -17,7 +17,7 @@ ACCOUNT_KEYS = {
     "DB_PATH", "PROMPT_PATH", "CATALOG_PATH", "QUOTES_DIR",
     "SHEET_CATALOG", "SHEET_INVENTORY", "STORE_RULES_PATH", "SHEET_COMMENTS",
     "ADMIN_IG_IDS", "REPORT_EMAIL", "BUTTONS_PATH", "HIDE_SPAM", "GOOGLE_TOOLS",
-    "IMAGES_PER_MONTH", "MESSAGES_PER_MONTH", "POSTS_PER_MONTH", "PLAN", "EN_REVISION",
+    "IMAGES_PER_MONTH", "MESSAGES_PER_MONTH", "POSTS_PER_MONTH", "PLAN", "EN_REVISION", "IG_VIA",
 }
 if CLIENTE:
     load_dotenv(f"{CLIENT_DIR}/.env")
@@ -77,6 +77,13 @@ MAIL_FROM = os.getenv("MAIL_FROM", "")  # tu dirección de Gmail
 IG_APP_ID = os.getenv("IG_APP_ID", "")
 IG_OAUTH_SECRET = os.getenv("IG_OAUTH_SECRET", "") or APP_SECRET
 SITE_URL = os.getenv("SITE_URL", "https://skandar.online").rstrip("/")
+# Login de Facebook (conectar la página de Facebook y, con ella, su Instagram): el identificador de la app
+# de Meta (Configuración > Básica), no el de Instagram. Su secreto es IG_APP_SECRET. Sin esto no sale el botón.
+FB_APP_ID = os.getenv("FB_APP_ID", "")
+FB_SCOPES = os.getenv("FB_SCOPES", "").replace(" ", "")
+# El "ID de configuración" del login de Facebook para empresas (Meta > Inicio de sesión con Facebook para empresas >
+# Configuraciones). Si está, se usa en vez de la lista de permisos.
+FB_CONFIG_ID = os.getenv("FB_CONFIG_ID", "").strip()
 
 # --- Imágenes para contenido (igbot/imagenes.py) ---
 # Quién pinta las imágenes: "openai" (desde 2026-10-23) o "gemini" (el de antes, por si se vuelve).
@@ -115,3 +122,10 @@ OPENAI_TEXT_USD_OUT = float(os.getenv("OPENAI_TEXT_USD_OUT", "10"))
 SHOPIFY_API_KEY = os.getenv("SHOPIFY_API_KEY", "")
 SHOPIFY_API_SECRET = os.getenv("SHOPIFY_API_SECRET", "")
 SHOPIFY_API_VERSION = os.getenv("SHOPIFY_API_VERSION", "2025-10")
+
+# Conecta tu Mercado Pago / tu Stripe (cobros.py). Sin estas llaves no salen en Conexión.
+MP_CLIENT_ID = os.getenv("MP_CLIENT_ID", "")
+MP_CLIENT_SECRET = os.getenv("MP_CLIENT_SECRET", "")
+STRIPE_CLIENT_ID = os.getenv("STRIPE_CLIENT_ID", "")  # ca_…, de Connect > Configuración de OAuth
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")  # la llave secreta de la plataforma (sk_…)
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")  # whsec_… del webhook de Connect
