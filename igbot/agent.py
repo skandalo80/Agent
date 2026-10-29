@@ -14,7 +14,7 @@ from pathlib import Path
 import anthropic
 from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query
 
-from . import catalog, cobros, config, limites, tienda, tienda_shopify, tools
+from . import agenda_google, catalog, cobros, config, limites, tienda, tienda_shopify, tools
 from .cuenta import cuenta
 from .google import Google
 from .instagram import Instagram
@@ -172,7 +172,13 @@ async def reply(
     # Con Mercado Pago o Stripe conectado, cobra por el chat con links de pago.
     if await cobros.conectado(cuenta()):
         extra += cobros.herramientas(cuenta(), user_id)
-    server, allowed = tools.build(store, google, user_id, state, instagram, extra)
+    # Con su Google Calendar conectado, agenda citas en el calendario del negocio.
+    agenda, cal = await agenda_google.calendario(cuenta())
+    if agenda:
+        system += "\n\n" + agenda_google.prompt(cal)
+    server, allowed = tools.build(store, google, user_id, state, instagram, extra, agenda=agenda,
+                                  presencial=cal.get("tipo", "presencial") == "presencial",
+                                  minutos=cal.get("minutos") or 0)
     prompt = await build_prompt(store, user_id, new_messages)
     text = await run_claude(prompt, system, {"bot": server}, allowed, max_turns=10)
     return text, state.get("acted", False)

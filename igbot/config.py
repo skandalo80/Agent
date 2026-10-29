@@ -65,6 +65,10 @@ MAX_CONCURRENT_PER_ACCOUNT = int(os.getenv("MAX_CONCURRENT_PER_ACCOUNT", "3"))
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
 GOOGLE_REFRESH_TOKEN = os.getenv("GOOGLE_REFRESH_TOKEN", "")
+# Cliente "Aplicación web" de Google (Conecta tu Google Calendar de cada cuenta). Es otro que el de
+# arriba (App de escritorio), que no deja poner URI de redireccionamiento.
+GOOGLE_WEB_CLIENT_ID = os.getenv("GOOGLE_WEB_CLIENT_ID", "")
+GOOGLE_WEB_CLIENT_SECRET = os.getenv("GOOGLE_WEB_CLIENT_SECRET", "")
 MAIL_FROM = os.getenv("MAIL_FROM", "")  # tu dirección de Gmail
 
 # --- Conectar cuentas de clientes (skandar.online/conectar) ---

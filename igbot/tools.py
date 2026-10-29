@@ -65,11 +65,11 @@ def overlaps(start: datetime, end: datetime, busy: list[tuple[str, str]]) -> boo
     )
 
 
-def free_slots(day: date, busy: list[tuple[str, str]], current: datetime) -> list[datetime]:
+def free_slots(day: date, busy: list[tuple[str, str]], current: datetime, minutos: int = 0) -> list[datetime]:
     window = business_window(day)
     if not window:
         return []
-    step = timedelta(minutes=cuenta().meeting_minutes)
+    step = timedelta(minutes=minutos or cuenta().meeting_minutes)
     earliest = current + timedelta(hours=cuenta().min_notice_hours)
     slots, t = [], window[0]
     while t + step <= window[1]:
@@ -114,7 +114,14 @@ async def check_client_email(store: Store, user_id: str, email: str) -> str | No
     return None
 
 
-def workspace_tools(store: Store, google: Google, user_id: str, state: dict | None = None) -> list:
+def workspace_tools(
+    store: Store, google: Google, user_id: str, state: dict | None = None, correo: bool = True,
+    presencial: bool = False, minutos: int = 0,
+) -> list:
+    """Agenda (y correo, con `correo`) en el Google que se pase: el tuyo de .env o el calendario que
+    conectó la cuenta (agenda_google.py), que no manda correos. `presencial`: citas en el negocio,
+    sin Meet y con el correo opcional. `minutos`: lo que dura cada cita (0: el de .env)."""
+    minutos = minutos or cuenta().meeting_minutes
     # Se marca cuando una herramienta hace algo fuera del chat (agendar,
     # cancelar, enviar correo): esa respuesta ya no se puede descartar.
     state = state if state is not None else {}
@@ -136,31 +143,33 @@ def workspace_tools(store: Store, google: Google, user_id: str, state: dict | No
         if not window:
             return ok(f"El {DAYS[day.weekday()]} {day:%d/%m} no hay atención.")
         busy = await google.busy(window[0].isoformat(), window[1].isoformat())
-        slots = free_slots(day, busy, now())
+        slots = free_slots(day, busy, now(), minutos)
         if not slots:
             return ok(f"No quedan horarios libres el {DAYS[day.weekday()]} {day:%d/%m}.")
         horas = ", ".join(f"{s:%H:%M}" for s in slots)
         return ok(
-            f"Libres el {DAYS[day.weekday()]} {day:%d/%m} ({cuenta().meeting_minutes} min,"
+            f"Libres el {DAYS[day.weekday()]} {day:%d/%m} ({minutos} min,"
             f" hora de {cuenta().timezone}): {horas}"
         )
 
     @tool(
         "agendar_reunion",
+        "Agenda una cita en el negocio. Antes confirma con la persona fecha, hora y su nombre; si da su correo,"
+        " le llega la invitación (si no, deja email vacío). fecha: AAAA-MM-DD, hora: HH:MM." if presencial else
         "Agenda una videollamada (Google Meet) e invita a la persona por correo. Antes confirma"
         " con ella fecha, hora y correo. fecha: AAAA-MM-DD, hora: HH:MM.",
         {"fecha": str, "hora": str, "email": str, "nombre": str, "motivo": str},
     )
     async def agendar_reunion(args):
-        email = args["email"].strip()
-        if problem := await check_email(email):
+        email = str(args.get("email") or "").strip()
+        if (email or not presencial) and (problem := await check_email(email)):
             return error(problem)
         try:
             day = parse_day(args["fecha"])
             start = datetime.combine(day, datetime.strptime(args["hora"].strip(), "%H:%M").time(), tz())
         except ValueError:
             return error("Fecha u hora inválida; usa AAAA-MM-DD y HH:MM.")
-        end = start + timedelta(minutes=cuenta().meeting_minutes)
+        end = start + timedelta(minutes=minutos)
         window = business_window(day)
         if not window or start < window[0] or end > window[1]:
             return error(f"Fuera del horario de atención ({cuenta().business_hours}).")
@@ -177,11 +186,15 @@ def workspace_tools(store: Store, google: Google, user_id: str, state: dict | No
         nombre = args["nombre"].strip()[:80] or "Cliente"
         event_id, link = await google.create_meeting(
             start.isoformat(), end.isoformat(), cuenta().timezone, email,
-            summary=f"Reunión con {nombre}",
-            description=f"Agendada por el asistente de Instagram.\nMotivo: {args['motivo'][:500]}",
+            summary=f"{'Cita' if presencial else 'Reunión'} con {nombre}",
+            description=f"Agendada por el asistente de Instagram.\nMotivo: {str(args.get('motivo') or '')[:500]}",
+            meet=not presencial,
         )
         await store.add_meeting(event_id, user_id, start.isoformat(), email, link)
         state["acted"] = True
+        if presencial:
+            return ok(f"Cita agendada para el {fmt(start)} (hora de {cuenta().timezone})."
+                      + (f" Invitación enviada a {email}." if email else "") + f" id: {event_id}")
         return ok(
             f"Agendada para el {fmt(start)} (hora de {cuenta().timezone}). Invitación enviada a"
             f" {email}. Link de Meet: {link or 'viene en la invitación'}. id: {event_id}"
@@ -209,7 +222,8 @@ def workspace_tools(store: Store, google: Google, user_id: str, state: dict | No
         await google.cancel_meeting(args["id"])
         await store.cancel_meeting(args["id"])
         state["acted"] = True
-        return ok("Reunión cancelada; la persona recibe el aviso por correo.")
+        con_correo = any(r[0] == args["id"] and r[2] for r in rows)
+        return ok("Cancelada." + (" La persona recibe el aviso por correo." if con_correo else ""))
 
     @tool(
         "enviar_correo",
@@ -233,7 +247,7 @@ def workspace_tools(store: Store, google: Google, user_id: str, state: dict | No
         state["acted"] = True
         return ok(f"Correo enviado a {email}.")
 
-    return [ver_disponibilidad, agendar_reunion, mis_reuniones, cancelar_reunion, enviar_correo]
+    return [ver_disponibilidad, agendar_reunion, mis_reuniones, cancelar_reunion] + ([enviar_correo] if correo else [])
 
 
 QUOTE_ARGS = {"paquete": str, "pago": str, "bloques_extra": int}
@@ -590,14 +604,19 @@ def human_tools(store: Store, google: Google | None, user_id: str, state: dict |
 
 def build(
     store: Store, google: Google | None, user_id: str, state: dict, instagram: Instagram | None = None,
-    extra: list | None = None,
+    extra: list | None = None, agenda: Google | None = None, presencial: bool = False, minutos: int = 0,
 ):
     """Servidor MCP con las herramientas de este usuario y la lista de permitidas.
-    `extra`: las de sus conexiones (p. ej. el inventario de su Shopify)."""
+    `extra`: las de sus conexiones (p. ej. el inventario de su Shopify). `agenda`: el Google Calendar
+    que conectó la cuenta; sus citas van ahí aunque la cuenta no use tu Google."""
     tools = memory_tools(store, user_id) + human_tools(store, google, user_id, state, instagram) + (extra or [])
+    if agenda:
+        tools += workspace_tools(store, agenda, user_id, state, correo=bool(google and cuenta().google_tools),
+                                 presencial=presencial, minutos=minutos)
     # Agenda, correo y cotizaciones usan tu Google: solo en las cuentas que lo tienen.
     if google and cuenta().google_tools:
-        tools += workspace_tools(store, google, user_id, state)
+        if not agenda:
+            tools += workspace_tools(store, google, user_id, state)
         if catalog.available():
             tools += quote_tools(store, google, instagram, user_id, state)
         if tienda.available():

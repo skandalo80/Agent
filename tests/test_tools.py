@@ -23,7 +23,7 @@ class FakeGoogle:
     async def busy(self, start, end):
         return self._busy
 
-    async def create_meeting(self, start, end, tz, email, summary, description):
+    async def create_meeting(self, start, end, tz, email, summary, description, meet=True):
         self.created.append((start, email))
         return f"ev{len(self.created)}", "https://meet.google.com/abc"
 

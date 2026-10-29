@@ -279,7 +279,10 @@ async def crear_link(c: Cuenta, user_id: str, producto: str, cantidad: int) -> s
 
 
 async def conectado(c: Cuenta) -> bool:
-    return any(enabled(p) and await conexion(c, p) for p in NOMBRES)
+    for p in NOMBRES:
+        if enabled(p) and await conexion(c, p):
+            return True
+    return False
 
 
 def herramientas(c: Cuenta, user_id: str) -> list:
