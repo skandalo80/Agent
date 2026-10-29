@@ -29,9 +29,9 @@ from fastapi.exception_handlers import http_exception_handler
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
-from igbot import (admin, agent, ajustes, asistente, botones, campanas, comentarios, conectar, config, contenido, empresa,
-                   errores, limites, marca, metricas, nueva_campana, panel, reporte, resultados, semana, skandi,
-                   sugeridos, tienda_shopify)
+from igbot import (admin, agent, ajustes, asistente, botones, campanas, comentarios, comprimir, conectar, config,
+                   contenido, empresa, errores, lentitud, limites, marca, metricas, nueva_campana, panel, reporte,
+                   resultados, semana, skandi, sugeridos, tienda_shopify)
 from igbot.cuenta import Cuenta, cargar, cuenta, de_carpeta, usar
 from igbot.dispatcher import Dispatcher
 from igbot.google import Google
@@ -208,6 +208,7 @@ def fondo() -> list[asyncio.Task]:
         asyncio.create_task(cada_cuenta(reporte_semanal, 600)),
         asyncio.create_task(cada_cuenta(sugeridos_del_lunes, 600)),
         asyncio.create_task(cada_cuenta(metricas_del_dia, 600)),
+        asyncio.create_task(lentitud.vigilar_bucle()),
     ]
 
 
@@ -261,6 +262,10 @@ async def lifespan(app: FastAPI):
 
 # Sin /docs ni /openapi.json: no hace falta publicar la lista de rutas.
 app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+# Las peticiones de más de 2 s quedan en el registro ("LENTO"), con su tiempo en base, IG e IA.
+lentitud.instalar()
+app.add_middleware(comprimir.Comprimir)
+app.add_middleware(lentitud.Medir)
 if not config.CLIENTE:
     # La página de conectar clientes la atiende solo el proceso principal.
     app.include_router(conectar.router)

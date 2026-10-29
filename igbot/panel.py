@@ -2307,7 +2307,7 @@ def script_menu():
 @router.get("/static/panel.js")
 def script():
     return FileResponse(STATIC / "panel.js", media_type="text/javascript",
-                        headers={"Cache-Control": "public, max-age=3600"})
+                        headers={"Cache-Control": "public, max-age=31536000, immutable"})
 
 
 @router.get("/static/fuentes/{archivo}")
