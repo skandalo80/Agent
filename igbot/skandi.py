@@ -71,6 +71,8 @@ _chats: dict[str, list[dict]] = {}
 _actual: dict[str, int | None] = {}
 _avisos: dict[str, str] = {}
 
+ICONO_MIN = ('<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2"'
+             ' stroke-linecap="round" aria-hidden="true"><path d="M6 12h12"/></svg>')
 ICONO_HISTORIAL = ('<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"'
                    ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/>'
                    '<path d="M3 3v5h5M12 7v5l3 2"/></svg>')
@@ -91,8 +93,9 @@ html:not(.js) .skandi:target~.sk-boton,.skandi.abierta~.sk-boton{display:none}
 .sk-avatar{width:2.2rem;height:2.2rem;border-radius:50%;background:var(--acento);color:var(--tinta);display:grid;place-items:center;font-weight:800}
 .sk-cabeza b{display:block;font-size:1rem}.sk-cabeza small{display:flex;align-items:center;gap:.35rem;color:#A8A8AE;font-size:.8rem}
 .sk-cabeza small::before{content:"";width:.45rem;height:.45rem;border-radius:50%;background:#C6FA2C}
-.sk-cerrar{color:#A8A8AE;font-size:1.5rem;line-height:1;text-decoration:none;padding:.2rem .45rem;border-radius:.6rem}
-.sk-cerrar:hover{color:#F5F5F4;background:rgba(255,255,255,.06)}
+.sk-cerrar,.sk-min{color:#A8A8AE;font-size:1.5rem;line-height:1;text-decoration:none;padding:.2rem .45rem;border-radius:.6rem;display:grid;place-items:center}
+.sk-min{padding:.35rem}
+.sk-cerrar:hover,.sk-min:hover{color:#F5F5F4;background:rgba(255,255,255,.06)}
 .sk-hist{margin-left:auto}
 .sk-hist>summary{list-style:none;cursor:pointer;color:#A8A8AE;padding:.35rem;border-radius:.6rem;display:grid;place-items:center}
 .sk-hist>summary::-webkit-details-marker{display:none}
@@ -192,10 +195,13 @@ def widget(c: Cuenta) -> str:
         '<div class="sk-cabeza"><span class="sk-avatar" aria-hidden="true">S</span>'
         '<div><b>Skandi</b><small>Tu ayuda en Skandar</small></div>'
         + historial(c, actual) +
-        '<a class="sk-cerrar" href="#cerrar-ayuda" data-cerrar-skandi aria-label="Cerrar ayuda">×</a></div>'
+        # Minimizar: se esconde y la conversación sigue igual. Cerrar (×): con JavaScript, además la
+        # siguiente pregunta empieza una conversación nueva (la anterior queda en el historial).
+        f'<a class="sk-min" href="#minimizar-ayuda" data-minimizar-skandi aria-label="Minimizar" title="Minimizar">{ICONO_MIN}</a>'
+        '<a class="sk-cerrar" href="#cerrar-ayuda" data-cerrar-skandi aria-label="Cerrar chat" title="Cerrar">×</a></div>'
         f'<div class="sk-mensajes" id="sk-mensajes">{mensajes}<span id="sk-fin"></span></div>'
         '<form class="sk-escribir" method="post" action="/panel/ayuda" data-skandi>'
-        '<input type="hidden" name="volver" value="">'
+        '<input type="hidden" name="volver" value=""><input type="hidden" name="nueva" value="">'
         f'<input type="text" name="mensaje" maxlength="{MAX_MENSAJE}" placeholder="Escribe tu pregunta"'
         ' aria-label="Escribe tu pregunta para Skandi" autocomplete="off" required>'
         '<button>Enviar</button></form></section>'
@@ -333,6 +339,8 @@ async def preguntar(request: Request):
     texto = " ".join(f.get("mensaje", "").split())[:MAX_MENSAJE]
     if not texto:
         return RedirectResponse(destino, status_code=303)
+    if f.get("nueva") == "1":  # cerró el chat: esta pregunta empieza una conversación nueva
+        _actual[k] = None
     limite, usadas = await preguntas_hoy(c)
     if usadas >= MAX_PREGUNTAS_DIA:
         _avisos[k] = ("Llegaste al límite de preguntas de hoy. Mañana sigo contigo; si es urgente,"
@@ -443,8 +451,11 @@ def con_cookie(response, token: str):
 
 
 @web_router.get("")
-async def ver_web(request: Request):
+async def ver_web(request: Request, nueva: str = ""):
     token, v = visitante(request)
+    if nueva == "1":  # cerró el chat (sitio.js): empieza otra conversación; la anterior queda guardada
+        v["charla"] = []
+        v.pop("chat_id", None)
     aviso = v.pop("aviso", "")
     return con_cookie(pagina_web(v, aviso), token)
 

@@ -52,7 +52,10 @@ document.querySelectorAll('.filtros [data-filtro]').forEach(function (b) {
   ventana.setAttribute('aria-label', 'Skandi, asistente de Skandar');
   ventana.innerHTML = '<div class="sk-cabeza"><span class="sk-avatar" aria-hidden="true">S</span>' +
     '<div><b>Skandi</b><small>Asistente de Skandar</small></div>' +
-    '<button class="sk-cerrar" type="button" aria-label="Cerrar chat">×</button></div>';
+    '<button class="sk-min" type="button" aria-label="Minimizar" title="Minimizar">' +
+    '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2"' +
+    ' stroke-linecap="round" aria-hidden="true"><path d="M6 12h12"/></svg></button>' +
+    '<button class="sk-cerrar" type="button" aria-label="Cerrar chat" title="Cerrar">×</button></div>';
   var boton = document.createElement('button');
   boton.className = 'sk-boton';
   boton.type = 'button';
@@ -69,8 +72,15 @@ document.querySelectorAll('.filtros [data-filtro]').forEach(function (b) {
     }
     document.body.classList.add('skandi-abierta');
   });
+  // Minimizar: solo se esconde. Cerrar: la próxima vez empieza una conversación nueva.
+  ventana.querySelector('.sk-min').addEventListener('click', function () {
+    document.body.classList.remove('skandi-abierta');
+    boton.focus();
+  });
   ventana.querySelector('.sk-cerrar').addEventListener('click', function () {
     document.body.classList.remove('skandi-abierta');
+    var marco = ventana.querySelector('iframe');
+    if (marco) marco.src = '/ayuda?nueva=1';
     boton.focus();
   });
 })();
