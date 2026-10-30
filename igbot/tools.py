@@ -593,7 +593,7 @@ def human_tools(store: Store, google: Google | None, user_id: str, state: dict |
             facts = await store.facts(user_id)
             recent = await store.recent(user_id, 10)
             body = (
-                f"Alguien en Instagram pidió hablar con una persona.\n\nMotivo: {args['motivo'][:500]}\n\n"
+                f"El asistente pasó una conversación a tu equipo ({RAZONES[razon]}).\n\nMotivo: {args['motivo'][:500]}\n\n"
                 + ("Datos guardados:\n" + "\n".join(f"- {k}: {v}" for k, v in facts.items()) + "\n\n" if facts else "")
                 + "Últimos mensajes:\n"
                 + "\n".join(f"{'Cliente' if r == 'user' else 'Bot'}: {t}" for r, t in recent)
@@ -603,7 +603,7 @@ def human_tools(store: Store, google: Google | None, user_id: str, state: dict |
             try:
                 await google.send_email(
                     config.MAIL_FROM, cuenta().mail_from_name, cuenta().owner_email, "",
-                    "Instagram: un cliente quiere hablar contigo", body,
+                    "Instagram: una conversación pasó a tu equipo", body,
                 )
             except Exception:
                 log.exception("No se pudo avisar al dueño de %s", user_id)

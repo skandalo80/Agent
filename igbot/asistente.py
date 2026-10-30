@@ -295,7 +295,7 @@ def _radios(nombre: str, opciones: dict, actual: str, pregunta: str, ayuda: str)
 
 def _tarjeta(k: str, elegida: bool) -> str:
     nombre, como, uso, (pregunta, respuesta), *_ = PERSONALIDADES[k]
-    return (f'<label class="as-pers"><input type="radio" name="personalidad" value="{k}"{" checked" if elegida else ""}>'
+    return (f'<label class="as-pers as-pers-{k}"><input type="radio" name="personalidad" value="{k}"{" checked" if elegida else ""}>'
             f'<span class="as-ck" aria-hidden="true">✓</span>'
             f'<span class="as-in"><b class="as-nom">{nombre}</b><span class="as-para">{como}</span>'
             f'<span class="as-uso"><b>Ideal para:</b> {uso}</span>'
@@ -626,6 +626,13 @@ fieldset.as-caja legend{float:left;width:100%;padding:0;font-weight:600;font-siz
 .as-pers input{position:absolute;opacity:0;pointer-events:none}
 .as-pers:has(input:checked){border-color:var(--acento-claro);box-shadow:0 0 0 3px rgba(255,138,61,.18)}
 .as-pers:has(input:focus-visible){outline:2px solid var(--acento-claro);outline-offset:2px}
+/* Cada personalidad con su tono apagado (ajustes.css --tono-*): tinte del fondo, rayita, nombre y ejemplo. */
+.as-pers-cercano{--tono:var(--tono-cercano)}.as-pers-profesional{--tono:var(--tono-profesional)}.as-pers-divertido{--tono:var(--tono-divertido)}.as-pers-empatico{--tono:var(--tono-empatico)}.as-pers-energico{--tono:var(--tono-energico)}.as-pers-premium{--tono:var(--tono-premium)}
+.as-tarjetas .as-pers{background:linear-gradient(160deg,color-mix(in srgb,var(--tono) var(--tono-fondo),#26272B) 0%,#1F2024 70%)!important}
+.as-tarjetas .as-in::before{content:"";display:block;width:2.25rem;height:.28rem;border-radius:1rem;background:var(--tono);opacity:.85;margin-bottom:.9rem}
+.as-tarjetas .as-nom{color:color-mix(in srgb,var(--tono) 55%,#F5F5F4)}
+.as-tarjetas .as-lbl{color:var(--tono)}
+.as-tarjetas .as-dlg{background:color-mix(in srgb,var(--tono) 8%,#1B1C1F)!important;border-color:color-mix(in srgb,var(--tono) 28%,transparent)!important}
 .as-ck{position:absolute;top:.9rem;right:.9rem;width:1.6rem;height:1.6rem;border-radius:50%;background:var(--acento-claro);color:var(--tinta);font-weight:700;font-size:.85rem;display:none;place-items:center}
 .as-pers:has(input:checked) .as-ck{display:grid}
 .as-in{display:block;padding:1.15rem 1.2rem 1.25rem}

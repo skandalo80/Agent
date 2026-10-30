@@ -48,6 +48,13 @@
 
   /* Tarjetas para elegir (Personalidad del asistente) */
   --pers-columnas: 3;          /* tarjetas por fila en computadora: 6 tarjetas = 2 filas de 3 */
+  --tono-fondo: 20%;           /* cuánto se tiñe el fondo de cada tarjeta con su tono */
+  --tono-cercano: #B08A78;     /* terracota apagado */
+  --tono-profesional: #7D8FA6; /* azul pizarra */
+  --tono-divertido: #B5A473;   /* mostaza gris */
+  --tono-empatico: #86A08E;    /* verde salvia */
+  --tono-energico: #B07F7F;    /* coral apagado */
+  --tono-premium: #9A8AA8;     /* ciruela gris */
 
   /* Tabla "¿Cuándo pasar la conversación a tu equipo?": caso, interruptor, qué recibe el cliente */
   --pase-columnas: minmax(0, 1fr) 4rem minmax(0, 1.6fr);

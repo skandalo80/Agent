@@ -74,7 +74,7 @@ def prompt_horario(c: Cuenta) -> str:
 def aviso_correo(c: Cuenta) -> str:
     """La casilla del aviso por correo (Tu equipo la pone al final de la tabla de cuándo pasar la conversación)."""
     return ('<div class="sub"><label class="check"><input type="checkbox" name="aviso_correo" value="1"'
-            f'{" checked" if c.aviso_correo else ""}> Cuando alguien pide hablar con una persona, avísame por correo'
+            f'{" checked" if c.aviso_correo else ""}> Cuando se pase una conversación a tu equipo, avísame por correo'
             f'</label><input type="email" name="correo" value="{escape(c.owner_email)}" aria-label="Correo"'
             ' placeholder="tu@correo.com"></div>')
 
