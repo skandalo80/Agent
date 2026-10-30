@@ -122,7 +122,7 @@ def test_negocio_de_servicios_ve_cotizaciones_citas_y_ventas_a_mano(con_facebook
     for u in ("u1", "u2", "u3"):
         client.portal.call(c.store.guardar_anuncio, u, "7", "Cortinas a la medida", "")
         client.portal.call(c.store.add_incoming, u, f"m-{u}", "hola")
-    _, anotar = t.human_tools(c.store, None, "u1")
+    _, anotar, _ = t.human_tools(c.store, None, "u1")
     with panel.usar(c):
         client.portal.call(anotar.handler, {"tipo": "visita", "detalle": "Medir 3 ventanas"})
     client.portal.call(c.store.add_event, "u2", "interes", {"tipo": "cotizacion"})

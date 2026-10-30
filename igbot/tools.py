@@ -551,7 +551,8 @@ HUMANO_SCHEMA = {
         "razon": {"type": "string", "enum": list(RAZONES),
                   "description": "pide_persona si pidió hablar con alguien; molesto si está enojado o"
                                  " inconforme; precio si quiere negociar; fuera_catalogo si busca algo que no"
-                                 " está en lo que vendemos; otro para lo demás."},
+                                 " está en lo que vendemos; otro para lo demás (si solo te falta un dato, usa"
+                                 " pregunta_sin_dato)."},
         "motivo": {"type": "string", "description": "Una línea con qué necesita."},
     },
     "required": ["razon", "motivo"],
@@ -604,6 +605,48 @@ def human_tools(store: Store, google: Google | None, user_id: str, state: dict |
         return ok("Listo: el dueño fue avisado y continuará la conversación. Despídete por ahora.")
 
     @tool(
+        "pregunta_sin_dato",
+        "Avisa al dueño que la persona preguntó algo que no está en tu información (un dato, un precio, una"
+        " medida, una fecha), para que él lo conteste si quiere. No pausa el chat: tú sigues atendiendo lo demás."
+        " Después dile a la persona que lo consultas con el equipo y que le avisan por aquí.",
+        {"type": "object", "properties": {
+            "pregunta": {"type": "string", "description": "La pregunta de la persona, en una línea."}},
+         "required": ["pregunta"]},
+    )
+    async def pregunta_sin_dato(args):
+        pregunta = " ".join(str(args.get("pregunta") or "").split())[:300]
+        if not pregunta:
+            return error("Escribe la pregunta que no pudiste contestar.")
+        # Sale en Conversaciones, del lado "Tu asistente", hasta que el dueño le contesta o la marca resuelta.
+        await store.add_event(user_id, "sin_dato", {"pregunta": pregunta})
+        store.avisar()
+        if instagram and cuenta().aviso_dm:
+            quien = await instagram.username(user_id)
+            for admin_id in cuenta().admin_ig_ids:
+                try:
+                    await instagram.send_text(admin_id, f"{quien} preguntó algo que tu asistente no sabe: {pregunta}")
+                except Exception:
+                    log.warning("No se pudo avisar por DM a %s", admin_id)
+        if google and cuenta().owner_email and cuenta().aviso_correo:
+            recent = await store.recent(user_id, 10)
+            body = (
+                f"Alguien en Instagram preguntó algo que tu asistente no sabe.\n\nPregunta: {pregunta}\n\n"
+                "Últimos mensajes:\n"
+                + "\n".join(f"{'Cliente' if r == 'user' else 'Bot'}: {t}" for r, t in recent)
+                + "\n\nTu asistente le dijo que lo consulta y sigue atendiendo el chat. Si quieres, contéstale"
+                " desde Conversaciones, en Tu asistente."
+            )
+            try:
+                await google.send_email(
+                    config.MAIL_FROM, cuenta().mail_from_name, cuenta().owner_email, "",
+                    "Instagram: una pregunta sin dato", body,
+                )
+            except Exception:
+                log.exception("No se pudo avisar al dueño de %s", user_id)
+        return ok("Listo: el dueño fue avisado. Dile a la persona que lo consultas con el equipo y que le avisan"
+                  " por aquí, y sigue atendiendo lo demás.")
+
+    @tool(
         "anotar_interes",
         "Anota que esta persona pidió cotización o presupuesto, una visita o medición, o dejó sus datos para"
         " que el negocio la contacte. Úsala una vez cuando pase; la persona no ve nada. No la uses si solo"
@@ -619,7 +662,7 @@ def human_tools(store: Store, google: Google | None, user_id: str, state: dict |
         conversiones_meta.avisar(cuenta(), user_id, "interes")
         return ok("Anotado.")
 
-    return [pasar_a_humano, anotar_interes]
+    return [pasar_a_humano, anotar_interes, pregunta_sin_dato]
 
 
 def build(

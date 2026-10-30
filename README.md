@@ -21,7 +21,7 @@ Instagram → Caddy (HTTPS) → POST /webhook (app.py, puerto 8001)
 | `igbot/dispatcher.py` | Cola: orden por persona, agrupar mensajes seguidos, límite de conversaciones a la vez, reintentos |
 | `igbot/store.py` | Toda la memoria en SQLite (`data/bot.db`). Es el único archivo a cambiar si algún día se pasa a Postgres |
 | `igbot/agent.py` | Arma el contexto y llama a Claude |
-| `igbot/tools.py` | Herramientas del agente y sus reglas: `recordar`, `olvidar`, `ver_disponibilidad`, `agendar_reunion`, `mis_reuniones`, `cancelar_reunion`, `enviar_correo`, `cotizar`, `enviar_cotizacion`, `pasar_a_humano`, y en la tienda `ver_productos`, `ver_existencias`, `cotizar_pedido` |
+| `igbot/tools.py` | Herramientas del agente y sus reglas: `recordar`, `olvidar`, `ver_disponibilidad`, `agendar_reunion`, `mis_reuniones`, `cancelar_reunion`, `enviar_correo`, `cotizar`, `enviar_cotizacion`, `pasar_a_humano`, `pregunta_sin_dato`, y en la tienda `ver_productos`, `ver_existencias`, `cotizar_pedido` |
 | `igbot/tienda.py` | Tienda de Nortex: lee catálogo y existencias de Google Sheets y cotiza pedidos por volumen |
 | `igbot/catalog.py` | Lee el catálogo, calcula las cotizaciones y arma el PDF |
 | `igbot/pdf_marca.py` | Diseño de los PDFs de cotización (Inter, negro y grafito, un acento en `negocio.color_acento`); las fuentes están en `fonts/` |
@@ -69,6 +69,8 @@ Pruebas locales: `pip install pytest && python -m pytest -q`
 **Cotizaciones.** El agente pregunta por el negocio del cliente, recomienda un paquete y da precios con `cotizar`. Si el cliente quiere la cotización formal, el agente le pregunta si la quiere por aquí o por correo (el correo no es obligatorio) y `enviar_cotizacion` genera un PDF con folio (`COT-0001`, `COT-0002`...) y lo manda por DM, por correo con copia a `MAIL_CC`, o por ambos. Los PDFs quedan en `data/cotizaciones/` y el registro en la tabla `quotes`. Necesita Google configurado (sección siguiente) y `PUBLIC_URL` en `.env` para el DM.
 
 **Pasar a humano.** Si el cliente pide hablar con alguien, quiere descuento o algo fuera del catálogo, el agente usa `pasar_a_humano`: te llega un correo (a `OWNER_EMAIL`, por defecto tu Gmail) con el motivo y los últimos mensajes, y el bot se calla en esa conversación durante `HUMAN_PAUSE_HOURS` (12 h).
+
+**Pregunta sin dato.** Si le preguntan algo que no está en la información del negocio, el agente usa `pregunta_sin_dato`: te avisa igual (DM y correo), le dice a la persona que lo consulta y sigue atendiendo el chat, sin pausa. En Conversaciones, del lado "Tu asistente", el chat lleva la etiqueta "Pregunta sin dato" con la pregunta hasta que le contestas a mano o la marcas resuelta.
 
 **Si contestas tú desde Instagram**, el bot lo detecta (Meta le avisa de cada DM que sale de la cuenta) y también se calla en esa conversación durante `HUMAN_PAUSE_HOURS`. Lo que escribiste queda en su memoria, así que al volver sigue desde ahí.
 

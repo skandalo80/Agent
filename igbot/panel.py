@@ -118,7 +118,8 @@ def generar(usuario: str, perfil: dict, empresa: str = "") -> str:
     humano = escape(perfil.get("humano", "").strip()) or "Dile que alguien del equipo le escribe en cuanto pueda."
     out += ["", "SI PIDEN HABLAR CON UNA PERSONA", humano + " Usa la herramienta pasar_a_humano.",
             "", "REGLAS",
-            "- Usa solo la información de arriba. Si no sabes algo, dilo y ofrece pasar con una persona.",
+            "- Usa solo la información de arriba. Si te falta un dato, usa pregunta_sin_dato: di que lo consultas"
+            " con el equipo y sigue atendiendo.",
             "- No inventes precios, promociones, existencias ni horarios."]
     return "\n".join(out) + "\n"
 
@@ -2075,7 +2076,8 @@ def _bandeja_de(f: dict) -> dict:
 
 @router.post("/pausas")
 async def cambiar_pausa(request: Request):
-    """El interruptor Asistente / Tú de un chat: lo toma (pausa al asistente), lo reactiva o le da más tiempo."""
+    """El interruptor Asistente / Tú de un chat: lo toma (pausa al asistente), lo reactiva o le da más tiempo.
+    También "Marcar como resuelta" de una pregunta sin dato."""
     de_aqui(request)
     if not (c := cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
@@ -2091,6 +2093,11 @@ async def cambiar_pausa(request: Request):
         log.info("@%s tomó el chat de %s desde el panel", await usuario(c), usuario_chat)
         return await panel_de(c, f"Listo: el asistente no le contesta a {nombre} en {c.human_pause_hours:g} h."
                               " Contéstale tú desde aquí o desde Instagram.", **bandeja)
+    if accion == "dato_listo":
+        # La pregunta sin dato ya no sale en Conversaciones; el asistente sigue con el chat.
+        await c.store.add_event(usuario_chat, "sin_dato_listo", {})
+        c.store.avisar()
+        return await panel_de(c, "Listo: marcaste la pregunta como resuelta.", **bandeja)
     if usuario_chat not in {u for u, *_ in await c.store.paused_list(time.time())}:
         return await panel_de(c, "Ese chat ya no estaba en pausa.", **bandeja)
     with usar(c):
