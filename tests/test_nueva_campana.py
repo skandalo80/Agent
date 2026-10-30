@@ -693,6 +693,20 @@ def test_flujo_brief_y_plan_con_claude_posts_e_imagen_con_openai(cliente, monkey
                                          "prompt": "My own prompt, a cup on the bar"})
     assert "Design brief: My own prompt, a cup on the bar" in proveedor.llamadas[-1][0]
     assert len([d for s, d in de_openai if "director de arte" in s]) == llamadas_arte
+    # Cambiar un texto entre comillas en el prompt cambia ese texto en el diseño (la lista de textos manda).
+    client.post(u, headers=ORIGEN, data={"accion": "generar", "k": str(foto["k"]), "idea": "Una taza en la barra",
+                                         "prompt": "Mi prompt con «Anuncio» y «Cita»"})
+    p = campanas.buscar_post(leer(client, c), foto["k"])
+    p["plan"]["foto"]["textos"] = ["Anuncio", "Venta"]
+    campanas.textos_del_prompt(p, "Con «Anuncio» y «Venta»", "Con «Anuncio» y «Cita»", False)
+    assert p["plan"]["foto"]["textos"] == ["Anuncio", "Cita"]
+    # Y se editan directo: "Textos dentro de la imagen", uno por renglón.
+    r = client.get(f"{u}?post={foto['k']}")
+    assert 'name="textos_img"' in r.text
+    client.post(u, headers=ORIGEN, data={"accion": "guardar", "k": str(foto["k"]), "idea": "Una taza en la barra",
+                                         "prompt": "Mi prompt con «Anuncio» y «Cita»", "textos_img": "Anuncio\nAgenda"})
+    p = campanas.buscar_post(leer(client, c), foto["k"])
+    assert p["plan"]["foto"]["textos"] == ["Anuncio", "Agenda"]
     # "Escribir el prompt" lo escribe sin generar la imagen.
     otro = next(p for p in leer(client, c)["posts"] if p["formato"] == "titular" and p["k"] != foto["k"])
     n_imagenes = len(proveedor.llamadas)
