@@ -15,7 +15,7 @@ Menú de la izquierda:
 - Campañas (plan Community Manager): crear una campaña paso por paso; la IA arma las publicaciones y sus imágenes y puedes editar cada una.
 - Calendario (plan Community Manager): ver, mover y descargar en PDF las publicaciones programadas.
 Menú de tu cuenta (abajo a la izquierda): Información de empresa (lo que el asistente sabe de tu negocio y tus productos), Tu marca (estilo visual, colores, tipografía y logotipo de tus imágenes), Conexión, Ver mi Instagram y Salir.
-En Conexión ve si todo funciona y conecta lo opcional, cada uno con su botón: Página de Facebook (Messenger, comentarios de la página y publicar también ahí), Google Calendar (para que el asistente agende citas), Mercado Pago o Stripe (links de pago por el chat) Tienda Shopify (inventario y ventas de la tienda ligadas al chat) y Cuenta de anuncios (solo lectura: gasto, clics y lo que mide su Pixel por anuncio en Resultados).
+En Conexión ve si todo funciona y conecta lo opcional, cada uno con su botón: Página de Facebook (Messenger, comentarios de la página y publicar también ahí), Google Calendar (para que el asistente agende citas), Mercado Pago o Stripe (links de pago por el chat) Tienda Shopify (inventario y ventas de la tienda ligadas al chat) y Cuenta de anuncios (gasto, clics y lo que mide su Pixel por anuncio en Resultados; además le avisamos a Meta cuando alguien del chat pide cotización, agenda o paga, para que sus anuncios de mensajes busquen a gente así).
 </el_panel>
 
 <como_contestas>

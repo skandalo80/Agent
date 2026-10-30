@@ -36,7 +36,7 @@ def volver_de_meta(client, monkeypatch, cuentas):
     r = client.post("/panel/anuncios/conectar", headers=ORIGEN, follow_redirects=False)
     destino = urlsplit(r.headers["location"])
     q = {k: v[0] for k, v in parse_qs(destino.query).items()}
-    assert destino.hostname == "www.facebook.com" and q["scope"] == "ads_read,business_management"
+    assert destino.hostname == "www.facebook.com" and q["scope"] == anuncios_meta.SCOPES
     assert q["redirect_uri"] == "https://console.skandar.online/panel/anuncios/callback"
     return client.get(f"/panel/anuncios/callback?code=cod1&state={q['state']}", follow_redirects=False)
 
@@ -151,3 +151,41 @@ def test_negocio_de_servicios_ve_cotizaciones_citas_y_ventas_a_mano(con_facebook
     externo = client.portal.call(c.store.ventas_de, "u2")[0]["externo"]
     client.post("/panel/venta", headers=ORIGEN, data={"usuario": "u2", "externo": externo, "accion": "quitar"})
     assert client.portal.call(c.store.ventas_de, "u2") == []
+
+
+def test_avisa_a_meta_cotizacion_cita_y_venta_del_chat(con_facebook, monkeypatch):
+    """Conversions API for Business Messaging: lo que pasa en el chat le llega a Meta, ligado a la persona."""
+    from igbot import conversiones_meta as cm
+    client, c, *_ = con_facebook
+    assert not client.portal.call(cm.mandar, c, "u1", "interes")  # sin cuenta de anuncios no se manda nada
+    client.portal.call(anuncios_meta.guardar, c, {**TOKEN, "cuenta": "act_9", "moneda": "MXN"})
+    client.portal.call(c.store.set, "fb_page_id", "pag1")
+    pedidos = []
+
+    def manejar(request):
+        pedidos.append(request)
+        if request.url.path.endswith("/dataset"):
+            return httpx.Response(200, json={"id": f"ds-{request.url.path.split('/')[-2]}"})
+        return httpx.Response(200, json={"events_received": 1})
+
+    monkeypatch.setattr(cm.httpx, "AsyncClient", lambda **k: REAL(transport=httpx.MockTransport(manejar)))
+    assert client.portal.call(cm.mandar, c, "u1", "interes")
+    assert not client.portal.call(cm.mandar, c, "u1", "interes")  # la segunda cotización no es otro prospecto
+    assert client.portal.call(cm.mandar, c, "fb:psid9", "venta", 8500.0, "mxn", "manual:abc")
+    ig_ds, ig_ev, fb_ds, fb_ev = pedidos
+    assert ig_ds.url.path.endswith(f"/{c.ig_account_id}/dataset") and fb_ds.url.path.endswith("/pag1/dataset")
+    evento = json.loads(ig_ev.content)["data"][0]
+    assert ig_ev.url.path.endswith(f"/ds-{c.ig_account_id}/events")
+    assert (evento["event_name"], evento["action_source"], evento["messaging_channel"]) == (
+        "LeadSubmitted", "business_messaging", "instagram")
+    assert evento["user_data"] == {"instagram_business_account_id": c.ig_account_id, "ig_sid": "u1"}
+    evento = json.loads(fb_ev.content)["data"][0]
+    assert evento["user_data"] == {"page_id": "pag1", "page_scoped_user_id": "psid9"}
+    assert evento["custom_data"] == {"currency": "MXN", "value": 8500.0} and evento["event_id"] == "manual:abc"
+    guardado = client.portal.call(anuncios_meta.conexion, c)
+    assert guardado["dataset_instagram"] == f"ds-{c.ig_account_id}" and guardado["dataset_messenger"] == "ds-pag1"
+    # Sin permiso: se anota y sale en Tu cuenta de anuncios.
+    monkeypatch.setattr(cm.httpx, "AsyncClient", lambda **k: REAL(transport=httpx.MockTransport(
+        lambda r: httpx.Response(403, json={"error": {"message": "Missing permission instagram_manage_events"}}))))
+    assert not client.portal.call(cm.mandar, c, "u2", "cita")
+    assert "Missing permission" in client.get("/panel/anuncios").text

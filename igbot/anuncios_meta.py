@@ -32,7 +32,8 @@ log = logging.getLogger("igbot.anuncios_meta")
 router = APIRouter(prefix="/panel/anuncios")
 
 CLAVE = "ads_meta"
-SCOPES = "ads_read,business_management"
+# instagram_manage_events y page_events: para avisarle a Meta lo que pasa en los chats (conversiones_meta.py).
+SCOPES = "ads_read,business_management,instagram_manage_events,page_events"
 STATE_COOKIE = "anuncios_state"
 ELEGIR_COOKIE = "anuncios_elegir"
 TTL = 900
@@ -237,8 +238,12 @@ async def ver(request: Request):
                   f'{escape(datos.get("cuenta", "").removeprefix("act_"))}</p>'
                   '<ul class="lista-shopify"><li>En Resultados &gt; Anuncios ves, por anuncio, lo que gastaste, los'
                   " clics y lo que registró tu Pixel: compras, prospectos o citas.</li><li>Junto a eso, los chats que"
-                  " trajo cada anuncio y hasta dónde llegaron: cotización, cita o venta.</li><li>Solo leemos: no creamos, cambiamos"
-                  " ni pagamos anuncios.</li></ul>"
+                  " trajo cada anuncio y hasta dónde llegaron: cotización, cita o venta.</li><li>Le avisamos a Meta"
+                  " cuando alguien del chat pide cotización, agenda o paga, para que tus anuncios de mensajes"
+                  " busquen a gente así.</li><li>No creamos, cambiamos ni pagamos anuncios.</li></ul>"
+                  + (f'<p class="ayuda">Meta no aceptó el último aviso del chat: {escape(datos["capi_error"][:200])}.'
+                     " Vuelve a conectar y acepta todos los permisos.</p>" + boton.format("Volver a conectar")
+                     if datos.get("capi_error") else "")
                   + ('<p class="ayuda">El permiso vence pronto: vuelve a conectar para no perder tus números.</p>'
                      + boton.format("Volver a conectar") if por_vencer(datos) else "")
                   + '<form method="post" action="/panel/anuncios/desconectar" class="acciones">'

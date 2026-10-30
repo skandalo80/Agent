@@ -90,10 +90,13 @@ MAX_NOMBRE = 40  # nombre del asistente
 MAX_TOQUE = 500  # "¿Quieres darle un toque más personal?" en Personalidad
 TRATOS = {"tu": ("De tú", "Tuteas a las personas."),
           "usted": ("De usted", "Hablas de usted a las personas.")}
-LARGOS = {"breve": ("Muy breves", "Contestas en una o dos frases."),
-          "equilibrada": ("Equilibradas", "Contestas en dos o tres frases, claras y al punto."),
+# El largo va con un tope de palabras: "dos o tres frases" solo, el modelo lo estira con frases largas.
+LARGOS = {"breve": ("Muy breves", "Contestas en una o dos frases cortas: unas 25 palabras como máximo."),
+          "equilibrada": ("Equilibradas", ("Contestas en dos o tres frases cortas, claras y al punto: unas 50 palabras"
+                                           " como máximo. Si hay más que contar, di lo principal y deja el resto para"
+                                           " cuando lo pregunte.")),
           "detalle": ("Con detalle", ("Puedes dar respuestas más completas cuando ayuden, sin pasar de un párrafo"
-                                     " corto."))}
+                                     " corto: unas 90 palabras como máximo."))}
 EMOJIS = {"nunca": ("Nunca", "No usas emojis."),
           "aveces": ("De vez en cuando", "Puedes usar algún emoji de vez en cuando."),
           "seguido": ("Seguido", "Usas emojis con frecuencia, sin exagerar.")}
@@ -107,9 +110,13 @@ REGLAS = [
      True, "En tu primer mensaje de cada conversación, aclara que eres un asistente virtual con inteligencia artificial.",
      ""),
     ("preguntar", "Pregunta antes de recomendar", "Hace una o dos preguntas para entender qué busca la persona.",
-     True, "Antes de recomendar algo, haces una o dos preguntas para entender qué busca la persona.", ""),
+     True, "Antes de recomendar algo, haces una o dos preguntas para entender qué busca la persona.",
+     "Si te piden una recomendación, la das directo con lo que ya sabes, sin hacer preguntas para indagar."),
     ("siguiente", "Invita al siguiente paso", "Sugiere comprar, agendar o visitar cuando la persona muestra interés.",
-     True, "Cuando la persona muestra interés, la invitas al siguiente paso: comprar, agendar o visitar.", ""),
+     True, "Cuando la persona muestra interés, la invitas al siguiente paso: comprar, agendar o visitar.",
+     # Apagada también va al prompt: sin nada, el modelo vende por costumbre (ofrece cotizar, agendar...).
+     "No empujas a comprar, cotizar, agendar ni visitar, ni cierras tus mensajes ofreciéndolo: contestas lo que"
+     " te preguntan. Si la persona pide avanzar, la ayudas."),
     ("links", "Comparte el link del producto", "Si preguntan por algo que tiene link, lo manda.",
      True, "Si preguntan por un producto o servicio que tiene link en tu información, compártelo.", ""),
     ("quejas", "Pasa las quejas a tu equipo", "Reclamos, reembolsos y casos delicados los atiende una persona.",
