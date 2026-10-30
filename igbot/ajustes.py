@@ -192,6 +192,20 @@ async def conexion(c: Cuenta) -> tuple[str, str]:
         else:  # no es un problema: no colorea el botón Conexión
             fila("no", "Página de Facebook", "Sin conectar: tu asistente contestaría también Messenger y tus"
                  " campañas saldrían en tu página", ir.format("Conectar tu página"))
+    from . import anuncios_meta
+    if anuncios_meta.enabled():
+        ads = await anuncios_meta.conexion(c)
+        ir = '<a class="boton secundario chico" href="/panel/anuncios">{}</a>'
+        if anuncios_meta.vencida(ads):
+            fila("aviso", "Cuenta de anuncios", f"{escape(ads.get('nombre', ''))} · venció el permiso: vuelve a"
+                 " conectarla para ver tus números", ir.format("Volver a conectar"))
+        elif ads.get("token"):
+            fila("aviso" if anuncios_meta.por_vencer(ads) else "ok", "Cuenta de anuncios",
+                 f"{escape(ads.get('nombre', ''))} · gasto, clics y compras por anuncio"
+                 + (" · el permiso vence pronto" if anuncios_meta.por_vencer(ads) else ""), ir.format("Ver"))
+        else:  # no es un problema: no colorea el botón Conexión
+            fila("no", "Cuenta de anuncios", "Sin conectar: verías en Resultados lo que deja cada anuncio, en tu"
+                 " página y en tus chats", ir.format("Conectar tu cuenta de anuncios"))
     from . import cobros
     for estado, titulo, detalle, boton in await cobros.filas(c):
         fila(estado, titulo, detalle, boton)

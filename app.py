@@ -29,9 +29,9 @@ from fastapi.exception_handlers import http_exception_handler
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
-from igbot import (admin, agenda_google, agent, ajustes, asistente, botones, campanas, cobros, comentarios,
-                   comprimir, conectar, config, contenido, empresa, errores, facebook, lentitud, limites, marca,
-                   metricas, nueva_campana, panel, reporte, resultados, semana, skandi, sugeridos, tienda_shopify)
+from igbot import (admin, agenda_google, agent, ajustes, anuncios_meta, asistente, botones, campanas, cobros,
+                   comentarios, comprimir, conectar, config, contenido, empresa, errores, facebook, lentitud, limites,
+                   marca, metricas, nueva_campana, panel, reporte, resultados, semana, skandi, sugeridos, tienda_shopify)
 from igbot.cuenta import Cuenta, cargar, cuenta, de_carpeta, usar
 from igbot.dispatcher import Dispatcher
 from igbot.google import Google
@@ -298,6 +298,7 @@ if not config.CLIENTE:
     app.include_router(skandi.web_router)
     app.include_router(tienda_shopify.router)
     app.include_router(facebook.router)
+    app.include_router(anuncios_meta.router)
     app.include_router(tienda_shopify.webhooks)
     app.include_router(agenda_google.router)
     app.include_router(cobros.router)
