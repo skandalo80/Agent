@@ -149,11 +149,12 @@ def test_el_asistente_de_punta_a_punta(cliente, monkeypatch):
     assert camp["producto_id"] == "p1" and camp["regla"] and json.loads(
         client.portal.call(c.store.get, nueva_campana.BORRADOR)) == {}
 
-    # Editar estrategia: vuelve al resumen con lo que eligió, y generar de nuevo es la misma campaña.
+    # Ver planificación: vuelve al resumen con lo que eligió, y generar de nuevo es la misma campaña.
     r = client.get(f"{URL}?editar={camp['id']}", follow_redirects=False)
     assert r.headers["location"] == f"{URL}?paso=8"
     r = client.get(r.headers["location"])
     assert "Revisa la estrategia de tu campaña" in r.text and "Ver el brief" in r.text
+    assert f'href="{campanas.BASE}/{camp["id"]}">‹ Volver a la campaña' in r.text
     r = client.get(f"{URL}?paso=9")
     assert "Volver a escribir los posts" in r.text and "Idea 2" in r.text
     client.post(URL, headers=ORIGEN, data={"paso": "9", "accion": "proponer"})
@@ -1006,7 +1007,7 @@ def test_campana_de_producto_con_anuncios(cliente, monkeypatch):
     generar(client)
     camp = leer(client, c)
     assert len(camp["posts"]) == 2 and {p["formato"] for p in camp["posts"]} == {"anuncio"}
-    assert camp["nombre"] == "Latte de calabaza · 15 % de descuento" and camp["producto_id"] == "p1"
+    assert camp["nombre"] == "Idea 1" and camp["producto_id"] == "p1"  # el título del brief
     assert "15 % de descuento" in camp["producto"] and camp["n_historias"] == 0
     p = camp["posts"][0]
     p["prompt"], p["idea_base"] = "The pumpkin latte on a calm cream background", p["idea"]
@@ -1020,3 +1021,25 @@ def test_campana_de_producto_con_anuncios(cliente, monkeypatch):
 
 def test_el_anuncio_no_entra_en_las_campanas_de_contenido():
     assert "anuncio" not in campanas.universo(0, {})["formato"] and "anuncio" not in nueva_campana.FORMATOS
+
+
+def test_solo_datos_curiosos_hablan_del_giro(cliente, monkeypatch):
+    """Con un solo enfoque, todos los posts son de él; los datos curiosos no llevan pilar ni dato de la empresa."""
+    client, c, *_ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 4)
+    llamadas = []
+    import app as bot
+    monkeypatch.setattr(bot.agent, "run_claude", claude_de_campana(llamadas))
+    listo(client, c)
+    client.portal.call(c.store.set, "productos", json.dumps([PRODUCTO]))
+    llenar(client)
+    paso(client, 3, enfoques=["datos"])
+    paso(client, 7, nombre="", inicio=LUNES.isoformat(), semanas="1", n_posts="6", dias=["0", "2", "4"],
+         horarios=["manana"])
+    generar(client, concepto="2")
+    camp = leer(client, c)
+    assert camp["nombre"] == "Idea 3"  # sin nombre propio, la campaña se llama como su brief
+    assert camp["temas"] == ["dato"] and {p["tipo"] for p in camp["posts"]} == {"dato"}
+    assert any("<temas_de_los_posts>Dato curioso</temas_de_los_posts>" in p for p, _ in llamadas)
+    prompt, sistema = next((p, s) for p, s in llamadas if "ya tiene su brief" in s and "community manager" in s)
+    assert "| pilar: " not in prompt and "| dato: " not in prompt and "del giro o la industria" in sistema

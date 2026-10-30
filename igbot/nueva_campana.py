@@ -226,7 +226,7 @@ async def escribir(c: Cuenta, b: dict) -> None:
 
 
 def de_campana(camp: dict) -> dict:
-    """Para "Editar estrategia": el borrador con lo que eligió para esa campaña (si se armó con el asistente)."""
+    """Para "Ver planificación": el borrador con lo que eligió para esa campaña (si se armó con el asistente)."""
     b = dict(camp.get("asistente") or {})
     b.update(nombre=camp.get("nombre", ""), inicio=camp["inicio"], semanas=camp.get("semanas", 2),
              n_posts=camp.get("n_posts") or len(camp.get("posts", [])) or 8,
@@ -291,7 +291,7 @@ async def a_campana(c: Cuenta, b: dict) -> dict:
             if t not in temas:
                 temas.insert(0, t)
     if enfoques := [ENFOQUES[k][2] for k in b.get("enfoques", []) if k in ENFOQUES]:
-        temas = enfoques + [t for t in temas if t not in enfoques][:max(0, campanas.MIN_TEMAS - len(enfoques))]
+        temas = enfoques  # lo que eligió, tal cual (con uno solo, todos los posts son de ese enfoque)
     temas = temas[:campanas.MAX_TEMAS]
     fuera = (*campanas.RETIRADOS, *campanas.APARTE)  # el anuncio es de las campañas de producto
     formatos = [k for k in b["formatos"] if k in campanas.FORMATOS and k not in fuera]
@@ -314,7 +314,8 @@ async def a_campana(c: Cuenta, b: dict) -> dict:
             "inicio": inicio.isoformat(), "semanas": b["semanas"], "publicar": "lun-sab",
             "dias_semana": sorted(b["dias"]), "n_posts": b["n_posts"], "n_historias": b.get("n_historias", 0),
             "tema": b["texto"],
-            "modo": "explorar", "mezcla": b["mezcla"], "temas": temas, "formatos": formatos, "horarios": horarios,
+            "modo": "explorar", "mezcla": b["mezcla"], "temas": temas, "enfoques": bool(enfoques),
+            "formatos": formatos, "horarios": horarios,
             "clientes": False,  # Ideas sugeridas (lo que preguntan, repetir lo que funcionó) está fuera por ahora
             "objetivo": f"{obj['titulo']}: {obj.get('descripcion', '')}".strip(": "),
             "mensaje": "; ".join(f"{m['titulo']}: {m.get('descripcion', '')}" for m in msgs),
@@ -1011,7 +1012,9 @@ async def pagina(c: Cuenta, paso: int, aviso: str = "", b: dict | None = None):
     editar = bool(b.get("cid"))
     return panel.pagina(
         await panel.menu_de(c, "contenido", sub="campanas")
-        + campanas.cabeza("", "", "Editar estrategia" if editar else "Nueva campaña")
+        + campanas.cabeza(f'<a class="boton secundario chico" href="{campanas.BASE}/{escape(str(b["cid"]))}">'
+                          '‹ Volver a la campaña</a>' if editar else "", "",
+                          "Planificación" if editar else "Nueva campaña")
         + '<div class="oscuro-pag"><main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
         + cuerpo + "</div></main></div>")
@@ -1034,7 +1037,7 @@ async def ver(request: Request):
     if c.imagenes_mes <= 0:
         return sin_plan()
     q = request.query_params
-    if cid := q.get("editar"):  # "Editar estrategia" de una campaña: el resumen con lo que eligió
+    if cid := q.get("editar"):  # "Ver planificación" de una campaña: el resumen con lo que eligió
         if not (camp := await campanas.leer(c, cid)):
             return RedirectResponse(campanas.BASE, status_code=303)
         await escribir(c, de_campana(camp))
@@ -1090,7 +1093,17 @@ async def guardar(request: Request):
     if accion == "brief":
         return await crear_brief(c, b, datos)
     datos["brief"] = b["brief"]["conceptos"][b["brief"].get("elegido", 0)]
+    datos["nombre"] = nombre_del_brief(b, datos)
     return await campanas.armar(c, datos, camp, borrador=True)
+
+
+def nombre_del_brief(b: dict, datos: dict) -> str:
+    """La campaña se llama como la idea del brief que eligió, salvo que él le haya puesto otro nombre
+    (si el nombre era el de otra idea del brief, cambia a la elegida)."""
+    titulo = str(datos["brief"].get("titulo") or "").strip()
+    puesto = b.get("nombre", "").strip()
+    ideas = {str(x.get("titulo") or "").strip() for x in b["brief"]["conceptos"]}
+    return titulo[:campanas.MAX_NOMBRE] if titulo and (not puesto or puesto in ideas) else datos["nombre"]
 
 
 async def referencias_del_form(c: Cuenta, f, b: dict) -> None:
@@ -1257,6 +1270,7 @@ async def crear_rapida(request: Request):
             conceptos = await brief.conceptos(c, datos, todas)
             b["brief"] = {"conceptos": conceptos, "elegido": 0}  # la primera idea: la que la IA pone primero
             camp["brief"] = conceptos[0]
+            camp["nombre"] = nombre_del_brief(b, camp)
             camp["asistente"] = {k: v for k, v in b.items() if k not in ("cid", "hechos", "adn")}
             await campanas.usar_ia(c)
             yield "Escribiendo los posts…"
