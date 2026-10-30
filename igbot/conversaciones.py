@@ -88,6 +88,19 @@ CSS = """
 .quien-contesta{display:flex;align-items:center;border:1px solid var(--linea-clara);border-radius:999px;padding:.2rem;background:var(--claro);margin:0}
 .quien-contesta button{font:inherit;font-size:.85rem;font-weight:600;border:0;background:transparent;padding:.4rem .9rem;border-radius:999px;cursor:pointer;color:var(--gris)}
 .quien-contesta button[aria-pressed=true]{background:var(--acento);color:var(--tinta);cursor:default}
+.venta-chat{position:relative}
+.venta-chat summary{list-style:none;cursor:pointer;font-size:.85rem;font-weight:600;border:1px solid var(--linea-clara);border-radius:999px;padding:.45rem .9rem;color:var(--gris);white-space:nowrap}
+.venta-chat summary::-webkit-details-marker{display:none}
+.venta-chat[open] summary{color:var(--naranja-t);border-color:rgba(255,138,61,.5)}
+.venta-chat .caja{position:absolute;right:0;top:calc(100% + .5rem);z-index:5;width:17rem;padding:1rem;border-radius:1rem;background:var(--claro);border:1px solid var(--linea-clara);box-shadow:0 12px 30px rgba(0,0,0,.35)}
+.venta-chat form{display:flex;flex-direction:column;gap:.5rem;margin:0}
+.venta-chat label{font-size:.85rem;font-weight:600}
+.venta-chat .fila{display:flex;gap:.5rem}
+.venta-chat input,.venta-chat select{font:inherit;font-size:.9rem;border:1px solid var(--linea-clara);border-radius:.75rem;padding:.5rem .7rem;background:var(--suave);color:inherit;min-width:0}
+.venta-chat input{flex:1}
+.venta-chat small{font-size:.75rem;color:var(--gris)}
+.venta-chat .marcada{flex-direction:row;justify-content:space-between;align-items:center;font-size:.85rem;padding-bottom:.6rem;margin-bottom:.6rem;border-bottom:1px solid var(--linea-clara)}
+.venta-chat .marcada button{font:inherit;font-size:.85rem;background:none;border:0;padding:0;cursor:pointer}
 .hilo .alerta{margin:1rem 1.5rem 0;padding:.75rem 1rem;border-radius:1rem;background:rgba(255,138,61,.12);border:1px solid rgba(255,138,61,.35);color:#E4E4E2;font-size:.9rem}
 .hilo .alerta b,.hilo .alerta strong{color:var(--naranja-t)}
 .hilo .alerta.tuyo{background:var(--claro);border-color:var(--linea-clara);color:#E4E4E2}
@@ -262,6 +275,28 @@ async def partes(c: Cuenta, ver: str = "", buscar: str = "", hoja: int = 1, chat
             "chat": chat if hilo else "", "pendientes": pendientes}
 
 
+async def _vendido(c: Cuenta, ocultos: str, ventas: list[dict]) -> str:
+    """"Marcar venta": para lo que se cobra fuera de Skandar (en persona, por transferencia). Cuenta en
+    Resultados > Anuncios como venta del anuncio que trajo este chat; las marcadas aquí se pueden quitar."""
+    from .empresa import MONEDAS, productos
+    from .tienda_shopify import monto
+    moneda = next((p["moneda"] for p in await productos(c) if p.get("moneda") in MONEDAS), MONEDAS[0])
+    opciones = "".join(f'<option{" selected" if m == moneda else ""}>{m}</option>' for m in MONEDAS)
+    marcadas = "".join(
+        f'<form method="post" action="/panel/venta#chats" class="marcada">{ocultos}'
+        f'<input type="hidden" name="externo" value="{escape(v["externo"])}">'
+        f'<span>Vendido {monto(v["monto"], v["moneda"])}</span>'
+        '<button name="accion" value="quitar" class="enlace">Quitar</button></form>'
+        for v in ventas if v["origen"] == "manual")
+    return ('<details class="venta-chat"><summary>Marcar venta</summary><div class="caja">' + marcadas
+            + f'<form method="post" action="/panel/venta#chats">{ocultos}'
+            '<label for="venta-monto">¿Por cuánto le vendiste?</label><div class="fila">'
+            '<input id="venta-monto" name="monto" type="number" min="1" step="0.01" required inputmode="decimal">'
+            f'<select name="moneda" aria-label="Moneda">{opciones}</select></div>'
+            '<button class="boton chico" name="accion" value="marcar">Guardar venta</button>'
+            "<small>Se suma al anuncio que trajo este chat, en Resultados.</small></form></div></details>")
+
+
 async def _hilo(c: Cuenta, u: str, ver: str, buscar: str, hoja: int, n: int, ahora: float, zona: ZoneInfo,
                 hoy: datetime, humano_desde: float) -> str:
     """El chat abierto. Vacío si ese chat no es de esta cuenta."""
@@ -299,6 +334,7 @@ async def _hilo(c: Cuenta, u: str, ver: str, buscar: str, hoja: int, n: int, aho
         + ("" if en_pausa else " disabled") + ">Asistente</button>"
         + f'<button name="accion" value="tomar" aria-pressed="{"true" if en_pausa else "false"}"'
         + (" disabled" if en_pausa else "") + ">Tú</button></form>")
+    vendido = await _vendido(c, ocultos, ventas)
     extender = (f'<form method="post" action="/panel/pausas#chats">{ocultos}'
                 f'<button name="accion" value="extender">Darte {c.human_pause_hours:g} h más</button></form>')
     if pidio is not None:
@@ -347,6 +383,6 @@ async def _hilo(c: Cuenta, u: str, ver: str, buscar: str, hoja: int, n: int, aho
                      " mensaje del cliente. Cuando te vuelva a escribir, puedes contestarle desde aquí.</p>")
     return (f'<div class="hilo"><a class="volver enlace" href="{escape(enlace(ver, buscar, hoja))}">‹ Tus chats</a>'
             f'<div class="cab"><span class="avatar">{escape(nombre[1:2].upper() or "?")}</span>'
-            f'<div class="nom"><b>{escape(nombre)}</b><small>{sub}</small></div>{interruptor}</div>'
+            f'<div class="nom"><b>{escape(nombre)}</b><small>{sub}</small></div>{vendido}{interruptor}</div>'
             f'{alerta}<div class="mensajes"><div>{"".join(burbujas)}</div></div>{responder}</div>')
 

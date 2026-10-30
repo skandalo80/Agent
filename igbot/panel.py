@@ -1242,7 +1242,7 @@ input[type=text],input[type=search],textarea,select,.inbox input[type=search],.e
 .res-kpis{margin-bottom:1rem}
 .ads-tabla{overflow-x:auto}.ads-tabla table{width:100%;min-width:40rem;border-collapse:collapse;font-size:.88rem}
 .ads-tabla th{text-align:left;font-weight:600;color:var(--gris);padding:.5rem .6rem;border-bottom:1px solid var(--linea-clara)}
-.ads-tabla td{padding:.6rem;border-bottom:1px solid var(--linea-clara)}.ads-tabla td:first-child{max-width:16rem}
+.ads-tabla td{padding:.6rem;border-bottom:1px solid var(--linea-clara)}.ads-tabla td:not(:first-child){white-space:nowrap}.ads-tabla td:first-child{max-width:16rem}
 @media(max-width:700px){.res-barra .cal-sw.modo{margin-left:0}.res-info .cal-bajar{margin-left:0}}
 .res-vista a{font-size:.95rem;padding:.45rem 1.1rem}
 .res-barra .cal-sw a.on{background:var(--acento);color:var(--tinta)}
@@ -2175,6 +2175,36 @@ async def responder(request: Request):
     await c.store.add_owner_message(usuario_chat, None, texto)
     log.info("@%s contestó a %s desde el panel", await usuario(c), usuario_chat)
     return await panel_de(c, f"Enviado. Tu asistente no contesta en este chat las próximas {c.human_pause_hours:g} h.",
+                          **bandeja)
+
+
+@router.post("/venta")
+async def marcar_venta(request: Request):
+    """"Marcar venta" en un chat: la venta que se cerró fuera de Skandar (en persona, por transferencia) cuenta
+    para el anuncio que trajo ese chat. "quitar" borra una de las marcadas a mano."""
+    de_aqui(request)
+    if not (c := cuenta_de_sesion(request)):
+        return RedirectResponse("/panel", status_code=303)
+    f = await form(request)
+    usuario_chat = f.get("usuario", "")
+    bandeja = _bandeja_de(f) | {"chat": usuario_chat}
+    if usuario_chat.startswith("admin:") or not await c.store.has_chat(usuario_chat):
+        return await panel_de(c, "No encontramos ese chat.", **(bandeja | {"chat": ""}))
+    if f.get("accion") == "quitar":
+        if any(v["externo"] == f.get("externo") and v["origen"] == "manual" for v in await c.store.ventas_de(usuario_chat)):
+            await c.store.borrar_venta("manual", f["externo"])
+        return await panel_de(c, "Quitamos esa venta.", **bandeja)
+    from .empresa import MONEDAS
+    try:
+        cantidad = round(float(f.get("monto", "").replace(",", "").replace("$", "")), 2)
+    except ValueError:
+        cantidad = 0
+    if not 0 < cantidad < 10_000_000:
+        return await panel_de(c, "Escribe por cuánto fue la venta.", **bandeja)
+    moneda = f.get("moneda") if f.get("moneda") in MONEDAS else MONEDAS[0]
+    anuncio = (await c.store.anuncios_de([usuario_chat])).get(usuario_chat, {}).get("ad_id", "")
+    await c.store.add_venta("manual", secrets.token_hex(8), usuario_chat, anuncio, cantidad, moneda, {}, time.time())
+    return await panel_de(c, "Venta guardada." + (" Ya cuenta para el anuncio que trajo este chat." if anuncio else ""),
                           **bandeja)
 
 

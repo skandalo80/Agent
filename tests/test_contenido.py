@@ -943,7 +943,7 @@ def test_lado_tu_nuevos_sin_contestar_y_razon(cliente):
 def test_pasar_a_humano_guarda_la_razon(cliente):
     from igbot import tools as t
     client, c, *_ = cliente
-    [pasar] = t.human_tools(c.store, None, "caro")
+    pasar, _ = t.human_tools(c.store, None, "caro")
     assert t.HUMANO_SCHEMA["properties"]["razon"]["enum"] == list(t.RAZONES)
     with panel.usar(c):
         client.portal.call(pasar.handler, {"razon": "precio", "motivo": "Quiere 20% de descuento"})
