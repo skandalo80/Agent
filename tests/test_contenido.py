@@ -1144,14 +1144,18 @@ def test_nombre_ia_y_tabla_de_pasar_a_tu_equipo(cliente):
     from igbot import asistente
     client, c, *_ = cliente
     r = client.get("/panel/asistente/configura?paso=reglas")
-    assert 'name="r_ia"' in r.text and 'name="r_enojado"' not in r.text  # enojado y quejas van en la tabla
-    assert r.text.index("class=\"as-caja as-pases\"") > r.text.index("name=\"instrucciones\"")
-    assert 'name="p_quejas" value="1"' in r.text and 'name="m_quejas" value="ia" checked' in r.text
+    assert 'name="r_ia"' in r.text and 'name="r_enojado"' not in r.text and 'name="p_quejas"' not in r.text
+    # La tabla va en Tu equipo, antes de la pausa, y el aviso por correo al final de su tarjeta.
+    r = client.get("/panel/asistente/configura?paso=equipo")
+    tabla = r.text.index('class="as-caja as-pases"')
+    assert tabla < r.text.index('name="aviso_correo"') < r.text.index('name="pausa"')
+    assert 'name="p_quejas" value="1" checked' in r.text and 'name="m_quejas" value="ia" checked' in r.text
     client.post("/panel/asistente/paso", headers=ORIGEN, data={
         "paso": "personalidad", "personalidad": "cercano", "nombre_asistente": "  Sofía <b> ", "opcionales": "1"})
     client.post("/panel/asistente/paso", headers=ORIGEN, data={
-        "paso": "reglas", "opcionales": "1", "r_ia": "1",
-        "p_enojado": "1", "m_enojado": "fijo", "msg_enojado": "Entiendo tu molestia <ya>.",
+        "paso": "reglas", "opcionales": "1", "r_ia": "1"})
+    client.post("/panel/asistente/paso", headers=ORIGEN, data={
+        "paso": "equipo", "p_enojado": "1", "m_enojado": "fijo", "msg_enojado": "Entiendo tu molestia <ya>.",
         "p_quejas": "1", "m_quejas": "nada", "p_persona": "1", "m_persona": "ia",
         "m_precio": "ia", "p_otro": "1", "m_otro": "ia", "t_otro": "Pedidos de más de 10 piezas"})
     prompt = Path(c.prompt_path).read_text()

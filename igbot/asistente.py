@@ -372,10 +372,10 @@ def _reglas(perfil: dict) -> str:
             # Las instrucciones libres de antes no se pierden: aquí siguen.
             + _opcional("instrucciones", "Algo más que deba saber", "",
                         "Ej. Saluda por su nombre y siempre invita a visitar la tienda.", extra, panel.MAX_INSTRUCCIONES)
-            + "</div>" + _tabla_pases(perfil) + _pie("reglas"))
+            + "</div>" + _pie("reglas"))
 
 
-def _tabla_pases(perfil: dict) -> str:
+def _tabla_pases(perfil: dict, pie: str = "") -> str:
     """Una fila por caso: si se pasa (interruptor) y qué recibe el cliente; el mensaje se ve solo con Predeterminado."""
     filas = ""
     for k, titulo, _, _, _, ejemplo in CASOS:
@@ -396,15 +396,15 @@ def _tabla_pases(perfil: dict) -> str:
             '<p class="ayuda">Marca los casos que atiende una persona y elige qué recibe el cliente al pasarlo.'
             " Al pasarla, te avisamos y el asistente deja de contestar en ese chat.</p>"
             '<div class="as-pase as-pase-cab" aria-hidden="true"><span>Caso</span><span>Pasar</span>'
-            "<span>Qué recibe el cliente</span></div>" + filas + "</div>")
+            "<span>Qué recibe el cliente</span></div>" + filas + pie + "</div>")
 
 
 def _equipo(c: Cuenta, perfil: dict) -> str:
     from . import ajustes  # ajustes importa panel
-    # Lo que dice al pasar a una persona ya está en Reglas (mensaje al transferir) y aquí, fuera de horario;
-    # el texto "humano" que alguien guardó antes sigue en sus instrucciones (panel.generar).
+    # Primero cuándo pasa la conversación a tu equipo y qué recibe el cliente; luego la pausa y los avisos.
     return (_cabeza("equipo", "Tu equipo", "Cuándo entra una persona y cómo te avisamos.")
-            + f'<div class="as-caja">{ajustes.campos(c)}</div>'
+            + _tabla_pases(perfil, ajustes.aviso_correo(c))
+            + f'<div class="as-caja">{ajustes.campos(c, avisos=False)}</div>'
             + _pie("equipo"))
 
 
@@ -454,10 +454,10 @@ async def _resumen(c: Cuenta, perfil: dict) -> str:
                 f"Tu toque: {perfil['toque'][:80]}" if perfil.get("toque") else ""])
             + caja("Reglas y límites", "reglas",
                    ["Nunca inventa datos"] + [t for k, t, *_ in REGLAS if activas[k]]
-                   + [f"No debe: {perfil['no_hacer'][:80]}" if perfil.get("no_hacer") else ""]
-                   + ["Pasa a tu equipo: " + ", ".join(t.lower() for k, t, *_ in CASOS if pases(perfil)[k]["on"])
-                      if any(c["on"] for c in pases(perfil).values()) else "No pasa conversaciones a tu equipo"])
+                   + [f"No debe: {perfil['no_hacer'][:80]}" if perfil.get("no_hacer") else ""])
             + caja("Tu equipo", "equipo", [
+                "Pasa a tu equipo: " + ", ".join(t.lower() for k, t, *_ in CASOS if pases(perfil)[k]["on"])
+                if any(x["on"] for x in pases(perfil).values()) else "No pasa conversaciones a tu equipo",
                 f"Cuando contestas tú, se calla {c.human_pause_hours:g} h",
                 f"Te avisa por correo a {c.owner_email}" if c.aviso_correo and c.owner_email else "Sin avisos"])
             + caja("Lo que sabe de tu negocio", "empresa", negocio)
@@ -548,14 +548,15 @@ async def guardar(request: Request):
                 datos[campo] = f[campo]
     elif paso == "reglas":
         datos["reglas"] = {k: f.get(f"r_{k}") == "1" for k, *_ in REGLAS}
+        datos["no_hacer"] = _texto(f, "no_hacer", MAX_TEXTO)
+        datos["instrucciones"] = _texto(f, "instrucciones", panel.MAX_INSTRUCCIONES)
+    elif paso == "equipo":
         datos["pases"] = {k: {"on": f.get(f"p_{k}") == "1", "modo": f.get(f"m_{k}") if f.get(f"m_{k}") in MODOS else "ia",
                               "msg": f.get(f"msg_{k}", "").strip()[:MAX_TEXTO],
                               **({"texto": f.get("t_otro", "").strip()[:MAX_TEXTO]} if k == "otro" else {})}
                           for k, *_ in CASOS}
         for viejo in ("msg_quejas", "msg_enojado", "pasar_equipo"):  # ya van en la tabla
             datos.pop(viejo, None)
-        datos["no_hacer"] = _texto(f, "no_hacer", MAX_TEXTO)
-        datos["instrucciones"] = _texto(f, "instrucciones", panel.MAX_INSTRUCCIONES)
     datos["pasos"] = sorted(set(datos.get("pasos") or []) | {paso})
     nombre = await panel.usuario(c)
     prompt = panel.generar(nombre, datos, await panel.negocio_de_empresa(c))
