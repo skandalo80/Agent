@@ -337,16 +337,14 @@ def _reglas(perfil: dict) -> str:
 
 def _equipo(c: Cuenta, perfil: dict) -> str:
     from . import ajustes  # ajustes importa panel
-    _, _, ayuda, filas = panel.HUMANO
+    # Lo que dice al pasar a una persona ya está en Reglas (mensaje al transferir) y aquí, fuera de horario;
+    # el texto "humano" que alguien guardó antes sigue en sus instrucciones (panel.generar).
     return (_cabeza("equipo", "Tu equipo", "Cuándo entra una persona y cómo te avisamos.")
-            + '<div class="as-caja">' + panel.caja("humano", "Cuando alguien pide hablar con una persona, ¿qué le dice?",
-                                                   ayuda, perfil.get("humano", ""), filas)
-            + "</div>" + f'<div class="as-caja">{ajustes.campos(c)}</div>'
+            + f'<div class="as-caja">{ajustes.campos(c)}</div>'
             + _pie("equipo"))
 
 
 async def _resumen(c: Cuenta, perfil: dict) -> str:
-    from .resultados import dias_de_horario
     e = estilo(perfil)
     activas = reglas_de(perfil)
 
@@ -394,12 +392,8 @@ async def _resumen(c: Cuenta, perfil: dict) -> str:
                    ["Nunca inventa datos"] + [t for k, t, *_ in REGLAS if activas[k]]
                    + [f"No debe: {perfil['no_hacer'][:80]}" if perfil.get("no_hacer") else ""])
             + caja("Tu equipo", "equipo", [
-                f"Atiende una persona {dias_de_horario(c)}",
                 f"Cuando contestas tú, se calla {c.human_pause_hours:g} h",
-                "Te avisa " + " y ".join(x for x in ("por DM" if c.aviso_dm and c.admin_ig_ids else "",
-                                                      f"por correo a {c.owner_email}" if c.aviso_correo and c.owner_email
-                                                      else "") if x) if (c.aviso_dm and c.admin_ig_ids) or
-                (c.aviso_correo and c.owner_email) else "Sin avisos"])
+                f"Te avisa por correo a {c.owner_email}" if c.aviso_correo and c.owner_email else "Sin avisos"])
             + caja("Lo que sabe de tu negocio", "empresa", negocio)
             + "</div>"
             + '<p class="as-nota">Además siempre sigue las reglas base de la plataforma: no inventa precios, no comparte'
@@ -493,8 +487,6 @@ async def guardar(request: Request):
         datos["no_hacer"] = _texto(f, "no_hacer", MAX_TEXTO)
         datos["pasar_equipo"] = _texto(f, "pasar_equipo", MAX_TEXTO)
         datos["instrucciones"] = _texto(f, "instrucciones", panel.MAX_INSTRUCCIONES)
-    elif paso == "equipo":
-        datos[panel.HUMANO[0]] = f.get(panel.HUMANO[0], "").strip()[:panel.MAX_CAMPO]
     datos["pasos"] = sorted(set(datos.get("pasos") or []) | {paso})
     nombre = await panel.usuario(c)
     prompt = panel.generar(nombre, datos, await panel.negocio_de_empresa(c))
@@ -559,7 +551,7 @@ fieldset.as-caja legend{float:left;width:100%;padding:0;font-weight:600;font-siz
 .as-main .opcion span{color:var(--gris)}
 .as-main .opcion:has(input:checked){background:rgba(255,138,61,.12);border-color:var(--acento-claro);box-shadow:inset 0 0 0 1px var(--acento-claro)}
 .as-main .sub{border-top-color:var(--linea-oscura)}
-.as-tarjetas{display:grid;grid-template-columns:repeat(auto-fill,minmax(15rem,1fr));gap:1rem;border:0;padding:0;margin:0;min-width:0}
+.as-tarjetas{display:grid;grid-template-columns:repeat(var(--pers-columnas),minmax(0,1fr));gap:var(--hueco);border:0;padding:0;margin:0;min-width:0}
 .as-pers{position:relative;margin:0;font-weight:400;display:flex;flex-direction:column;background:var(--grafito);border:1px solid var(--linea-oscura);border-radius:1.25rem;overflow:hidden;cursor:pointer}
 .as-pers input{position:absolute;opacity:0;pointer-events:none}
 .as-pers:has(input:checked){border-color:var(--acento-claro);box-shadow:0 0 0 3px rgba(255,138,61,.18)}

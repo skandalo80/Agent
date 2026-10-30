@@ -79,8 +79,6 @@ POLITICAS = [
     ("apartados", "Apartados o reservaciones", "Si se puede apartar o reservar y cómo."),
     ("otras_politicas", "Otra política", "Cualquier otra regla que tus clientes deban saber."),
 ]
-HUMANO = ("humano", "Si piden hablar con una persona",
-          "Qué debe decir. Ej.: que alguien del equipo le contesta hoy mismo.", 2)
 EJEMPLOS = [  # para que vean cómo llenar cada par
     ("¿Hacen envíos?", "Sí, a todo México por paquetería."),
     ("¿Tienen estacionamiento?", "Sí, gratis para clientes."),
@@ -609,6 +607,7 @@ input[type=file]{font:inherit;font-size:.9rem;margin-top:.75rem;max-width:100%}
 .sub{margin-top:1.5rem;padding-top:1.5rem;border-top:1px solid var(--linea-clara)}
 .horas{display:flex;gap:.75rem;align-items:center;margin-top:.6rem}.horas input{width:9rem}
 label.check input[type=email]{flex:1;max-width:22rem;margin:0}
+.sub>input[type=email]{max-width:22rem;margin-top:.6rem}
 .si-fijo{display:none;margin-top:.75rem}form:has(input[name=fuera][value=fijo]:checked) .si-fijo{display:block}
 .semaforo{width:.65rem;height:.65rem;border-radius:50%;flex:none;margin:0 .4rem;background:#C6FA2C}
 .semaforo.sem-aviso{background:#ff9f0a}.semaforo.sem-mal{background:#ff453a}.semaforo.sem-no{background:var(--linea-oscura)}
