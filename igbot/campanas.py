@@ -98,7 +98,7 @@ FORMATOS = {
     "foto": ("Foto sola", 1, "Una foto sin nada escrito encima: la foto cuenta todo. \"titulo\" solo sirve para"
              " reconocerlo en el calendario."),
     "titular": ("Foto con titular", 1, "Una foto con el título escrito encima."),
-    "texto": ("Solo texto", 0, "Un diseño gráfico tipo infografía, sin foto de protagonista: una frase o un dato en"
+    "texto": ("Solo texto", 0, "Un diseño gráfico tipo infografía, sin ninguna fotografía: una frase o un dato en"
               " grande con los colores de la marca."
               " \"titulo\" es esa frase (máximo 12 palabras) y \"subtitulo\" la completa. \"idea\": \"\"."),
     "collage": ("Collage", 0, "Un collage: varias imágenes en una sola composición (en las campañas con brief, la"
@@ -1187,6 +1187,7 @@ Reglas:
 - El estilo es un tratamiento de luz, color, textura y composición, nunca objetos de arcilla, cristal, neón u otro material dentro de la escena.
 - Si la "pieza" es un diseño estilo infografía, el prompt describe la pieza gráfica terminada: la jerarquía, dónde va cada uno de sus "textos del diseño" (cítalos tal cual, en español y entre comillas, sin agregar otros), los íconos o gráficos simples que los acompañan, los bloques de color de la marca y la foto o ilustración que la completa. Si es una imagen sin texto, ni una letra, número o logo dentro. Fotografía realista y creíble salvo que el formato o el plan pidan ilustración o gráfico.
 - Si la "pieza" es un anuncio limpio, el prompt describe una pieza publicitaria de marca premium: el producto real de "producto" como protagonista (o su resultado, si es un servicio), una sola idea, un tercio del lienzo vacío y en calma, sus "textos del diseño" (tal cual, entre comillas) con un titular grande y una línea chica, a lo más dos colores de la marca, y nada de íconos, sellos, explosiones, salpicaduras ni objetos volando.
+- Si la "pieza" es un diseño gráfico de texto sin fotografía, no hay foto ni objetos fotografiados (ni producto, ni personas, ni escenas): la frase manda, acompañada a lo más de íconos o formas planas simples sobre un fondo liso o con textura sutil en los colores de la marca.
 - En "Collage", una sola imagen con varias fotos nuevas en recuadros de distintos tamaños, todas de esta campaña (nada de fotos viejas).
 - Contexto: el negocio de <empresa> es real. Lo que se ve sale del plan visual y de <empresa>; no inventes productos, negocios, clientes, locales ni datos que no estén ahí. En un post de "Dato curioso del giro", lo que se ve es el dato (un objeto, un fenómeno o un gráfico limpio), sin el producto de la empresa ni negocios, marcas o personas concretas.
 - Diferenciación: antes de contestar, compara los prompts entre sí y con <otros_posts> (protagonista, escenario, acción, composición y metáfora). Si dos se parecen aunque cambie el encuadre, ajusta el que tenga más margen dentro de su plan; nunca cambies lo que pide una idea del dueño. No repitas superficies o muebles de catálogo (repisa o mesa de madera) salvo que sean del lugar real.
@@ -1290,7 +1291,10 @@ def textos_del_diseno(p: dict) -> list[str]:
                                                     if t)]
     textos = [p.get("titulo", ""), p.get("subtitulo", "") if formato_de(p) in CON_SUBTITULO else "",
               *p["plan"]["foto"].get("textos", [])]
-    return ["pieza: diseño completo estilo infografía, con el texto dentro",
+    pieza = ("pieza: diseño gráfico de texto, SIN ninguna fotografía: solo tipografía, íconos o formas planas y los"
+             " colores de la marca" if formato_de(p) == "texto" else "pieza: diseño completo estilo infografía, con el"
+             " texto dentro")
+    return [pieza,
             "textos del diseño: " + " | ".join(f"«{escape(t)}»" for t in textos if t)]
 
 
