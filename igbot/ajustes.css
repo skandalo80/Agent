@@ -46,9 +46,15 @@
   --boton-mini-pad: .35rem .8rem; /* botón chico junto a un campo (Llenar con mi sitio web) */
   --t-boton-mini: .8rem;       /* su letra */
 
+  /* Tarjetas para elegir (Personalidad del asistente) */
+  --pers-columnas: 3;          /* tarjetas por fila en computadora: 6 tarjetas = 2 filas de 3 */
+
   /* Conversaciones */
   --punto-chat: .6rem;         /* punto lima de no leído en cada chat, debajo de la hora */
 }
+@media (max-width: 900px) {
+  :root { --pers-columnas: 2; }
+}
 @media (max-width: 560px) {
-  :root { --t-titulo: 1.5rem; --hoja-pad: 1.4rem 1.1rem; --caja-pad: 1.1rem; }
+  :root { --t-titulo: 1.5rem; --hoja-pad: 1.4rem 1.1rem; --caja-pad: 1.1rem; --pers-columnas: 1; }
 }

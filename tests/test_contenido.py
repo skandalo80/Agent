@@ -773,12 +773,15 @@ def test_ajustes_y_conexion(cliente, monkeypatch):
     assert c.human_pause_hours == 24 and c.business_hours == "10:00-19:30" and c.owner_email == "ana@cafe.mx"
     assert c.fuera_horario == "" and c.business_days == [1, 2, 3, 4, 5, 6]
 
-    # El paso Tu equipo de Configura guarda Horario y avisos junto con qué decir si piden una persona.
+    # El paso Tu equipo de Configura guarda Horario y avisos; ya no pregunta qué decir si piden una persona
+    # (eso está en Reglas y en "Fuera de ese horario"), pero el texto que alguien guardó antes no se pierde.
+    from igbot import panel
+    viejo = {**client.portal.call(panel.perfil, c), "humano": "Te escribe Ana."}
+    client.portal.call(c.store.set, "perfil", json.dumps(viejo))
     r = client.get("/panel/asistente/configura?paso=equipo")
-    assert "Guardar ajustes" not in r.text and r.text.index('name="humano"') < r.text.index('name="pausa"')
+    assert "Guardar ajustes" not in r.text and 'name="humano"' not in r.text and 'name="pausa"' in r.text
     r = client.post("/panel/asistente/paso", headers=ORIGEN,
-                    data={**datos, "pausa": "48", "paso": "equipo", "humano": "Te escribe Ana."},
-                    follow_redirects=False)
+                    data={**datos, "pausa": "48", "paso": "equipo"}, follow_redirects=False)
     assert r.headers["location"] == "/panel/asistente/configura?paso=resumen&ok=1"
     assert c.human_pause_hours == 48 and c.business_hours == "10:00-19:30"
     assert "Te escribe Ana." in Path(c.prompt_path).read_text()

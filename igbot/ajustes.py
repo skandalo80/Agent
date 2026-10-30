@@ -25,7 +25,6 @@ log = logging.getLogger(__name__)
 router = APIRouter(prefix="/panel")
 
 PAUSAS = (4, 12, 24, 48)
-DIAS = ("Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom")
 HORA = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 CORREO = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 MAX_FUERA = 300
@@ -77,24 +76,15 @@ def campos(c: Cuenta) -> str:
     pausas = "".join(
         f'<label><input type="radio" name="pausa" value="{h}"{" checked" if h == c.human_pause_hours else ""}> {h} h</label>'
         for h in PAUSAS)
-    dias = "".join(
-        f'<label><input type="checkbox" name="dias" value="{i}"{" checked" if i in c.business_days else ""}> {d}</label>'
-        for i, d in enumerate(DIAS, 1))
-    desde, hasta = (t.strip() for t in c.business_hours.split("-"))
     fijo = bool(c.fuera_horario)
-    dm = ('<label class="check"><input type="checkbox" name="aviso_dm" value="1"'
-          f'{" checked" if c.aviso_dm else ""}> DM a mi Instagram personal</label>' if c.admin_ig_ids else "")
     return (
         "<label>Cuando contestas tú un chat, el asistente se calla por</label>"
         f'<div class="chips">{pausas}</div>'
         '<p class="ayuda">Pasado ese tiempo vuelve a contestar solo. Siempre puedes reactivarlo antes desde'
         " Conversaciones recientes.</p>"
-        '<div class="sub"><label>Horario de atención</label><p class="ayuda">Tu asistente contesta las 24 h;'
-        " esto es para decir cuándo atiende una persona.</p>"
-        f'<div class="chips">{dias}</div>'
-        f'<div class="horas"><input type="time" name="desde" value="{escape(desde)}" aria-label="Desde">'
-        f' a <input type="time" name="hasta" value="{escape(hasta)}" aria-label="Hasta"></div>'
-        '<label style="margin-top:1rem">Fuera de ese horario, si piden hablar con una persona</label>'
+        # El horario de atención ya no se pide aquí: sin días ni horas en el formulario, del_form deja los guardados
+        # (los usan las citas, Resultados y el "fuera de horario").
+        '<div class="sub"><label>Fuera del horario de atención, si piden hablar con una persona</label>'
         '<div class="opciones">'
         f'<label class="opcion"><input type="radio" name="fuera" value="avisar"{"" if fijo else " checked"}>'
         "<b>Avisar cuándo le contestan</b><span>«Te escribimos mañana a partir de las 9:00». El asistente sigue"
@@ -104,10 +94,11 @@ def campos(c: Cuenta) -> str:
         f'<textarea class="si-fijo" name="fuera_texto" aria-label="Mensaje fijo" rows="2" maxlength="{MAX_FUERA}"'
         ' placeholder="Ej. Gracias por escribir. Te contestamos el lunes a primera hora.">'
         f"{escape(c.fuera_horario)}</textarea></div>"
-        '<div class="sub"><label>Cuando alguien pide hablar con una persona, avísame por</label>'
-        f"{dm}"
-        f'<label class="check"><input type="checkbox" name="aviso_correo" value="1"{" checked" if c.aviso_correo else ""}>'
-        f' Correo a <input type="email" name="correo" value="{escape(c.owner_email)}" aria-label="Correo"></label></div>'
+        # Solo aviso por correo: el DM al Instagram personal ya no se ofrece (al guardar queda apagado).
+        '<div class="sub"><label class="check"><input type="checkbox" name="aviso_correo" value="1"'
+        f'{" checked" if c.aviso_correo else ""}> Cuando alguien pide hablar con una persona, avísame por correo</label>'
+        f'<input type="email" name="correo" value="{escape(c.owner_email)}" aria-label="Correo"'
+        ' placeholder="tu@correo.com"></div>'
     )
 
 
