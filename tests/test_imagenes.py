@@ -221,3 +221,17 @@ def test_las_historias_salen_en_9_16():
     assert Image.open(io.BytesIO(imagenes.collage([foto(), foto()], alto=imagenes.ALTO_HISTORIA))).size == (1080, 1920)
     assert "9:16" in imagenes.prompt_final("Una taza", "editorial", historia=True)
     assert "story" in imagenes.prompt_libre("Una taza", TEXTO, historia=True)
+
+
+def test_historia_con_texto_no_se_corta_de_los_lados():
+    """Un diseño 2:3 en historia queda a lo ancho completo, con franjas de su mismo color arriba y abajo."""
+    from PIL import Image
+    img = Image.new("RGB", (1024, 1536), (20, 20, 24))
+    img.paste((255, 0, 0), (0, 760, 1024, 776))  # una franja roja de borde a borde: no debe perderse ningún extremo
+    buf = io.BytesIO()
+    img.save(buf, "PNG")
+    out = Image.open(io.BytesIO(imagenes._historia_completa(buf.getvalue())))
+    assert out.size == (imagenes.ANCHO, imagenes.ALTO_HISTORIA)
+    y = imagenes.ALTO_HISTORIA // 2
+    assert out.getpixel((2, y))[0] > 150 and out.getpixel((imagenes.ANCHO - 3, y))[0] > 150
+    assert max(abs(a - b) for a, b in zip(out.getpixel((10, 5)), (20, 20, 24))) < 8
