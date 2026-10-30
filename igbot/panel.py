@@ -2203,7 +2203,10 @@ async def marcar_venta(request: Request):
         return await panel_de(c, "Escribe por cuánto fue la venta.", **bandeja)
     moneda = f.get("moneda") if f.get("moneda") in MONEDAS else MONEDAS[0]
     anuncio = (await c.store.anuncios_de([usuario_chat])).get(usuario_chat, {}).get("ad_id", "")
-    await c.store.add_venta("manual", secrets.token_hex(8), usuario_chat, anuncio, cantidad, moneda, {}, time.time())
+    externo = secrets.token_hex(8)
+    await c.store.add_venta("manual", externo, usuario_chat, anuncio, cantidad, moneda, {}, time.time())
+    from .conversiones_meta import avisar
+    avisar(c, usuario_chat, "venta", cantidad, moneda, f"manual:{externo}")
     return await panel_de(c, "Venta guardada." + (" Ya cuenta para el anuncio que trajo este chat." if anuncio else ""),
                           **bandeja)
 

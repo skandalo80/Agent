@@ -308,7 +308,10 @@ async def _guardar_pago(c: Cuenta, origen: str, externo: str, codigo: str, monto
     if not user_id:
         return False  # no es un cobro del asistente
     anuncio = (await c.store.anuncios_de([user_id])).get(user_id, {}).get("ad_id", "")
-    return await c.store.add_venta(origen, externo, user_id, anuncio, monto, moneda.upper(), detalle, time.time())
+    if nueva := await c.store.add_venta(origen, externo, user_id, anuncio, monto, moneda.upper(), detalle, time.time()):
+        from .conversiones_meta import avisar
+        avisar(c, user_id, "venta", monto, moneda, f"{origen}:{externo}")
+    return nueva
 
 
 @publico.post("/mercadopago/aviso")

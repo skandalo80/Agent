@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 
 from claude_agent_sdk import create_sdk_mcp_server, tool
 
-from . import catalog, config, tienda
+from . import catalog, config, conversiones_meta, tienda
 from .cuenta import cuenta
 from .google import Google
 from .instagram import Instagram
@@ -192,6 +192,7 @@ def workspace_tools(
         )
         await store.add_meeting(event_id, user_id, start.isoformat(), email, link)
         await store.add_event(user_id, "cita", {"id": event_id, "inicio": start.isoformat()})  # para Resultados > Anuncios
+        conversiones_meta.avisar(cuenta(), user_id, "cita")
         state["acted"] = True
         if presencial:
             return ok(f"Cita agendada para el {fmt(start)} (hora de {cuenta().timezone})."
@@ -615,6 +616,7 @@ def human_tools(store: Store, google: Google | None, user_id: str, state: dict |
     async def anotar_interes(args):
         tipo = args.get("tipo") if args.get("tipo") in INTERESES else "cotizacion"
         await store.add_event(user_id, "interes", {"tipo": tipo, "detalle": str(args.get("detalle") or "")[:300]})
+        conversiones_meta.avisar(cuenta(), user_id, "interes")
         return ok("Anotado.")
 
     return [pasar_a_humano, anotar_interes]
