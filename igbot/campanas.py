@@ -1179,7 +1179,7 @@ async def pieza_con_ia(c: Cuenta, camp: dict, p: dict, marca: dict, pieza_: dict
 
 SISTEMA_PROMPTS = """Eres el director de arte de una campaña de Instagram. Escribes de una vez el prompt para el generador de imágenes de cada <post> de <posts>. Cada uno trae su formato, su plan visual (función, protagonista, escenario, acción, encuadre, luz, composición, relación con la marca, qué la hace distinta y qué evitar), el estilo y el color que le tocan y, si el dueño la cambió, su idea.
 
-Cada prompt, en inglés (salvo los textos del diseño, que van en español), de 120 a 200 palabras en un solo párrafo, cubre en este orden: el sujeto principal; el escenario; la acción; la composición y el encuadre (en un diseño, dónde va cada texto); la iluminación; los colores y cuánto protagonismo tienen los de la marca (según su "color"); el tratamiento de su "estilo"; y lo que hay que evitar.
+Cada prompt, en español (el dueño lo lee y lo edita), de 120 a 200 palabras en un solo párrafo, cubre en este orden: el sujeto principal; el escenario; la acción; la composición y el encuadre (en un diseño, dónde va cada texto); la iluminación; los colores y cuánto protagonismo tienen los de la marca (según su "color"); el tratamiento de su "estilo"; y lo que hay que evitar.
 
 Reglas:
 - Fidelidad: el prompt traduce el plan visual de su post, no inventa otra imagen. Si el post trae "idea del dueño", esa manda: cambia lo que ella cambie y conserva del plan lo que no la contradiga (encuadre, luz, formato, lo que se evita).
@@ -1245,6 +1245,33 @@ async def empresa_visual(c: Cuenta) -> str:
 
 def con_foto(p: dict) -> bool:
     return bool(p.get("idea")) and (ia_completa(p) or formato_de(p) not in (*SIN_IDEA, "collage"))
+
+
+CITA = re.compile(r'[«"“]([^«»"“”\n]{1,80})[»"”]')
+MAX_TEXTOS_IMG, MAX_TEXTO_IMG = 3, 60  # los textos chicos del diseño (brief.SISTEMA_PLAN: de 0 a 3, cortos)
+
+
+def cambiar_cita(prompt: str, viejo: str, nuevo: str) -> str:
+    """El prompt con un texto citado cambiado por otro (entre las comillas que tenga)."""
+    if not viejo or viejo == nuevo:
+        return prompt
+    return re.sub(r'([«"“])' + re.escape(viejo) + r'([»"”])', lambda m: m[1] + nuevo + m[2], prompt)
+
+
+def textos_del_prompt(p: dict, viejo: str, nuevo: str, con_titulo: bool) -> None:
+    """Lo que el dueño cambió entre comillas en el prompt (p. ej. «Venta» por «Cita») pasa a los textos que el
+    diseño escribe tal cual (si no, la lista de textos manda y la imagen seguiría diciendo «Venta»). Si quitó un
+    texto del prompt, sale también de la lista."""
+    antes, ahora = CITA.findall(viejo), CITA.findall(nuevo)
+    cambios = dict(zip(antes, ahora)) if len(antes) == len(ahora) else {}
+    foto = (p.get("plan") or {}).get("foto")
+    if foto and foto.get("textos"):
+        foto["textos"] = [cambios.get(t, t)[:MAX_TEXTO_IMG] for t in foto["textos"]
+                          if t in cambios or t in ahora or t not in antes]
+    if con_titulo:
+        for campo in ("titulo", "subtitulo"):
+            if p.get(campo) in cambios and cambios[p[campo]].strip():
+                p[campo] = cambios[p[campo]].strip()[:MAX_TITULO if campo == "titulo" else 120]
 
 
 def prompt_vigente(p: dict) -> str:
@@ -1560,9 +1587,15 @@ async def detalle(c: Cuenta, camp: dict, p: dict, quedan_ia: int) -> str:
                f' name="con_marca" value="1"{" checked" if p.get("con_marca", True) else ""}{" disabled" if fija else ""}>'
                " Usar Tu marca como contexto</label>")
             + "</div></details>")
+    foto = (p.get("plan") or {}).get("foto")
+    if con_prompt and foto and formato in CON_TEXTO and formato != "anuncio":
+        idea += ('<div class="campo"><label for="d-textos">Textos dentro de la imagen</label>'
+                 f'<textarea id="d-textos" name="textos_img" rows="3"{solo}>'
+                 f'{escape(chr(10).join(foto.get("textos", [])))}</textarea><small>Además del título: uno por renglón,'
+                 f' hasta {MAX_TEXTOS_IMG}, tal cual salen en el diseño. Se usan al volver a generar la imagen.</small></div>')
     if con_prompt:
         idea += ('<details class="prompt-img"><summary>Prompt de la imagen</summary><div class="campo">'
-                 f'<textarea id="d-prompt" name="prompt" rows="9" maxlength="{MAX_IDEA * 2}" lang="en"'
+                 f'<textarea id="d-prompt" name="prompt" rows="9" maxlength="{MAX_IDEA * 2}"'
                  f' aria-label="Prompt de la imagen" placeholder="Aún no se escribe: toca Escribir el prompt o Generar'
                  f' imagen."{solo}>{escape(vigente)}</textarea><small>Es lo que recibe el generador de imágenes, con la'
                  " dirección visual de tu campaña. Puedes editarlo antes de generar.</small>"
@@ -2339,8 +2372,18 @@ async def accion(request: Request, cid: str):
         if campo in f and (f[campo].strip() or campo == "subtitulo") and not (post and campo not in ("caption", "idea")):
             p[campo] = f[campo].strip()[:maximo]
     # El prompt que editó a mano es el que va al generador (mientras no cambie la idea otra vez).
+    # Si en él cambió un texto entre comillas («Venta» por «Cita»), ese texto cambia también en la imagen.
     if camp.get("brief") and (nuevo := f.get("prompt", "").strip()[:MAX_IDEA * 2]) and nuevo != p.get("prompt"):
+        textos_del_prompt(p, prompt_vigente(p), nuevo, con_titulo=not post)
         p["prompt"], p["idea_base"] = nuevo, p["idea"]
+    elif camp.get("brief") and "textos_img" in f and (foto := (p.get("plan") or {}).get("foto")) is not None:
+        nuevos = [" ".join(x.split())[:MAX_TEXTO_IMG] for x in f["textos_img"].splitlines() if x.strip()][:MAX_TEXTOS_IMG]
+        if nuevos != foto.get("textos", []):
+            if vigente := prompt_vigente(p):
+                for viejo, otro in zip(foto.get("textos", []), nuevos):
+                    vigente = cambiar_cita(vigente, viejo, otro)
+                p["prompt"] = vigente
+            foto["textos"] = nuevos
     if f.get("con_marca_en_form") == "1":
         p["con_marca"] = f.get("con_marca") == "1"
     if not post and f.get("formato") in FORMATOS:

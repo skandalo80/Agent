@@ -930,3 +930,14 @@ def test_diseno_de_texto_va_sin_foto():
     titular = {**texto, "formato": "titular"}
     assert "SIN ninguna fotografía" in campanas.textos_del_diseno(texto)[0]
     assert "SIN ninguna fotografía" not in campanas.textos_del_diseno(titular)[0]
+
+
+def test_lo_que_cambia_entre_comillas_en_el_prompt_cambia_en_la_imagen():
+    """Si el dueño cambia «Venta» por «Cita» en el prompt, la lista de textos del diseño (que manda) también."""
+    p = {"titulo": "Deja de adivinar", "plan": {"foto": {"textos": ["Anuncio", "Chat", "Venta"]}}}
+    viejo = 'Titular «Deja de adivinar»; tres íconos: «Anuncio», «Chat» y «Venta» con un carrito.'
+    campanas.textos_del_prompt(p, viejo, viejo.replace("«Venta» con un carrito", "«Cita» con un calendario"), True)
+    assert p["plan"]["foto"]["textos"] == ["Anuncio", "Chat", "Cita"]
+    campanas.textos_del_prompt(p, 'Íconos «Anuncio», «Chat» y «Cita».', 'Íconos «Anuncio» y «Cita».', True)
+    assert p["plan"]["foto"]["textos"] == ["Anuncio", "Cita"]  # quitó «Chat»
+    assert campanas.cambiar_cita('Un «Cita» y "Cita"', "Cita", "Agenda") == 'Un «Agenda» y "Agenda"'
