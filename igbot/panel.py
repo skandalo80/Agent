@@ -113,9 +113,7 @@ def generar(usuario: str, perfil: dict, empresa: str = "") -> str:
         out += ["", empresa.strip()]
     else:
         out += _negocio_de_configura(perfil)
-    humano = escape(perfil.get("humano", "").strip()) or "Dile que alguien del equipo le escribe en cuanto pueda."
-    out += ["", "SI PIDEN HABLAR CON UNA PERSONA", humano + " Usa la herramienta pasar_a_humano.",
-            "", "REGLAS",
+    out += ["", "REGLAS",
             "- Usa solo la información de arriba. Si te falta un dato, usa pregunta_sin_dato: di que lo consultas"
             " con el equipo y sigue atendiendo.",
             "- No inventes precios, promociones, existencias ni horarios."]

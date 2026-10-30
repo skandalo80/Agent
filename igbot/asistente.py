@@ -78,14 +78,23 @@ PERSONALIDADES = {
                  " sin exagerar."),
                 ("usted", "equilibrada", "nunca")),
 }
-# Reglas que pasan a tu equipo y pueden llevar un mensaje propio al transferir:
-# regla: (campo en kv perfil, a quién se lo dice en el prompt, ejemplo)
-AL_TRANSFERIR = {
-    "quejas": ("msg_quejas", "Antes de pasar una queja a una persona",
-               "Ej. Lamento lo que pasó. Le paso tu caso a alguien del equipo para que lo resuelva contigo."),
-    "enojado": ("msg_enojado", "Antes de pasar a una persona molesta",
-                "Ej. Entiendo tu molestia. Le pido a alguien del equipo que te atienda en un momento."),
-}
+# La tabla "¿Cuándo pasar la conversación a tu equipo?" (al final de Reglas y límites). Cada caso se pasa o no,
+# y al pasarlo el cliente recibe el mensaje predeterminado, lo que conteste la IA o nada.
+# (clave, caso, razón de pasar_a_humano, se pasa al empezar, cuándo en el prompt, ejemplo del mensaje)
+CASOS = [
+    ("persona", "Pide hablar con una persona", "pide_persona", True, "Si pide hablar con una persona",
+     "Ej. Claro, le aviso a alguien del equipo para que te escriba por aquí."),
+    ("quejas", "Una queja, reclamo o reembolso", "queja", True,
+     "Si es una queja, un reclamo, un reembolso o un caso delicado",
+     "Ej. Lamento lo que pasó. Le paso tu caso a alguien del equipo para que lo resuelva contigo."),
+    ("enojado", "Nota al cliente molesto o enojado", "molesto", True, "Si notas a la persona molesta o enojada",
+     "Ej. Entiendo tu molestia. Le pido a alguien del equipo que te atienda en un momento."),
+    ("precio", "Quiere negociar el precio", "precio", True, "Si quiere negociar el precio o pide un trato especial",
+     "Ej. Le paso tu mensaje a alguien del equipo para ver qué opciones hay."),
+    ("otro", "Otro caso", "otro", False, "", "Ej. Le paso tu pedido a alguien del equipo."),
+]
+DE_RAZON = {razon: k for k, _, razon, *_ in CASOS} | {"fuera_catalogo": "otro"}
+MODOS = {"fijo": "Predeterminado", "ia": "La IA contesta", "nada": "Sin mensaje"}
 MAX_NOMBRE = 40  # nombre del asistente
 MAX_TOQUE = 500  # "¿Quieres darle un toque más personal?" en Personalidad
 TRATOS = {"tu": ("De tú", "Tuteas a las personas."),
@@ -119,10 +128,6 @@ REGLAS = [
      " te preguntan. Si la persona pide avanzar, la ayudas."),
     ("links", "Comparte el link del producto", "Si preguntan por algo que tiene link, lo manda.",
      True, "Si preguntan por un producto o servicio que tiene link en tu información, compártelo.", ""),
-    ("quejas", "Pasa las quejas a tu equipo", "Reclamos, reembolsos y casos delicados los atiende una persona.",
-     True, "Las quejas, reclamos, reembolsos y casos delicados no los resuelves tú: usa pasar_a_humano.", ""),
-    ("enojado", "Pasa a tu equipo si nota al cliente enojado", "Si percibe molestia o enojo, deja la conversación a"
-     " una persona.", True, "Si notas a la persona molesta o enojada, no discutas: usa pasar_a_humano.", ""),
     ("descuentos", "Habla de descuentos", "Solo los que tengas escritos; nunca inventa promociones.",
      False, "Puedes mencionar los descuentos y promociones que aparecen en tu información, y ninguno más.",
      "No ofreces descuentos ni promociones aunque te los pidan; si insisten, ofrece pasar con una persona."),
@@ -158,6 +163,56 @@ def reglas_de(perfil: dict) -> dict[str, bool]:
     return {k: bool(guardadas.get(k, encendida)) for k, _, _, encendida, *_ in REGLAS}
 
 
+def pases(perfil: dict) -> dict[str, dict]:
+    """Cada caso de la tabla: {"on", "modo", "msg"} (y "texto" en Otro caso). Sin tabla guardada, sale de lo de
+    antes: las reglas quejas y enojado con su mensaje al transferir, y "¿Cuándo debe pasar...?" como Otro caso."""
+    guardados, reglas = perfil.get("pases") or {}, perfil.get("reglas") or {}
+    out = {}
+    for k, _, _, encendido, *_ in CASOS:
+        if k in guardados:
+            g = guardados[k]
+            out[k] = {"on": bool(g.get("on")), "modo": g.get("modo") if g.get("modo") in MODOS else "ia",
+                      "msg": g.get("msg", ""), "texto": g.get("texto", "")}
+            continue
+        msg = perfil.get(f"msg_{k}", "").strip() if k in ("quejas", "enojado") else ""
+        texto = perfil.get("pasar_equipo", "").strip() if k == "otro" else ""
+        out[k] = {"on": bool(reglas.get(k, encendido)) if k != "otro" else bool(texto),
+                  "modo": "fijo" if msg else "ia", "msg": msg, "texto": texto}
+    return out
+
+
+def mensaje_al_pasar(perfil: dict, razon: str) -> str | None:
+    """Lo que recibe el cliente al pasarlo a tu equipo, si no lo escribe la IA: el mensaje predeterminado o ""."""
+    caso = pases(perfil)[DE_RAZON.get(razon, "otro")]
+    if caso["modo"] == "nada":
+        return ""
+    return caso["msg"].strip() if caso["modo"] == "fijo" and caso["msg"].strip() else None
+
+
+def pases_prompt(perfil: dict) -> list[str]:
+    out = ["", "CUÁNDO PASAR LA CONVERSACIÓN A TU EQUIPO (usa pasar_a_humano con esa razón)"]
+    for k, _, razon, _, cuando, _ in CASOS:
+        caso = pases(perfil)[k]
+        if k == "otro":
+            if caso["on"] and caso["texto"].strip():
+                # Lo que escribe el dueño va escapado y entre etiquetas: son datos, no instrucciones nuevas.
+                out += [f"- En estos casos (razón {razon}):",
+                        f"<cuando_pasar_al_equipo>\n{escape(caso['texto'].strip())}\n</cuando_pasar_al_equipo>"]
+            continue
+        if not caso["on"]:
+            out.append(f"- {cuando}: no la pases a tu equipo; atiéndela tú con calma en lo que puedas.")
+        elif caso["modo"] == "ia":
+            out.append(f"- {cuando}: usa pasar_a_humano (razón {razon}) y dile con tus palabras que alguien del"
+                       " equipo le escribe por aquí.")
+        else:
+            out.append(f"- {cuando}: usa pasar_a_humano (razón {razon}). El mensaje al cliente lo manda el sistema:"
+                       " no hace falta que escribas nada más.")
+    if humano := perfil.get("humano", "").strip():  # lo de antes en Tu equipo, para "La IA contesta"
+        out += ["Si pide hablar con una persona y le escribes tú, el dueño quiere que digas esto:",
+                f"<si_piden_una_persona>\n{escape(humano)}\n</si_piden_una_persona>"]
+    return out
+
+
 def tono_prompt(perfil: dict) -> list[str]:
     """Las líneas de TONO y CÓMO ATIENDES del prompt (panel.generar las pone después de la presentación)."""
     e = estilo(perfil)
@@ -173,18 +228,11 @@ def tono_prompt(perfil: dict) -> list[str]:
     reglas = [si if activas[k] else no for k, _, _, _, si, no in REGLAS if (si if activas[k] else no)]
     if reglas:
         out += ["", "CÓMO ATIENDES", *(f"- {r}" for r in reglas)]
-    for k, (campo, cuando, _) in AL_TRANSFERIR.items():
-        if activas[k] and (aviso := perfil.get(campo, "").strip()):
-            out += [f"{cuando}, dile esto (puedes ajustar las palabras):",
-                    f"<mensaje_al_transferir>\n{escape(aviso)}\n</mensaje_al_transferir>"]
     # Lo que escribe el dueño va escapado y entre etiquetas: son datos, no instrucciones nuevas.
     if no_hacer := perfil.get("no_hacer", "").strip():
         out += ["", "LO QUE NO DEBES DECIR NI HACER (además de las reglas base)",
                 f"<lo_que_no_debes_hacer>\n{escape(no_hacer)}\n</lo_que_no_debes_hacer>"]
-    if pasar := perfil.get("pasar_equipo", "").strip():
-        out += ["", "CUÁNDO PASAR LA CONVERSACIÓN AL EQUIPO (usa pasar_a_humano)",
-                f"<cuando_pasar_al_equipo>\n{escape(pasar)}\n</cuando_pasar_al_equipo>"]
-    return out
+    return out + pases_prompt(perfil)
 
 
 # --- páginas ---
@@ -314,11 +362,6 @@ def _reglas(perfil: dict) -> str:
         filas += (f'<label class="as-fila"><span><b>{titulo}</b><small>{ayuda}</small></span>'
                   f'<input type="checkbox" class="as-sw" name="r_{k}" value="1"{" checked" if activas[k] else ""}>'
                   "</label>")
-        if k in AL_TRANSFERIR:  # solo se ve con la regla encendida
-            campo, _, ejemplo = AL_TRANSFERIR[k]
-            filas += (f'<div class="as-sub as-sub-{k}">' + _opcional(
-                campo, "Mensaje al transferir", "Lo que le dice antes de pasar la conversación a tu equipo.",
-                ejemplo, perfil.get(campo, ""), MAX_TEXTO) + "</div>")
     extra = perfil.get("instrucciones", "")
     return (_cabeza("reglas", "Reglas y límites", "Qué puede hacer por su cuenta y qué no.")
             + f'<div class="as-caja">{filas}</div>'
@@ -326,13 +369,34 @@ def _reglas(perfil: dict) -> str:
             + _opcional("no_hacer", "¿Qué no debe decir o hacer?", "",
                         "Ej. No prometer fechas de entrega exactas, no hablar de la competencia.",
                         perfil.get("no_hacer", ""), MAX_TEXTO)
-            + _opcional("pasar_equipo", "¿Cuándo debe pasar la conversación a tu equipo?", "",
-                        "Ej. Si piden más de 10 piezas o una cotización especial.",
-                        perfil.get("pasar_equipo", ""), MAX_TEXTO)
             # Las instrucciones libres de antes no se pierden: aquí siguen.
             + _opcional("instrucciones", "Algo más que deba saber", "",
                         "Ej. Saluda por su nombre y siempre invita a visitar la tienda.", extra, panel.MAX_INSTRUCCIONES)
-            + "</div>" + _pie("reglas"))
+            + "</div>" + _tabla_pases(perfil) + _pie("reglas"))
+
+
+def _tabla_pases(perfil: dict) -> str:
+    """Una fila por caso: si se pasa (interruptor) y qué recibe el cliente; el mensaje se ve solo con Predeterminado."""
+    filas = ""
+    for k, titulo, _, _, _, ejemplo in CASOS:
+        caso = pases(perfil)[k]
+        modos = "".join(f'<label><input type="radio" name="m_{k}" value="{m}"{" checked" if m == caso["modo"] else ""}>'
+                        f"{nombre}</label>" for m, nombre in MODOS.items())
+        otro = (f'<textarea class="as-pase-desc" name="t_otro" rows="2" maxlength="{MAX_TEXTO}" aria-label="Cuándo pasarla"'
+                ' placeholder="Ej. Si piden más de 10 piezas o una cotización especial.">'
+                f'{escape(caso["texto"])}</textarea>' if k == "otro" else "")
+        filas += (f'<div class="as-pase as-pase-{k}"><b class="as-pase-caso">{titulo}</b>{otro}'
+                  f'<label class="as-pase-on"><input type="checkbox" class="as-sw" name="p_{k}" value="1"'
+                  f'{" checked" if caso["on"] else ""} aria-label="Pasar a tu equipo: {titulo}"><span>Pasar</span></label>'
+                  f'<div class="as-pase-msg"><div class="as-seg">{modos}</div>'
+                  f'<textarea class="as-pase-fijo" name="msg_{k}" rows="2" maxlength="{MAX_TEXTO}"'
+                  f' aria-label="Mensaje predeterminado: {titulo}" placeholder="{ejemplo}">{escape(caso["msg"])}</textarea>'
+                  "</div></div>")
+    return ('<div class="as-caja as-pases"><h3 class="as-pases-t">¿Cuándo pasar la conversación a tu equipo?</h3>'
+            '<p class="ayuda">Marca los casos que atiende una persona y elige qué recibe el cliente al pasarlo.'
+            " Al pasarla, te avisamos y el asistente deja de contestar en ese chat.</p>"
+            '<div class="as-pase as-pase-cab" aria-hidden="true"><span>Caso</span><span>Pasar</span>'
+            "<span>Qué recibe el cliente</span></div>" + filas + "</div>")
 
 
 def _equipo(c: Cuenta, perfil: dict) -> str:
@@ -390,7 +454,9 @@ async def _resumen(c: Cuenta, perfil: dict) -> str:
                 f"Tu toque: {perfil['toque'][:80]}" if perfil.get("toque") else ""])
             + caja("Reglas y límites", "reglas",
                    ["Nunca inventa datos"] + [t for k, t, *_ in REGLAS if activas[k]]
-                   + [f"No debe: {perfil['no_hacer'][:80]}" if perfil.get("no_hacer") else ""])
+                   + [f"No debe: {perfil['no_hacer'][:80]}" if perfil.get("no_hacer") else ""]
+                   + ["Pasa a tu equipo: " + ", ".join(t.lower() for k, t, *_ in CASOS if pases(perfil)[k]["on"])
+                      if any(c["on"] for c in pases(perfil).values()) else "No pasa conversaciones a tu equipo"])
             + caja("Tu equipo", "equipo", [
                 f"Cuando contestas tú, se calla {c.human_pause_hours:g} h",
                 f"Te avisa por correo a {c.owner_email}" if c.aviso_correo and c.owner_email else "Sin avisos"])
@@ -482,10 +548,13 @@ async def guardar(request: Request):
                 datos[campo] = f[campo]
     elif paso == "reglas":
         datos["reglas"] = {k: f.get(f"r_{k}") == "1" for k, *_ in REGLAS}
-        for campo, *_ in AL_TRANSFERIR.values():
-            datos[campo] = _texto(f, campo, MAX_TEXTO)
+        datos["pases"] = {k: {"on": f.get(f"p_{k}") == "1", "modo": f.get(f"m_{k}") if f.get(f"m_{k}") in MODOS else "ia",
+                              "msg": f.get(f"msg_{k}", "").strip()[:MAX_TEXTO],
+                              **({"texto": f.get("t_otro", "").strip()[:MAX_TEXTO]} if k == "otro" else {})}
+                          for k, *_ in CASOS}
+        for viejo in ("msg_quejas", "msg_enojado", "pasar_equipo"):  # ya van en la tabla
+            datos.pop(viejo, None)
         datos["no_hacer"] = _texto(f, "no_hacer", MAX_TEXTO)
-        datos["pasar_equipo"] = _texto(f, "pasar_equipo", MAX_TEXTO)
         datos["instrucciones"] = _texto(f, "instrucciones", panel.MAX_INSTRUCCIONES)
     datos["pasos"] = sorted(set(datos.get("pasos") or []) | {paso})
     nombre = await panel.usuario(c)
@@ -568,7 +637,20 @@ fieldset.as-caja legend{float:left;width:100%;padding:0;font-weight:600;font-siz
 .as-optc input{width:1.15rem;height:1.15rem;flex:none;margin:0;accent-color:var(--acento)}
 .as-optb{display:none;margin-top:.7rem}
 .as-sub{padding:0 0 .9rem}
-.as-caja:has(input[name=r_quejas]:not(:checked)) .as-sub-quejas,.as-caja:has(input[name=r_enojado]:not(:checked)) .as-sub-enojado{display:none}
+.as-pases-t{font-size:var(--t-tarjeta);font-weight:var(--peso-tarjeta);margin:0}
+.as-pase{display:grid;grid-template-columns:var(--pase-columnas);column-gap:var(--hueco);align-items:start;padding:var(--hueco) 0;border-top:1px solid var(--linea-oscura)}
+.as-pase-on{grid-column:2;grid-row:1}.as-pase-msg{grid-column:3;grid-row:1/span 2}.as-pase-desc{grid-column:1;grid-row:2;margin-top:.6rem}
+.as-pase-cab{font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:var(--gris);padding-bottom:.5rem;margin-top:var(--hueco)}
+.as-pase-cab+.as-pase{border-top:0}
+.as-pase-caso{display:block;font-weight:600;padding-top:.45rem}
+.as-pase-on{display:flex;align-items:center;gap:.5rem;margin:0;padding-top:.2rem;font-weight:500;cursor:pointer}
+.as-pase-on span{display:none}
+.as-pase-msg .as-seg{margin-top:0}
+.as-pase-fijo{display:none;margin-top:.6rem}
+.as-pase:has(input[value=fijo]:checked) .as-pase-fijo{display:block}
+.as-pase:has(.as-pase-on input:not(:checked)) .as-pase-msg{opacity:.4;pointer-events:none}
+@media(max-width:900px){.as-pase{grid-template-columns:1fr auto;row-gap:.6rem}.as-pase-desc{grid-column:1/-1;grid-row:2;margin:0}.as-pase-msg{grid-column:1/-1;grid-row:auto}.as-pase-cab{display:none}.as-pase-on span{display:inline}
+.as-pase-msg .as-seg{display:flex;flex-wrap:nowrap}.as-pase-msg .as-seg label{flex:1;text-align:center;padding:.5rem .3rem;font-size:.8rem}}
 .as-nombre>.as-opt{margin-top:1rem;padding-top:1rem;border-top:1px solid var(--linea-oscura)}
 .as-opt:has(.as-optc input:checked) .as-optb{display:block}
 .as-lbl{display:block;margin-bottom:.35rem;font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--gris)}

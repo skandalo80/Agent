@@ -85,7 +85,8 @@ async def handle(user_id: str, rows: list[tuple[int, str]]) -> None:
     if not is_admin:
         # Los links a su tienda llevan el código del chat, para saber qué compró quién.
         text = await tienda_shopify.etiquetar(cuenta(), user_id, text)
-    await instagram.send_text(admin.real_id(user_id), text)
+    if text:  # vacío: lo pasó a tu equipo con "Sin mensaje"
+        await instagram.send_text(admin.real_id(user_id), text)
     await store.mark_answered(user_id, [i for i, _ in rows], text)
     try:
         await agent.summarize_if_needed(store, user_id)

@@ -5,6 +5,7 @@ Instagram: no pueden leer ni tocar datos de otra persona. Las reglas de
 negocio (horario, límites, a quién se puede escribir) se validan aquí en
 código, no en el prompt, para que nadie pueda saltárselas con un DM.
 """
+import json
 import logging
 import re
 import secrets
@@ -541,7 +542,7 @@ def store_tools(
 
 
 # Por qué el asistente pasa un chat a una persona: sale como etiqueta en Conversaciones.
-RAZONES = {"pide_persona": "Pidió una persona", "molesto": "Molesto", "precio": "Negociar precio",
+RAZONES = {"pide_persona": "Pidió una persona", "queja": "Queja", "molesto": "Molesto", "precio": "Negociar precio",
            "fuera_catalogo": "Fuera del catálogo", "otro": "Otro motivo"}
 # Lo que anota el asistente cuando alguien está a punto de comprar un servicio (Resultados > Anuncios).
 INTERESES = {"cotizacion": "Pidió cotización", "visita": "Pidió visita o medición", "datos": "Dejó sus datos"}
@@ -549,8 +550,8 @@ HUMANO_SCHEMA = {
     "type": "object",
     "properties": {
         "razon": {"type": "string", "enum": list(RAZONES),
-                  "description": "pide_persona si pidió hablar con alguien; molesto si está enojado o"
-                                 " inconforme; precio si quiere negociar; fuera_catalogo si busca algo que no"
+                  "description": "pide_persona si pidió hablar con alguien; queja si es una queja, reclamo o"
+                                 " reembolso; molesto si está enojado o inconforme; precio si quiere negociar; fuera_catalogo si busca algo que no"
                                  " está en lo que vendemos; otro para lo demás (si solo te falta un dato, usa"
                                  " pregunta_sin_dato)."},
         "motivo": {"type": "string", "description": "Una línea con qué necesita."},
@@ -576,6 +577,10 @@ def human_tools(store: Store, google: Google | None, user_id: str, state: dict |
         await store.add_event(user_id, "humano", {"motivo": args["motivo"][:300], "razon": razon})
         await store.pause(user_id, time.time() + cuenta().human_pause_hours * 3600)
         state["acted"] = True
+        # Lo que recibe el cliente sale de la tabla de Tu asistente: el mensaje predeterminado, nada o lo de la IA.
+        from .asistente import mensaje_al_pasar  # asistente importa el panel, que importa este módulo
+        if (fijo := mensaje_al_pasar(json.loads(await store.get("perfil") or "{}"), razon)) is not None:
+            state["mensaje"] = fijo
         # Por DM a los administradores (solo llega si le escribieron al bot en las últimas 24 h).
         if instagram and cuenta().aviso_dm:
             quien = await instagram.username(user_id)

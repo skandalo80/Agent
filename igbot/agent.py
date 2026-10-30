@@ -181,7 +181,8 @@ async def reply(
                                   minutos=cal.get("minutos") or 0)
     prompt = await build_prompt(store, user_id, new_messages)
     text = await run_claude(prompt, system, {"bot": server}, allowed, max_turns=10)
-    return text, state.get("acted", False)
+    # Al pasar el chat a tu equipo con mensaje predeterminado (o sin mensaje), ese va en lugar de lo de Claude.
+    return state.get("mensaje", text), state.get("acted", False)
 
 
 SUMMARY_SYSTEM = (
