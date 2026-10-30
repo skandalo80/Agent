@@ -921,3 +921,12 @@ def test_un_trabajo_en_segundo_plano_no_pisa_lo_que_cambiaste(cliente):
     ahora = client.portal.call(campanas.leer, c, 8)
     assert campanas.buscar_post(ahora, 1)["caption"] == "Texto nuevo"
     assert campanas.buscar_post(ahora, 2)["hora"] == "20:00"
+
+
+def test_diseno_de_texto_va_sin_foto():
+    """El diseño de texto se pide sin ninguna fotografía; los demás con texto siguen siendo infografía."""
+    plan = {"foto": {"protagonista": "La frase", "textos": ["Dato"]}}
+    texto = {"formato": "texto", "titulo": "Una frase", "subtitulo": "La completa", "plan": plan}
+    titular = {**texto, "formato": "titular"}
+    assert "SIN ninguna fotografía" in campanas.textos_del_diseno(texto)[0]
+    assert "SIN ninguna fotografía" not in campanas.textos_del_diseno(titular)[0]
