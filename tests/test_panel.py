@@ -179,7 +179,7 @@ def test_cliente_se_conecta_configura_y_enciende(monkeypatch, tmp_path):
         # Reglas y límites: interruptores y lo que escribe el dueño (escapado y entre etiquetas).
         r = client.post("/panel/asistente/paso", headers=ORIGEN, follow_redirects=False, data={
             "paso": "reglas", "r_preguntar": "1", "r_descuentos": "1", "no_hacer": "No hablar de <b>la competencia</b>",
-            "pasar_equipo": "Pedidos de más de 10 piezas"})
+            "p_otro": "1", "t_otro": "Pedidos de más de 10 piezas"})
         assert r.headers["location"] == "/panel/asistente/configura?paso=equipo&ok=1"
         prompt = Path(c.prompt_path).read_text()
         assert "haces una o dos preguntas" in prompt and "invitas al siguiente paso" not in prompt

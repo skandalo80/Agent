@@ -1121,13 +1121,13 @@ def test_personalidad_sin_imagenes_y_con_toque_personal(cliente):
 def test_reglas_opcionales_plegadas_y_casilla_vacia_las_borra(cliente):
     client, c, *_ = cliente
     r = client.get("/panel/asistente/configura?paso=reglas")
-    assert 'name="no_hacer_on" value="1">' in r.text and 'name="pasar_equipo_on"' in r.text
+    assert 'name="no_hacer_on" value="1">' in r.text
     assert 'name="instrucciones_on" value="1" checked>' in r.text  # ya trae "Vendemos carteras."
     datos = {"paso": "reglas", "opcionales": "1", "no_hacer": "No hablar de precios.", "no_hacer_on": "1",
-             "pasar_equipo": "Esto no se guarda", "instrucciones": "Vendemos carteras."}
+             "instrucciones": "Vendemos carteras."}
     client.post("/panel/asistente/paso", headers=ORIGEN, data=datos)
     perfil = client.portal.call(panel.perfil, c)
-    assert perfil["no_hacer"] == "No hablar de precios." and perfil["pasar_equipo"] == "" and perfil["instrucciones"] == ""
+    assert perfil["no_hacer"] == "No hablar de precios." and perfil["instrucciones"] == ""
 
 
 def test_menu_de_tu_cuenta_solo_la_cuenta(cliente, monkeypatch):
@@ -1140,26 +1140,43 @@ def test_menu_de_tu_cuenta_solo_la_cuenta(cliente, monkeypatch):
     assert "Información de empresa" not in menu and "Tu marca" not in menu  # están en Configuración
 
 
-def test_nombre_ia_y_transferir_si_esta_enojado(cliente):
+def test_nombre_ia_y_tabla_de_pasar_a_tu_equipo(cliente):
+    from igbot import asistente
     client, c, *_ = cliente
     r = client.get("/panel/asistente/configura?paso=reglas")
-    assert 'name="r_ia"' in r.text and 'name="r_enojado"' in r.text
-    assert 'name="msg_enojado_on" value="1">' in r.text  # plegado mientras no escriba nada
+    assert 'name="r_ia"' in r.text and 'name="r_enojado"' not in r.text  # enojado y quejas van en la tabla
+    assert r.text.index("class=\"as-caja as-pases\"") > r.text.index("name=\"instrucciones\"")
+    assert 'name="p_quejas" value="1"' in r.text and 'name="m_quejas" value="ia" checked' in r.text
     client.post("/panel/asistente/paso", headers=ORIGEN, data={
         "paso": "personalidad", "personalidad": "cercano", "nombre_asistente": "  Sofía <b> ", "opcionales": "1"})
     client.post("/panel/asistente/paso", headers=ORIGEN, data={
-        "paso": "reglas", "opcionales": "1", "r_ia": "1", "r_enojado": "1", "msg_enojado_on": "1",
-        "msg_enojado": "Entiendo tu molestia, te paso con alguien."})
+        "paso": "reglas", "opcionales": "1", "r_ia": "1",
+        "p_enojado": "1", "m_enojado": "fijo", "msg_enojado": "Entiendo tu molestia <ya>.",
+        "p_quejas": "1", "m_quejas": "nada", "p_persona": "1", "m_persona": "ia",
+        "m_precio": "ia", "p_otro": "1", "m_otro": "ia", "t_otro": "Pedidos de más de 10 piezas"})
     prompt = Path(c.prompt_path).read_text()
     assert "Te llamas Sofía &lt;b&gt;;" in prompt and "asistente virtual con inteligencia artificial" in prompt
-    assert "usa pasar_a_humano" in prompt and "<mensaje_al_transferir>\nEntiendo tu molestia" in prompt
+    assert "Si notas a la persona molesta o enojada: usa pasar_a_humano (razón molesto). El mensaje" in prompt
+    assert "Si pide hablar con una persona: usa pasar_a_humano (razón pide_persona) y dile con tus palabras" in prompt
+    assert "Si quiere negociar el precio o pide un trato especial: no la pases" in prompt
+    assert "<cuando_pasar_al_equipo>\nPedidos de más de 10 piezas\n" in prompt
+    perfil = client.portal.call(panel.perfil, c)
+    assert asistente.mensaje_al_pasar(perfil, "molesto") == "Entiendo tu molestia <ya>."
+    assert asistente.mensaje_al_pasar(perfil, "queja") == ""  # sin mensaje
+    assert asistente.mensaje_al_pasar(perfil, "pide_persona") is None  # contesta la IA
     r = client.get("/panel/asistente/configura?paso=resumen")
-    assert "Se llama Sofía" in r.text and "Pasa a tu equipo si nota al cliente enojado" in r.text
-    # Con la regla apagada el mensaje no va al prompt.
-    client.post("/panel/asistente/paso", headers=ORIGEN, data={
-        "paso": "reglas", "opcionales": "1", "msg_enojado_on": "1", "msg_enojado": "Entiendo tu molestia."})
-    prompt = Path(c.prompt_path).read_text()
-    assert "mensaje_al_transferir" not in prompt and "inteligencia artificial" not in prompt
+    assert "Se llama Sofía" in r.text and "Pasa a tu equipo: pide hablar con una persona" in r.text
+
+
+def test_la_tabla_toma_lo_que_habia_antes():
+    from igbot import asistente
+    viejo = {"reglas": {"quejas": True, "enojado": False}, "msg_quejas": "Lo siento.",
+             "pasar_equipo": "Pedidos grandes"}
+    p = asistente.pases(viejo)
+    assert p["quejas"] == {"on": True, "modo": "fijo", "msg": "Lo siento.", "texto": ""}
+    assert not p["enojado"]["on"] and p["persona"]["on"] and p["otro"]["on"] and p["otro"]["texto"] == "Pedidos grandes"
+    assert asistente.mensaje_al_pasar(viejo, "queja") == "Lo siento."
+    assert asistente.mensaje_al_pasar({}, "pide_persona") is None  # sin nada guardado, como siempre
 
 
 def test_la_plataforma_se_llama_skandar(cliente):
@@ -1177,17 +1194,3 @@ def test_el_logo_se_sirve_y_el_menu_plegado_lleva_solo_el_icono(cliente):
     for nombre in ("logo-skandar.svg", "logo-sk.svg"):
         logo = client.get(f"/{nombre}")
         assert logo.status_code == 200 and logo.headers["content-type"].startswith("image/svg+xml")
-
-
-def test_mensaje_al_pasar_una_queja(cliente):
-    client, c, *_ = cliente
-    r = client.get("/panel/asistente/configura?paso=reglas")
-    assert 'class="as-sub as-sub-quejas"' in r.text and 'name="msg_quejas_on" value="1">' in r.text
-    client.post("/panel/asistente/paso", headers=ORIGEN, data={
-        "paso": "reglas", "opcionales": "1", "r_quejas": "1", "msg_quejas_on": "1", "msg_quejas": "Lo siento <mucho>."})
-    prompt = Path(c.prompt_path).read_text()
-    assert "Antes de pasar una queja a una persona, dile esto" in prompt and "Lo siento &lt;mucho&gt;." in prompt
-    # Con la regla apagada no va.
-    client.post("/panel/asistente/paso", headers=ORIGEN, data={
-        "paso": "reglas", "opcionales": "1", "msg_quejas_on": "1", "msg_quejas": "Lo siento."})
-    assert "pasar una queja" not in Path(c.prompt_path).read_text()

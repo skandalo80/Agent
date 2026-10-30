@@ -49,6 +49,9 @@
   /* Tarjetas para elegir (Personalidad del asistente) */
   --pers-columnas: 3;          /* tarjetas por fila en computadora: 6 tarjetas = 2 filas de 3 */
 
+  /* Tabla "¿Cuándo pasar la conversación a tu equipo?": caso, interruptor, qué recibe el cliente */
+  --pase-columnas: minmax(0, 1fr) 4rem minmax(0, 1.6fr);
+
   /* Conversaciones */
   --punto-chat: .6rem;         /* punto lima de no leído en cada chat, debajo de la hora */
 }
