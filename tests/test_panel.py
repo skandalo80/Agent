@@ -179,7 +179,7 @@ def test_cliente_se_conecta_configura_y_enciende(monkeypatch, tmp_path):
         # Reglas y límites: interruptores y lo que escribe el dueño (escapado y entre etiquetas).
         r = client.post("/panel/asistente/paso", headers=ORIGEN, follow_redirects=False, data={
             "paso": "reglas", "r_preguntar": "1", "r_descuentos": "1", "no_hacer": "No hablar de <b>la competencia</b>",
-            "p_otro": "1", "t_otro": "Pedidos de más de 10 piezas"})
+        })
         assert r.headers["location"] == "/panel/asistente/configura?paso=equipo&ok=1"
         prompt = Path(c.prompt_path).read_text()
         assert "haces una o dos preguntas" in prompt and "invitas al siguiente paso" not in prompt
@@ -187,7 +187,7 @@ def test_cliente_se_conecta_configura_y_enciende(monkeypatch, tmp_path):
         assert "unas 25 palabras como máximo" in prompt
         assert "descuentos y promociones que aparecen" in prompt
         assert "<lo_que_no_debes_hacer>\nNo hablar de &lt;b&gt;la competencia&lt;/b&gt;\n" in prompt
-        assert "<cuando_pasar_al_equipo>\nPedidos de más de 10 piezas\n" in prompt and "Cafetería en Puebla" in prompt
+        assert "Cafetería en Puebla" in prompt
         assert len(claude) == n  # elegir y escribir no llama a Claude (la revisión de prueba aprueba todo)
 
         # Resumen con Editar a cada paso y el botón para encenderlo.

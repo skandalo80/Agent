@@ -71,7 +71,15 @@ def prompt_horario(c: Cuenta) -> str:
 
 # --- tarjetas del panel ---
 
-def campos(c: Cuenta) -> str:
+def aviso_correo(c: Cuenta) -> str:
+    """La casilla del aviso por correo (Tu equipo la pone al final de la tabla de cuándo pasar la conversación)."""
+    return ('<div class="sub"><label class="check"><input type="checkbox" name="aviso_correo" value="1"'
+            f'{" checked" if c.aviso_correo else ""}> Cuando alguien pide hablar con una persona, avísame por correo'
+            f'</label><input type="email" name="correo" value="{escape(c.owner_email)}" aria-label="Correo"'
+            ' placeholder="tu@correo.com"></div>')
+
+
+def campos(c: Cuenta, avisos: bool = True) -> str:
     """Pausa, horario de atención de una persona y avisos (también el paso Tu equipo de asistente.py)."""
     pausas = "".join(
         f'<label><input type="radio" name="pausa" value="{h}"{" checked" if h == c.human_pause_hours else ""}> {h} h</label>'
@@ -95,10 +103,7 @@ def campos(c: Cuenta) -> str:
         ' placeholder="Ej. Gracias por escribir. Te contestamos el lunes a primera hora.">'
         f"{escape(c.fuera_horario)}</textarea></div>"
         # Solo aviso por correo: el DM al Instagram personal ya no se ofrece (al guardar queda apagado).
-        '<div class="sub"><label class="check"><input type="checkbox" name="aviso_correo" value="1"'
-        f'{" checked" if c.aviso_correo else ""}> Cuando alguien pide hablar con una persona, avísame por correo</label>'
-        f'<input type="email" name="correo" value="{escape(c.owner_email)}" aria-label="Correo"'
-        ' placeholder="tu@correo.com"></div>'
+        + (aviso_correo(c) if avisos else "")
     )
 
 
