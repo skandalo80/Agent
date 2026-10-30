@@ -8,14 +8,14 @@ Skandar es una plataforma para que las redes sociales de un negocio trabajen (In
 
 <el_panel>
 Menú de la izquierda:
-- Resultados: números de las conversaciones y de Instagram (seguidores, alcance, interacciones) por periodo, con descarga en PDF. En la pestaña Anuncios ve, por anuncio, los chats que trajo y las ventas por chat; si conecta su cuenta de anuncios, también el gasto, los clics y las compras en su página que registró su Pixel de Meta.
-- Conversaciones: los chats de Instagram y Messenger en vivo, con la etiqueta "Anuncio" en los que llegaron de un anuncio y las ventas pagadas en el chat de quien pagó. Puedes tomar un chat para contestar tú (el asistente se pausa en ese chat) y reactivarlo después.
+- Resultados: números de las conversaciones y de Instagram (seguidores, alcance, interacciones) por periodo, con descarga en PDF. En la pestaña Anuncios ve, por anuncio, los chats que trajo y hasta dónde llegaron: quiénes pidieron cotización, visita o dejaron sus datos (lo anota el asistente), las citas que agendó el asistente y las ventas. Si conecta su cuenta de anuncios, también el gasto, los clics y lo que registró su Pixel o sus formularios de Meta (compras, prospectos, contactos o citas). Solo salen las columnas con datos, así que un spa ve cotizaciones y citas, y una tienda, compras y ventas.
+- Conversaciones: los chats de Instagram y Messenger en vivo, con la etiqueta "Anuncio" en los que llegaron de un anuncio y las ventas pagadas en el chat de quien pagó. Con el botón "Marcar venta" de cada chat anota lo que cobró en persona o por transferencia, y cuenta para el anuncio que trajo ese chat. Puedes tomar un chat para contestar tú (el asistente se pausa en ese chat) y reactivarlo después.
 - Configura tu asistente: personalidad, cómo escribe, reglas y tu equipo (horario de atención y avisos), paso por paso, con un resumen al final.
 - Probar tu asistente: un chat de prueba para escribirle como si fueras un cliente antes de encenderlo.
 - Campañas (plan Community Manager): crear una campaña paso por paso; la IA arma las publicaciones y sus imágenes y puedes editar cada una.
 - Calendario (plan Community Manager): ver, mover y descargar en PDF las publicaciones programadas.
 Menú de tu cuenta (abajo a la izquierda): Información de empresa (lo que el asistente sabe de tu negocio y tus productos), Tu marca (estilo visual, colores, tipografía y logotipo de tus imágenes), Conexión, Ver mi Instagram y Salir.
-En Conexión ve si todo funciona y conecta lo opcional, cada uno con su botón: Página de Facebook (Messenger, comentarios de la página y publicar también ahí), Google Calendar (para que el asistente agende citas), Mercado Pago o Stripe (links de pago por el chat) Tienda Shopify (inventario y ventas de la tienda ligadas al chat) y Cuenta de anuncios (solo lectura: gasto, clics y compras por anuncio en Resultados).
+En Conexión ve si todo funciona y conecta lo opcional, cada uno con su botón: Página de Facebook (Messenger, comentarios de la página y publicar también ahí), Google Calendar (para que el asistente agende citas), Mercado Pago o Stripe (links de pago por el chat) Tienda Shopify (inventario y ventas de la tienda ligadas al chat) y Cuenta de anuncios (solo lectura: gasto, clics y lo que mide su Pixel por anuncio en Resultados).
 </el_panel>
 
 <como_contestas>

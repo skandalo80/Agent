@@ -191,6 +191,7 @@ def workspace_tools(
             meet=not presencial,
         )
         await store.add_meeting(event_id, user_id, start.isoformat(), email, link)
+        await store.add_event(user_id, "cita", {"id": event_id, "inicio": start.isoformat()})  # para Resultados > Anuncios
         state["acted"] = True
         if presencial:
             return ok(f"Cita agendada para el {fmt(start)} (hora de {cuenta().timezone})."
@@ -541,6 +542,8 @@ def store_tools(
 # Por qué el asistente pasa un chat a una persona: sale como etiqueta en Conversaciones.
 RAZONES = {"pide_persona": "Pidió una persona", "molesto": "Molesto", "precio": "Negociar precio",
            "fuera_catalogo": "Fuera del catálogo", "otro": "Otro motivo"}
+# Lo que anota el asistente cuando alguien está a punto de comprar un servicio (Resultados > Anuncios).
+INTERESES = {"cotizacion": "Pidió cotización", "visita": "Pidió visita o medición", "datos": "Dejó sus datos"}
 HUMANO_SCHEMA = {
     "type": "object",
     "properties": {
@@ -599,7 +602,22 @@ def human_tools(store: Store, google: Google | None, user_id: str, state: dict |
                 log.exception("No se pudo avisar al dueño de %s", user_id)
         return ok("Listo: el dueño fue avisado y continuará la conversación. Despídete por ahora.")
 
-    return [pasar_a_humano]
+    @tool(
+        "anotar_interes",
+        "Anota que esta persona pidió cotización o presupuesto, una visita o medición, o dejó sus datos para"
+        " que el negocio la contacte. Úsala una vez cuando pase; la persona no ve nada. No la uses si solo"
+        " preguntó un precio del catálogo.",
+        {"type": "object", "properties": {
+            "tipo": {"type": "string", "enum": list(INTERESES)},
+            "detalle": {"type": "string", "description": "Una línea: qué servicio y lo que ya se sabe."}},
+         "required": ["tipo"]},
+    )
+    async def anotar_interes(args):
+        tipo = args.get("tipo") if args.get("tipo") in INTERESES else "cotizacion"
+        await store.add_event(user_id, "interes", {"tipo": tipo, "detalle": str(args.get("detalle") or "")[:300]})
+        return ok("Anotado.")
+
+    return [pasar_a_humano, anotar_interes]
 
 
 def build(

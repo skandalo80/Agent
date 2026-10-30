@@ -3,8 +3,10 @@
 El cliente que anuncia manda a la gente directo a su página y ahí compra; eso ya lo mide el Pixel de Meta.
 No lo reconstruimos: lo leemos. Con el mismo login de Facebook (permiso ads_read, solo lectura) elige su
 cuenta publicitaria y en Resultados > Anuncios ve, por anuncio y en el periodo elegido:
-- de Meta: gasto, clics y las compras en su página que registró su Pixel (con su valor);
-- de Skandar: los chats que llegaron de ese anuncio (anuncios_chat) y las ventas ligadas a esos chats (ventas).
+- de Meta: gasto, clics y lo que registró su Pixel o sus formularios: compras (con su valor), prospectos,
+  contactos y citas; un negocio de servicios no vende en su página, pero sí junta prospectos o citas;
+- de Skandar: los chats que llegaron de ese anuncio (anuncios_chat) y hasta dónde llegaron (cotización, cita,
+  venta; Store.por_anuncio).
 
 kv "ads_meta": {"token", "vence", "cuenta": "act_…", "nombre", "moneda", "fecha"}. El token de usuario dura 60
 días: al vencer se pide volver a conectar (sale en Conexión). Sin FB_APP_ID en .env no sale nada de esto.
@@ -43,6 +45,10 @@ _cache: dict[tuple, tuple[float, list[dict] | None]] = {}
 # contar la misma compra dos veces (omni_purchase ya incluye a las del Pixel).
 COMPRAS = ("omni_purchase", "purchase", "offsite_conversion.fb_pixel_purchase")
 CHATS_META = "onsite_conversion.messaging_conversation_started_7d"
+# Lo mismo para los negocios de servicios: prospectos (Pixel Lead o formularios de Meta), contactos y citas.
+PROSPECTOS = ("lead", "onsite_conversion.lead_grouped", "offsite_conversion.fb_pixel_lead")
+CONTACTOS = ("contact_total", "contact_website", "offsite_conversion.fb_pixel_contact")
+CITAS = ("schedule_total", "schedule_website", "offsite_conversion.fb_pixel_schedule")
 
 
 def enabled() -> bool:
@@ -230,8 +236,8 @@ async def ver(request: Request):
                   f'<p class="ayuda"><b>{escape(datos.get("nombre", ""))}</b> · '
                   f'{escape(datos.get("cuenta", "").removeprefix("act_"))}</p>'
                   '<ul class="lista-shopify"><li>En Resultados &gt; Anuncios ves, por anuncio, lo que gastaste, los'
-                  " clics y las compras en tu página que registró tu Pixel.</li><li>Junto a eso, los chats que trajo"
-                  " cada anuncio y las ventas que se cerraron en ellos.</li><li>Solo leemos: no creamos, cambiamos"
+                  " clics y lo que registró tu Pixel: compras, prospectos o citas.</li><li>Junto a eso, los chats que"
+                  " trajo cada anuncio y hasta dónde llegaron: cotización, cita o venta.</li><li>Solo leemos: no creamos, cambiamos"
                   " ni pagamos anuncios.</li></ul>"
                   + ('<p class="ayuda">El permiso vence pronto: vuelve a conectar para no perder tus números.</p>'
                      + boton.format("Volver a conectar") if por_vencer(datos) else "")
@@ -239,9 +245,9 @@ async def ver(request: Request):
                   '<button class="boton secundario chico">Desconectar tu cuenta de anuncios</button></form></div>')
     else:
         cuerpo = ('<div class="tarjeta"><h2>Conecta tu cuenta de anuncios</h2>'
-                  '<p class="ayuda">Ve en un solo lugar lo que deja cada anuncio: el gasto, los clics y las compras'
-                  " en tu página que ya mide tu Pixel de Meta, junto a los chats que trajo y las ventas que se"
-                  " cerraron en ellos. No cambias nada de cómo trabajas.</p>"
+                  '<p class="ayuda">Ve en un solo lugar lo que deja cada anuncio: el gasto, los clics y lo que ya mide'
+                  " tu Pixel de Meta (compras, prospectos o citas), junto a los chats que trajo y hasta dónde"
+                  " llegaron: cotización, cita o venta. No cambias nada de cómo trabajas.</p>"
                   + ('<p class="ayuda">El permiso anterior venció.</p>' if vencida(datos) else "")
                   + boton.format("Conectar tu cuenta de anuncios") + "</div>")
     aviso_html = f'<div class="aviso">{escape(AVISOS[aviso])}</div>' if aviso in AVISOS else ""
@@ -270,7 +276,10 @@ def fila_de(x: dict) -> dict:
             "impresiones": int(float(x.get("impressions") or 0)),
             "compras": int(_accion(x.get("actions"), COMPRAS)),
             "valor_compras": _accion(x.get("action_values"), COMPRAS),
-            "chats_meta": int(_accion(x.get("actions"), (CHATS_META,)))}
+            "chats_meta": int(_accion(x.get("actions"), (CHATS_META,))),
+            "prospectos": int(_accion(x.get("actions"), PROSPECTOS)),
+            "contactos": int(_accion(x.get("actions"), CONTACTOS)),
+            "citas_meta": int(_accion(x.get("actions"), CITAS))}
 
 
 async def por_anuncio(c: Cuenta, ini: date, fin: date) -> list[dict] | None:

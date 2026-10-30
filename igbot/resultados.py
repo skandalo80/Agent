@@ -410,8 +410,13 @@ def dinero(v: float, moneda: str) -> str:
     return f"${v:,.0f}" + (f" {moneda}" if moneda else "")
 
 
+def _veces(n: int, monto: float = 0, moneda: str = "") -> str:
+    return (f"{n} · {dinero(monto, moneda)}" if monto else f"{n:,}") if n else "0"
+
+
 async def anuncios_html(c: Cuenta, ini: date, fin: date) -> str:
-    """Por anuncio: lo de Meta (gasto, clics, compras en su página) junto a lo de sus chats (chats y ventas)."""
+    """Por anuncio: lo de Meta (gasto, clics y lo que mide su Pixel) junto a lo de sus chats (chats y hasta dónde
+    llegaron). Solo salen las columnas con datos: una tienda ve compras y ventas; un spa, cotizaciones y citas."""
     zona = ZoneInfo(c.timezone)
     desde = datetime(ini.year, ini.month, ini.day, tzinfo=zona).timestamp()
     hasta = datetime(fin.year, fin.month, fin.day, tzinfo=zona).timestamp() + 86400
@@ -421,17 +426,19 @@ async def anuncios_html(c: Cuenta, ini: date, fin: date) -> str:
     moneda = datos.get("moneda", "")
     filas: dict[str, dict] = {}
     for x in meta or []:
-        if x["gasto"] or x["clics"] or x["compras"] or x["ad_id"] in nuestros:
+        if (x["gasto"] or x["clics"] or x["compras"] or x["prospectos"] or x["citas_meta"]
+                or x["ad_id"] in nuestros):
             filas[x["ad_id"]] = {**x}
     for ad, x in nuestros.items():
         filas.setdefault(ad, {"ad_id": ad, "nombre": x["titulo"] or f"Anuncio {ad[-6:]}"})
-        filas[ad].update(chats=x["chats"], ventas=x["ventas"], monto=x["monto"], moneda_ventas=x["moneda"])
+        filas[ad].update(chats=x["chats"], cotizaciones=x["cotizaciones"], citas=x["citas"], ventas=x["ventas"],
+                         monto=x["monto"], moneda_ventas=x["moneda"])
     aviso = ""
     if anuncios_meta.enabled() and (not datos.get("token") or anuncios_meta.vencida(datos)):
         aviso = ('<div class="tarjeta"><h2>Conecta tu cuenta de anuncios</h2><p class="ayuda">Suma aquí lo que ya'
-                 " mide Meta de cada anuncio: el gasto, los clics y las compras en tu página que registra tu Pixel."
-                 '</p><div class="acciones"><a class="boton" href="/panel/anuncios">Conectar tu cuenta de anuncios</a>'
-                 "</div></div>")
+                 " mide Meta de cada anuncio: el gasto, los clics y lo que registra tu Pixel (compras, prospectos o"
+                 ' citas).</p><div class="acciones"><a class="boton" href="/panel/anuncios">Conectar tu cuenta de'
+                 " anuncios</a></div></div>")
     elif anuncios_meta.enabled() and meta is None:
         aviso = ('<div class="tarjeta"><p class="ayuda">Meta no nos dio tus números de anuncios esta vez. Intenta en'
                  ' unos minutos o revisa tu conexión en <a class="enlace" href="/panel/anuncios">Tu cuenta de'
@@ -439,37 +446,56 @@ async def anuncios_html(c: Cuenta, ini: date, fin: date) -> str:
     if not filas:
         return aviso + ('<div class="tarjeta"><h2>Sin anuncios en este periodo</h2><p class="ayuda">Cuando tengas'
                         " anuncios activos, aquí verás lo que dejó cada uno: en tu página y en tus chats.</p></div>")
-    con_meta = meta is not None
-    gasto = sum(x.get("gasto", 0) for x in filas.values())
-    compras = sum(x.get("compras", 0) for x in filas.values())
-    valor = sum(x.get("valor_compras", 0) for x in filas.values())
-    chats = sum(x.get("chats", 0) for x in filas.values())
-    ventas = sum(x.get("ventas", 0) for x in filas.values())
-    monto = sum(x.get("monto", 0) for x in filas.values())
+
+    def total(campo: str) -> float:
+        return sum(x.get(campo, 0) for x in filas.values())
+
     moneda_ventas = next((x["moneda_ventas"] for x in filas.values() if x.get("moneda_ventas")), "")
-    kpis = '<div class="hoy kpis res-kpis">'
+    # (título, celda, total para su tarjeta, explicación al pie). Gasto, clics y chats siempre; lo demás si hay.
+    de_meta = [
+        ("compras", "Compras en tu página", lambda x: _veces(x.get("compras", 0), x.get("valor_compras", 0), moneda),
+         dinero(total("valor_compras"), moneda) + " según tu Pixel", "las que registró tu Pixel"),
+        ("prospectos", "Prospectos en Meta", lambda x: _veces(x.get("prospectos", 0)),
+         "formularios y tu página", "los datos que dejaron en un formulario de Meta o en tu página"),
+        ("contactos", "Contactos en tu página", lambda x: _veces(x.get("contactos", 0)),
+         "según tu Pixel", "quienes te llamaron o escribieron desde tu página"),
+        ("citas_meta", "Citas en tu página", lambda x: _veces(x.get("citas_meta", 0)),
+         "según tu Pixel", "las que se agendaron en tu página"),
+    ] if meta is not None else []
+    de_chats = [
+        ("cotizaciones", "Pidieron cotización", lambda x: _veces(x.get("cotizaciones", 0)),
+         "en el chat", "quienes pidieron cotización, visita o dejaron sus datos"),
+        ("citas", "Agendaron cita", lambda x: _veces(x.get("citas", 0)),
+         "con tu asistente", "las citas que agendó tu asistente"),
+        ("ventas", "Ventas por chat", lambda x: _veces(x.get("ventas", 0), x.get("monto", 0), x.get("moneda_ventas", "")),
+         dinero(total("monto"), moneda_ventas), "pagos con link, pedidos de tu tienda y las que marcaste como vendidas"),
+    ]
+    de_meta = [col for col in de_meta if total(col[0])]
+    de_chats = [col for col in de_chats if total(col[0])]
+    con_meta = meta is not None
+    tarjetas = []
     if con_meta:
-        kpis += (kpi("Gasto en anuncios", dinero(gasto, moneda))
-                 + kpi("Compras en tu página", compras, dinero(valor, moneda) + " según tu Pixel"))
-    kpis += kpi("Chats de anuncios", chats) + kpi("Ventas por chat", ventas, dinero(monto, moneda_ventas))
-    kpis += "</div>"
-    cabeza = (["Anuncio"] + (["Gasto", "Clics", "Compras en tu página"] if con_meta else [])
-              + ["Chats", "Ventas por chat"])
+        tarjetas.append(kpi("Gasto en anuncios", dinero(total("gasto"), moneda)))
+        if de_meta:  # lo principal que mide su Pixel
+            campo, titulo, _, sub, _ = de_meta[0]
+            tarjetas.append(kpi(titulo, f"{total(campo):,.0f}", sub))
+    tarjetas.append(kpi("Chats de anuncios", f"{total('chats'):,.0f}"))
+    # Con Meta caben cuatro tarjetas: del chat va solo hasta dónde llegó (venta, si no cita, si no cotización).
+    for campo, titulo, _, sub, _ in de_chats[-1:] if con_meta else de_chats:
+        tarjetas.append(kpi(titulo, f"{total(campo):,.0f}", sub))
+    kpis = '<div class="hoy kpis res-kpis">' + "".join(tarjetas) + "</div>"
+    columnas = ([("Gasto", lambda x: dinero(x.get("gasto", 0), moneda)), ("Clics", lambda x: f'{x.get("clics", 0):,}')]
+                if con_meta else [])
+    columnas += [(t, f) for _, t, f, _, _ in de_meta] + [("Chats", lambda x: str(x.get("chats", 0)))]
+    columnas += [(t, f) for _, t, f, _, _ in de_chats]
     orden = sorted(filas.values(), key=lambda x: (x.get("gasto", 0), x.get("chats", 0)), reverse=True)
-    cuerpo = ""
-    for x in orden:
-        celdas = [escape(x.get("nombre") or "")]
-        if con_meta:
-            celdas += [dinero(x.get("gasto", 0), moneda), f'{x.get("clics", 0):,}',
-                       f'{x.get("compras", 0)} · {dinero(x.get("valor_compras", 0), moneda)}' if x.get("compras") else "0"]
-        celdas += [str(x.get("chats", 0)),
-                   f'{x["ventas"]} · {dinero(x["monto"], x.get("moneda_ventas", ""))}' if x.get("ventas") else "0"]
-        cuerpo += "<tr>" + "".join(f"<td>{v}</td>" for v in celdas) + "</tr>"
+    cuerpo = "".join("<tr><td>" + escape(x.get("nombre") or "") + "</td>"
+                     + "".join(f"<td>{f(x)}</td>" for _, f in columnas) + "</tr>" for x in orden)
+    pie = " ".join(f"{t}: {nota}." for _, t, _, _, nota in de_meta + de_chats)
     tabla = ('<div class="tarjeta"><span class="num">Por anuncio</span><h2>Lo que dejó cada anuncio</h2>'
-             '<div class="ads-tabla"><table><tr>' + "".join(f"<th>{h}</th>" for h in cabeza) + "</tr>"
-             + cuerpo + "</table></div>"
-             '<p class="ayuda">Compras en tu página: las que registró tu Pixel de Meta. Chats y ventas por chat: las'
-             " conversaciones que llegaron de cada anuncio y lo que se vendió en ellas.</p></div>")
+             '<div class="ads-tabla"><table><tr><th>Anuncio</th>' + "".join(f"<th>{h}</th>" for h, _ in columnas)
+             + "</tr>" + cuerpo + "</table></div>"
+             + (f'<p class="ayuda">{pie}</p>' if pie else "") + "</div>")
     return aviso + kpis + tabla
 
 

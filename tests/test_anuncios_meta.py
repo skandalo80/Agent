@@ -113,3 +113,41 @@ def test_resultados_junta_meta_con_los_chats(con_facebook, monkeypatch):
     assert "1 · $450 MXN" in texto  # la venta por chat del anuncio 7
     assert "Solo chats" in texto and "Sin nada" not in texto  # sin gasto ni chats no se muestra
     assert "Descargar" not in texto
+
+
+def test_negocio_de_servicios_ve_cotizaciones_citas_y_ventas_a_mano(con_facebook, monkeypatch):
+    """Un spa o una tienda de cortinas no vende en su página: ve prospectos de Meta, cotizaciones y citas."""
+    from igbot import panel, tools as t
+    client, c, *_ = con_facebook
+    for u in ("u1", "u2", "u3"):
+        client.portal.call(c.store.guardar_anuncio, u, "7", "Cortinas a la medida", "")
+        client.portal.call(c.store.add_incoming, u, f"m-{u}", "hola")
+    _, anotar = t.human_tools(c.store, None, "u1")
+    with panel.usar(c):
+        client.portal.call(anotar.handler, {"tipo": "visita", "detalle": "Medir 3 ventanas"})
+    client.portal.call(c.store.add_event, "u2", "interes", {"tipo": "cotizacion"})
+    client.portal.call(c.store.add_event, "u2", "cita", {"id": "ev1"})
+    client.portal.call(c.store.add_meeting, "ev1", "u2", "2026-11-02T10:00:00-06:00", "", "")
+    client.portal.call(c.store.add_event, "u3", "cita", {"id": "ev2"})
+    client.portal.call(c.store.add_meeting, "ev2", "u3", "2026-11-03T10:00:00-06:00", "", "")
+    client.portal.call(c.store.cancel_meeting, "ev2")  # la cancelada no cuenta
+    # El dueño marca la venta que cobró en persona.
+    r = client.post("/panel/venta", headers=ORIGEN, data={"usuario": "u2", "monto": "8,500", "moneda": "MXN",
+                                                          "accion": "marcar"})
+    assert "Ya cuenta para el anuncio" in r.text and "Vendido $8,500 MXN" in r.text
+    assert "Escribe por cuánto" in client.post("/panel/venta", headers=ORIGEN,
+                                                data={"usuario": "u2", "monto": "abc"}).text
+    client.portal.call(anuncios_meta.guardar, c, {**TOKEN, "cuenta": "act_9", "nombre": "Ads", "moneda": "MXN"})
+    datos = {"data": [{"ad_id": "7", "ad_name": "Cortinas a la medida", "spend": "900", "clicks": "120",
+                       "actions": [{"action_type": "lead", "value": "6"}]}]}
+    monkeypatch.setattr(anuncios_meta.httpx, "AsyncClient",
+                        lambda **k: REAL(transport=httpx.MockTransport(lambda r: httpx.Response(200, json=datos))))
+    texto = client.get("/panel/resultados?ver=anuncios").text
+    for columna in ("Prospectos en Meta", "Pidieron cotización", "Agendaron cita", "Ventas por chat"):
+        assert f"<th>{columna}</th>" in texto
+    assert "Compras en tu página" not in texto and "Citas en tu página" not in texto  # sin datos, no salen
+    assert "<td>6</td><td>3</td><td>2</td><td>1</td><td>1 · $8,500 MXN</td>" in texto
+    # Se puede quitar la venta marcada a mano.
+    externo = client.portal.call(c.store.ventas_de, "u2")[0]["externo"]
+    client.post("/panel/venta", headers=ORIGEN, data={"usuario": "u2", "externo": externo, "accion": "quitar"})
+    assert client.portal.call(c.store.ventas_de, "u2") == []

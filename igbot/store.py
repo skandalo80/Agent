@@ -125,7 +125,8 @@ CREATE TABLE IF NOT EXISTS posts (
 );
 
 -- Cosas que pasaron en las conversaciones, para el reporte semanal
--- ('cotizacion' con sus productos y total, 'humano' cuando se pasó a una persona).
+-- ('cotizacion' con sus productos y total, 'humano' cuando se pasó a una persona, 'interes' cuando pidió
+-- cotización, visita o dejó sus datos, 'cita' cuando el asistente agendó una).
 CREATE TABLE IF NOT EXISTS events (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id    TEXT NOT NULL,
@@ -195,11 +196,12 @@ CREATE TABLE IF NOT EXISTS anuncios_chat (
     PRIMARY KEY (user_id, ad_id)
 );
 
--- Ventas ligadas a un chat o a un anuncio (por ahora, los pedidos de la tienda Shopify conectada).
+-- Ventas ligadas a un chat o a un anuncio: pedidos de Shopify, pagos con link (Stripe, Mercado Pago) y las que
+-- marca a mano el dueño desde Conversaciones (origen 'manual').
 -- user_id vacío = la venta vino de un anuncio pero no de un chat; ad_id vacío = de un chat sin anuncio.
 CREATE TABLE IF NOT EXISTS ventas (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    origen     TEXT NOT NULL,              -- 'shopify'
+    origen     TEXT NOT NULL,              -- 'shopify' | 'stripe' | 'mercadopago' | 'manual'
     externo    TEXT NOT NULL,              -- id del pedido en su origen
     user_id    TEXT NOT NULL DEFAULT '',
     ad_id      TEXT NOT NULL DEFAULT '',
@@ -1019,20 +1021,39 @@ class Store:
         return {u: {"ad_id": a, "titulo": t, "foto": f, "created_at": c} for u, a, t, f, c in await cur.fetchall()}
 
     async def por_anuncio(self, desde: float, hasta: float) -> dict[str, dict]:
-        """Por anuncio, en el periodo: los chats que llegaron de él y las ventas ligadas a él.
-        {ad_id: {"titulo", "chats", "ventas", "monto", "moneda"}}."""
+        """Por anuncio, en el periodo: los chats que llegaron de él y hasta dónde llegaron esos chats
+        (cotizaciones que anotó el asistente, citas que agendó y no se cancelaron, ventas).
+        {ad_id: {"titulo", "chats", "cotizaciones", "citas", "ventas", "monto", "moneda"}}."""
         out: dict[str, dict] = {}
+
+        def fila(ad: str) -> dict:
+            return out.setdefault(ad, {"titulo": "", "chats": 0, "cotizaciones": 0, "citas": 0, "ventas": 0,
+                                       "monto": 0.0, "moneda": ""})
+
         cur = await self.db.execute(
             "SELECT ad_id, MAX(titulo), COUNT(DISTINCT user_id) FROM anuncios_chat"
             " WHERE created_at >= ? AND created_at < ? GROUP BY ad_id", (desde, hasta))
         for ad, titulo, chats in await cur.fetchall():
-            out[ad] = {"titulo": titulo or "", "chats": chats, "ventas": 0, "monto": 0.0, "moneda": ""}
+            fila(ad).update(titulo=titulo or "", chats=chats)
+        # Personas (no avisos) que pidieron cotización: lo anota el asistente o sale de cotizar un pedido.
+        cur = await self.db.execute(
+            "SELECT a.ad_id, COUNT(DISTINCT e.user_id) FROM events e JOIN anuncios_chat a ON a.user_id = e.user_id"
+            " WHERE e.kind IN ('interes', 'cotizacion') AND e.created_at >= ? AND e.created_at < ?"
+            " GROUP BY a.ad_id", (desde, hasta))
+        for ad, n in await cur.fetchall():
+            fila(ad)["cotizaciones"] = n
+        cur = await self.db.execute(
+            "SELECT a.ad_id, COUNT(*) FROM events e JOIN anuncios_chat a ON a.user_id = e.user_id"
+            " LEFT JOIN meetings m ON m.event_id = json_extract(e.detail, '$.id')"
+            " WHERE e.kind = 'cita' AND COALESCE(m.status, 'active') = 'active'"
+            " AND e.created_at >= ? AND e.created_at < ? GROUP BY a.ad_id", (desde, hasta))
+        for ad, n in await cur.fetchall():
+            fila(ad)["citas"] = n
         cur = await self.db.execute(
             "SELECT ad_id, COUNT(*), SUM(monto), MAX(moneda) FROM ventas"
             " WHERE ad_id != '' AND created_at >= ? AND created_at < ? GROUP BY ad_id", (desde, hasta))
         for ad, n, monto, moneda in await cur.fetchall():
-            fila = out.setdefault(ad, {"titulo": "", "chats": 0, "ventas": 0, "monto": 0.0, "moneda": ""})
-            fila.update(ventas=n, monto=float(monto or 0), moneda=moneda or "")
+            fila(ad).update(ventas=n, monto=float(monto or 0), moneda=moneda or "")
         return out
 
     async def codigo_chat(self, user_id: str) -> str:
