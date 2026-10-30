@@ -787,6 +787,23 @@ class Store:
         )
         return [(u, json.loads(d), t) for u, d, t in await cur.fetchall()]
 
+    async def sin_dato(self, desde: float) -> dict[str, list[tuple[str, float]]]:
+        """Las preguntas que el asistente no supo contestar (pregunta_sin_dato) desde `desde` y que siguen
+        abiertas: el dueño no ha contestado a mano después ni las marcó resueltas. {usuario: [(pregunta, hora)]}."""
+        cur = await self.db.execute(
+            "SELECT e.user_id, e.detail, e.created_at FROM events e WHERE e.kind = 'sin_dato'"
+            " AND e.created_at >= ? AND e.user_id NOT LIKE 'admin:%'"
+            " AND NOT EXISTS (SELECT 1 FROM events r WHERE r.user_id = e.user_id AND r.kind = 'sin_dato_listo'"
+            " AND r.created_at >= e.created_at)"
+            " AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.user_id = e.user_id AND m.role = 'assistant'"
+            " AND substr(m.text, 1, ?) = ? AND m.created_at > e.created_at) ORDER BY e.id",
+            (desde, len(MANUAL), MANUAL),
+        )
+        out: dict[str, list[tuple[str, float]]] = {}
+        for u, d, t in await cur.fetchall():
+            out.setdefault(u, []).append((json.loads(d).get("pregunta", ""), t))
+        return out
+
     async def week_stats(self, since: float, until: float) -> dict:
         """Números de las conversaciones con clientes (sin las de los administradores)."""
         clients = "user_id NOT LIKE 'admin:%'"

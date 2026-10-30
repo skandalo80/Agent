@@ -943,7 +943,7 @@ def test_lado_tu_nuevos_sin_contestar_y_razon(cliente):
 def test_pasar_a_humano_guarda_la_razon(cliente):
     from igbot import tools as t
     client, c, *_ = cliente
-    pasar, _ = t.human_tools(c.store, None, "caro")
+    pasar, *_ = t.human_tools(c.store, None, "caro")
     assert t.HUMANO_SCHEMA["properties"]["razon"]["enum"] == list(t.RAZONES)
     with panel.usar(c):
         client.portal.call(pasar.handler, {"razon": "precio", "motivo": "Quiere 20% de descuento"})
@@ -951,6 +951,35 @@ def test_pasar_a_humano_guarda_la_razon(cliente):
     eventos = client.portal.call(c.store.events, "humano", 0, 9e9)
     assert [d["razon"] for _, d, _ in eventos] == ["precio", "otro"]
     assert client.portal.call(c.store.paused_until, "caro") > 0
+
+
+def test_pregunta_sin_dato_no_pausa_y_avisa_en_tu_asistente(cliente):
+    from igbot import tools as t
+    client, c, *_ = cliente
+    store = c.store
+    p = client.portal.call
+    p(store.add_incoming, "beto", "m1", "¿Hacen envíos a Mérida?")
+    sin_dato = {x.name: x for x in t.human_tools(store, None, "beto")}["pregunta_sin_dato"]
+    with panel.usar(c):
+        p(sin_dato.handler, {"pregunta": "¿Hacen envíos a Mérida?"})
+    p(store.add_bot_message, "beto", "Déjame consultarlo con el equipo y te aviso por aquí.")
+    # El asistente se queda con el chat: no hay pausa ni pasa a "Tú".
+    assert p(store.paused_until, "beto") == 0
+    r = client.get("/panel/asistente?ver=curso")
+    assert '<span class="razon dato" title="¿Hacen envíos a Mérida?">Pregunta sin dato</span>Asistente' in r.text
+    assert "Tu asistente<b>1</b>" in r.text
+    r = client.get("/panel/asistente?ver=curso&chat=beto")
+    assert "<b>Pregunta sin dato:</b> «¿Hacen envíos a Mérida?»" in r.text and 'value="dato_listo"' in r.text
+    # La marcas resuelta: se quita la etiqueta y el número.
+    client.post("/panel/pausas", headers=ORIGEN, data={"usuario": "beto", "accion": "dato_listo", "ver": "curso"})
+    r = client.get("/panel/asistente?ver=curso")
+    assert "Pregunta sin dato" not in r.text and "@beto" in r.text
+    # Otra pregunta: si el dueño le contesta a mano, también se quita.
+    with panel.usar(c):
+        p(sin_dato.handler, {"pregunta": "¿Cuánto tarda?"})
+    assert "Pregunta sin dato" in client.get("/panel/asistente?ver=curso").text
+    p(store.add_owner_message, "beto", None, "Tarda 3 días")
+    assert "Pregunta sin dato" not in client.get("/panel/asistente?ver=curso").text
 
 
 def test_menu_js_antes_de_pintar(cliente):

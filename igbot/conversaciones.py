@@ -2,7 +2,8 @@
 
 A la izquierda, los chats de 10 en 10 con buscador, arriba quién los atiende (Tú: Nuevos, Sin
 contestar y Todas, con la razón por la que te los pasó el asistente o por la que no pudo contestar;
-Tu asistente: En curso y Todas); a la derecha, el chat abierto con el interruptor
+Tu asistente: En curso y Todas, con la etiqueta "Pregunta sin dato" cuando le faltó un dato y te avisó
+sin soltar el chat); a la derecha, el chat abierto con el interruptor
 Asistente / Tú y la caja para contestar desde aquí. Solo DMs: los comentarios no salen.
 Todo es HTML que arma el servidor; el buscador se manda solo mientras escribes con
 panel.js (sin fetch: recarga la página), y sin JS se busca con Enter.
@@ -75,6 +76,7 @@ CSS = """
 .lados b{display:inline-block;min-width:1.1rem;margin-left:.35rem;padding:0 .3rem;border-radius:999px;background:var(--neon);color:#1B1C1F;text-align:center;font-size:.7rem;line-height:1.1rem}
 .conv .razon{display:inline-block;margin-right:.4rem;padding:0 .45rem;border-radius:999px;background:var(--claro);color:var(--gris);font-weight:600}
 .conv .razon.anuncio{background:rgba(255,138,61,.16);color:var(--naranja-t)}
+.conv .razon.dato{background:rgba(255,138,61,.16);color:var(--naranja-t)}
 .conv .razon.molesto{background:rgba(255,69,58,.18);color:#ff8a80}
 .lat-item{position:relative}
 .punto-menu{position:absolute;width:.5rem;height:.5rem;border-radius:50%;background:var(--neon);margin:-1.1rem 0 0 1rem;box-shadow:0 0 0 2px #18191C}
@@ -212,6 +214,8 @@ async def partes(c: Cuenta, ver: str = "", buscar: str = "", hoja: int = 1, chat
     razones = {u: d for u, d, _ in await c.store.events("humano", humano_desde, ahora + 1) if u in pasados} if pasados else {}
     # Los que llegaron por un anuncio de "Enviar mensaje".
     anuncios = await c.store.anuncios_de([f[0] for f in filas])
+    # Lo que el asistente no supo contestar y te avisó (pregunta_sin_dato): él sigue con el chat.
+    sin_dato = await c.store.sin_dato(ahora - VENTANA)
 
     conv = []
     for (u, t, rol, texto, hasta, est, paso), nombre in zip(filas, nombres):
@@ -230,11 +234,15 @@ async def partes(c: Cuenta, ver: str = "", buscar: str = "", hoja: int = 1, chat
         elif est == "revisar":
             etiqueta = f'<span class="razon">{"Límite del plan" if limite else "El asistente no respondió"}</span>'
             quien = "Sin contestar"
+        elif u in sin_dato:
+            pregunta = sin_dato[u][-1][0]
+            etiqueta = f'<span class="razon dato" title="{escape(pregunta)}">Pregunta sin dato</span>'
+            quien = "Asistente"
         else:
             etiqueta, quien = "", "Asistente"
         if u in anuncios:
             etiqueta = '<span class="razon anuncio">Anuncio</span>' + etiqueta
-        aviso = est in ("nuevo", "tu_sin", "revisar")
+        aviso = est in ("nuevo", "tu_sin", "revisar") or (est == "asistente" and u in sin_dato)
         conv.append(
             f'<a class="conv{" sin" if aviso else ""}{" on" if u == chat else ""}"'
             f' href="{escape(enlace(ver, buscar, hoja, u))}"' + (' aria-current="true"' if u == chat else "") + ">"
@@ -244,9 +252,13 @@ async def partes(c: Cuenta, ver: str = "", buscar: str = "", hoja: int = 1, chat
             f'<span class="ult">{ult}</span><span class="lo-tiene">{etiqueta}{quien}</span></span></a>')
     lado = LADO[ver]
     pendientes = cuantos["nuevos"] + cuantos["sin"]
+    # Del lado del asistente, cuántos chats tienen una pregunta sin dato abierta (y siguen con él).
+    activos = {u for u, *_ in await c.store.paused_list(ahora)}
+    sin_contestar = len(set(sin_dato) - activos)
+    numero = {"tu": pendientes, "bot": sin_contestar}
     lados = "".join(
         f'<a href="{escape(enlace(primero(cuantos, k), buscar))}"' + (' class="on" aria-current="true"' if k == lado else "")
-        + f">{nombre}" + (f"<b>{pendientes}</b>" if k == "tu" and pendientes else "") + "</a>"
+        + f">{nombre}" + (f"<b>{numero[k]}</b>" if numero[k] else "") + "</a>"
         for k, nombre in (("tu", "Tú"), ("bot", "Tu asistente")))
     pestanas = "".join(
         f'<a href="{escape(enlace(k, buscar))}"' + (' class="on" aria-current="page"' if k == ver else "") + ">"
@@ -270,7 +282,7 @@ async def partes(c: Cuenta, ver: str = "", buscar: str = "", hoja: int = 1, chat
              f'<nav class="filtros-chat" aria-label="Filtros">{pestanas}</nav>{cuantos_txt}'
              + ("".join(conv) or f'<p class="vacio">{vacio}</p>')
              + panel.paginas(hoja, total, lambda x: enlace(ver, buscar, x, chat)))
-    hilo = await _hilo(c, chat, ver, buscar, hoja, n, ahora, zona, hoy, humano_desde) if chat else ""
+    hilo = await _hilo(c, chat, ver, buscar, hoja, n, ahora, zona, hoy, humano_desde, sin_dato.get(chat, [])) if chat else ""
     return {"busqueda": busqueda, "lista": lista, "hilo": hilo, "ver": ver, "buscar": buscar, "hoja": hoja,
             "chat": chat if hilo else "", "pendientes": pendientes}
 
@@ -298,7 +310,7 @@ async def _vendido(c: Cuenta, ocultos: str, ventas: list[dict]) -> str:
 
 
 async def _hilo(c: Cuenta, u: str, ver: str, buscar: str, hoja: int, n: int, ahora: float, zona: ZoneInfo,
-                hoy: datetime, humano_desde: float) -> str:
+                hoy: datetime, humano_desde: float, preguntas: list[tuple[str, float]] = ()) -> str:
     """El chat abierto. Vacío si ese chat no es de esta cuenta."""
     hasta = await c.store.paused_until(u)
     en_pausa = hasta > ahora
@@ -343,6 +355,12 @@ async def _hilo(c: Cuenta, u: str, ver: str, buscar: str, hoja: int, n: int, aho
         alerta = (f'<div class="alerta"><b>Te lo pasó el asistente: {RAZONES.get(pidio.get("razon"), "pidió una persona")}.</b> '
                   + (f"Motivo: {escape(motivo[:200])}. " if motivo else "")
                   + f"Tu asistente no le contesta en las próximas {horas} h. {extender}</div>")
+    elif preguntas and not en_pausa:
+        cuales = " ".join(f"«{escape(p[:200])}»" for p, _ in preguntas[-3:])
+        alerta = (f'<div class="alerta"><b>Pregunta sin dato:</b> {cuales}. Tu asistente le dijo que lo consulta y'
+                  " sigue atendiendo el chat. Si quieres, contéstale tú aquí abajo."
+                  f' <form method="post" action="/panel/pausas#chats">{ocultos}'
+                  '<button name="accion" value="dato_listo">Marcar como resuelta</button></form></div>')
     elif en_pausa:
         alerta = (f'<div class="alerta tuyo">Lo atiendes tú: tu asistente no le contesta en las próximas {horas} h.'
                   f" {extender}</div>")
