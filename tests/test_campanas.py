@@ -941,3 +941,16 @@ def test_lo_que_cambia_entre_comillas_en_el_prompt_cambia_en_la_imagen():
     campanas.textos_del_prompt(p, 'Íconos «Anuncio», «Chat» y «Cita».', 'Íconos «Anuncio» y «Cita».', True)
     assert p["plan"]["foto"]["textos"] == ["Anuncio", "Cita"]  # quitó «Chat»
     assert campanas.cambiar_cita('Un «Cita» y "Cita"', "Cita", "Agenda") == 'Un «Agenda» y "Agenda"'
+
+
+def test_la_imagen_lleva_sus_elementos_clave_y_el_texto_del_post():
+    """El plan marca lo que la imagen debe llevar sí o sí, y el prompt ve el texto que se publica."""
+    from igbot import brief
+    foto = brief.leer_foto({"clave": "Un celular con tres mensajes: horario, dirección y cómo reservar",
+                            "protagonista": "El celular", "escenario": "Un mostrador"})
+    assert brief.idea_de_foto(foto).startswith("Debe verse: Un celular con tres mensajes")
+    p = {"k": 1, "formato": "foto", "titulo": "Las mismas tres dudas", "caption": "Horario, dirección y cómo reservar.",
+         "plan": {"foto": foto}, "idea": brief.idea_de_foto(foto)}
+    bloque = campanas.bloque_imagen({}, {}, p)
+    assert "Elementos clave: Un celular" in bloque and "texto que se publica: Las mismas tres dudas" in bloque
+    assert "sin personas" in campanas.SISTEMA_PROMPTS and "Prueba de 3 segundos" in brief.SISTEMA_PLAN

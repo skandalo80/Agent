@@ -794,7 +794,8 @@ async def revisar_plan(base: str, camp: dict, fichas: list[dict]) -> dict[int, s
     con_foto = [(i, f) for i, f in enumerate(fichas) if (f.get("plan") or {}).get("foto")]
     if not con_foto:
         return {}
-    lineas = "\n".join(f"{n}. tema: {tema_de(f['tipo'])[0]} | ángulo: {escape(f['plan'].get('angulo', ''))}"
+    lineas = "\n".join(f"{n}. tema: {tema_de(f['tipo'])[0]} | formato: {FORMATOS[f['formato']][0]}"
+                       f" | ángulo: {escape(f['plan'].get('angulo', ''))}"
                        f" | titular: {escape(f['plan'].get('titular', ''))}"
                        f" | imagen: {escape(brief.idea_de_foto(f['plan']['foto']))}" for n, (_, f) in enumerate(con_foto, 1))
     try:
@@ -1187,6 +1188,10 @@ Reglas:
 - El estilo es un tratamiento de luz, color, textura y composición, nunca objetos de arcilla, cristal, neón u otro material dentro de la escena.
 - Si la "pieza" es un diseño estilo infografía, el prompt describe la pieza gráfica terminada: la jerarquía, dónde va cada uno de sus "textos del diseño" (cítalos tal cual, en español y entre comillas, sin agregar otros), los íconos o gráficos simples que los acompañan, los bloques de color de la marca y la foto o ilustración que la completa. Si es una imagen sin texto, ni una letra, número o logo dentro. Fotografía realista y creíble salvo que el formato o el plan pidan ilustración o gráfico.
 - Si la "pieza" es un anuncio limpio, el prompt describe una pieza publicitaria de marca premium: el producto real de "producto" como protagonista (o su resultado, si es un servicio), una sola idea, un tercio del lienzo vacío y en calma, sus "textos del diseño" (tal cual, entre comillas) con un titular grande y una línea chica, a lo más dos colores de la marca, y nada de íconos, sellos, explosiones, salpicaduras ni objetos volando.
+- Elementos clave: si el plan visual trae "Elementos clave", el prompt empieza por ellos, explícitos (qué son, cuántos, cómo se ven y dónde van); nunca se omiten, se simplifican ni se cambian por otra cosa.
+- Personas: si el plan visual no pide personas (en protagonista, acción o escenario), el prompt dice claramente "sin personas, sin caras ni manos".
+- Revisión final: cada <post> trae su "texto que se publica". La imagen cuenta lo mismo que ese texto y se entiende sin leerlo. Si el plan visual no lo prueba, ajusta protagonista y acción para que lo prueben, conservando los elementos clave, el encuadre, la luz y el estilo.
+- Si la "pieza" es "imagen sin texto", no reserves espacio para un titular: la escena llena la imagen.
 - Si la "pieza" es un diseño gráfico de texto sin fotografía, no hay foto ni objetos fotografiados (ni producto, ni personas, ni escenas): la frase manda, acompañada a lo más de íconos o formas planas simples sobre un fondo liso o con textura sutil en los colores de la marca.
 - En "Collage", una sola imagen con varias fotos nuevas en recuadros de distintos tamaños, todas de esta campaña (nada de fotos viejas).
 - Contexto: el negocio de <empresa> es real. Lo que se ve sale del plan visual y de <empresa>; no inventes productos, negocios, clientes, locales ni datos que no estén ahí. En un post de "Dato curioso del giro", lo que se ve es el dato (un objeto, un fenómeno o un gráfico limpio), sin el producto de la empresa ni negocios, marcas o personas concretas.
@@ -1300,6 +1305,9 @@ def bloque_imagen(camp: dict, marca: dict, p: dict) -> str:
               f"estilo: {escape(estilo[0])}. {escape(estilo[2])}", f"color: {color[0]}. {color[2]}"]
     if foto:
         lineas.append(f"plan visual:\n{brief.foto_texto(foto)}")
+        publicado = " ".join(x for x in (p.get("titulo", ""), p.get("caption", "")[:500]) if x)
+        if publicado.strip():
+            lineas.append(f"texto que se publica: {escape(publicado)}")
     else:  # campañas de antes del plan visual: su plan y su idea
         lineas += [f"plan: {brief.plan_texto(p['plan'])}" if p.get("plan") else "", f"idea: {escape(p['idea'])}"]
     if foto and idea_editada(p):
