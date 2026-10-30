@@ -108,7 +108,9 @@ def generar(usuario: str, perfil: dict, empresa: str = "") -> str:
     if extra := perfil.get("instrucciones", "").strip():
         # Preferencias del dueño (escapadas): no cambian las reglas base (prompts/base.md, que va al final).
         out += ["", "CÓMO QUIERE EL DUEÑO QUE ATIENDAS (dentro de las reglas base)",
-                f"<instrucciones_del_dueño>\n{escape(extra)}\n</instrucciones_del_dueño>"]
+                f"<instrucciones_del_dueño>\n{escape(extra)}\n</instrucciones_del_dueño>",
+                "Si algo de esto choca con TONO o CÓMO ATIENDES (el largo de las respuestas, invitar al siguiente"
+                " paso, preguntar antes de recomendar), manda lo de TONO y CÓMO ATIENDES."]
     if empresa.strip():
         out += ["", empresa.strip()]
     else:

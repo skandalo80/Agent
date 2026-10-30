@@ -183,6 +183,8 @@ def test_cliente_se_conecta_configura_y_enciende(monkeypatch, tmp_path):
         assert r.headers["location"] == "/panel/asistente/configura?paso=equipo&ok=1"
         prompt = Path(c.prompt_path).read_text()
         assert "haces una o dos preguntas" in prompt and "invitas al siguiente paso" not in prompt
+        assert "No empujas a comprar, cotizar" in prompt  # apagada también se dice: si no, vende por costumbre
+        assert "unas 25 palabras como máximo" in prompt
         assert "descuentos y promociones que aparecen" in prompt
         assert "<lo_que_no_debes_hacer>\nNo hablar de &lt;b&gt;la competencia&lt;/b&gt;\n" in prompt
         assert "<cuando_pasar_al_equipo>\nPedidos de más de 10 piezas\n" in prompt and "Cafetería en Puebla" in prompt
