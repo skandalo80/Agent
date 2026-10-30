@@ -544,6 +544,28 @@ def _jpg(data: bytes, historia: bool = False) -> bytes:
     return out.getvalue()
 
 
+def _historia_completa(data: bytes) -> bytes:
+    """Un diseño con texto en 9:16 sin recortar los lados (OpenAI lo entrega en 2:3): a lo ancho completo, con
+    franjas arriba y abajo del color de su propio borde, para que no se corte ningún texto."""
+    img = Image.open(io.BytesIO(data)).convert("RGB")
+    alto = round(img.size[1] * ANCHO / img.size[0])
+    if alto >= ALTO_HISTORIA:  # ya es tan alta como una historia: se recorta arriba y abajo, nada a los lados
+        return _jpg(data, True)
+    img = img.resize((ANCHO, alto), Image.Resampling.LANCZOS)
+
+    def borde(y: int) -> tuple:
+        fila = img.crop((0, y, ANCHO, y + 1)).resize((1, 1), Image.Resampling.BOX)
+        return fila.getpixel((0, 0))
+
+    arriba = (ALTO_HISTORIA - alto) // 2
+    lienzo = Image.new("RGB", (ANCHO, ALTO_HISTORIA), borde(0))
+    lienzo.paste(Image.new("RGB", (ANCHO, ALTO_HISTORIA - arriba - alto), borde(alto - 1)), (0, arriba + alto))
+    lienzo.paste(img, (0, arriba))
+    out = io.BytesIO()
+    lienzo.save(out, "JPEG", quality=92)
+    return out.getvalue()
+
+
 async def crear_pieza(store: Store, user_id: str, idea: str, plantilla: str, texto: Texto,
                       fotos: list[bytes] = (), permitir_extra: bool = False, marca: Marca | None = None,
                       historia: bool = False, infografia: bool = False, puntos: list[str] = (),
@@ -564,7 +586,9 @@ async def crear_pieza(store: Store, user_id: str, idea: str, plantilla: str, tex
             fiel = {"fiel": True} if anuncio and con_producto and fotos else {}
             crudo = await proveedor.generar(prompt, list(fotos), **fiel)
         async with _turno:
-            base = await asyncio.to_thread(_jpg, crudo, historia)
+            # Una historia con el texto en el diseño se ve completa (recortar los lados cortaba sus textos).
+            base = await asyncio.to_thread(_historia_completa, crudo) if historia and plantilla == LIBRE and (
+                infografia or anuncio) else await asyncio.to_thread(_jpg, crudo, historia)
             # En diseño libre el texto ya viene en el diseño, y una foto sin título va tal cual: no se rotula.
             final = (base if plantilla == LIBRE or not texto.titulo
                      else await asyncio.to_thread(rotular, base, plantilla, texto, marca))
