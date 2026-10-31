@@ -126,6 +126,22 @@ def test_skandi_contesta_y_pasa_a_soporte(monkeypatch, tmp_path):
         assert "Ve a Campañas" not in r.text.split('id="sk-mensajes"')[1] and "Claro, dime." in r.text
         assert client.portal.call(bot.principal.store.chats_skandi, "panel", "cafe_lunar")[1] == 2
 
+        # Enlaces: [[clave]] sale como el nombre de la sección en lima con su dirección; una clave inventada
+        # no sale. Skandi recibe la lista de secciones y cada dirección abre en el panel.
+        respuestas.append("Tus productos se agregan en [[catalogo]]. Ve a [[inventada]] o a <b>[[conexion]]</b>.")
+        r = client.post("/panel/ayuda", headers=ORIGEN, data={"mensaje": "¿Dónde subo mis productos?"})
+        dice = r.text.split('id="sk-mensajes"')[1]
+        assert ('<a class="sk-enlace" href="/panel/empresa?paso=3" data-enlace-skandi>Tu catálogo</a>.' in dice
+                and 'href="/panel/conexion" data-enlace-skandi>Conexión</a>' in dice)
+        assert "inventada" not in dice and "[[" not in dice and "&lt;b&gt;" in dice  # lo demás va escapado
+        assert "[[catalogo]] = Tu catálogo" in vistos[-1][1]
+        assert ".sk-enlace{color:#C6FA2C" in r.text
+        for _, _, href, _, _ in skandi.SECCIONES:
+            assert client.get(href.split("#")[0]).status_code == 200, href
+        # Sin contenido en el plan, las secciones de contenido salen como nombre, sin enlace.
+        assert skandi.con_enlaces("Ve a [[calendario]].", contenido=False) == "Ve a Calendario."
+        assert skandi.sin_fichas("Ve a [[catalogo]].") == "Ve a Tu catálogo."
+
         # Los chats de todos solo los ve la cuenta principal.
         assert client.get("/panel/skandi").status_code == 404
         assert "Chats de Skandi" not in html

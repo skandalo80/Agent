@@ -29,11 +29,16 @@ skandi_chats, los de la web también). Arriba en la ventana, el ícono de histor
 empezar otro. Una copia de esa lista vive en memoria (_chats, se llena al
 arrancar con cargar()) para pintar el botón sin esperar a la base.
 
+Enlaces a secciones: si preguntan dónde está algo, Skandi escribe [[clave]] y aquí se
+cambia por el nombre de la sección en lima, con enlace a esa parte del panel. Solo
+valen las claves de SECCIONES (direcciones reales); una clave que no existe no sale.
+
 La cuenta principal ve todos los chats (panel y web) en /panel/skandi, con los que
 pidieron soporte marcados.
 """
 import logging
 import os
+import re
 from datetime import datetime
 from html import escape
 from pathlib import Path
@@ -64,6 +69,43 @@ MAX_MENSAJE = 500
 MAX_HISTORIAL = 30  # chats que ve cada cuenta en su historial
 MAX_GUARDADOS = 200  # mensajes que se guardan por chat (a Claude solo van los últimos MAX_TURNOS)
 SALUDO = "Hola, soy Skandi ¿Cómo te puedo ayudar?"
+
+# Las secciones del panel a las que Skandi puede mandar con un enlace: (clave, nombre que se ve,
+# dirección, qué hay ahí, solo con contenido en el plan). Solo estas: nada de direcciones inventadas.
+SECCIONES = [
+    ("resultados", "Resultados", "/panel/resultados", "números de conversaciones e Instagram, PDF", False),
+    ("anuncios", "Resultados de tus anuncios", "/panel/resultados?ver=anuncios", "chats, citas y ventas por anuncio", False),
+    ("conversaciones", "Conversaciones", "/panel/asistente", "los chats en vivo, tomar un chat, Marcar venta", False),
+    ("probar", "Probar tu asistente", "/panel/probar#ultimo", "chat de prueba con su asistente", False),
+    ("campanas", "Campañas", "/panel/contenido/campanas", "sus campañas", True),
+    ("nueva_campana", "Crear campaña", "/panel/contenido/campanas/nueva", "empezar una campaña nueva", True),
+    ("calendario", "Calendario", "/panel/contenido", "publicaciones programadas, moverlas, PDF", True),
+    ("empresa", "Tu empresa", "/panel/empresa", "todo lo que el asistente sabe del negocio", False),
+    ("empresa_general", "Información general", "/panel/empresa?paso=1",
+     "nombre, sitio web, a qué se dedica, ciudad, llenar con su sitio web", False),
+    ("catalogo", "Tu catálogo", "/panel/empresa?paso=3",
+     "sus productos y servicios, precios, fotos, traer productos de Shopify", False),
+    ("como_compran", "Cómo te compran", "/panel/empresa?paso=4", "horarios, dónde atiende, formas de pago, políticas", False),
+    ("preguntas", "Preguntas frecuentes", "/panel/empresa?paso=5", "preguntas que le hacen y sus respuestas", False),
+    ("clientes", "Tus clientes", "/panel/empresa?paso=2", "a quién le vende y qué lo hace distinto", False),
+    ("asistente", "Tu asistente", "/panel/asistente/configura", "configurar su asistente paso por paso", False),
+    ("personalidad", "Personalidad", "/panel/asistente/configura?paso=personalidad", "cómo se siente al hablar", False),
+    ("escribe", "Cómo escribe", "/panel/asistente/configura?paso=escribe", "trato, largo de mensajes y emojis", False),
+    ("reglas", "Reglas y límites", "/panel/asistente/configura?paso=reglas", "qué hace y qué evita su asistente", False),
+    ("equipo", "Tu equipo", "/panel/asistente/configura?paso=equipo",
+     "cuándo pasar la conversación a su equipo y el aviso por correo", False),
+    ("encender", "Resumen de tu asistente", "/panel/asistente/configura?paso=resumen",
+     "encender o pausar su asistente", False),
+    ("marca", "Tu marca", "/panel/contenido/marca", "cómo se ven sus imágenes", True),
+    ("estilo", "Estilo visual", "/panel/contenido/marca?paso=1", "estilos de sus diseños", True),
+    ("colores", "Colores", "/panel/contenido/marca?paso=2", "colores de su marca", True),
+    ("tipografia", "Tipografía", "/panel/contenido/marca?paso=3", "letra de títulos y textos", True),
+    ("logotipo", "Logotipo", "/panel/contenido/marca?paso=4", "su logo en las imágenes", True),
+    ("conexion", "Conexión", "/panel/conexion",
+     "ver si todo funciona; conectar Facebook, Google Calendar, Mercado Pago, Stripe, Shopify y anuncios", False),
+]
+ENLACES = {k: (nombre, href, solo_contenido) for k, nombre, href, _, solo_contenido in SECCIONES}
+FICHA = re.compile(r"\[\[\s*([a-z_]+)\s*\]\]")
 
 # Por cuenta (clave): sus chats del más reciente al más viejo (como los da Store.chats_skandi),
 # el que tiene abierto (None = uno nuevo; sin entrada = el más reciente) y un aviso que sale una vez.
@@ -120,6 +162,8 @@ html:not(.js) .skandi:target~.sk-boton,.skandi.abierta~.sk-boton{display:none}
 .sk-msj{max-width:85%;padding:.55rem .85rem;border-radius:1.1rem;font-size:.92rem;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}
 .sk-msj.tu{align-self:flex-end;background:var(--acento);color:var(--tinta);border-bottom-right-radius:.3rem}
 .sk-msj.skandi-dice{align-self:flex-start;background:#2E3035;border-bottom-left-radius:.3rem}
+.sk-enlace{color:#C6FA2C;font-weight:700;text-decoration:underline;text-decoration-color:rgba(198,250,44,.35);text-underline-offset:.18em}
+.sk-enlace:hover{text-decoration-color:#C6FA2C}
 .sk-msj.escribiendo{color:#A8A8AE;font-style:italic}
 .sk-aviso{font-size:.85rem;color:#FFAB70;background:rgba(255,138,61,.12);border-radius:.8rem;padding:.55rem .8rem}
 .sk-escribir{display:flex;gap:.5rem;padding:.8rem;border-top:1px solid rgba(255,255,255,.08)}
@@ -141,8 +185,34 @@ def plan(c: Cuenta) -> str:
     return "Community Manager" if c.imagenes_mes > 0 else "Asistente virtual"
 
 
-def mensaje(rol: str, texto: str) -> str:
-    return f'<div class="sk-msj {"tu" if rol == "user" else "skandi-dice"}">{escape(texto)}</div>'
+def con_enlaces(texto: str, contenido: bool = True) -> str:
+    """El texto escapado, con cada [[clave]] de SECCIONES como enlace en lima a esa sección.
+    Sin contenido en el plan, las secciones de contenido salen como nombre, sin enlace."""
+    def cambiar(m: re.Match) -> str:
+        if m.group(1) not in ENLACES:
+            return ""
+        nombre, href, solo_contenido = ENLACES[m.group(1)]
+        if solo_contenido and not contenido:
+            return nombre
+        return f'<a class="sk-enlace" href="{escape(href)}" data-enlace-skandi>{nombre}</a>'
+    return re.sub(r" +([,.;:])", r"\1", FICHA.sub(cambiar, escape(texto)))
+
+
+def mensaje(rol: str, texto: str, contenido: bool = True) -> str:
+    cuerpo = escape(texto) if rol == "user" else con_enlaces(texto, contenido)
+    return f'<div class="sk-msj {"tu" if rol == "user" else "skandi-dice"}">{cuerpo}</div>'
+
+
+def sin_fichas(texto: str) -> str:
+    """Para el correo a soporte: [[clave]] como el nombre de la sección."""
+    return FICHA.sub(lambda m: ENLACES.get(m.group(1), ("",))[0], texto)
+
+
+def enlaces_para(c: Cuenta) -> str:
+    """La lista de secciones a las que puede mandar Skandi (según el plan de la cuenta)."""
+    filas = "\n".join(f"[[{k}]] = {nombre}: {que}" for k, nombre, _, que, solo in SECCIONES
+                      if not solo or c.imagenes_mes > 0)
+    return f"<enlaces>\n{filas}\n</enlaces>"
 
 
 def abierto(k: str) -> dict | None:
@@ -192,7 +262,8 @@ def widget(c: Cuenta) -> str:
     actual = abierto(clave(c))
     charla = actual["mensajes"] if actual else []
     aviso = _avisos.pop(clave(c), "")
-    mensajes = mensaje("assistant", SALUDO) + "".join(mensaje(r, t) for r, t in charla)
+    contenido = c.imagenes_mes > 0
+    mensajes = mensaje("assistant", SALUDO) + "".join(mensaje(r, t, contenido) for r, t in charla)
     if aviso:
         mensajes += f'<div class="sk-aviso">{escape(aviso)}</div>'
     # El botón va después de la ventana: así el CSS lo esconde mientras está abierta.
@@ -312,7 +383,7 @@ async def avisar_soporte(c: Cuenta, charla: list[list[str]]) -> None:
 
 
 def texto_charla(charla: list[list[str]], quien: str = "Cliente") -> str:
-    return "\n".join(f"{quien if r == 'user' else 'Skandi'}: {t}" for r, t in charla)
+    return "\n".join(f"{quien if r == 'user' else 'Skandi'}: {sin_fichas(t)}" for r, t in charla)
 
 
 def volver_a(request: Request, pedido: str) -> str:
@@ -358,7 +429,8 @@ async def preguntar(request: Request):
     todos = actual["mensajes"] if actual else []
     previos = todos[-MAX_TURNOS:]
     try:
-        extra = f"<cuenta_de_quien_pregunta>\n{await datos_cuenta(c)}\n</cuenta_de_quien_pregunta>"
+        extra = (f"<cuenta_de_quien_pregunta>\n{await datos_cuenta(c)}\n</cuenta_de_quien_pregunta>\n\n"
+                 + enlaces_para(c))
         respuesta = await responder(c, previos, texto, await sistema(PROMPT, extra))
     except Exception:
         log.exception("Skandi no pudo contestar a %s", clave(c))
