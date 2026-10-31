@@ -1318,7 +1318,12 @@ COMUN = AJUSTES + """
 :is(.antetitulo,.wiz-cab .ante,.as-num,.cab-paso .antetitulo,.camino>.num){display:block;font-size:var(--t-ante);font-weight:var(--peso-ante);letter-spacing:var(--espaciado-ante);text-transform:uppercase;color:var(--acento);line-height:1.4;margin:0 0 .5rem}
 .titulo-fila .antetitulo{margin:0}
 /* Título del paso o de la página y su bajada. */
-:is(.wiz-cab h2,.as-cont .as-h,.cab-paso h2,.camino>h2){font-size:var(--t-titulo);font-weight:var(--peso-titulo);letter-spacing:-.02em;line-height:1.2;margin:0 0 .4rem}
+:is(.wiz-cab h2,.as-cont .as-h,.cab-paso h2,.camino>h2){font-size:var(--t-titulo);font-weight:var(--peso-titulo);letter-spacing:-.02em;line-height:1.2;margin:0 0 var(--titulo-abajo)}
+/* Sin subtítulo: el título del paso deja su espacio; solo se acerca a un aviso (lo que falta) o a la leyenda de íconos. */
+:is(.wiz-cab h2,.as-cont .as-h,.cab-paso h2):has(+p){margin-bottom:.4rem}
+.cab-paso h2{margin-bottom:.75rem}
+/* Título de tarjeta grande sin subtítulo: el mismo espacio antes del primer campo. */
+:is(.caja-o>h3,.as-caja>legend,.as-pases-t):not(:has(+.sub,+.ayuda)){margin-bottom:var(--tarjeta-titulo-abajo)}
 :is(.wiz-cab .baj,.as-cont .as-baj,.cab-paso p:not(.antetitulo)){font-size:var(--t-bajada);line-height:1.55;color:var(--texto2);margin:0 0 1.5rem;max-width:52rem}
 /* La hoja de cada paso de configuración y de Crear campaña, y las tarjetas de adentro. */
 :is(.wiz-main,.as-cont,.hoja-o){padding:var(--hoja-pad);border:0}

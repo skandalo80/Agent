@@ -13,6 +13,8 @@
   --espaciado-ante: .12em;     /* separación entre letras del antetítulo */
 
   /* Espacios y bordes */
+  --titulo-abajo: 1.5rem;       /* espacio bajo el título del paso (ya sin subtítulo) */
+  --tarjeta-titulo-abajo: 1rem; /* espacio bajo el título de una tarjeta grande (ya sin subtítulo) */
   --hoja-pad: 2rem 2.25rem;    /* relleno de la hoja grande de cada paso (arriba y abajo, lados) */
   --caja-pad: 1.5rem;          /* relleno de cada tarjeta: más grande = el texto más lejos del borde */
   --hueco: 1rem;               /* espacio entre tarjetas */

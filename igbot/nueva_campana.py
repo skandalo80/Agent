@@ -559,11 +559,11 @@ def riel(b: dict, actual: int) -> str:
                "</button>" if b.get("brief") else "") + panel.avance(avance) + "</nav>")
 
 
-def cab(b: dict, n: int, titulo: str, bajada: str) -> str:
+def cab(b: dict, n: int, titulo: str) -> str:
     lista = visibles(b)  # el número que ve: sin contar los pasos ocultos
     v = lista.index(n) + 1 if n in lista else n
     return (f'<div class="wiz-cab"><p class="ante">Paso {v} de {len(lista)} · {nombre_paso(b, n)}</p>'
-            f'<h2>{titulo}</h2><p class="baj">{bajada}</p></div>')
+            f'<h2>{titulo}</h2></div>')  # sin subtítulo
 
 
 def pie(b: dict, n: int) -> str:
@@ -583,14 +583,14 @@ def nota(titulo: str, texto: str) -> str:
 def paso_tipo(b: dict) -> str:
     ops = "".join(op("tipo", k, t, d, marcada=b.get("tipo", "contenido") == k, imagen=img("tipo", k, color, t))
                   for k, (t, d, color) in TIPOS.items())
-    return (cab(b, TIPO, "¿Qué tipo de campaña quieres?", "Según lo que elijas cambian los pasos que siguen.")
+    return (cab(b, TIPO, "¿Qué tipo de campaña quieres?")
             + f'<div class="wiz-ops dos">{ops}</div>' + pie(b, TIPO))
 
 
 def paso_producto(b: dict, prods: list[tuple[dict, str]]) -> str:
     """Sus productos y servicios (Tu empresa o Shopify) como tarjetas con su foto y su precio."""
     if not prods:
-        return (cab(b, PRODUCTO, "¿Qué quieres promocionar?", "Sale de los productos y servicios de tu perfil de empresa.")
+        return (cab(b, PRODUCTO, "¿Qué quieres promocionar?")
                 + nota("Todavía no tienes productos.", 'Agrégalos en <a href="/panel/empresa">Tu empresa</a> (o tráelos de'
                        " tu Shopify) con su foto y su precio, y vuelve aquí.") + pie(b, PRODUCTO))
     ops = "".join(
@@ -599,9 +599,7 @@ def paso_producto(b: dict, prods: list[tuple[dict, str]]) -> str:
            imagen=f'<span class="wiz-img" style="--fondo:#26262a{f" url({u})" if u else ""}">'
                   f'{"" if u else "Sin foto"}</span>')
         for x, u in prods)
-    return (cab(b, PRODUCTO, "¿Qué quieres promocionar?",
-                "Salen de los productos y servicios de tu perfil de empresa (y de tu Shopify, si lo conectaste), con su"
-                " foto y su precio. Con foto, el anuncio muestra tu producto real.")
+    return (cab(b, PRODUCTO, "¿Qué quieres promocionar?")
             + f'<div class="wiz-ops cuatro prods-cam">{ops}</div>'
             + '<p class="ayuda" style="margin-top:1rem">¿No está? Agrégalo en <a href="/panel/empresa">Tu empresa</a>.</p>'
             + pie(b, PRODUCTO))
@@ -627,8 +625,7 @@ def campos_promo(b: dict) -> str:
 def paso_oferta(b: dict, prods: list[dict]) -> str:
     prod = next((p for p in prods if p["id"] == b["producto"]), None)
     nombre = escape(prod["nombre"]) + (f" · {escape(precio_de(prod))}" if precio_de(prod) else "") if prod else ""
-    return (cab(b, OFERTA, "¿Qué quieres hacer con él?",
-                "Con esto escribimos el mensaje del anuncio: una sola idea, clara en dos segundos.")
+    return (cab(b, OFERTA, "¿Qué quieres hacer con él?")
             + '<div class="wiz-bloque prod-cam">' + (f'<label class="t">{nombre}</label>' if nombre else "")
             + '<label class="t" style="margin-top:1rem">¿Qué quieres hacer?</label><div class="wiz-chips">'
             + "".join(chip("accion", k, v, b["accion"] == k) for k, v in ACCIONES.items())
@@ -647,9 +644,7 @@ def paso_oferta(b: dict, prods: list[dict]) -> str:
 def paso_1(b: dict, objetivos: list[dict]) -> str:
     ops = "".join(op("objetivo", o["k"], o["titulo"], o.get("descripcion", ""), marcada=o["k"] == b["objetivo"],
                      sugerido=bool(o.get("sugerido"))) for o in objetivos)  # sin miniatura: cada opción es de su negocio
-    return (cab(b, 1, "¿Qué quieres lograr con esta campaña?",
-                "Elige el resultado que buscas. Las opciones salen de tu perfil de empresa, así que hablan de tu"
-                " negocio.")
+    return (cab(b, 1, "¿Qué quieres lograr con esta campaña?")
             + f'<div class="wiz-ops">{ops}</div>'
             + pie(b, 1))
 
@@ -672,10 +667,7 @@ def paso_2(b: dict, mensajes: list[dict], prods: list[dict], objetivos: list[dic
            '<p class="ayuda">Agrega tus productos en tu <a href="/panel/empresa">perfil de empresa</a> y podrás elegir'
            " uno para lanzarlo, darlo a conocer o hacerle una promoción.</p>")
         + "</div></div>")
-    obj = next((o["titulo"] for o in objetivos if o["k"] == b["objetivo"]), "")
-    return (cab(b, 2, "¿Qué quieres comunicar?",
-                (f"Ideas pensadas para «{escape(obj)}». " if obj else "")
-                + f"Es el tema de la campaña: lo que la gente se va a llevar en la cabeza. Elige hasta {MAX_MENSAJES}.")
+    return (cab(b, 2, "¿Qué quieres comunicar?")
             + f'<div class="wiz-ops">{ops}</div>'
             + '<div class="wiz-bloque">' + abre("con_texto", "Cuéntalo en tus palabras", b.get("con_texto") or b["texto"])
             + '<p class="ayuda">Un dato, una fecha o una idea que no debe faltar.</p>'
@@ -690,8 +682,7 @@ def paso_3(b: dict, objetivos: list[dict]) -> str:
     ops = "".join(op("enfoques", k, v[0], v[1], "checkbox", k in b.get("enfoques", []),
                      em="Va con tu objetivo" if k in van else "")  # sin foto: solo el texto
                   for k, v in ENFOQUES.items())
-    return (cab(b, 3, "¿De qué van a tratar tus posts?",
-                f"Elige uno o varios (hasta {MAX_ENFOQUES}). Los posts de la campaña se reparten entre ellos.")
+    return (cab(b, 3, "¿De qué van a tratar tus posts?")
             + f'<div class="wiz-ops cuatro">{ops}</div>'
             + pie(b, 3))
 
@@ -700,8 +691,7 @@ def paso_4(b: dict, fotos: int) -> str:
     for k, (t, d, color) in FORMATOS.items():  # todas las piezas las genera la IA completas: 1 imagen cada una
         em = "1 imagen" if k in campanas.FORMATOS else ""
         ops += op("formatos", k, t, d, "checkbox", k in b["formatos"], img("formato", k, color, t, alta=True), em)
-    return (cab(b, 4, "¿Qué formatos te gustan?",
-                "Elige uno o varios. Se reparten parejo para que veas cuál le funciona mejor a tu audiencia.")
+    return (cab(b, 4, "¿Qué formatos te gustan?")
             + f'<div class="formatos-cam"><div class="wiz-ops cinco">{ops}</div>'
             '<div class="wiz-si titular"><h3 class="wiz-sub">Texto dentro de la imagen</h3><p class="ayuda">Para'
             ' Foto con titular: elige una, dos o las tres. No es el pie de foto: es lo que va escrito sobre la'
@@ -715,8 +705,7 @@ def paso_4(b: dict, fotos: int) -> str:
 def paso_5(b: dict) -> str:
     ops = "".join(op("visual", k, t, d, "checkbox", k in b["visual"], img("visual", k, color, t))
                   for k, (t, d, color) in VISUAL.items())
-    return (cab(b, 5, "¿Qué quieres que se vea en las imágenes?",
-                "No es el mensaje ni el objetivo: son las cosas que vamos a ver en cada foto. Elige las que quieras.")
+    return (cab(b, 5, "¿Qué quieres que se vea en las imágenes?")
             + f'<div class="wiz-ops tres">{ops}</div>'
             + nota("Tip:", "si quieres que se vea tu producto real y no uno parecido, sube sus fotos en tu perfil de"
                    " empresa. Las usamos como referencia en cada imagen.") + pie(b, 5))
@@ -737,8 +726,7 @@ def paso_6(b: dict, candidatos: list[tuple[str, str]] = ()) -> str:
     variedad = "".join(op("variedad", k, t, d, marcada=b["variedad"] == k, imagen=img("variedad", k, color, t, alta=True),
                           em="Recomendado" if k == "coherencia" else "")
                        for k, (t, d, color) in VARIEDAD.items())
-    return (cab(b, 6, "¿Cómo quieres que se vean tus anuncios?" if de_producto(b) else "¿Cómo quieres que se vea esta campaña?",
-                "Solo cambia esta campaña. Tus colores, tu tipografía y tu logo siguen siendo los de Tu marca.")
+    return (cab(b, 6, "¿Cómo quieres que se vean tus anuncios?" if de_producto(b) else "¿Cómo quieres que se vea esta campaña?")
             + '<h3 class="wiz-sub">Variedad visual</h3><p class="ayuda">Qué tan distintas se ven las fotos entre'
             ' sí: el lugar, el encuadre y la luz.</p>'
             f'<div class="wiz-ops dos ops-variedad">{variedad}</div>' + referencias(b, candidatos) + pie(b, 6))
@@ -768,10 +756,9 @@ def paso_7(b: dict) -> str:
                f' max="{MAX_HISTORIAS}" value="{b.get("n_historias", 0)}"></div></div>'
                '<p class="ayuda" style="margin-top:.7rem">Las historias son verticales (9:16), se ven 24 horas y no llevan'
                " texto publicado: lo que se lee va en la imagen. Pon 0 si no quieres historias.</p>")
-    return ((cab(b, 7, "¿Cuándo salen tus anuncios?", f"Las {b.get('versiones', 4)} versiones se reparten en estos días.")
+    return ((cab(b, 7, "¿Cuándo salen tus anuncios?")
              if de_producto(b) else
-             cab(b, 7, "¿Cuánto y cuándo?", "Puedes empezar con pocos posts y estirar la campaña después desde el"
-                 " calendario."))
+             cab(b, 7, "¿Cuánto y cuándo?"))
             + '<div class="wiz-campos cinco">'
             f'<div><label for="w-nombre">Nombre de la campaña</label><input type="text" id="w-nombre" name="nombre"'
             f' maxlength="{campanas.MAX_NOMBRE}" value="{escape(b["nombre"])}" placeholder="Ej. Otoño en tu negocio"></div>'
@@ -831,12 +818,7 @@ async def resumen(c: Cuenta, b: dict, objetivos: list[dict], mensajes: list[dict
         quedan = await campanas.ia_restantes(c)
     editar = bool(b.get("cid"))
     return ('<div class="wiz-cab"><p class="ante">Resumen</p>'
-            f'<h2>{"Revisa la estrategia de tu campaña" if editar else "Revisa tu campaña antes de generarla"}</h2>'
-            '<p class="baj">Toca Editar en cualquier bloque para cambiarlo. Antes de los posts armamos el brief: la idea'
-            " central de la campaña. Nada de esto gasta imágenes: primero ves el calendario con textos e ideas, y las"
-            " imágenes las generas al final."
-            + (" Los posts que ya tienen imagen se quedan en su día." if editar else "")
-            + '</p></div>'
+            f'<h2>{"Revisa la estrategia de tu campaña" if editar else "Revisa tu campaña antes de generarla"}</h2></div>'
             f'<div class="wiz-resumen">{tarjetas}</div>{await cruce(c, b)}'
             f'<div class="wiz-total"><div><b>{cantidad}</b><span>en {b["semanas"]} semana'
             f'{"s" if b["semanas"] > 1 else ""}</span></div>'
@@ -915,9 +897,7 @@ def paso_brief(b: dict, quedan: int) -> str:
                 "<p>Puedes cambiar cualquier texto. Lo que dejes aquí es lo que se sigue en cada post.</p>"
                 f"{cuerpo}</div>")
 
-    return ('<div class="wiz-cab"><p class="ante">Brief</p><h2>Elige la idea de tu campaña</h2><p class="baj">Con tu'
-            " empresa, tu marca y lo que elegiste, te proponemos tres ideas distintas a tus campañas anteriores. Elige"
-            " una y ajusta su brief: cada post se escribe a partir de él.</p></div>"
+    return ('<div class="wiz-cab"><p class="ante">Brief</p><h2>Elige la idea de tu campaña</h2></div>'
             f'<div class="conceptos">{tarjetas}</div>' + "".join(editor(i, x) for i, x in enumerate(conceptos))
             + f'<div class="wiz-pie"><button class="boton secundario" name="ir" value="{RESUMEN}">‹ Resumen</button>'
             f'<button class="boton secundario" name="accion" value="brief"{"" if quedan else " disabled"}>Otras 3 ideas'
@@ -1169,9 +1149,7 @@ def pagina_rapida_html(b: dict, objetivos: list[dict]) -> str:
     semanas = "".join(f'<option value="{n}"{" selected" if b["semanas"] == n else ""}>{n} semana{"s" if n > 1 else ""}'
                       "</option>" for n in campanas.SEMANAS)
     return (f'<form method="post" action="{RAPIDA}" class="wiz rapida-cam"><div class="wiz-main">'
-            '<div class="wiz-cab"><p class="ante">Crear con IA</p><h2>¿Qué quieres lograr con esta campaña?</h2>'
-            '<p class="baj">Elige el objetivo y cuándo empieza. Nosotros escribimos todos los posts con tu perfil de'
-            " empresa, tu marca y tus resultados. Las imágenes las generas después, cuando las revises.</p></div>"
+            '<div class="wiz-cab"><p class="ante">Crear con IA</p><h2>¿Qué quieres lograr con esta campaña?</h2></div>'
             f'<div class="wiz-ops">{ops}</div>'
             '<h3 class="wiz-sub">Cuándo</h3><div class="wiz-campos dos-r">'
             f'<div><label for="r-inicio">Empieza</label><input type="date" id="r-inicio" name="inicio"'

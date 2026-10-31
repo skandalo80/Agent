@@ -270,12 +270,14 @@ def _lista(actual: str, perfil: dict, hechos: set[str]) -> str:
             " quieras.</small></nav>")
 
 
-def _cabeza(paso: str, titulo: str, bajada: str) -> str:
+def _cabeza(paso: str, titulo: str, aviso: str = "") -> str:
+    """Antetítulo y título del paso, sin subtítulo. `aviso` solo sale cuando hay algo que avisar (lo que falta)."""
     if paso in ORDEN:
         antes = f"Paso {ORDEN.index(paso) + 1} de {len(ORDEN)}"
     else:
         antes = "Resumen"
-    return f'<p class="as-num">{antes}</p><h2 class="as-h">{titulo}</h2><p class="as-baj">{bajada}</p>'
+    extra = f'<p class="as-baj">{aviso}</p>' if aviso else ""
+    return f'<p class="as-num">{antes}</p><h2 class="as-h">{titulo}</h2>{extra}'
 
 
 def _pie(paso: str) -> str:
@@ -285,11 +287,11 @@ def _pie(paso: str) -> str:
     return panel.pie_config(atras, f'<button class="boton" name="accion" value="siguiente">Siguiente: {nombre} →</button>')
 
 
-def _radios(nombre: str, opciones: dict, actual: str, pregunta: str, ayuda: str) -> str:
+def _radios(nombre: str, opciones: dict, actual: str, pregunta: str) -> str:
     botones = "".join(
         f'<label><input type="radio" id="{nombre}-{k}" name="{nombre}" value="{k}"{" checked" if k == actual else ""}>'
         f"{etiqueta}</label>" for k, (etiqueta, _) in opciones.items())
-    return (f'<fieldset class="as-caja"><legend>{pregunta}</legend><p class="ayuda">{ayuda}</p>'
+    return (f'<fieldset class="as-caja"><legend>{pregunta}</legend>'
             f'<div class="as-seg">{botones}</div></fieldset>')
 
 
@@ -315,9 +317,7 @@ def _opcional(nombre: str, titulo: str, ayuda: str, ejemplo: str, valor: str, ma
 
 def _personalidad(perfil: dict) -> str:
     actual = perfil.get("personalidad") if perfil.get("personalidad") in PERSONALIDADES else ""
-    return (_cabeza("personalidad", "Elige su personalidad",
-                    "Elige el estilo que mejor represente a tu marca. Así definiremos cómo se comunica tu asistente"
-                    " con tus clientes.")
+    return (_cabeza("personalidad", "Elige su personalidad")
             + '<fieldset class="as-tarjetas"><legend class="oculto">Personalidad</legend>'
             + "".join(_tarjeta(k, k == actual) for k in PERSONALIDADES) + "</fieldset>"
             + '<div class="as-caja as-toque as-nombre"><input type="hidden" name="opcionales" value="1">'
@@ -343,13 +343,10 @@ def _escribe(perfil: dict) -> str:
                ' <span class="v-tu">¿Quieres que te comparta el precio?</span><span class="v-usted">¿Desea que le'
                ' comparta el precio?</span></span><span class="v-emoji"> 🙂</span><span class="v-emoji2"> ✨</span>'
                "</span></div>")
-    return (_cabeza("escribe", "Cómo escribe",
-                    f"Ya viene ajustado a {PERSONALIDADES[e['personalidad']][0].lower()}. Cambia solo lo que quieras.")
-            + _radios("trato", TRATOS, e["trato"], "¿Cómo trata a tus clientes?", "Así se dirige a cada persona.")
-            + _radios("largo", LARGOS, e["largo"], "¿Qué tan largas son sus respuestas?",
-                      "En Instagram funcionan mejor los mensajes cortos.")
-            + _radios("emojis", EMOJIS, e["emojis"], "¿Usa emojis?",
-                      "Un emoji bien puesto hace la conversación más cálida.")
+    return (_cabeza("escribe", "Cómo escribe")
+            + _radios("trato", TRATOS, e["trato"], "¿Cómo trata a tus clientes?")
+            + _radios("largo", LARGOS, e["largo"], "¿Qué tan largas son sus respuestas?")
+            + _radios("emojis", EMOJIS, e["emojis"], "¿Usa emojis?")
             + muestra + _pie("escribe"))
 
 
@@ -363,7 +360,7 @@ def _reglas(perfil: dict) -> str:
                   f'<input type="checkbox" class="as-sw" name="r_{k}" value="1"{" checked" if activas[k] else ""}>'
                   "</label>")
     extra = perfil.get("instrucciones", "")
-    return (_cabeza("reglas", "Reglas y límites", "Qué puede hacer por su cuenta y qué no.")
+    return (_cabeza("reglas", "Reglas y límites")
             + f'<div class="as-caja">{filas}</div>'
             '<div class="as-caja as-toque"><input type="hidden" name="opcionales" value="1">'
             + _opcional("no_hacer", "¿Qué no debe decir o hacer?", "",
@@ -393,8 +390,6 @@ def _tabla_pases(perfil: dict, pie: str = "") -> str:
                   f' aria-label="Mensaje predeterminado: {titulo}" placeholder="{ejemplo}">{escape(caso["msg"])}</textarea>'
                   "</div></div>")
     return ('<div class="as-caja as-pases"><h3 class="as-pases-t">¿Cuándo pasar la conversación a tu equipo?</h3>'
-            '<p class="ayuda">Marca los casos que atiende una persona y elige qué recibe el cliente al pasarlo.'
-            " Al pasarla, te avisamos y el asistente deja de contestar en ese chat.</p>"
             '<div class="as-pase as-pase-cab" aria-hidden="true"><span>Caso</span><span>Pasar</span>'
             "<span>Qué recibe el cliente</span></div>" + filas + pie + "</div>")
 
@@ -402,7 +397,7 @@ def _tabla_pases(perfil: dict, pie: str = "") -> str:
 def _equipo(c: Cuenta, perfil: dict) -> str:
     from . import ajustes  # ajustes importa panel
     # Primero cuándo pasa la conversación a tu equipo y qué recibe el cliente; luego la pausa y los avisos.
-    return (_cabeza("equipo", "Tu equipo", "Cuándo entra una persona y cómo te avisamos.")
+    return (_cabeza("equipo", "Tu equipo")
             + _tabla_pases(perfil, ajustes.aviso_correo(c))
             + f'<div class="as-caja">{ajustes.campos(c, avisos=False)}</div>'
             + _pie("equipo"))
@@ -442,9 +437,8 @@ async def _resumen(c: Cuenta, perfil: dict) -> str:
     faltan = [t for k, t, _ in PASOS if k not in _hechos(perfil)]
     titulo = ("Tu asistente está contestando" if encendido else
               "Tu asistente está listo" if not faltan else "Ya casi está")
-    bajada = ("Revisa que todo se vea bien. Con Editar regresas a ese paso." if not faltan else
-              f"Te falta: {', '.join(faltan)}. Igual puedes encenderlo; usa lo que ya guardaste.")
-    return (_cabeza("resumen", titulo, bajada)
+    aviso = f"Te falta: {', '.join(faltan)}. Igual puedes encenderlo; usa lo que ya guardaste." if faltan else ""
+    return (_cabeza("resumen", titulo, aviso)
             + '<div class="as-resumen">'
             + caja("Personalidad", "personalidad", [
                 PERSONALIDADES[e["personalidad"]][0],
