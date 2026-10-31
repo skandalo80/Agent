@@ -73,6 +73,13 @@
   --marca-op-titulo: .9rem;    /* nombre de la tarjeta */
   --marca-op-texto: .76rem;    /* textos de la tarjeta */
 
+  /* Configura tus interacciones: la tabla de comentarios (tipo, en comentarios, por DM, flechita) */
+  --int-columnas: minmax(0, .8fr) minmax(0, 1.3fr) minmax(0, 1.3fr) 2rem;
+  --int-columnas-una: minmax(0, .8fr) minmax(0, 2.6fr) 2rem; /* tablas con una sola columna (historias) */
+  --int-claves-columnas: minmax(0, .8fr) minmax(0, 1.6fr) minmax(0, 1fr) 2rem; /* palabras, DM, respuesta, quitar */
+  --int-hueco: 1.5rem;         /* espacio entre columnas */
+  --int-fila-pad: 1rem;        /* espacio arriba y abajo de cada fila */
+
   /* Conversaciones */
   --punto-chat: .6rem;         /* punto lima de no leído en cada chat, debajo de la hora */
 }

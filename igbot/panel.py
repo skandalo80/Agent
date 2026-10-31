@@ -1456,10 +1456,12 @@ MENU = [("resultados", "Resultados", "/panel/resultados", "resultados"),
         ("campanas", "Campañas", "/panel/contenido/campanas", "contenido"),
         ("calendario", "Calendario", "/panel/contenido", "contenido")]
 # Abajo, bajo la etiqueta "Configuración" (arriba de Ayuda): lo que se configura una vez. (clave, nombre, dirección)
-# Tu marca solo con contenido en el plan.
+# Tu marca y Tus interacciones solo con contenido en el plan.
 CONFIGURACION = [("empresa", "Tu empresa", "/panel/empresa"),
                  ("configura", "Tu asistente", "/panel/asistente/configura"),
-                 ("marca", "Tu marca", "/panel/contenido/marca")]
+                 ("marca", "Tu marca", "/panel/contenido/marca"),
+                 ("interacciones", "Tus interacciones", "/panel/interacciones")]
+CON_CONTENIDO = {"marca", "interacciones"}
 # La sección que se marca si la página no dice cuál (`sub`) dentro de su grupo (`menu`).
 POR_GRUPO = {"resultados": "resultados", "asistente": "chats", "contenido": "calendario"}
 
@@ -1481,6 +1483,7 @@ ICONOS = {
     "campanas": _icono('<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>'),
     "calendario": _icono('<rect width="18" height="18" x="3" y="4" rx="2"/><path d="M8 2v4M16 2v4M3 10h18'
                          'M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01"/>'),
+    "interacciones": _icono('<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/><path d="M8 12h.01M12 12h.01M16 12h.01"/>'),
     "marca": _icono('<path d="M12 22a10 10 0 1 1 10-10c0 3-2.5 5-5.5 5H15a1.7 1.7 0 0 0-1.3 2.8c.3.3.4.7.4 1.1'
                     ' 0 .9-.7 1.6-1.6 1.6z"/><circle cx="13.5" cy="6.5" r=".6" fill="currentColor"/>'
                     '<circle cx="17.5" cy="10.5" r=".6" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".6" fill="currentColor"/>'
@@ -1572,7 +1575,7 @@ def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None, 
     ajustes = "".join(
         f'<a class="lat-item{" on" if k == sub else ""}" href="{href}" title="{nombre}">{ICONOS[k]}'
         f'<span class="txt">{nombre}</span></a>' for k, nombre, href in CONFIGURACION
-        if k != "marca" or cuenta is None or cuenta.imagenes_mes > 0)
+        if k not in CON_CONTENIDO or cuenta is None or cuenta.imagenes_mes > 0)
     # Sin JavaScript también abre en el celular: la hamburguesa apunta a #lateral (:target).
     return (
         '<header class="movil"><a class="hamburguesa" href="#lateral" aria-label="Abrir menú">'
