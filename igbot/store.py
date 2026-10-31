@@ -121,7 +121,8 @@ CREATE TABLE IF NOT EXISTS posts (
     permalink   TEXT NOT NULL DEFAULT '',
     error       TEXT NOT NULL DEFAULT '',
     created_at  REAL NOT NULL,
-    tipo        TEXT NOT NULL DEFAULT 'post' -- post | historia
+    tipo        TEXT NOT NULL DEFAULT 'post', -- post | historia
+    ig_id       TEXT NOT NULL DEFAULT ''      -- id que le dio Instagram al publicarla
 );
 
 -- Cosas que pasaron en las conversaciones, para el reporte semanal
@@ -269,6 +270,10 @@ class Store:
         cur = await self.db.execute("PRAGMA table_info(posts)")
         if "tipo" not in {row[1] for row in await cur.fetchall()}:
             await self.db.execute("ALTER TABLE posts ADD COLUMN tipo TEXT NOT NULL DEFAULT 'post'")
+        # Bases de antes de guardar el id de Instagram (para saber a qué historia le respondieron).
+        cur = await self.db.execute("PRAGMA table_info(posts)")
+        if "ig_id" not in {row[1] for row in await cur.fetchall()}:
+            await self.db.execute("ALTER TABLE posts ADD COLUMN ig_id TEXT NOT NULL DEFAULT ''")
         await self.db.commit()
 
     async def close(self) -> None:
@@ -685,7 +690,7 @@ class Store:
         await self.db.commit()
         return cur.lastrowid
 
-    POST_FIELDS = "id, user_id, media_ids, caption, publish_at, status, permalink, error, created_at, tipo"
+    POST_FIELDS = "id, user_id, media_ids, caption, publish_at, status, permalink, error, created_at, tipo, ig_id"
 
     def _post(self, row) -> dict | None:
         if not row:
@@ -696,6 +701,13 @@ class Store:
 
     async def post(self, post_id: int) -> dict | None:
         cur = await self.db.execute(f"SELECT {self.POST_FIELDS} FROM posts WHERE id = ?", (post_id,))
+        return self._post(await cur.fetchone())
+
+    async def post_de_instagram(self, ig_id: str) -> dict | None:
+        """La publicación que salió con ese id de Instagram (p. ej. la historia a la que le respondieron)."""
+        if not ig_id:
+            return None
+        cur = await self.db.execute(f"SELECT {self.POST_FIELDS} FROM posts WHERE ig_id = ?", (ig_id,))
         return self._post(await cur.fetchone())
 
     async def posts_by_id(self, ids: list[int]) -> dict[int, dict]:
@@ -759,10 +771,10 @@ class Store:
         await self.db.commit()
 
     async def set_post(self, post_id: int, status: str, permalink: str = "", error: str = "",
-                       only_if: str | None = None) -> bool:
+                       only_if: str | None = None, ig_id: str = "") -> bool:
         """Cambia el estado; con only_if, solo si estaba en ese estado (evita publicar dos veces)."""
-        sql = "UPDATE posts SET status = ?, permalink = ?, error = ? WHERE id = ?"
-        args = [status, permalink, error, post_id]
+        sql = "UPDATE posts SET status = ?, permalink = ?, error = ?, ig_id = ? WHERE id = ?"
+        args = [status, permalink, error, ig_id, post_id]
         if only_if:
             sql += " AND status = ?"
             args.append(only_if)
@@ -865,6 +877,15 @@ class Store:
     async def week_comments(self, since: float, until: float) -> list[tuple[str, int, int]]:
         cur = await self.db.execute(
             "SELECT matched, dm_sent, replied FROM comments WHERE created_at >= ? AND created_at < ?",
+            (since, until),
+        )
+        return list(await cur.fetchall())
+
+    async def comments_between(self, since: float, until: float) -> list[tuple[str, str, str, int, int, float]]:
+        """(user_id, media_id, matched, dm_sent, replied, created_at) de cada comentario del periodo."""
+        cur = await self.db.execute(
+            "SELECT user_id, media_id, matched, dm_sent, replied, created_at FROM comments"
+            " WHERE created_at >= ? AND created_at < ?",
             (since, until),
         )
         return list(await cur.fetchall())
@@ -1111,6 +1132,24 @@ class Store:
             " ORDER BY created_at", (user_id,))
         return [{"origen": o, "externo": e, "ad_id": a, "monto": m, "moneda": mo, "detalle": json.loads(d),
                  "created_at": t} for o, e, a, m, mo, d, t in await cur.fetchall()]
+
+    async def ventas_desde(self, since: float) -> tuple[int, float, str] | None:
+        """Ventas desde `since`: (cuántas, monto, moneda más usada). None si la cuenta nunca ha tenido una."""
+        cur = await self.db.execute("SELECT 1 FROM ventas LIMIT 1")
+        if await cur.fetchone() is None:
+            return None
+        cur = await self.db.execute(
+            "SELECT COUNT(*), COALESCE(SUM(monto), 0) FROM ventas WHERE created_at >= ?", (since,))
+        n, monto = await cur.fetchone()
+        cur = await self.db.execute("SELECT moneda FROM ventas GROUP BY moneda ORDER BY COUNT(*) DESC LIMIT 1")
+        return n, monto, (await cur.fetchone())[0] or ""
+
+    async def escribieron_desde(self, since: float) -> int:
+        """Cuántas personas distintas escribieron desde `since`."""
+        cur = await self.db.execute(
+            "SELECT COUNT(DISTINCT user_id) FROM messages WHERE role = 'user' AND user_id NOT LIKE 'admin:%'"
+            " AND created_at >= ?", (since,))
+        return (await cur.fetchone())[0]
 
     # --- valores sueltos (token de Instagram, etc.) ---
 

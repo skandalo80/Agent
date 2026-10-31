@@ -101,6 +101,21 @@ class Instagram:
         )
         r.raise_for_status()
 
+    async def texto_mencion(self, media_id: str, comment_id: str = "") -> str:
+        """El comentario (o el texto del post) de otra cuenta donde mencionaron a esta (aviso "mentions")."""
+        if comment_id:
+            d = await self._graph("GET", "me", fields=f"mentioned_comment.comment_id({comment_id}){{text}}")
+            return str((d.get("mentioned_comment") or {}).get("text") or "")
+        d = await self._graph("GET", "me", fields=f"mentioned_media.media_id({media_id}){{caption}}")
+        return str((d.get("mentioned_media") or {}).get("caption") or "")
+
+    async def contestar_mencion(self, media_id: str, comment_id: str, text: str) -> None:
+        """Responde en el post (o el comentario) de otra cuenta donde mencionaron a esta."""
+        datos = {"media_id": media_id, "message": text[:2000]}
+        if comment_id:
+            datos["comment_id"] = comment_id
+        await self._graph("POST", f"{await self.account_id()}/mentions", **datos)
+
     async def hide_comment(self, comment_id: str) -> None:
         await self._graph("POST", comment_id, hide="true")
 
@@ -168,6 +183,11 @@ class Instagram:
     async def media_count(self) -> int:
         """Cuántas publicaciones tiene la cuenta."""
         return int((await self._graph("GET", "me", fields="media_count")).get("media_count", 0))
+
+    async def media_basico(self, media_id: str) -> dict:
+        """Foto, texto, enlace y fecha de un post (Resultados > Comentarios)."""
+        return await self._graph("GET", media_id, fields="caption,media_type,media_product_type,media_url,"
+                                 "thumbnail_url,permalink,timestamp")
 
     async def media_info(self, media_id: str) -> dict:
         return await self._graph("GET", media_id, fields="id,caption")
@@ -252,7 +272,15 @@ class Instagram:
         return r.json()
 
     async def publish(self, image_urls: list[str], caption: str) -> str:
-        """Publica una foto (o un carrusel de hasta 10) y devuelve el link de la publicación.
+        """Publica una foto (o un carrusel de hasta 10) y devuelve el link de la publicación."""
+        return (await self.publicar(image_urls, caption))[1]
+
+    async def publish_story(self, image_url: str) -> str:
+        """Publica una historia y devuelve su link, si Instagram lo da."""
+        return (await self.publicar_historia(image_url))[1]
+
+    async def publicar(self, image_urls: list[str], caption: str) -> tuple[str, str]:
+        """Publica una foto (o un carrusel de hasta 10). Devuelve (id de Instagram, link).
 
         Instagram descarga cada foto de su URL, así que tienen que ser públicas y JPG.
         """
@@ -270,23 +298,26 @@ class Instagram:
             )
         await self._wait_ready(container["id"])
         media = await self._graph("POST", "me/media_publish", creation_id=container["id"])
+        ig_id = str(media.get("id", ""))
         try:
-            return await self.permalink(media["id"])
+            return ig_id, await self.permalink(ig_id)
         except Exception:
-            log.exception("Publicado (%s), pero no se pudo obtener el link", media["id"])
-            return ""
+            log.exception("Publicado (%s), pero no se pudo obtener el link", ig_id)
+            return ig_id, ""
 
-    async def publish_story(self, image_url: str) -> str:
-        """Publica una historia (una foto 9:16) y devuelve su link, si Instagram lo da. Mismo permiso que los
-        posts; las historias no llevan texto publicado (caption) y duran 24 horas."""
+    async def publicar_historia(self, image_url: str) -> tuple[str, str]:
+        """Publica una historia (una foto 9:16). Devuelve (id de Instagram, link si lo da). Mismo permiso que
+        los posts; las historias no llevan texto publicado (caption) y duran 24 horas. El id es el que llega
+        en reply_to.story cuando alguien le responde."""
         container = await self._graph("POST", "me/media", image_url=image_url, media_type="STORIES")
         await self._wait_ready(container["id"])
         media = await self._graph("POST", "me/media_publish", creation_id=container["id"])
+        ig_id = str(media.get("id", ""))
         try:
-            return await self.permalink(media["id"])
+            return ig_id, await self.permalink(ig_id)
         except Exception:
-            log.warning("Historia publicada (%s), sin link", media["id"])
-            return ""
+            log.warning("Historia publicada (%s), sin link", ig_id)
+            return ig_id, ""
 
     async def _wait_ready(self, container_id: str, tries: int = 20, every: float = 3) -> None:
         for _ in range(tries):

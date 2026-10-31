@@ -528,3 +528,23 @@ if (skandi) {
   };
   requestAnimationFrame(pinta);
 })();
+
+// Configura tus interacciones: la lista de respuestas predeterminadas de cada tipo de comentario.
+// "+ Agregar respuesta" copia el renglón vacío de su <template>; la × quita el suyo (sin JavaScript, borrar el texto basta).
+document.addEventListener("click", (e) => {
+  const agregar = e.target.closest("[data-agregar]");
+  if (agregar) {
+    const lista = agregar.closest("[data-lista]");
+    const nuevo = lista.querySelector("template").content.firstElementChild.cloneNode(true);
+    lista.insertBefore(nuevo, agregar);
+    nuevo.querySelector("input, textarea").focus();
+    return;
+  }
+  const quitar = e.target.closest("[data-quitar]");
+  if (quitar) {
+    const lista = quitar.closest("[data-lista]");
+    const item = quitar.closest(".it-item");
+    if (lista.querySelectorAll(".it-item").length > 1) item.remove();
+    else item.querySelectorAll("input, textarea").forEach((campo) => { campo.value = ""; });
+  }
+});

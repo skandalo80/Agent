@@ -238,6 +238,8 @@ async def terminar(p: dict, sesion: str):
     await adjuntar(c, p)
     r = RedirectResponse(f"{config.PUBLIC_URL}/panel", status_code=303)
     panel.iniciar_sesion(r, ig_id)
+    from . import acceso
+    acceso.ultimo(r, "facebook")
     return r
 
 

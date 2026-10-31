@@ -494,7 +494,7 @@ async def pagina(c: Cuenta, paso: str = "", aviso: str = "", nota: str = "", per
 @router.get("/asistente/configura")
 async def ver(request: Request):
     if not (c := panel.cuenta_de_sesion(request)):
-        return panel.entrar()
+        return panel.entrar(request)
     q = request.query_params
     return await pagina(c, q.get("paso", ""), aviso={"1": "Guardado.", "aplicado": "Cambios aplicados."}.get(q.get("ok", ""), ""))
 
