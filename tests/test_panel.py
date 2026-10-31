@@ -101,7 +101,7 @@ def test_cliente_se_conecta_configura_y_enciende(monkeypatch, tmp_path):
     monkeypatch.setattr(bot.agent, "run_claude", fake_claude)
 
     with TestClient(bot.app, base_url="https://testserver") as client:
-        assert "Entrar con Instagram" in client.get("/panel").text  # sin sesión
+        assert "Entrar con mi correo" in client.get("/panel").text  # sin sesión
 
         client.post("/conectar/solicitud", data={"usuario": "cafe.lunar", "nombre": "Ana", "correo": "ana@cafe.mx"})
         r = client.get("/conectar/instagram", follow_redirects=False)

@@ -69,6 +69,11 @@ GOOGLE_REFRESH_TOKEN = os.getenv("GOOGLE_REFRESH_TOKEN", "")
 # arriba (App de escritorio), que no deja poner URI de redireccionamiento.
 GOOGLE_WEB_CLIENT_ID = os.getenv("GOOGLE_WEB_CLIENT_ID", "")
 GOOGLE_WEB_CLIENT_SECRET = os.getenv("GOOGLE_WEB_CLIENT_SECRET", "")
+# Entrar con Apple (opcional): Services ID, Team ID, Key ID y la ruta del archivo .p8 de la llave.
+APPLE_SERVICES_ID = os.getenv("APPLE_SERVICES_ID", "").strip()
+APPLE_TEAM_ID = os.getenv("APPLE_TEAM_ID", "").strip()
+APPLE_KEY_ID = os.getenv("APPLE_KEY_ID", "").strip()
+APPLE_KEY_PATH = os.getenv("APPLE_KEY_PATH", "").strip()
 MAIL_FROM = os.getenv("MAIL_FROM", "")  # tu dirección de Gmail
 
 # --- Conectar cuentas de clientes (skandar.online/conectar) ---

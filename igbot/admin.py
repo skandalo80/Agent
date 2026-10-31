@@ -183,9 +183,9 @@ async def publish_post(store: Store, instagram: Instagram, post: dict) -> tuple[
             await save_photo(store, instagram, media_id)
             urls.append(public_url((await store.media(media_id))[0]))
         if post.get("tipo") == "historia":
-            link = await instagram.publish_story(urls[0])
+            ig_id, link = await instagram.publicar_historia(urls[0])
         else:
-            link = await instagram.publish(urls, post["caption"])
+            ig_id, link = await instagram.publicar(urls, post["caption"])
             # Y en su página de Facebook, si la conectó (si falla ahí, el de Instagram ya salió).
             from .pagina_fb import publicar_tambien
             await publicar_tambien(store, urls, post["caption"], link)
@@ -193,7 +193,7 @@ async def publish_post(store: Store, instagram: Instagram, post: dict) -> tuple[
         log.exception("No se pudo publicar la publicación %s", post["id"])
         await store.set_post(post["id"], "fallida", error=str(e)[:500])
         return "", str(e)
-    await store.set_post(post["id"], "publicada", permalink=link)
+    await store.set_post(post["id"], "publicada", permalink=link, ig_id=ig_id)
     log.info("Publicada la publicación %s: %s", post["id"], link)
     return link, ""
 
