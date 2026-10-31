@@ -1124,6 +1124,24 @@ class Store:
         return [{"origen": o, "externo": e, "ad_id": a, "monto": m, "moneda": mo, "detalle": json.loads(d),
                  "created_at": t} for o, e, a, m, mo, d, t in await cur.fetchall()]
 
+    async def ventas_desde(self, since: float) -> tuple[int, float, str] | None:
+        """Ventas desde `since`: (cuántas, monto, moneda más usada). None si la cuenta nunca ha tenido una."""
+        cur = await self.db.execute("SELECT 1 FROM ventas LIMIT 1")
+        if await cur.fetchone() is None:
+            return None
+        cur = await self.db.execute(
+            "SELECT COUNT(*), COALESCE(SUM(monto), 0) FROM ventas WHERE created_at >= ?", (since,))
+        n, monto = await cur.fetchone()
+        cur = await self.db.execute("SELECT moneda FROM ventas GROUP BY moneda ORDER BY COUNT(*) DESC LIMIT 1")
+        return n, monto, (await cur.fetchone())[0] or ""
+
+    async def escribieron_desde(self, since: float) -> int:
+        """Cuántas personas distintas escribieron desde `since`."""
+        cur = await self.db.execute(
+            "SELECT COUNT(DISTINCT user_id) FROM messages WHERE role = 'user' AND user_id NOT LIKE 'admin:%'"
+            " AND created_at >= ?", (since,))
+        return (await cur.fetchone())[0]
+
     # --- valores sueltos (token de Instagram, etc.) ---
 
     async def get(self, key: str) -> str | None:

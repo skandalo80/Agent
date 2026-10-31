@@ -1030,9 +1030,9 @@ def test_menu_lateral_sin_grupos(cliente, monkeypatch):
     r = client.get("/panel/asistente").text
     # Cada sección es un renglón con su ícono, como Resultados; sin Tu asistente ni Contenido como grupos.
     nav = r.split('<nav class="lat-nav">')[1].split("</nav>")[0]
-    titulos = ["Resultados", "Conversaciones", "Probar tu asistente", "Campañas", "Calendario"]
+    titulos = ["Inicio", "Resultados", "Conversaciones", "Probar tu asistente", "Campañas", "Calendario"]
     assert [nav.index(f'title="{t}"') for t in titulos] == sorted(nav.index(f'title="{t}"') for t in titulos)
-    assert nav.count("<svg") == 5 and "lat-sub" not in nav and "data-sub" not in nav
+    assert nav.count("<svg") == 6 and "lat-sub" not in nav and "data-sub" not in nav
     assert 'title="Tu asistente"' not in nav and 'title="Contenido"' not in nav
     assert nav.count('class="lat-item on"') == 1 and 'class="lat-item on" href="/panel/asistente"' in nav
     # Sin contenido en el plan, no salen Campañas ni Calendario.
