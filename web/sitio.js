@@ -114,3 +114,63 @@ document.querySelectorAll('.filtros [data-filtro]').forEach(function (b) {
     if (localStorage.getItem('skandi') === 'min') minimizar(localStorage.getItem('skandi-ultimo'));
   } catch (e) {}
 })();
+
+// Animaciones (estilos en animaciones.css). Nada se mueve si el sistema pide reducir el movimiento.
+(function () {
+  if (!('IntersectionObserver' in window)) return;
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  document.documentElement.classList.add('anima');
+
+  // Aparición al bajar: lo que entra a la vez en pantalla aparece uno tras otro.
+  var bloques = document.querySelectorAll('main .antetitulo, main h1, main h2, main .bajada, main .acciones, main .micro,' +
+    ' main .tarjeta, main .funcion, main .pasos > article, main .plan, main .articulo-tarjeta, main .pastilla');
+  var vigia = new IntersectionObserver(function (entradas) {
+    var n = 0;
+    entradas.forEach(function (e) {
+      if (!e.isIntersecting) return;
+      e.target.style.setProperty('--retraso', Math.min(n++ * 0.08, 0.48) + 's');
+      e.target.classList.add('visto');
+      vigia.unobserve(e.target);
+      // Al terminar se quitan las clases para que el hover de cada tarjeta vuelva a su transición normal.
+      var t = e.target;
+      setTimeout(function () { t.classList.remove('revela', 'visto'); t.style.removeProperty('--retraso'); }, 1300);
+    });
+  }, { rootMargin: '0px 0px -8% 0px', threshold: 0.12 });
+  bloques.forEach(function (b) {
+    if (b.closest('.visual, .articulo')) return;
+    b.classList.add('revela');
+    vigia.observe(b);
+  });
+
+  // Chat del teléfono: el cliente escribe, el asistente "teclea" y contesta; al final llega la tarjeta del anuncio.
+  var chat = document.querySelector('.telefono .chat');
+  if (!chat) return;
+  var burbujas = chat.querySelectorAll('.burbuja');
+  var idea = document.querySelector('.tarjeta-idea');
+  var escribe = document.createElement('span');
+  escribe.className = 'escribe';
+  escribe.innerHTML = '<i></i><i></i><i></i>';
+  chat.append(escribe);
+  var espera = function (ms) { return new Promise(function (listo) { setTimeout(listo, ms); }); };
+  var conversar = function () {
+    var paso = espera(400);
+    burbujas.forEach(function (b) {
+      paso = paso.then(function () {
+        if (!b.classList.contains('agente')) return;
+        escribe.style.top = b.offsetTop + 'px';
+        escribe.classList.add('visto');
+        return espera(1000).then(function () { escribe.classList.remove('visto'); });
+      }).then(function () {
+        b.classList.add('visto');
+        return espera(b.classList.contains('agente') ? 900 : 500);
+      });
+    });
+    paso.then(function () { if (idea) idea.classList.add('visto'); });
+  };
+  var vigiaChat = new IntersectionObserver(function (entradas) {
+    if (!entradas[0].isIntersecting) return;
+    vigiaChat.disconnect();
+    conversar();
+  }, { threshold: 0.4 });
+  vigiaChat.observe(chat);
+})();

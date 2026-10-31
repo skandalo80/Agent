@@ -1,5 +1,6 @@
 /* Tamaños, rellenos y esquinas de la web: en ajustes.css. */
 @import url("ajustes.css?v=2026-10-28f");
+@import url("animaciones.css?v=2026-10-31a");
 :root {
   /* Grafito mate: fondo grafito, naranja para botones y números, lima solo en detalles chicos. */
   --grafito: #18191C;
