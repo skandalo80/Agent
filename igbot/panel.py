@@ -380,8 +380,21 @@ h2{font-size:1.5rem;letter-spacing:-.02em;margin-bottom:.25rem}
 .punto{color:var(--acento-claro)}
 .bajada{font-size:clamp(1.1rem,2.4vw,1.35rem);line-height:1.4;color:var(--gris);margin:1.25rem auto 0;max-width:34rem}
 .nota{color:var(--gris);font-size:.9rem;margin-top:2rem}
-.entrar-correo{display:flex;flex-wrap:wrap;gap:.75rem;justify-content:center;max-width:30rem;margin:2rem auto 0}
-.entrar-correo input{flex:1 1 14rem;width:auto}
+.caja-entrar{max-width:var(--entrar-ancho);margin:0 auto;text-align:left}
+.caja-entrar h1{font-size:var(--entrar-titulo)}
+.caja-entrar .bajada{margin:.75rem 0 0;font-size:var(--t-bajada)}
+.entrar-correo{margin-top:2rem}
+.entrar-correo label{display:block;font-size:.9rem;font-weight:600;margin-bottom:.45rem}
+.ayuda-entrar{color:var(--gris);font-size:.85rem;margin:.5rem 0 1rem}
+.caja-entrar .boton-ancho,.boton-entrar{position:relative;display:flex;width:100%;align-items:center;justify-content:center;gap:.6rem}
+.boton-ancho svg,.boton-entrar svg{width:1.2rem;height:1.2rem;flex:none}
+.boton-entrar{padding:.8rem 1.5rem;border-radius:999px;font-weight:600;text-decoration:none;color:var(--claro);background:var(--entrar-boton);border:1px solid var(--linea-oscura)}
+.boton-entrar:hover{border-color:var(--acento)}
+.otros-entrar{display:grid;gap:.75rem}
+.o-entra{display:flex;align-items:center;gap:1rem;margin:1.75rem 0;color:var(--gris);font-size:.78rem;font-weight:700;letter-spacing:var(--espaciado-ante);text-transform:uppercase}
+.o-entra::before,.o-entra::after{content:"";flex:1;height:1px;background:var(--linea-oscura)}
+.ultimo-usado{position:absolute;top:-.6rem;right:1rem;background:var(--acento);color:var(--tinta);font-size:.66rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:.15rem .5rem;border-radius:.4rem}
+.caja-entrar .nota{text-align:center}
 .aviso-entrar{color:var(--acento-claro);margin:1.5rem 0 0}
 .enlace{color:var(--acento-claro);text-decoration:none;font-weight:500}
 .volver{margin:0 0 1rem;font-size:.95rem}
@@ -1314,6 +1327,40 @@ h1,h2,h3{text-wrap:balance}
 .met-graf.barras .mh.der.abajo span{transform:translate(calc(-100% - 1rem),-.3rem)}
 .mh:hover::before,.mh:hover i,.mh:hover span{opacity:1}
 .met-graf.barras .mh::before{display:none}
+/* Inicio (igbot/inicio.py): saludo, Te falta, los números de hoy, chats que te esperan, próximas publicaciones y
+   tu plan. Tamaños en ajustes.css (--ini-*). */
+.ini-cab{margin:0 0 1.25rem}.ini-hola{font-size:var(--ini-saludo);font-weight:var(--peso-titulo);color:var(--negro)}
+.ini-botones{display:flex;gap:.6rem;flex-wrap:wrap}
+.ini-falta{margin-bottom:1.75rem}.ini-gris{color:var(--gris);font-size:.88rem}
+.ini-pasos{display:grid;grid-template-columns:repeat(auto-fit,minmax(16rem,1fr));gap:var(--hueco);margin-top:.5rem}
+.ini-paso{display:flex;gap:.8rem;align-items:center;background:var(--caja-fondo);border:1px solid var(--linea-oscura);border-radius:1rem;padding:1rem 1.1rem;color:var(--negro);text-decoration:none}
+.ini-paso:hover{border-color:rgba(255,138,61,.45)}
+.ini-n{flex:none;width:var(--paso-circulo);height:var(--paso-circulo);border-radius:50%;border:1.5px solid var(--acento);color:var(--acento);display:grid;place-items:center;font-size:var(--t-paso-num);font-weight:700}
+.ini-ir{margin-left:auto;color:var(--acento);font-weight:700;font-size:.88rem;white-space:nowrap}
+.ini-barra{display:block;height:.45rem;border-radius:999px;background:#2E3035;overflow:hidden}
+.ini-barra>span{display:block;height:100%;background:var(--neon);border-radius:999px}
+.ini-falta>.ini-barra{margin-top:1.1rem}
+.ini-sec{font-size:var(--t-ante);font-weight:var(--peso-ante);letter-spacing:var(--espaciado-ante);text-transform:uppercase;color:var(--gris);margin:0 0 .6rem}
+.ini-num{grid-column:span 3;text-decoration:none}.ini-et{color:var(--gris);font-size:.88rem}
+.ini-num b{font-size:var(--ini-numero);font-weight:700;color:var(--acento);margin:.35rem 0 .1rem;line-height:1.1}
+.ini-num small{color:var(--gris);font-size:.82rem}
+.ini-num small.sube::before{content:"";display:inline-block;width:.45rem;height:.45rem;border-radius:50%;background:var(--neon);margin-right:.4rem;vertical-align:middle}
+.ini-dos>.ini-chats{grid-column:span 7}.ini-dos>.ini-posts{grid-column:span 5}
+.ini-fila{display:flex;gap:.8rem;align-items:center;padding:.8rem 0;border-top:1px solid var(--linea-oscura);color:var(--negro);text-decoration:none}
+.cab-tarjeta+.ini-fila{border-top:0}
+.ini-av{flex:none;width:2.4rem;height:2.4rem;border-radius:50%;background:#2E3035;display:grid;place-items:center;font-weight:700;color:var(--naranja-t)}
+.ini-txt{min-width:0;flex:1}.ini-txt b{display:block;font-size:.95rem}
+.ini-txt small{display:block;color:var(--gris);font-size:.86rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ini-paso .ini-txt small{white-space:normal;margin-top:.15rem;font-size:.82rem}
+.ini-der{display:flex;flex-direction:column;align-items:flex-end;gap:.25rem}.ini-der small{color:var(--gris);font-size:.78rem}
+.ini-der em{font-style:normal;font-size:.75rem;font-weight:600;color:var(--naranja-t);background:rgba(255,138,61,.12);border-radius:999px;padding:.15rem .6rem;white-space:nowrap}
+.ini-der em.gris{color:var(--gris);background:#2E3035}
+.ini-mini{flex:none;width:3rem;height:3rem;border-radius:.6rem;object-fit:cover;background:#2E3035}
+.ini-usos{display:grid;grid-template-columns:repeat(auto-fit,minmax(14rem,1fr));gap:1.5rem;margin-top:.5rem}
+.ini-uso>div{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.5rem}.ini-uso>div>span{color:var(--gris);font-size:.9rem}
+.ini-uso b{font-size:1.05rem}.ini-uso b small{color:var(--gris);font-weight:400;font-size:.8rem}
+@media(max-width:900px){.ini-num{grid-column:span 6}.ini-dos>.ini-chats,.ini-dos>.ini-posts{grid-column:span 12}.ini-pasos{grid-template-columns:1fr}}
+@media(max-width:560px){.ini-num{grid-column:span 12}}
 """
 
 # Los tamaños (letras, rellenos, huecos, esquinas) salen de igbot/ajustes.css: se cambian ahí y cambian
@@ -1447,18 +1494,21 @@ def pagina(cuerpo: str) -> HTMLResponse:
 
 ACTIVA = ' class="on"'
 # El menú lateral, sin grupos: cada sección con su ícono. (clave, nombre, dirección, grupo al que pertenece)
-MENU = [("resultados", "Resultados", "/panel/resultados", "resultados"),
+MENU = [("inicio", "Inicio", "/panel/inicio", "inicio"),
+        ("resultados", "Resultados", "/panel/resultados", "resultados"),
         ("chats", "Conversaciones", "/panel/asistente", "asistente"),
         ("probar", "Probar tu asistente", "/panel/probar#ultimo", "asistente"),
         ("campanas", "Campañas", "/panel/contenido/campanas", "contenido"),
         ("calendario", "Calendario", "/panel/contenido", "contenido")]
 # Abajo, bajo la etiqueta "Configuración" (arriba de Ayuda): lo que se configura una vez. (clave, nombre, dirección)
-# Tu marca solo con contenido en el plan.
+# Tu marca y Tus interacciones solo con contenido en el plan.
 CONFIGURACION = [("empresa", "Tu empresa", "/panel/empresa"),
                  ("configura", "Tu asistente", "/panel/asistente/configura"),
-                 ("marca", "Tu marca", "/panel/contenido/marca")]
+                 ("marca", "Tu marca", "/panel/contenido/marca"),
+                 ("interacciones", "Tus interacciones", "/panel/interacciones")]
+CON_CONTENIDO = {"marca", "interacciones"}
 # La sección que se marca si la página no dice cuál (`sub`) dentro de su grupo (`menu`).
-POR_GRUPO = {"resultados": "resultados", "asistente": "chats", "contenido": "calendario"}
+POR_GRUPO = {"inicio": "inicio", "resultados": "resultados", "asistente": "chats", "contenido": "calendario"}
 
 
 # Íconos del menú lateral: de línea, todos del mismo trazo y tamaño (dibujos de Lucide, licencia ISC).
@@ -1468,6 +1518,8 @@ def _icono(trazos: str, tam: int = 20) -> str:
 
 
 ICONOS = {
+    "inicio": _icono('<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999'
+                     'a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),
     "resultados": _icono('<path d="M3 3v16a2 2 0 0 0 2 2h16M18 17V9M13 17V5M8 17v-3"/>'),
     "chats": _icono('<path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"/>'
                     '<path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"/>'),
@@ -1478,6 +1530,7 @@ ICONOS = {
     "campanas": _icono('<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>'),
     "calendario": _icono('<rect width="18" height="18" x="3" y="4" rx="2"/><path d="M8 2v4M16 2v4M3 10h18'
                          'M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01"/>'),
+    "interacciones": _icono('<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/><path d="M8 12h.01M12 12h.01M16 12h.01"/>'),
     "marca": _icono('<path d="M12 22a10 10 0 1 1 10-10c0 3-2.5 5-5.5 5H15a1.7 1.7 0 0 0-1.3 2.8c.3.3.4.7.4 1.1'
                     ' 0 .9-.7 1.6-1.6 1.6z"/><circle cx="13.5" cy="6.5" r=".6" fill="currentColor"/>'
                     '<circle cx="17.5" cy="10.5" r=".6" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".6" fill="currentColor"/>'
@@ -1569,7 +1622,7 @@ def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None, 
     ajustes = "".join(
         f'<a class="lat-item{" on" if k == sub else ""}" href="{href}" title="{nombre}">{ICONOS[k]}'
         f'<span class="txt">{nombre}</span></a>' for k, nombre, href in CONFIGURACION
-        if k != "marca" or cuenta is None or cuenta.imagenes_mes > 0)
+        if k not in CON_CONTENIDO or cuenta is None or cuenta.imagenes_mes > 0)
     # Sin JavaScript también abre en el celular: la hamburguesa apunta a #lateral (:target).
     return (
         '<header class="movil"><a class="hamburguesa" href="#lateral" aria-label="Abrir menú">'
@@ -1617,19 +1670,65 @@ def menu_perfil(perfil: str, cuenta: Cuenta | None, foto: str = "", sub: str = "
             + salir.format("", "", "Salir") + "</div></details></div>")
 
 
-def entrar() -> HTMLResponse:
+ICONO_GOOGLE = ('<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7'
+                ' 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4'
+                ' 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00"'
+                ' d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3'
+                ' 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7'
+                ' 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6'
+                ' 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/>'
+                '</svg>')
+ICONO_FACEBOOK = ('<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#1877F2" d="M24 12a12 12 0 1 0-13.9'
+                  ' 11.9v-8.4H7.1V12h3V9.4c0-3 1.8-4.7 4.5-4.7 1.3 0 2.7.2 2.7.2v3h-1.5c-1.5 0-2 .9-2 1.9V12h3.4l-.5'
+                  ' 3.5h-2.9v8.4A12 12 0 0 0 24 12z"/></svg>')
+ICONO_APPLE = ('<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M16.4 12.6c0-2.6 2.1-3.8'
+               ' 2.2-3.9-1.2-1.8-3.1-2-3.7-2-1.6-.2-3.1.9-3.9.9-.8 0-2-.9-3.4-.9-1.7 0-3.3 1-4.2 2.6-1.8 3.1-.5'
+               ' 7.7 1.3 10.2.9 1.2 1.9 2.6 3.2 2.6 1.3-.1 1.8-.8 3.3-.8 1.6 0 2 .8 3.4.8 1.4 0 2.3-1.3 3.1-2.5 1-1.4'
+               ' 1.4-2.8 1.4-2.9 0 0-2.7-1-2.7-4.1zM13.9 5c.7-.9 1.2-2.1 1.1-3.3-1 0-2.3.7-3 1.6-.7.8-1.2 2-1.1'
+               ' 3.2 1.1.1 2.3-.6 3-1.5z"/></svg>')
+ICONO_CORREO = ('<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"'
+                ' stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/>'
+                '<path d="m22 7-10 6L2 7"/></svg>')
+
+
+def entrar(request: Request | None = None, aviso: str = "") -> HTMLResponse:
+    """La pantalla de entrar: correo (enlace de un solo uso), Google, Apple (si hay llaves) y Facebook. Instagram ya no: en el iPhone
+    con la app instalada se queda en "Loading". Quien entra por primera vez con correo o Google enlaza su
+    Instagram en el paso siguiente (acceso.py); con Facebook llega ya enlazado."""
+    from . import acceso, agenda_google, facebook
+    ultimo = request.cookies.get(acceso.COOKIE_ULTIMO, "") if request else ""
+
+    def marca(metodo: str) -> str:
+        return '<span class="ultimo-usado">Último usado</span>' if metodo == ultimo else ""
+
+    otros = ""
+    if agenda_google.enabled():
+        otros += (f'<a class="boton-entrar" href="/panel/correo/google">{ICONO_GOOGLE}Entrar con Google'
+                  f'{marca("google")}</a>')
+    if acceso.apple_activo():
+        otros += (f'<a class="boton-entrar" href="/panel/correo/apple">{ICONO_APPLE}Entrar con Apple'
+                  f'{marca("apple")}</a>')
+    if facebook.enabled():
+        otros += (f'<a class="boton-entrar" href="/panel/facebook/entrar">{ICONO_FACEBOOK}Entrar con Facebook'
+                  f'{marca("facebook")}</a>')
     return pagina(
         cabecera()
-        + '<section class="oscuro entrar"><div class="contenedor centro">'
-        ''
-        '<h1>Tu asistente<span class="punto">.</span></h1>'
-        '<p class="bajada">Entra con tu cuenta de Instagram para configurar lo que responde tu asistente.</p>'
-        '<div class="acciones"><a class="boton" href="/conectar/instagram">Entrar con Instagram</a>'
-        + ('<a class="boton secundario" href="/panel/facebook/entrar">Entrar con Facebook</a>'
-           if config.FB_APP_ID else "") + "</div>"
-        + '<p class="nota">¿En el cel no abre Instagram? <a class="enlace" href="/panel/correo">Entra con tu correo ›</a></p>'
-        f'<p class="nota">¿Aún no conectas tu Instagram? <a class="enlace" href="{config.SITE_URL}/conectar">Empieza aquí ›</a></p>'
-        "</div></section>"
+        + '<section class="oscuro entrar"><div class="contenedor"><div class="caja-entrar">'
+        '<h1>Entra a Skandar<span class="punto">.</span></h1>'
+        '<p class="bajada">Tus redes sociales, trabajando.</p>'
+        + (f'<p class="aviso-entrar">{escape(aviso)}</p>' if aviso else "")
+        + '<form class="entrar-correo" method="post" action="/panel/correo">'
+        '<label for="correo-entrar">Tu correo</label>'
+        '<input id="correo-entrar" type="email" name="correo" required maxlength="254" autocomplete="email"'
+        ' placeholder="tu@correo.com">'
+        '<p class="ayuda-entrar">Te mandamos un enlace de un solo uso para entrar.</p>'
+        f'<button class="boton boton-ancho" type="submit">{ICONO_CORREO}Entrar con mi correo{marca("correo")}'
+        "</button></form>"
+        + (f'<div class="o-entra"><span>o entra con</span></div><div class="otros-entrar">{otros}</div>'
+           if otros else "")
+        + f'<p class="nota">¿Primera vez? Entra con cualquiera de estas opciones y enlazamos tu Instagram.'
+        f' <a class="enlace" href="{config.SITE_URL}">Conoce Skandar ›</a></p>'
+        "</div></div></section>"
     )
 
 
@@ -1864,25 +1963,29 @@ async def bienvenida(c: Cuenta) -> HTMLResponse:
 
 async def inicio(c: Cuenta) -> str:
     """A dónde lleva /panel: a la bienvenida hasta que pasa por su paso 2 (las cuentas de antes que ya
-    tenían todo listo no la ven); luego a Resultados si el asistente ya trabaja (encendido y con mensajes
-    de clientes); si no, a Tu asistente."""
+    tenían todo listo no la ven); luego a Inicio (igbot/inicio.py)."""
     if c.slug and await c.store.get("bienvenida") != "1" and not (await asistente_listo(c) and await marca_lista(c)):
         return "/panel/bienvenida"
-    if await activo(c) and await c.store.has_client_messages():
-        return "/panel/resultados"
-    return "/panel/asistente"
+    return "/panel/inicio"
 
 
 @router.get("")
 async def ver(request: Request):
     c = cuenta_de_sesion(request)
-    return RedirectResponse(await inicio(c), status_code=303) if c else entrar()
+    if not c:
+        return entrar(request)
+    from . import acceso
+    r = RedirectResponse(await inicio(c), status_code=303)
+    if correo := acceso.correo_alta(request):  # se registró con correo o Google y acaba de enlazar su Instagram
+        await acceso.guardar_correo(c, correo)
+        r.delete_cookie(acceso.COOKIE_ALTA, path="/panel")
+    return r
 
 
 @router.get("/bienvenida")
 async def ver_bienvenida(request: Request):
     c = cuenta_de_sesion(request)
-    return await bienvenida(c) if c else entrar()
+    return await bienvenida(c) if c else entrar(request)
 
 
 @router.post("/bienvenida")
@@ -1906,7 +2009,7 @@ async def ver_asistente(request: Request):
     hoja = int(q["p"]) if q.get("p", "").isdigit() else 1
     n = int(q["n"]) if q.get("n", "").isdigit() else 0
     return await panel_de(c, ver=q.get("ver", ""), vista=vista, abrir=q.get("abrir") == "1",
-                          buscar=q.get("q", ""), hoja=hoja, chat=q.get("chat", "")[:64], n=n) if c else entrar()
+                          buscar=q.get("q", ""), hoja=hoja, chat=q.get("chat", "")[:64], n=n) if c else entrar(request)
 
 
 @router.get("/conexion")
@@ -1914,7 +2017,7 @@ async def ver_conexion(request: Request):
     c = cuenta_de_sesion(request)
     from .cobros import AVISOS  # al volver de conectar un cobro
     return await panel_de(c, vista="conexion", aviso=AVISOS.get(request.query_params.get("aviso", ""), "")) \
-        if c else entrar()
+        if c else entrar(request)
 
 
 @router.get("/asistente/conexion")  # su dirección anterior

@@ -1,6 +1,11 @@
 /* Ajustes de diseño del panel (console.skandar.online). Todas las páginas del panel leen sus tamaños de aquí:
    cambia un número y cambia en todas. La web tiene los suyos en web/ajustes.css. */
 :root {
+  /* Pantalla de entrar (correo, Google, Facebook) */
+  --entrar-ancho: 26rem;       /* ancho de la columna de entrar */
+  --entrar-titulo: 2.25rem;    /* "Entra a Skandar." */
+  --entrar-boton: #2E3035;     /* fondo de los botones de Google y Facebook */
+
   /* Letras */
   --t-ante: .75rem;            /* antetítulo: RESUMEN, PASO 1 DE 4, UNA SOLA PLATAFORMA */
   --t-titulo: 1.75rem;         /* título de cada paso o página */
@@ -68,6 +73,17 @@
   --marca-op-titulo: .9rem;    /* nombre de la tarjeta */
   --marca-op-texto: .76rem;    /* textos de la tarjeta */
 
+  /* Inicio */
+  --ini-saludo: 1.25rem;       /* "Hola, …" arriba a la izquierda */
+  --ini-numero: 2rem;          /* los números grandes de "Hoy" */
+
+  /* Configura tus interacciones: la tabla de comentarios (tipo, en comentarios, por DM, flechita) */
+  --int-columnas: minmax(0, .8fr) minmax(0, 1.3fr) minmax(0, 1.3fr) 2rem;
+  --int-columnas-una: minmax(0, .8fr) minmax(0, 2.6fr) 2rem; /* tablas con una sola columna (historias) */
+  --int-claves-columnas: minmax(0, .8fr) minmax(0, 1.6fr) minmax(0, 1fr) 2rem; /* palabras, DM, respuesta, quitar */
+  --int-hueco: 1.5rem;         /* espacio entre columnas */
+  --int-fila-pad: 1rem;        /* espacio arriba y abajo de cada fila */
+
   /* Conversaciones */
   --punto-chat: .6rem;         /* punto lima de no leído en cada chat, debajo de la hora */
 }
@@ -75,5 +91,5 @@
   :root { --pers-columnas: 2; }
 }
 @media (max-width: 560px) {
-  :root { --t-titulo: 1.5rem; --hoja-pad: 1.4rem 1.1rem; --caja-pad: 1.1rem; --pers-columnas: 1; }
+  :root { --ini-numero: 1.6rem; --t-titulo: 1.5rem; --hoja-pad: 1.4rem 1.1rem; --caja-pad: 1.1rem; --pers-columnas: 1; }
 }

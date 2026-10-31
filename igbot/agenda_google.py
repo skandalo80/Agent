@@ -272,6 +272,9 @@ async def conectar(request: Request):
 
 @router.get("/callback")
 async def callback(request: Request):
+    from . import acceso
+    if acceso.es_de_entrar(request.query_params.get("state", "")):  # entrar con Google, no conectar el calendario
+        return await acceso.vuelta_google(request)
     if not (c := panel.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     p = dict(request.query_params)

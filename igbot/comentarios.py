@@ -149,8 +149,9 @@ async def claude_spam(text: str) -> bool:
 
 
 async def handle(value: dict, store: Store, instagram: Instagram, google: Google, account_id: str,
-                 classify=claude_matches, spam_check=claude_spam) -> None:
-    """Procesa un aviso de comentario del webhook (campo 'comments')."""
+                 classify=claude_matches, spam_check=claude_spam, escribe=None) -> None:
+    """Procesa un aviso de comentario del webhook (campo 'comments').
+    `escribe`: quien escribe las respuestas de la tabla de interacciones (las pruebas pasan uno falso)."""
     comment_id = value.get("id", "")
     author = (value.get("from") or {}).get("id", "")
     media_id = (value.get("media") or {}).get("id", "")
@@ -170,14 +171,19 @@ async def handle(value: dict, store: Store, instagram: Instagram, google: Google
         from .contenido import reglas  # las de los posts que armó el cliente en su panel
 
         rules += for_post(await reglas(store), code)
+    from . import interacciones  # Configura tus interacciones (import tardío: importa el panel)
+
+    tabla = await interacciones.guardado(cuenta(), store)
+    if interacciones.disponible(cuenta()):
+        rules += interacciones.claves_generales(tabla, code)  # las palabras clave que sirven en cualquier post
     literal = literal_matches(rules, text)
     # Una publicación viral no debe vaciar el presupuesto: pasado el tope del día (o el
     # presupuesto de Claude), solo cuentan las palabras clave escritas tal cual.
-    con_claude = (await store.comments_since(limites.today_start()) <= cuenta().max_comments_per_day
+    con_claude = (await store.comments_since(limites.today_start()) <= interacciones.tope(cuenta(), tabla)
                   and not await limites.over_budget(store))
     if not con_claude:
         log.info("Tope de comentarios del día: el %s solo se revisa por palabra exacta", comment_id)
-    if con_claude and cuenta().hide_spam and not literal and await spam_check(text):
+    if con_claude and interacciones.ocultar_spam(cuenta(), tabla) and not literal and await spam_check(text):
         try:
             await instagram.hide_comment(comment_id)
             await store.comment_result(comment_id, SPAM, False, False)
@@ -185,11 +191,15 @@ async def handle(value: dict, store: Store, instagram: Instagram, google: Google
         except Exception:
             log.exception("No se pudo ocultar el comentario %s", comment_id)
         return
-    if not rules:
-        log.info("La publicación no tiene palabras clave; se ignora el comentario %s", comment_id)
-        return
-    matched = literal or (await classify(rules, text) if con_claude else [])
+    matched = literal or (await classify(rules, text) if rules and con_claude else [])
     if not matched:
+        # Sin palabra clave que aplique: lo que diga la tabla de Configura tus interacciones (con Claude dentro del tope).
+        if con_claude and await interacciones.atender(cuenta(), comment_id, author, text, store, instagram,
+                                                      parent=value.get("parent_id", ""), escribe=escribe):
+            return
+        if not rules:
+            log.info("La publicación no tiene palabras clave; se ignora el comentario %s", comment_id)
+            return
         log.info("El comentario %s no coincide con ninguna palabra clave de %s", comment_id, code)
         await store.comment_result(comment_id, "", False, False)
         return

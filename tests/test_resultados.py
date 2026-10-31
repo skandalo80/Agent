@@ -158,15 +158,15 @@ def test_inicio_del_panel(cliente, monkeypatch):
     assert "Te falta llenar tu <b>Perfil de empresa</b>" in client.get("/panel/asistente").text
     lista["empresa"] = True
     assert "Te falta llenar tu" not in client.get("/panel/asistente").text
-    # Después (en pausa y sin mensajes): a configurar su asistente.
+    # Después: siempre a Inicio, con lo que le falta, lo de hoy y quién lo espera.
     r = client.get("/panel", follow_redirects=False)
-    assert r.status_code == 303 and r.headers["location"] == "/panel/asistente"
+    assert r.status_code == 303 and r.headers["location"] == "/panel/inicio"
     client.post("/panel/estado", headers=ORIGEN, data={"activo": "1"})
-    assert client.get("/panel", follow_redirects=False).headers["location"] == "/panel/asistente"  # sin mensajes
     client.portal.call(c.store.add_incoming, "ana", "m1", "hola")
-    assert client.get("/panel", follow_redirects=False).headers["location"] == "/panel/resultados"
+    assert client.get("/panel", follow_redirects=False).headers["location"] == "/panel/inicio"
     html = client.get("/panel").text
-    assert html.index(" title=\"Resultados\"") < html.index(" title=\"Conversaciones\"")  # primero en el menú
+    assert html.index(' title="Inicio"') < html.index(' title="Resultados"') < html.index(' title="Conversaciones"')
+    assert 'class="lat-item on" href="/panel/inicio" title="Inicio"' in html
     assert 'href="/panel/asistente" title="Conversaciones"' in html
 
 
@@ -235,3 +235,41 @@ def test_pestana_comentarios(cliente, monkeypatch):
     monkeypatch.setattr(resultados, "_cache", {})
     client.get("/panel/resultados?ver=comentarios")
     assert len(pedidos) == 2  # la foto y el texto quedan guardados
+
+
+def test_pagina_de_inicio(cliente, monkeypatch):
+    client, c = cliente
+
+    async def username(user_id):
+        return f"@{user_id}"
+
+    monkeypatch.setattr(c.instagram, "username", username, raising=False)
+    assert client.get("/panel/inicio", follow_redirects=False).status_code == 200
+    html = client.get("/panel/inicio").text.split("<main>")[1]
+    # Básico: sin publicaciones, sin Crear campaña y solo el uso de mensajes.
+    assert "Te falta" in html and "Hola" in html and "Mensajes que contestó tu asistente" in html
+    assert "Nadie te espera" in html and "Próximas publicaciones" not in html and "Crear campaña" not in html
+    assert "Tu plan · Asistente virtual" in html and ">Imágenes<" not in html
+    assert "Personas que te escribieron" in html  # sin ventas todavía
+
+    async def preparar():
+        await c.store.add_incoming("beto", "m1", "quiero hablar con alguien")
+        await c.store.pause("beto", time.time() + 3600)
+        await c.store.add_event("beto", "humano", {"razon": "queja"})
+        await c.store.add_venta("shopify", "1", "beto", "", 120, "MXN", {}, time.time())
+        post = await c.store.add_post("panel", [], "Abrimos el sábado\nmás texto", time.time() + 86400)
+        await c.store.set_post(post, "programada")
+
+    client.portal.call(preparar)
+    html = client.get("/panel/inicio").text.split("<main>")[1]
+    assert "quiero hablar con alguien" in html and ">Queja<" in html and "Nadie te espera" not in html
+    assert "$120 MXN" in html and "1 pedido" in html
+    assert "Abrimos el sábado" not in html  # Básico no ve publicaciones
+    monkeypatch.setattr(c, "imagenes_mes", 40)
+    monkeypatch.setattr(c, "posts_mes", 12)
+    html = client.get("/panel/inicio").text.split("<main>")[1]
+    assert "Próximas publicaciones" in html and "Mañana" in html and "Abrimos el sábado" in html
+    assert "Crear campaña" in html and ">Imágenes<" in html and ">Posts<" in html
+    # Sin sesión, a entrar.
+    client.cookies.clear()
+    assert client.get("/panel/inicio", follow_redirects=False).headers["location"] == "/panel"

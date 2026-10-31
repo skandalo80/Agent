@@ -101,7 +101,7 @@ def test_cliente_se_conecta_configura_y_enciende(monkeypatch, tmp_path):
     monkeypatch.setattr(bot.agent, "run_claude", fake_claude)
 
     with TestClient(bot.app, base_url="https://testserver") as client:
-        assert "Entrar con Instagram" in client.get("/panel").text  # sin sesión
+        assert "Entrar con mi correo" in client.get("/panel").text  # sin sesión
 
         client.post("/conectar/solicitud", data={"usuario": "cafe.lunar", "nombre": "Ana", "correo": "ana@cafe.mx"})
         r = client.get("/conectar/instagram", follow_redirects=False)
@@ -124,6 +124,8 @@ def test_cliente_se_conecta_configura_y_enciende(monkeypatch, tmp_path):
         r = client.get("/panel")  # la primera vez: la bienvenida, ya en su paso 2
         assert "¿Por dónde seguimos?" in r.text and "Configurar tu asistente" not in r.text and "Empezar" in r.text
         r = client.get("/panel")
+        assert r.url.path == "/panel/inicio" and "Hola" in r.text
+        r = client.get("/panel/asistente")
         assert "@cafe.lunar" in r.text and "en pausa" in r.text
 
         # Mientras está en pausa, sus DMs no se contestan.
@@ -346,7 +348,7 @@ def test_cuenta_grande_queda_en_revision(monkeypatch, tmp_path):
         c = bot.buscar("1784")
         client.get("/panel")  # bienvenida
         client.post("/panel/bienvenida", headers=ORIGEN, data={"accion": "omitir"})
-        r = client.get("/panel")
+        r = client.get("/panel/asistente")
         assert ">Encender<" not in r.text
         r = client.post("/panel/estado", headers=ORIGEN, data={"activo": "1"})
         assert "En revisión" in r.text and not client.portal.call(panel.activo, c)
