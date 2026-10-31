@@ -1,6 +1,11 @@
 /* Ajustes de diseño del panel (console.skandar.online). Todas las páginas del panel leen sus tamaños de aquí:
    cambia un número y cambia en todas. La web tiene los suyos en web/ajustes.css. */
 :root {
+  /* Pantalla de entrar (correo, Google, Facebook) */
+  --entrar-ancho: 26rem;       /* ancho de la columna de entrar */
+  --entrar-titulo: 2.25rem;    /* "Entra a Skandar." */
+  --entrar-boton: #2E3035;     /* fondo de los botones de Google y Facebook */
+
   /* Letras */
   --t-ante: .75rem;            /* antetítulo: RESUMEN, PASO 1 DE 4, UNA SOLA PLATAFORMA */
   --t-titulo: 1.75rem;         /* título de cada paso o página */
