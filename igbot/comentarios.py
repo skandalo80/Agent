@@ -171,16 +171,18 @@ async def handle(value: dict, store: Store, instagram: Instagram, google: Google
         from .contenido import reglas  # las de los posts que armó el cliente en su panel
 
         rules += for_post(await reglas(store), code)
+    from . import interacciones  # Configura tus interacciones (import tardío: importa el panel)
+
+    tabla = await interacciones.guardado(cuenta(), store)
+    if interacciones.disponible(cuenta()):
+        rules += interacciones.claves_generales(tabla, code)  # las palabras clave que sirven en cualquier post
     literal = literal_matches(rules, text)
     # Una publicación viral no debe vaciar el presupuesto: pasado el tope del día (o el
     # presupuesto de Claude), solo cuentan las palabras clave escritas tal cual.
-    con_claude = (await store.comments_since(limites.today_start()) <= cuenta().max_comments_per_day
+    con_claude = (await store.comments_since(limites.today_start()) <= interacciones.tope(cuenta(), tabla)
                   and not await limites.over_budget(store))
     if not con_claude:
         log.info("Tope de comentarios del día: el %s solo se revisa por palabra exacta", comment_id)
-    from . import interacciones  # la tabla de Configura tus interacciones (import tardío: importa el panel)
-
-    tabla = await interacciones.guardado(cuenta(), store)
     if con_claude and interacciones.ocultar_spam(cuenta(), tabla) and not literal and await spam_check(text):
         try:
             await instagram.hide_comment(comment_id)

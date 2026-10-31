@@ -70,6 +70,8 @@
 
   /* Configura tus interacciones: la tabla de comentarios (tipo, en comentarios, por DM, flechita) */
   --int-columnas: minmax(0, .8fr) minmax(0, 1.3fr) minmax(0, 1.3fr) 2rem;
+  --int-columnas-una: minmax(0, .8fr) minmax(0, 2.6fr) 2rem; /* tablas con una sola columna (historias) */
+  --int-claves-columnas: minmax(0, .8fr) minmax(0, 1.6fr) minmax(0, 1fr) 2rem; /* palabras, DM, respuesta, quitar */
   --int-hueco: 1.5rem;         /* espacio entre columnas */
   --int-fila-pad: 1rem;        /* espacio arriba y abajo de cada fila */
 

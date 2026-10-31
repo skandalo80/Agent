@@ -159,7 +159,14 @@ async def arrancar(c: Cuenta) -> None:
         if google and comentarios.available() or c.hide_spam or c.imagenes_mes:
             fields += ",comments"
         try:
-            await c.instagram.subscribe(fields)
+            if interacciones.disponible(c):  # menciones en posts y comentarios de otras cuentas
+                try:
+                    await c.instagram.subscribe(fields + ",mentions")
+                except Exception:
+                    log.exception("No se pudo suscribir %s a las menciones; sigue sin ellas", nombre(c))
+                    await c.instagram.subscribe(fields)
+            else:
+                await c.instagram.subscribe(fields)
         except Exception:
             log.exception("No se pudo suscribir la cuenta %s a los avisos", nombre(c))
         await conectar_pagina(c)
@@ -537,6 +544,9 @@ async def receive_entry(c: Cuenta, entry: dict) -> None:
         log.info("Aviso para %s, que está en pausa desde su panel; no se contesta", nombre(c))
         return
     for change in entry.get("changes", []):
+        if change.get("field") == "mentions":  # te mencionaron en el post o en un comentario de otra cuenta
+            in_background(interacciones.mencion(c, change.get("value") or {}))
+            continue
         if change.get("field") != "comments":
             continue
         value = change.get("value") or {}
@@ -581,5 +591,7 @@ async def receive_entry(c: Cuenta, entry: dict) -> None:
                 for photo in photos:
                     in_background(admin.save_photo_quietly(store, instagram, photo))
                 user_id = admin.key(user_id)
+        if not admin.is_admin(event["sender"]["id"]) and await interacciones.dm_de_historia(c, user_id, message, text):
+            continue  # una historia con mensaje predeterminado o sin contestar (Configura tus interacciones)
         if await store.add_incoming(user_id, message["mid"], text):
             dispatchers[c.slug].notify(user_id)

@@ -537,7 +537,7 @@ document.addEventListener("click", (e) => {
     const lista = agregar.closest("[data-lista]");
     const nuevo = lista.querySelector("template").content.firstElementChild.cloneNode(true);
     lista.insertBefore(nuevo, agregar);
-    nuevo.querySelector("input").focus();
+    nuevo.querySelector("input, textarea").focus();
     return;
   }
   const quitar = e.target.closest("[data-quitar]");
@@ -545,6 +545,6 @@ document.addEventListener("click", (e) => {
     const lista = quitar.closest("[data-lista]");
     const item = quitar.closest(".it-item");
     if (lista.querySelectorAll(".it-item").length > 1) item.remove();
-    else item.querySelector("input").value = "";
+    else item.querySelectorAll("input, textarea").forEach((campo) => { campo.value = ""; });
   }
 });

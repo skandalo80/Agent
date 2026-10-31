@@ -122,3 +122,124 @@ def test_tipos_sin_claude():
     assert it.tipo_sin_claude("😍🔥!!") == "emojis"
     assert it.tipo_sin_claude("@ana.m @beto_2 👀") == "etiqueta"
     assert it.tipo_sin_claude("@ana mira esto") == ""
+
+
+def test_palabras_clave_generales_sirven_en_cualquier_post(monkeypatch):
+    datos = {"claves": [{"palabras": "MENU, carta", "dm": "Aquí la carta: …", "publica": "¡Te mandamos DM!"}]}
+    ig, _, llamadas = run([comment("c1", "me pasas el menú?", media="m2")], datos, None, monkeypatch)
+    assert ig.dms == [("c1", "Aquí la carta: …")] and ig.public == [("c1", "¡Te mandamos DM!")]
+    assert llamadas == []  # va antes que la tabla
+    ig, _, _ = run([comment("c1", "menu", media="m2")], {**datos, "activo": False}, None, monkeypatch)
+    assert ig.dms == []  # con sus interacciones en pausa
+
+
+def test_pausadas_la_tabla_no_contesta(monkeypatch):
+    ig, _, llamadas = run([comment("c1", "me encanta", media="m2")], {**tabla(), "activo": False},
+                          lambda t: {"tipo": "elogio", "publica": "😊"}, monkeypatch)
+    assert ig.public == [] and llamadas == []
+
+
+def test_el_tope_del_dia_sale_de_la_tabla(monkeypatch):
+    ig, _, llamadas = run([comment("c1", "me encanta", media="m2"), comment("c2", "qué cool", media="m2", author="b")],
+                          {**tabla(), "tope": 50}, lambda t: {"tipo": "elogio", "publica": "😊"}, monkeypatch)
+    assert len(ig.public) == 2
+    assert it.tope(cuenta(), {"tope": 50}) == 50 and it.tope(cuenta(), {"tope": 7}) == cuenta().max_comments_per_day
+
+
+class FakeCanal:
+    def __init__(self):
+        self.textos, self.menciones = [], []
+
+    async def send_text(self, user_id, text):
+        self.textos.append((user_id, text))
+
+    async def texto_mencion(self, media_id, comment_id=""):
+        return "Miren lo que compré en @cafe.lunar 😍"
+
+    async def contestar_mencion(self, media_id, comment_id, text):
+        self.menciones.append((media_id, comment_id, text))
+
+
+class FakeCuenta:
+    def __init__(self, store, imagenes=40):
+        self.store, self.instagram, self.imagenes_mes = store, FakeCanal(), imagenes
+        self.max_comments_per_day, self.hide_spam = 300, False
+
+
+def con_cuenta(datos, prueba, monkeypatch, imagenes=40):
+    monkeypatch.setattr("igbot.panel.usuario", lambda c: asyncio.sleep(0, "cafe.lunar"))
+
+    async def main():
+        store = Store(":memory:")
+        await store.open()
+        if datos is not None:
+            await store.set("interacciones", json.dumps(datos))
+        c = FakeCuenta(store, imagenes)
+        try:
+            return await prueba(c)
+        finally:
+            await store.close()
+
+    return asyncio.run(main())
+
+
+MENCION = {"mid": "m1", "attachments": [{"type": "story_mention", "payload": {"url": "https://x"}}]}
+RESPUESTA = {"mid": "m2", "text": "🔥", "reply_to": {"story": {"id": "s1", "url": "https://x"}}}
+
+
+def test_que_historia_es():
+    assert it.de_historia(MENCION, "[envió: story_mention]") == ("menciones", "historia")
+    assert it.de_historia(RESPUESTA, "🔥") == ("historias", "reaccion")
+    assert it.de_historia({**RESPUESTA, "text": "¿cuánto?"}, "¿cuánto?") == ("historias", "mensaje")
+    assert it.de_historia({"mid": "m3", "text": "hola"}, "hola") is None
+
+
+def test_historias_con_la_ia_siguen_el_camino_de_siempre(monkeypatch):
+    async def prueba(c):
+        return await it.dm_de_historia(c, "ana", RESPUESTA, "🔥"), await c.store.pending("ana")
+
+    assert con_cuenta(None, prueba, monkeypatch) == (False, [])  # lo propuesto: La IA contesta = el asistente
+
+
+def test_mencion_en_historia_con_mensaje_predeterminado(monkeypatch):
+    datos = {"menciones": {"historia": {"dm": {"on": True, "modo": "fijo", "msg": "¡Gracias por compartirnos! 💛"}}}}
+
+    async def prueba(c):
+        atendido = await it.dm_de_historia(c, "ana", MENCION, "[envió: story_mention]")
+        return atendido, c.instagram.textos, await c.store.pending("ana"), await c.store.recent("ana", 5)
+
+    atendido, textos, pendientes, recientes = con_cuenta(datos, prueba, monkeypatch)
+    assert atendido and textos == [("ana", "¡Gracias por compartirnos! 💛")]
+    assert pendientes == [] and recientes[-1] == ("assistant", "¡Gracias por compartirnos! 💛")
+
+
+def test_reaccion_sin_contestar_no_se_contesta(monkeypatch):
+    datos = {"historias": {"reaccion": {"dm": {"on": False}}}}
+
+    async def prueba(c):
+        return await it.dm_de_historia(c, "ana", RESPUESTA, "🔥"), c.instagram.textos, await c.store.pending("ana")
+
+    assert con_cuenta(datos, prueba, monkeypatch) == (True, [], [])
+
+
+def test_mencion_en_un_post_se_agradece_ahi(monkeypatch):
+    escritos = []
+
+    async def escribe(c, texto, usuario, va_dm, mencion=False):
+        escritos.append((texto, mencion))
+        return {"publica": "¡Gracias por la mención! 💛"}
+
+    async def prueba(c):
+        await it.mencion(c, {"media_id": "77", "comment_id": "88"}, escribe=escribe)
+        await it.mencion(c, {"media_id": "77", "comment_id": "88"}, escribe=escribe)  # Meta reintenta
+        return c.instagram.menciones
+
+    assert con_cuenta({}, prueba, monkeypatch) == [("77", "88", "¡Gracias por la mención! 💛")]
+    assert escritos == [("Miren lo que compré en @cafe.lunar 😍", True)]
+
+    async def apagada(c):
+        await it.mencion(c, {"media_id": "77"}, escribe=escribe)
+        return c.instagram.menciones
+
+    assert con_cuenta({"menciones": {"post": {"pub": {"on": False}}}}, apagada, monkeypatch) == []
+    assert con_cuenta({}, apagada, monkeypatch, imagenes=0) == []

@@ -1441,13 +1441,14 @@ MENU = [("resultados", "Resultados", "/panel/resultados", "resultados"),
         ("chats", "Conversaciones", "/panel/asistente", "asistente"),
         ("probar", "Probar tu asistente", "/panel/probar#ultimo", "asistente"),
         ("campanas", "Campañas", "/panel/contenido/campanas", "contenido"),
-        ("calendario", "Calendario", "/panel/contenido", "contenido"),
-        ("interacciones", "Interacciones", "/panel/interacciones", "contenido")]
+        ("calendario", "Calendario", "/panel/contenido", "contenido")]
 # Abajo, bajo la etiqueta "Configuración" (arriba de Ayuda): lo que se configura una vez. (clave, nombre, dirección)
-# Tu marca solo con contenido en el plan.
+# Tu marca y Tus interacciones solo con contenido en el plan.
 CONFIGURACION = [("empresa", "Tu empresa", "/panel/empresa"),
                  ("configura", "Tu asistente", "/panel/asistente/configura"),
-                 ("marca", "Tu marca", "/panel/contenido/marca")]
+                 ("marca", "Tu marca", "/panel/contenido/marca"),
+                 ("interacciones", "Tus interacciones", "/panel/interacciones")]
+CON_CONTENIDO = {"marca", "interacciones"}
 # La sección que se marca si la página no dice cuál (`sub`) dentro de su grupo (`menu`).
 POR_GRUPO = {"resultados": "resultados", "asistente": "chats", "contenido": "calendario"}
 
@@ -1561,7 +1562,7 @@ def cabecera(salir: bool = False, menu: str = "", cuenta: Cuenta | None = None, 
     ajustes = "".join(
         f'<a class="lat-item{" on" if k == sub else ""}" href="{href}" title="{nombre}">{ICONOS[k]}'
         f'<span class="txt">{nombre}</span></a>' for k, nombre, href in CONFIGURACION
-        if k != "marca" or cuenta is None or cuenta.imagenes_mes > 0)
+        if k not in CON_CONTENIDO or cuenta is None or cuenta.imagenes_mes > 0)
     # Sin JavaScript también abre en el celular: la hamburguesa apunta a #lateral (:target).
     return (
         '<header class="movil"><a class="hamburguesa" href="#lateral" aria-label="Abrir menú">'
