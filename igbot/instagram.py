@@ -101,6 +101,21 @@ class Instagram:
         )
         r.raise_for_status()
 
+    async def texto_mencion(self, media_id: str, comment_id: str = "") -> str:
+        """El comentario (o el texto del post) de otra cuenta donde mencionaron a esta (aviso "mentions")."""
+        if comment_id:
+            d = await self._graph("GET", "me", fields=f"mentioned_comment.comment_id({comment_id}){{text}}")
+            return str((d.get("mentioned_comment") or {}).get("text") or "")
+        d = await self._graph("GET", "me", fields=f"mentioned_media.media_id({media_id}){{caption}}")
+        return str((d.get("mentioned_media") or {}).get("caption") or "")
+
+    async def contestar_mencion(self, media_id: str, comment_id: str, text: str) -> None:
+        """Responde en el post (o el comentario) de otra cuenta donde mencionaron a esta."""
+        datos = {"media_id": media_id, "message": text[:2000]}
+        if comment_id:
+            datos["comment_id"] = comment_id
+        await self._graph("POST", f"{await self.account_id()}/mentions", **datos)
+
     async def hide_comment(self, comment_id: str) -> None:
         await self._graph("POST", comment_id, hide="true")
 

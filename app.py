@@ -30,8 +30,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
 from igbot import (acceso, admin, agenda_google, agent, ajustes, anuncios_meta, asistente, botones, campanas, cobros,
-                   comentarios, comprimir, conectar, config, contenido, empresa, errores, facebook, historias, lentitud,
-                   limites, marca, metricas, nueva_campana, panel, reporte, resultados, semana, skandi, sugeridos, tienda_shopify)
+                   comentarios, comprimir, conectar, config, contenido, empresa, errores, facebook, historias, interacciones,
+                   lentitud, limites, marca, metricas, nueva_campana, panel, reporte, resultados, semana, skandi, sugeridos, tienda_shopify)
 from igbot.cuenta import Cuenta, cargar, cuenta, de_carpeta, usar
 from igbot.dispatcher import Dispatcher
 from igbot.google import Google
@@ -159,7 +159,14 @@ async def arrancar(c: Cuenta) -> None:
         if google and comentarios.available() or c.hide_spam or c.imagenes_mes:
             fields += ",comments"
         try:
-            await c.instagram.subscribe(fields)
+            if interacciones.disponible(c):  # menciones en posts y comentarios de otras cuentas
+                try:
+                    await c.instagram.subscribe(fields + ",mentions")
+                except Exception:
+                    log.exception("No se pudo suscribir %s a las menciones; sigue sin ellas", nombre(c))
+                    await c.instagram.subscribe(fields)
+            else:
+                await c.instagram.subscribe(fields)
         except Exception:
             log.exception("No se pudo suscribir la cuenta %s a los avisos", nombre(c))
         await conectar_pagina(c)
@@ -290,6 +297,7 @@ if not config.CLIENTE:
     app.include_router(acceso.router)
     app.include_router(ajustes.router)
     app.include_router(asistente.router)
+    app.include_router(interacciones.router)
     app.include_router(contenido.router)
     app.include_router(empresa.router)
     app.include_router(marca.router)
@@ -543,6 +551,9 @@ async def receive_entry(c: Cuenta, entry: dict) -> None:
         log.info("Aviso para %s, que está en pausa desde su panel; no se contesta", nombre(c))
         return
     for change in entry.get("changes", []):
+        if change.get("field") == "mentions":  # te mencionaron en el post o en un comentario de otra cuenta
+            in_background(interacciones.mencion(c, change.get("value") or {}))
+            continue
         if change.get("field") != "comments":
             continue
         value = change.get("value") or {}
@@ -576,6 +587,11 @@ async def receive_entry(c: Cuenta, entry: dict) -> None:
         user_id = event["sender"]["id"]
         log.info("DM de %s (%s)", user_id, nombre(c))
         text = message_text(message)
+        # Primero lo que eligió el dueño en Configura tus interacciones (con el texto tal cual llegó, para
+        # distinguir un emoji de un mensaje); si toca "La IA contesta", sigue el camino de siempre con el
+        # contexto de la historia.
+        if not admin.is_admin(user_id) and await interacciones.dm_de_historia(c, user_id, message, limites.trim(text)):
+            continue  # una historia con mensaje predeterminado o sin contestar
         if (url := historias.url_de_mencion(message)) is not None:
             # Lo mencionaron en una historia: se describe la imagen (tarda unos segundos) y luego entra a la cola.
             in_background(entrar_mencion(c, user_id, message["mid"], url))
