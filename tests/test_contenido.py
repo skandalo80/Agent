@@ -302,11 +302,11 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     # Le toca salir: se publica sin mandarle DM a nadie y la palabra clave ya responde comentarios.
     publicadas = []
 
-    async def publish(urls, caption):
+    async def publicar(urls, caption):
         publicadas.append((urls, caption))
-        return "https://www.instagram.com/p/ABC123/"
+        return "179000222", "https://www.instagram.com/p/ABC123/"
 
-    monkeypatch.setattr(c.instagram, "publish", publish, raising=False)
+    monkeypatch.setattr(c.instagram, "publicar", publicar, raising=False)
     client.portal.call(c.store.update_post, 1, None, 1.0)
 
     async def correr():
