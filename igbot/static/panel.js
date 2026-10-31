@@ -455,6 +455,8 @@ if (skandi) {
     marcar("#skandi");
     abrir();
   }));
+  // Un enlace a una sección del panel: la ventana queda minimizada en la página nueva, con la charla.
+  mensajes.addEventListener("click", (e) => { if (e.target.closest("[data-enlace-skandi]")) recordar(true); });
   let guardado = null;
   try { guardado = localStorage.getItem("skandi"); } catch {}
   if (location.hash === "#skandi") abrir();
