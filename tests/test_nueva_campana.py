@@ -545,13 +545,13 @@ def test_historias_de_punta_a_punta(cliente, monkeypatch):
         def __init__(self):
             self.historias, self.posts = [], []
 
-        async def publish_story(self, url):
+        async def publicar_historia(self, url):
             self.historias.append(url)
-            return ""
+            return "179000333", ""
 
-        async def publish(self, urls, caption):
+        async def publicar(self, urls, caption):
             self.posts.append(urls)
-            return "https://www.instagram.com/p/X/"
+            return "179000444", "https://www.instagram.com/p/X/"
 
     ig = IG()
 
@@ -563,7 +563,8 @@ def test_historias_de_punta_a_punta(cliente, monkeypatch):
     monkeypatch.setattr(admin, "save_photo", lambda *a: _nada())
     assert client.portal.call(publicar) == ("", "")
     assert len(ig.historias) == 1 and ig.posts == []
-    assert client.portal.call(c.store.post, post_id)["status"] == "publicada"
+    publicada = client.portal.call(c.store.post, post_id)
+    assert publicada["status"] == "publicada" and publicada["ig_id"] == "179000333"
 
 
 async def _nada():

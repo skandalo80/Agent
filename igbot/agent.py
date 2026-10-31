@@ -128,6 +128,9 @@ async def build_prompt(store: Store, user_id: str, new_messages: list[str]) -> s
         parts.append(f"<resumen_de_antes>\n{dato(summary)}\n</resumen_de_antes>")
     if history:
         parts.append(f"<conversacion_reciente>\n{render(history)}\n</conversacion_reciente>")
+    from . import historias  # historias importa este módulo
+    if extra := await historias.prompt(store, user_id):
+        parts.append(extra)
     parts.append(f"<ahora>{tools.fmt(tools.now())} ({cuenta().timezone}), {tools.now():%Y-%m-%d}</ahora>")
     parts.append(
         "<mensajes_nuevos>\n" + "\n".join(dato(m) for m in new_messages) + "\n</mensajes_nuevos>\n\n"
