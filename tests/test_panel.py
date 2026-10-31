@@ -430,3 +430,11 @@ def test_barra_de_trabajo_avanza_lento_y_distinto():
     assert k1 != k2 and panel.porcentaje(k1, 10) != panel.porcentaje(k2, 10)
     pasos = ("Uno…", "Dos…", "Tres…")
     assert [panel.paso_de(pasos, p) for p in (0, 40, 95)] == ["Uno…", "Dos…", "Tres…"] and panel.paso_de((), 50) == ""
+
+
+def test_pasos_en_el_celular_no_ensanchan_la_pagina():
+    """En el celular la columna de los pasos no crece con su contenido (1fr = minmax(auto, 1fr) la ensanchaba a
+    ~1000 px en Tu marca); las tarjetas de marca van en las columnas de ajustes.css."""
+    css = panel.ESTILO + panel.COMUN
+    assert ".wiz{grid-template-columns:minmax(0,1fr)}" in css and ".wiz{grid-template-columns:1fr}" not in css
+    assert "--marca-columnas-cel:" in panel.COMUN and "repeat(var(--marca-columnas-cel)" in panel.COMUN

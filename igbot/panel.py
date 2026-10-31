@@ -952,7 +952,7 @@ select,input[type=date],input[type=number]{color:var(--negro);background:var(--c
 .modal-cam .dos-modal{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}
 .modal-cam input[type=date]{width:100%;font:inherit;font-size:1rem;padding:.7rem .9rem;border-radius:.85rem}
 @media(max-width:900px){.conceptos,.brief-cam{grid-template-columns:1fr}}
-@media(max-width:900px){.wiz{grid-template-columns:1fr}.wiz-pasos{position:static}.wiz-ops.tres,.wiz-resumen{grid-template-columns:1fr}.wiz-ops.cuatro,.wiz-ops.cinco{grid-template-columns:repeat(2,minmax(0,1fr))}.wiz-main{padding:1.4rem}}
+@media(max-width:900px){.wiz{grid-template-columns:minmax(0,1fr)}.wiz-pasos{position:static}.wiz-ops.tres,.wiz-resumen{grid-template-columns:1fr}.wiz-ops.cuatro,.wiz-ops.cinco{grid-template-columns:repeat(2,minmax(0,1fr))}.wiz-main{padding:1.4rem}}
 /* Pasos de la marca (igbot/marca.py): el menú de pasos se pliega en el celular; paletas, letras, logo y fotos. */
 .wiz-pasos summary{display:none}
 .wiz-pasos a span small{display:block;font-size:.76rem;font-weight:400;color:var(--gris);margin-top:.05rem}
@@ -1018,6 +1018,7 @@ select,input[type=date],input[type=number]{color:var(--negro);background:var(--c
 .mrc-subir .ico{flex:none;width:2.8rem;height:2.8rem;border-radius:.8rem;background:var(--claro);color:var(--acento-claro);display:grid;place-items:center;font-size:1.2rem;font-weight:700}
 .mrc-subir .t{flex:1;min-width:0}.mrc-subir .t b{display:block}.mrc-subir .t small{color:var(--texto2,#A8A8AE);font-size:.85rem}
 .mrc-subir input[type=file]{max-width:15rem;font-size:.82rem;color:var(--gris)}
+.mrc-subir input[type=file]::file-selector-button{font:600 var(--t-boton-mini) Nunito,system-ui,sans-serif;padding:var(--boton-mini-pad);margin-right:.7rem;border-radius:999px;border:1px solid var(--acento);background:transparent;color:var(--acento);cursor:pointer}
 .mrc-logo{display:flex;align-items:center;gap:1rem;margin-bottom:.8rem;padding:.8rem 1rem;border:1px solid var(--linea-clara);border-radius:1rem}
 .mrc-logo img{width:4rem;height:4rem;object-fit:contain;border-radius:.6rem;background:#fff}.mrc-logo span{flex:1}.mrc-logo b{display:block}.mrc-logo small{color:var(--gris)}
 .mrc .fotos{display:grid;grid-template-columns:repeat(auto-fill,minmax(7rem,1fr));gap:.6rem;margin-bottom:.8rem}
@@ -1373,6 +1374,30 @@ body:has(>.lateral) .compacta{padding-top:var(--margen-arriba)}
 body:has(>.lateral) :is(.compacta+main,.compacta.delgada~main,.compacta.delgada~.oscuro-pag>main){padding-top:1.5rem}
 }
 @media(max-width:900px){:is(.as-resumen,.wiz-resumen,.resumen-tarjetas){grid-template-columns:1fr}.avance-pasos{display:none}}
+/* Barra de pasos .wiz-pasos (marca y nueva campaña) en el celular: el paso actual con su nombre y los demás
+   solo con su círculo, para que quepan todos sin deslizar. */
+@media(max-width:900px){
+.wiz-pasos :is(a,.wiz-paso):not(.actual) small,.wiz-pasos :is(a,.wiz-paso).actual small{display:none}
+.wiz-pasos :is(a,.wiz-paso):not(.actual)>span{display:none}
+.wiz-pasos>nav{align-items:center}.wiz-pasos :is(a,.wiz-paso){align-self:center}
+.wiz-pasos :is(a,.wiz-paso).actual{flex:1 1 auto;min-width:0}
+.wiz-pasos :is(a,.wiz-paso).actual>span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wiz-pasos :is(a,.wiz-paso).actual>b{display:none}
+}
+/* Página de marca (.mrc) en el celular: las tarjetas para elegir en columnas (ajustes.css) y el pie del resumen apilado. */
+@media(max-width:560px){
+.mrc .wiz-ops,.mrc .wiz-ops.tres{grid-template-columns:repeat(var(--marca-columnas-cel),minmax(0,1fr));gap:var(--marca-hueco-cel)}
+.mrc .wiz-op .cuerpo{padding:var(--marca-op-pad)}
+.mrc .wiz-op b{font-size:var(--marca-op-titulo)}
+.mrc .wiz-op :is(small,.mrc-lema,.mrc-sensa){font-size:var(--marca-op-texto)}
+.mrc .mrc-sensa{display:none}
+.mrc .mrc-reco{font-size:.66rem}
+.mrc .mrc-recomienda .ico{height:auto;aspect-ratio:1/1}
+.mrc .mrc-colores{grid-template-columns:repeat(2,minmax(0,1fr))}
+.mrc .mrc-subir input[type=file]{max-width:100%}
+.mrc .wiz-pie{flex-direction:column;align-items:stretch}
+.mrc .wiz-pie .boton{text-align:center;white-space:nowrap}
+}
 """
 
 
