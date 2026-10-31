@@ -881,6 +881,15 @@ class Store:
         )
         return list(await cur.fetchall())
 
+    async def comments_between(self, since: float, until: float) -> list[tuple[str, str, str, int, int, float]]:
+        """(user_id, media_id, matched, dm_sent, replied, created_at) de cada comentario del periodo."""
+        cur = await self.db.execute(
+            "SELECT user_id, media_id, matched, dm_sent, replied, created_at FROM comments"
+            " WHERE created_at >= ? AND created_at < ?",
+            (since, until),
+        )
+        return list(await cur.fetchall())
+
     async def week_published(self, since: float, until: float) -> list[dict]:
         cur = await self.db.execute(
             f"SELECT {self.POST_FIELDS} FROM posts WHERE status = 'publicada'"

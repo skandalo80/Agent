@@ -184,6 +184,11 @@ class Instagram:
         """Cuántas publicaciones tiene la cuenta."""
         return int((await self._graph("GET", "me", fields="media_count")).get("media_count", 0))
 
+    async def media_basico(self, media_id: str) -> dict:
+        """Foto, texto, enlace y fecha de un post (Resultados > Comentarios)."""
+        return await self._graph("GET", media_id, fields="caption,media_type,media_product_type,media_url,"
+                                 "thumbnail_url,permalink,timestamp")
+
     async def media_info(self, media_id: str) -> dict:
         return await self._graph("GET", media_id, fields="id,caption")
 
