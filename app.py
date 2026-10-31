@@ -30,7 +30,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
 from igbot import (acceso, admin, agenda_google, agent, ajustes, anuncios_meta, asistente, botones, campanas, cobros,
-                   comentarios, comprimir, conectar, config, contenido, empresa, errores, facebook, interacciones,
+                   comentarios, comprimir, conectar, config, contenido, empresa, errores, facebook, historias, interacciones,
                    lentitud, limites, marca, metricas, nueva_campana, panel, reporte, resultados, semana, skandi, sugeridos, tienda_shopify)
 from igbot.cuenta import Cuenta, cargar, cuenta, de_carpeta, usar
 from igbot.dispatcher import Dispatcher
@@ -537,6 +537,13 @@ def de_messenger(entry: dict) -> dict:
     return {**entry, "messaging": eventos, "changes": cambios}
 
 
+async def entrar_mencion(c: Cuenta, user_id: str, mid: str, url: str) -> None:
+    with usar(c):
+        text = await historias.mencion(c, user_id, url)
+        if await c.store.add_incoming(user_id, mid, text):
+            dispatchers[c.slug].notify(user_id)
+
+
 async def receive_entry(c: Cuenta, entry: dict) -> None:
     """Un aviso de una cuenta. Corre dentro de usar(c): lo que se lance aquí es de esa cuenta."""
     store, instagram = c.store, c.instagram
@@ -580,6 +587,18 @@ async def receive_entry(c: Cuenta, entry: dict) -> None:
         user_id = event["sender"]["id"]
         log.info("DM de %s (%s)", user_id, nombre(c))
         text = message_text(message)
+        # Primero lo que eligió el dueño en Configura tus interacciones (con el texto tal cual llegó, para
+        # distinguir un emoji de un mensaje); si toca "La IA contesta", sigue el camino de siempre con el
+        # contexto de la historia.
+        if not admin.is_admin(user_id) and await interacciones.dm_de_historia(c, user_id, message, limites.trim(text)):
+            continue  # una historia con mensaje predeterminado o sin contestar
+        if (url := historias.url_de_mencion(message)) is not None:
+            # Lo mencionaron en una historia: se describe la imagen (tarda unos segundos) y luego entra a la cola.
+            in_background(entrar_mencion(c, user_id, message["mid"], url))
+            continue
+        if story := ((message.get("reply_to") or {}).get("story") or {}).get("id"):
+            # Respondió a una historia: el asistente debe saber cuál era para contestar sobre esa.
+            text = await historias.respuesta(c, user_id, str(story), message.get("text", ""))
         if not admin.is_admin(user_id):
             text = limites.trim(text)
         else:
@@ -591,7 +610,5 @@ async def receive_entry(c: Cuenta, entry: dict) -> None:
                 for photo in photos:
                     in_background(admin.save_photo_quietly(store, instagram, photo))
                 user_id = admin.key(user_id)
-        if not admin.is_admin(event["sender"]["id"]) and await interacciones.dm_de_historia(c, user_id, message, text):
-            continue  # una historia con mensaje predeterminado o sin contestar (Configura tus interacciones)
         if await store.add_incoming(user_id, message["mid"], text):
             dispatchers[c.slug].notify(user_id)

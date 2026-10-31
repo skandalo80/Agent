@@ -41,9 +41,9 @@ class FakeIG:
     async def send_text(self, user_id, text):
         self.texts.append((user_id, text))
 
-    async def publish(self, urls, caption):
+    async def publicar(self, urls, caption):
         self.published.append((urls, caption))
-        return "https://www.instagram.com/p/NUEVA/"
+        return "179000111", "https://www.instagram.com/p/NUEVA/"
 
     async def username(self, user_id):
         return {"111": "@ana"}.get(user_id, user_id)

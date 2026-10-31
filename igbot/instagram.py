@@ -267,7 +267,15 @@ class Instagram:
         return r.json()
 
     async def publish(self, image_urls: list[str], caption: str) -> str:
-        """Publica una foto (o un carrusel de hasta 10) y devuelve el link de la publicación.
+        """Publica una foto (o un carrusel de hasta 10) y devuelve el link de la publicación."""
+        return (await self.publicar(image_urls, caption))[1]
+
+    async def publish_story(self, image_url: str) -> str:
+        """Publica una historia y devuelve su link, si Instagram lo da."""
+        return (await self.publicar_historia(image_url))[1]
+
+    async def publicar(self, image_urls: list[str], caption: str) -> tuple[str, str]:
+        """Publica una foto (o un carrusel de hasta 10). Devuelve (id de Instagram, link).
 
         Instagram descarga cada foto de su URL, así que tienen que ser públicas y JPG.
         """
@@ -285,23 +293,26 @@ class Instagram:
             )
         await self._wait_ready(container["id"])
         media = await self._graph("POST", "me/media_publish", creation_id=container["id"])
+        ig_id = str(media.get("id", ""))
         try:
-            return await self.permalink(media["id"])
+            return ig_id, await self.permalink(ig_id)
         except Exception:
-            log.exception("Publicado (%s), pero no se pudo obtener el link", media["id"])
-            return ""
+            log.exception("Publicado (%s), pero no se pudo obtener el link", ig_id)
+            return ig_id, ""
 
-    async def publish_story(self, image_url: str) -> str:
-        """Publica una historia (una foto 9:16) y devuelve su link, si Instagram lo da. Mismo permiso que los
-        posts; las historias no llevan texto publicado (caption) y duran 24 horas."""
+    async def publicar_historia(self, image_url: str) -> tuple[str, str]:
+        """Publica una historia (una foto 9:16). Devuelve (id de Instagram, link si lo da). Mismo permiso que
+        los posts; las historias no llevan texto publicado (caption) y duran 24 horas. El id es el que llega
+        en reply_to.story cuando alguien le responde."""
         container = await self._graph("POST", "me/media", image_url=image_url, media_type="STORIES")
         await self._wait_ready(container["id"])
         media = await self._graph("POST", "me/media_publish", creation_id=container["id"])
+        ig_id = str(media.get("id", ""))
         try:
-            return await self.permalink(media["id"])
+            return ig_id, await self.permalink(ig_id)
         except Exception:
-            log.warning("Historia publicada (%s), sin link", media["id"])
-            return ""
+            log.warning("Historia publicada (%s), sin link", ig_id)
+            return ig_id, ""
 
     async def _wait_ready(self, container_id: str, tries: int = 20, every: float = 3) -> None:
         for _ in range(tries):
