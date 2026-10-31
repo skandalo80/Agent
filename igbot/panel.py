@@ -1304,6 +1304,40 @@ h1,h2,h3{text-wrap:balance}
 .met-graf.barras .mh.der.abajo span{transform:translate(calc(-100% - 1rem),-.3rem)}
 .mh:hover::before,.mh:hover i,.mh:hover span{opacity:1}
 .met-graf.barras .mh::before{display:none}
+/* Inicio (igbot/inicio.py): saludo, Te falta, los números de hoy, chats que te esperan, próximas publicaciones y
+   tu plan. Tamaños en ajustes.css (--ini-*). */
+.ini-cab{margin:0 0 1.25rem}.ini-hola{font-size:var(--ini-saludo);font-weight:var(--peso-titulo);color:var(--negro)}
+.ini-botones{display:flex;gap:.6rem;flex-wrap:wrap}
+.ini-falta{margin-bottom:1.75rem}.ini-gris{color:var(--gris);font-size:.88rem}
+.ini-pasos{display:grid;grid-template-columns:repeat(auto-fit,minmax(16rem,1fr));gap:var(--hueco);margin-top:.5rem}
+.ini-paso{display:flex;gap:.8rem;align-items:center;background:var(--caja-fondo);border:1px solid var(--linea-oscura);border-radius:1rem;padding:1rem 1.1rem;color:var(--negro);text-decoration:none}
+.ini-paso:hover{border-color:rgba(255,138,61,.45)}
+.ini-n{flex:none;width:var(--paso-circulo);height:var(--paso-circulo);border-radius:50%;border:1.5px solid var(--acento);color:var(--acento);display:grid;place-items:center;font-size:var(--t-paso-num);font-weight:700}
+.ini-ir{margin-left:auto;color:var(--acento);font-weight:700;font-size:.88rem;white-space:nowrap}
+.ini-barra{display:block;height:.45rem;border-radius:999px;background:#2E3035;overflow:hidden}
+.ini-barra>span{display:block;height:100%;background:var(--neon);border-radius:999px}
+.ini-falta>.ini-barra{margin-top:1.1rem}
+.ini-sec{font-size:var(--t-ante);font-weight:var(--peso-ante);letter-spacing:var(--espaciado-ante);text-transform:uppercase;color:var(--gris);margin:0 0 .6rem}
+.ini-num{grid-column:span 3;text-decoration:none}.ini-et{color:var(--gris);font-size:.88rem}
+.ini-num b{font-size:var(--ini-numero);font-weight:700;color:var(--acento);margin:.35rem 0 .1rem;line-height:1.1}
+.ini-num small{color:var(--gris);font-size:.82rem}
+.ini-num small.sube::before{content:"";display:inline-block;width:.45rem;height:.45rem;border-radius:50%;background:var(--neon);margin-right:.4rem;vertical-align:middle}
+.ini-dos>.ini-chats{grid-column:span 7}.ini-dos>.ini-posts{grid-column:span 5}
+.ini-fila{display:flex;gap:.8rem;align-items:center;padding:.8rem 0;border-top:1px solid var(--linea-oscura);color:var(--negro);text-decoration:none}
+.cab-tarjeta+.ini-fila{border-top:0}
+.ini-av{flex:none;width:2.4rem;height:2.4rem;border-radius:50%;background:#2E3035;display:grid;place-items:center;font-weight:700;color:var(--naranja-t)}
+.ini-txt{min-width:0;flex:1}.ini-txt b{display:block;font-size:.95rem}
+.ini-txt small{display:block;color:var(--gris);font-size:.86rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ini-paso .ini-txt small{white-space:normal;margin-top:.15rem;font-size:.82rem}
+.ini-der{display:flex;flex-direction:column;align-items:flex-end;gap:.25rem}.ini-der small{color:var(--gris);font-size:.78rem}
+.ini-der em{font-style:normal;font-size:.75rem;font-weight:600;color:var(--naranja-t);background:rgba(255,138,61,.12);border-radius:999px;padding:.15rem .6rem;white-space:nowrap}
+.ini-der em.gris{color:var(--gris);background:#2E3035}
+.ini-mini{flex:none;width:3rem;height:3rem;border-radius:.6rem;object-fit:cover;background:#2E3035}
+.ini-usos{display:grid;grid-template-columns:repeat(auto-fit,minmax(14rem,1fr));gap:1.5rem;margin-top:.5rem}
+.ini-uso>div{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.5rem}.ini-uso>div>span{color:var(--gris);font-size:.9rem}
+.ini-uso b{font-size:1.05rem}.ini-uso b small{color:var(--gris);font-weight:400;font-size:.8rem}
+@media(max-width:900px){.ini-num{grid-column:span 6}.ini-dos>.ini-chats,.ini-dos>.ini-posts{grid-column:span 12}.ini-pasos{grid-template-columns:1fr}}
+@media(max-width:560px){.ini-num{grid-column:span 12}}
 """
 
 # Los tamaños (letras, rellenos, huecos, esquinas) salen de igbot/ajustes.css: se cambian ahí y cambian
@@ -1437,7 +1471,8 @@ def pagina(cuerpo: str) -> HTMLResponse:
 
 ACTIVA = ' class="on"'
 # El menú lateral, sin grupos: cada sección con su ícono. (clave, nombre, dirección, grupo al que pertenece)
-MENU = [("resultados", "Resultados", "/panel/resultados", "resultados"),
+MENU = [("inicio", "Inicio", "/panel/inicio", "inicio"),
+        ("resultados", "Resultados", "/panel/resultados", "resultados"),
         ("chats", "Conversaciones", "/panel/asistente", "asistente"),
         ("probar", "Probar tu asistente", "/panel/probar#ultimo", "asistente"),
         ("campanas", "Campañas", "/panel/contenido/campanas", "contenido"),
@@ -1448,7 +1483,7 @@ CONFIGURACION = [("empresa", "Tu empresa", "/panel/empresa"),
                  ("configura", "Tu asistente", "/panel/asistente/configura"),
                  ("marca", "Tu marca", "/panel/contenido/marca")]
 # La sección que se marca si la página no dice cuál (`sub`) dentro de su grupo (`menu`).
-POR_GRUPO = {"resultados": "resultados", "asistente": "chats", "contenido": "calendario"}
+POR_GRUPO = {"inicio": "inicio", "resultados": "resultados", "asistente": "chats", "contenido": "calendario"}
 
 
 # Íconos del menú lateral: de línea, todos del mismo trazo y tamaño (dibujos de Lucide, licencia ISC).
@@ -1458,6 +1493,8 @@ def _icono(trazos: str, tam: int = 20) -> str:
 
 
 ICONOS = {
+    "inicio": _icono('<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999'
+                     'a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),
     "resultados": _icono('<path d="M3 3v16a2 2 0 0 0 2 2h16M18 17V9M13 17V5M8 17v-3"/>'),
     "chats": _icono('<path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"/>'
                     '<path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"/>'),
@@ -1854,13 +1891,10 @@ async def bienvenida(c: Cuenta) -> HTMLResponse:
 
 async def inicio(c: Cuenta) -> str:
     """A dónde lleva /panel: a la bienvenida hasta que pasa por su paso 2 (las cuentas de antes que ya
-    tenían todo listo no la ven); luego a Resultados si el asistente ya trabaja (encendido y con mensajes
-    de clientes); si no, a Tu asistente."""
+    tenían todo listo no la ven); luego a Inicio (igbot/inicio.py)."""
     if c.slug and await c.store.get("bienvenida") != "1" and not (await asistente_listo(c) and await marca_lista(c)):
         return "/panel/bienvenida"
-    if await activo(c) and await c.store.has_client_messages():
-        return "/panel/resultados"
-    return "/panel/asistente"
+    return "/panel/inicio"
 
 
 @router.get("")

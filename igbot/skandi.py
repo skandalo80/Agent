@@ -73,6 +73,7 @@ SALUDO = "Hola, soy Skandi ¿Cómo te puedo ayudar?"
 # Las secciones del panel a las que Skandi puede mandar con un enlace: (clave, nombre que se ve,
 # dirección, qué hay ahí, solo con contenido en el plan). Solo estas: nada de direcciones inventadas.
 SECCIONES = [
+    ("inicio", "Inicio", "/panel/inicio", "lo de hoy: pasos que faltan, números, chats que esperan, próximas publicaciones, uso del plan", False),
     ("resultados", "Resultados", "/panel/resultados", "números de conversaciones e Instagram, PDF", False),
     ("anuncios", "Resultados de tus anuncios", "/panel/resultados?ver=anuncios", "chats, citas y ventas por anuncio", False),
     ("conversaciones", "Conversaciones", "/panel/asistente", "los chats en vivo, tomar un chat, Marcar venta", False),

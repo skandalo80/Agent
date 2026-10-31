@@ -30,7 +30,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
 from igbot import (acceso, admin, agenda_google, agent, ajustes, anuncios_meta, asistente, botones, campanas, cobros,
-                   comentarios, comprimir, conectar, config, contenido, empresa, errores, facebook, lentitud, limites,
+                   comentarios, comprimir, conectar, config, contenido, empresa, errores, facebook, inicio, lentitud, limites,
                    marca, metricas, nueva_campana, panel, reporte, resultados, semana, skandi, sugeridos, tienda_shopify)
 from igbot.cuenta import Cuenta, cargar, cuenta, de_carpeta, usar
 from igbot.dispatcher import Dispatcher
@@ -297,6 +297,7 @@ if not config.CLIENTE:
     app.include_router(nueva_campana.router)  # antes que campanas: /campanas/nueva no es /campanas/{cid}
     app.include_router(campanas.router)
     app.include_router(resultados.router)
+    app.include_router(inicio.router)
     app.include_router(skandi.router)
     app.include_router(skandi.web_router)
     app.include_router(tienda_shopify.router)
