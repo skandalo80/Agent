@@ -164,14 +164,14 @@ def etiquetas(lista_: tuple[str, ...]) -> str:
 
 def menu_pasos(actual: str, hechos_: set[str]) -> str:
     items = ""
-    for i, (k, nombre, desc, *_) in enumerate(PASOS, 1):
+    for i, (k, nombre, *_) in enumerate(PASOS, 1):  # sin subtítulo en la barra de pasos
         clase = "actual" if k == actual else "hecho" if k in hechos_ else ""
         marca = "✓" if k in hechos_ and k != actual else str(i)
         items += (f'<a href="{BASE}?paso={i}" class="{clase}"><b>{marca}</b>'
-                  f'<span>{nombre}<small>{desc}</small></span></a>')
+                  f'<span>{nombre}</span></a>')
     clase = "actual" if actual == RESUMEN else ""
     items += (f'<a href="{BASE}?paso={RESUMEN}" class="{clase}"><b>★</b>'
-              "<span>Resumen<small>Revisa y edita</small></span></a>")
+              "<span>Resumen</span></a>")
     avance = len(hechos_ & set(CLAVES)) * 100 // len(CLAVES)
     return ('<details class="wiz-pasos" open><summary><span class="hamb"><i></i><i></i><i></i></span>Tu marca</summary>'
             f'<nav>{items}</nav>{panel.avance(avance)}<div class="mrc-tip"><b>Tú eliges, la IA diseña</b>Entra a cualquier paso cuando'

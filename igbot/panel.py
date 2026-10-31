@@ -1769,13 +1769,13 @@ def pasos_bienvenida(actual: int, empresa: bool = False) -> str:
     """Los dos pasos en la barra de arriba, como en los demás asistentes del panel: en el segundo,
     la empresa sale con palomita si ya la llenó."""
     if actual == 1:
-        uno = '<span class="wiz-paso actual"><b>1</b><span>Tu empresa<small>Cuéntanos de tu negocio</small></span></span>'
+        uno = '<span class="wiz-paso actual"><b>1</b><span>Tu empresa</span></span>'
     elif empresa:
-        uno = '<span class="wiz-paso hecho"><b>✓</b><span>Tu empresa<small>Guardada</small></span></span>'
+        uno = '<span class="wiz-paso hecho"><b>✓</b><span>Tu empresa</span></span>'
     else:
-        uno = '<span class="wiz-paso"><b>1</b><span>Tu empresa<small>La llenas después</small></span></span>'
+        uno = '<span class="wiz-paso"><b>1</b><span>Tu empresa</span></span>'
     dos = (f'<span class="wiz-paso{" actual" if actual == 2 else ""}"><b>2</b>'
-           '<span>¿Por dónde seguimos?<small>Tu asistente o tu marca</small></span></span>')
+           '<span>¿Por dónde seguimos?</span></span>')
     return f'<nav class="wiz-pasos pasos-bienv">{uno}<div class="sep"></div>{dos}</nav>'
 
 

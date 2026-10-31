@@ -248,23 +248,16 @@ def _href(paso: str) -> str:
 
 
 def _lista(actual: str, perfil: dict, hechos: set[str]) -> str:
-    e = estilo(perfil)
-    detalle = {"personalidad": PERSONALIDADES[e["personalidad"]][0],
-               "escribe": f"{TRATOS[e['trato']][0]} · {LARGOS[e['largo']][0].lower()} · emojis"
-                          f" {EMOJIS[e['emojis']][0].lower()}",
-               "reglas": f"{sum(reglas_de(perfil).values())} de {len(REGLAS)} activas"}
     items = []
-    for i, (k, titulo, sub) in enumerate(PASOS):
+    for i, (k, titulo, _) in enumerate(PASOS):  # sin subtítulo en la barra de pasos
         hecho = k in hechos and k != actual
-        sub = detalle.get(k, sub) if hecho else sub
         items.append(f'<a class="as-paso{" on" if k == actual else ""}{" ok" if hecho else ""}" href="{_href(k)}"'
                      + (' aria-current="step"' if k == actual else "")
-                     + f'><span class="as-n">{"✓" if hecho else i + 1}</span><span><b>{titulo}</b>'
-                     f"<small>{escape(sub)}</small></span></a>")
+                     + f'><span class="as-n">{"✓" if hecho else i + 1}</span><span><b>{titulo}</b></span></a>')
     listos = len(hechos & set(ORDEN))
     return ('<nav class="as-pasos" aria-label="Pasos"><p class="as-t">Tus pasos</p>' + "".join(items)
             + f'<a class="as-paso{" on" if actual == "resumen" else ""}" href="{_href("resumen")}">'
-            '<span class="as-n">★</span><span><b>Resumen</b><small>Revisa y enciéndelo</small></span></a>'
+            '<span class="as-n">★</span><span><b>Resumen</b></span></a>'
             + panel.avance(listos * 100 // len(ORDEN))
             + f'<small class="as-nota">{listos} de {len(ORDEN)} listos. Puedes volver a cualquier paso cuando'
             " quieras.</small></nav>")

@@ -719,10 +719,10 @@ def riel(e: dict, prods: list[dict], actual: int, con_form: bool) -> str:
     y salta (no se pierde lo escrito); si no, un enlace."""
     listos = hechos(e, prods)
     items = []
-    for n, (titulo, bajada) in [*((n, PASOS[n]) for n in ORDEN), (RESUMEN, ("Resumen", "Revisa y guarda"))]:
+    for n, titulo in [*((n, PASOS[n][0]) for n in ORDEN), (RESUMEN, "Resumen")]:
         cls = "on" if n == actual else "ok" if n in listos else ""
         marca = "★" if n == RESUMEN else "✓" if n in listos and n != actual else str(numero(n))
-        dentro = f'<span class="n">{marca}</span><span><b>{CORTOS.get(n, titulo)}</b><small>{bajada}</small></span>'
+        dentro = f'<span class="n">{marca}</span><span><b>{CORTOS.get(n, titulo)}</b></span>'
         actual_ = ' aria-current="step"' if n == actual else ""
         items.append(f'<button class="paso {cls}" form="f-emp" name="accion" value="ir_{n}"{actual_}>{dentro}</button>'
                      if con_form else f'<a class="paso {cls}" href="/panel/empresa?paso={n}"{actual_}>{dentro}</a>')
