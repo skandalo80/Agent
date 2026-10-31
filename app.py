@@ -29,7 +29,7 @@ from fastapi.exception_handlers import http_exception_handler
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
-from igbot import (admin, agenda_google, agent, ajustes, anuncios_meta, asistente, botones, campanas, cobros,
+from igbot import (acceso, admin, agenda_google, agent, ajustes, anuncios_meta, asistente, botones, campanas, cobros,
                    comentarios, comprimir, conectar, config, contenido, empresa, errores, facebook, lentitud, limites,
                    marca, metricas, nueva_campana, panel, reporte, resultados, semana, skandi, sugeridos, tienda_shopify)
 from igbot.cuenta import Cuenta, cargar, cuenta, de_carpeta, usar
@@ -261,6 +261,7 @@ async def lifespan(app: FastAPI):
     conectar.store, conectar.instagram, conectar.google = store, instagram, google
     panel.buscar, panel.alta = buscar, alta
     panel.conectar_pagina = conectar_pagina
+    acceso.todas = lambda: cuentas
     skandi.principal = lambda: principal
     tienda_shopify.cuentas = cobros.cuentas = lambda: cuentas
     for c in cuentas:
@@ -286,6 +287,7 @@ if not config.CLIENTE:
     # La página de conectar clientes la atiende solo el proceso principal.
     app.include_router(conectar.router)
     app.include_router(panel.router)
+    app.include_router(acceso.router)
     app.include_router(ajustes.router)
     app.include_router(asistente.router)
     app.include_router(contenido.router)
