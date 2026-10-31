@@ -1249,6 +1249,7 @@ input[type=text],input[type=search],textarea,select,.inbox input[type=search],.e
 .ads-tabla td{padding:.6rem;border-bottom:1px solid var(--linea-clara)}.ads-tabla td:not(:first-child){white-space:nowrap}.ads-tabla td:first-child{max-width:16rem}
 @media(max-width:700px){.res-barra .cal-sw.modo{margin-left:0}.res-info .cal-bajar{margin-left:0}}
 .res-vista a{font-size:.95rem;padding:.45rem 1.1rem}
+@media(max-width:700px){.res-vista{width:100%;overflow-x:auto;scrollbar-width:none}.res-vista a{flex:1 0 auto;text-align:center;padding:.45rem .8rem;font-size:.88rem}}
 .res-barra .cal-sw a.on{background:var(--acento);color:var(--tinta)}
 .res-kpis .kpi b{color:var(--negro)}
 .res-dos{display:grid;grid-template-columns:minmax(0,2fr) minmax(16rem,1fr);gap:1rem;margin-bottom:1.25rem}.res-dos>*{margin:0}
@@ -1256,6 +1257,15 @@ input[type=text],input[type=search],textarea,select,.inbox input[type=search],.e
 .met-lista li small{color:var(--gris);font-size:.78rem;width:2.6rem;text-align:right}
 .met-lista li b{padding-left:1rem}
 @media(max-width:900px){.res-dos{grid-template-columns:1fr}}
+/* Resultados > Comentarios: de qué tipo son, en barras acostadas */
+.res-tipos{list-style:none;margin:0;padding:0;display:grid;gap:.8rem;font-size:.9rem}
+.res-tipos li{display:grid;grid-template-columns:minmax(6.5rem,8.5rem) 1fr auto;align-items:center;gap:.25rem .75rem}
+.res-tipos .rt-barra{height:.5rem;border-radius:999px;background:#2E3035;overflow:hidden}
+.res-tipos .rt-barra i{display:block;height:100%;border-radius:999px;background:var(--acento-claro)}
+.res-tipos b{font-weight:700;text-align:right}
+.res-tipos small{grid-column:2/-1;color:var(--gris);font-size:.78rem;margin-top:-.2rem}
+@media(min-width:701px){.res-com .pp-grid{grid-template-columns:repeat(5,minmax(0,1fr))}}
+@media(max-width:700px){.res-com .pp-grid .pp-tasa small{display:inline}}
 /* pulido: títulos sin una palabra sola abajo, cifras de ancho fijo (no "bailan"), el botón que se está
    mandando (panel.js) y un fundido al cambiar de página (Chrome y Safari; los demás, igual que antes) */
 h1,h2,h3{text-wrap:balance}

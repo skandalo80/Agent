@@ -8,8 +8,11 @@ o 30 días:
 - Gráficas: mensajes por día y a qué hora escriben (dentro y fuera de horario).
 - Arriba, las tarjetas de Instagram (seguidores, alcance, vistas, interacciones y
   público) que guarda metricas.py una vez al día.
-- Si el plan tiene contenido (Community Manager): comentarios, DMs que salieron
-  de un comentario, palabras clave, spam ocultado y publicaciones.
+- Si el plan tiene contenido (Community Manager): tus publicaciones (en Instagram) y la
+  pestaña Comentarios: cuántos llegaron, cuántos contestó el asistente (en público o por DM),
+  spam ocultado, menciones, de qué tipo son (los de Configura tus interacciones), por día,
+  los posts con más comentarios y las palabras clave más usadas. Para la foto y el texto de
+  esos posts sí se llama a Instagram (guardado POST_INFO_SEGUNDOS).
 
 Solo lee lo que ya está en la base de la cuenta: no llama a Instagram ni a
 Claude. Los números se guardan CACHE_SEGUNDOS en memoria para que recargar la
@@ -231,22 +234,6 @@ def kpi(etiqueta: str, valor, nota: str = "") -> str:
     return f'<div class="kpi"><span>{etiqueta}</span><b>{valor}</b><small>{nota}</small></div>'
 
 
-def seccion_comentarios(d: dict) -> str:
-    palabras = "".join(f'<span class="chip">{escape(w)} · {n}</span> ' for w, n in d["palabras"])
-    return (
-        '<div class="tarjeta"><span class="num">Comentarios</span><h2>De comentario a mensaje</h2>'
-        '<p class="ayuda">Cuando alguien comenta una palabra clave, tu asistente le escribe por mensaje directo.</p>'
-        '<div class="kpis">'
-        + kpi("Comentarios", d["comentarios"])
-        + kpi("Mensajes directos", d["dms"], "enviados por un comentario")
-        + kpi("Respuestas públicas", d["publicas"])
-        + (kpi("Spam ocultado", d["spam"]) if d["spam"] else "")
-        + "</div>"
-        + (f'<p class="ayuda" style="margin-top:1.25rem">Palabras clave más usadas</p><div>{palabras}</div>' if palabras else "")
-        + "</div>"
-    )
-
-
 MAX_POSTS = 24  # los más recientes del periodo con sus Insights (Instagram los guarda 1 h en informe)
 
 
@@ -333,7 +320,13 @@ def titulo_periodo(ini: date, fin: date) -> str:
     return f"{ini.day} de {MESES[ini.month - 1]} al {fin.day} de {MESES[fin.month - 1]} de {fin.year}"
 
 
-VISTAS = {"instagram": "Instagram", "conversaciones": "Conversaciones", "anuncios": "Anuncios"}
+VISTAS = {"instagram": "Instagram", "conversaciones": "Conversaciones", "comentarios": "Comentarios",
+          "anuncios": "Anuncios"}
+
+
+def vistas_de(c: Cuenta) -> dict[str, str]:
+    """Comentarios, solo con contenido en el plan (Community Manager): Básico no los atiende."""
+    return {k: v for k, v in VISTAS.items() if k != "comentarios" or c.imagenes_mes > 0}
 
 
 def enlace(rango: str, fin: date, hoy: date, vista: str = "instagram", base: str = "/panel/resultados") -> str:
@@ -350,7 +343,7 @@ async def barra(c: Cuenta, rango: str, fin: date, hoy: date, vista: str) -> str:
     siguiente = (f'<a href="{enlace(rango, min(fin + timedelta(days=dias), hoy), hoy, vista)}" aria-label="Siguiente">›</a>'
                  if fin < hoy else '<span class="off" aria-hidden="true">›</span>')
     vistas = "".join(f'<a href="{enlace(rango, fin, hoy, k)}"{panel.ACTIVA if k == vista else ""}>{nombre}</a>'
-                     for k, nombre in VISTAS.items())
+                     for k, nombre in vistas_de(c).items())
     rangos = "".join(f'<a href="{enlace(k, fin, hoy, vista)}"{panel.ACTIVA if k == rango else ""}>{nombre}</a>'
                      for k, nombre in RANGOS.items())
     guardado = await c.store.get(metricas.CLAVE_HORA)
@@ -372,8 +365,10 @@ async def barra(c: Cuenta, rango: str, fin: date, hoy: date, vista: str) -> str:
            if vista == "instagram" else
            '<span><i class="punto"></i>Anuncios: números de Meta y de tus chats, cada 10 minutos</span>'
            if vista == "anuncios" else
+           '<span><i class="punto"></i>Comentarios: se actualizan cada 10 minutos</span>'
+           if vista == "comentarios" else
            '<span><i class="punto"></i>Mensajes: se actualizan cada 10 minutos</span>')
-        + ("" if vista == "anuncios" else  # el PDF tiene Instagram y Conversaciones
+        + ("" if vista in ("anuncios", "comentarios") else  # el PDF tiene Instagram y Conversaciones
            f'<a class="boton secundario chico cal-bajar" href="{enlace(rango, fin, hoy, vista, "/panel/resultados/descargar")}"'
            ' title="Este periodo, en PDF">↓ Descargar</a>') + "</div></div>"
     )
@@ -401,8 +396,171 @@ def conversaciones_html(c: Cuenta, d: dict, publico: dict) -> str:
         cuerpo = ('<div class="tarjeta"><h2>Aún no hay mensajes en este periodo</h2>'
                   '<p class="ayuda">Cuando tu asistente esté encendido y te escriban, aquí verás lo que hizo por ti.</p>'
                   '<div class="acciones"><a class="boton" href="/panel/asistente">Ir a tu asistente</a></div></div>')
-    if c.imagenes_mes > 0:
-        cuerpo += seccion_comentarios(d)
+    return cuerpo
+
+
+# --- Comentarios ---
+
+# Los tipos de Configura tus interacciones (interacciones.CASOS), con nombre corto para la gráfica.
+TIPOS_COMENTARIO = {
+    "elogio": "Elogio", "pregunta": "Pregunta", "compra": "Quiere comprar", "queja": "Queja o crítica",
+    "etiqueta": "Etiqueta a un amigo", "emojis": "Solo emojis", "otro": "Otro",
+}
+MENCION = "mencion"  # interacciones.mencion las guarda en comments con este user_id
+MAX_POSTS_COMENTARIOS = 5
+POST_INFO_SEGUNDOS = 6 * 3600  # la foto de Instagram (su URL vence) y el texto de cada post, guardados un rato
+
+
+def tipo_de(matched: str) -> str:
+    """El tipo de un comentario según lo que anotó comentarios.handle o la tabla de interacciones."""
+    if matched.startswith("tipo: "):
+        tipo = matched[6:].strip()
+        return tipo if tipo in TIPOS_COMENTARIO else "otro"
+    return "clave" if matched else "sin"
+
+
+async def numeros_comentarios(c: Cuenta, rango: str, fin: date) -> dict:
+    zona = ZoneInfo(c.timezone)
+    dias = int(rango)
+    inicio = datetime(fin.year, fin.month, fin.day, tzinfo=zona) - timedelta(days=dias - 1)
+    filas = await c.store.comments_between(inicio.timestamp(), (inicio + timedelta(days=dias)).timestamp())
+    menciones = [f for f in filas if f[0] == MENCION]
+    todos = [f for f in filas if f[0] != MENCION]
+    normales = [f for f in todos if f[2] != SPAM]
+    por_dia = [0] * dias
+    tipos: dict[str, list[int]] = {}
+    for _, _, matched, dm, publica, t in normales:
+        dia = (datetime.fromtimestamp(t, zona).date() - inicio.date()).days
+        if 0 <= dia < dias:
+            por_dia[dia] += 1
+        x = tipos.setdefault(tipo_de(matched), [0, 0])
+        x[0] += 1
+        x[1] += 1 if (dm or publica) else 0
+    por_post = Counter(f[1] for f in normales if f[1])
+    return {
+        "inicio": inicio, "dias": dias, "por_dia": por_dia, "tipos": tipos,
+        "comentarios": len(normales),
+        "contestados": sum(1 for f in normales if f[3] or f[4]),
+        "publicas": sum(f[4] for f in normales),
+        "dms": sum(f[3] for f in normales),
+        "spam": len(todos) - len(normales),
+        "menciones": len(menciones),
+        "palabras": Counter(w for f in normales if tipo_de(f[2]) == "clave"
+                            for w in f[2].split("; ") if w).most_common(6),
+        "posts": por_post.most_common(MAX_POSTS_COMENTARIOS),
+    }
+
+
+async def info_post(c: Cuenta, media_id: str) -> dict:
+    """Foto, texto y enlace de un post de Instagram (los suba quien los suba), guardados POST_INFO_SEGUNDOS."""
+    clave = f"post_info:{media_id}"
+    if guardado := await c.store.get(clave):
+        datos = json.loads(guardado)
+        if datos.get("t", 0) > time.time() - POST_INFO_SEGUNDOS:
+            return datos
+    try:
+        x = await c.instagram.media_basico(media_id)
+    except Exception:
+        return {}
+    datos = {"t": time.time(), "permalink": x.get("permalink", ""), "caption": x.get("caption", ""),
+             "imagen": x.get("thumbnail_url") or x.get("media_url", ""),
+             "fecha": x.get("timestamp", ""), "tipo": x.get("media_product_type") or x.get("media_type", "")}
+    await c.store.set(clave, json.dumps(datos, ensure_ascii=False))
+    return datos
+
+
+def tipos_html(d: dict) -> str:
+    orden = sorted(d["tipos"].items(), key=lambda x: -x[1][0])
+    tope = max((n for n, _ in d["tipos"].values()), default=0) or 1
+    nombres = {**TIPOS_COMENTARIO, "clave": "Palabra clave", "sin": "Sin clasificar"}
+    filas = "".join(
+        f'<li><span class="rt-nombre">{nombres[k]}</span>'
+        f'<span class="rt-barra"><i style="width:{max(n / tope * 100, 2):.0f}%"></i></span>'
+        f'<b>{n:,}</b><small>{plural(si, "contestado")}</small></li>'
+        for k, (n, si) in orden)
+    ayuda = ("" if any(k in TIPOS_COMENTARIO for k in d["tipos"]) else
+             '<p class="ayuda chica">Los comentarios se separan por tipo cuando eliges qué contestar en '
+             '<a class="enlace" href="/panel/interacciones">Configura tus interacciones</a>.</p>')
+    return f'<ul class="res-tipos">{filas}</ul>{ayuda}'
+
+
+def comentarios_por_dia(d: dict) -> str:
+    fechas = [d["inicio"] + timedelta(days=i) for i in range(d["dias"])]
+    if d["dias"] <= 7:
+        etiquetas = [DIAS[f.weekday()] for f in fechas]
+    else:
+        cada = 5 if d["dias"] <= 30 else 15
+        etiquetas = [f"{f:%d/%m}" if (d["dias"] - 1 - i) % cada == 0 else "" for i, f in enumerate(fechas)]
+    pico = max(range(d["dias"]), key=lambda i: d["por_dia"][i])
+    resumen = (f'Promedio: {sum(d["por_dia"]) / d["dias"]:.1f} al día · el día con más fue el'
+               f' {DIAS[fechas[pico].weekday()]} {fechas[pico]:%d/%m} ({d["por_dia"][pico]}).').replace(".0 al", " al")
+    return (barras(d["por_dia"], etiquetas, [""] * d["dias"], descripcion="Comentarios por día")
+            + f'<p class="ayuda" style="margin-top:.75rem">{resumen}</p>')
+
+
+async def posts_comentados(c: Cuenta, d: dict) -> str:
+    tarjetas = []
+    for media_id, n in d["posts"]:
+        x = await info_post(c, media_id)
+        foto = (f'<img src="{escape(x["imagen"])}" alt="" loading="lazy" referrerpolicy="no-referrer">'
+                if x.get("imagen") else '<div class="sin-foto">Sin imagen</div>')
+        if x.get("permalink", "").startswith("https://"):
+            foto = f'<a href="{escape(x["permalink"])}" rel="noopener" title="Ver en Instagram">{foto}</a>'
+        fecha = ""
+        if x.get("fecha"):
+            try:
+                cuando = datetime.fromisoformat(x["fecha"].replace("+0000", "+00:00")).astimezone(ZoneInfo(c.timezone))
+                fecha = f'<p class="pp-fecha">{"Reel" if x.get("tipo") == "REELS" else "Post"} · {cuando:%d/%m}</p>'
+            except ValueError:
+                pass
+        tarjetas.append(
+            f'<article class="pp"><div class="pp-foto">{foto}</div><div class="pp-cuerpo">{fecha}'
+            f'<p class="pp-texto">{escape((x.get("caption") or "Publicación")[:140])}</p>'
+            f'<div class="pp-tasa"><b class="tasa">{n:,}</b><small>{"comentario" if n == 1 else "comentarios"}</small></div>'
+            "</div></article>")
+    return ('<section class="met-c ancho res-posts res-com"><div class="met-cab"><span>Posts con más comentarios</span></div>'
+            f'<div class="pp-grid">{"".join(tarjetas)}</div></section>')
+
+
+async def comentarios_html(c: Cuenta, rango: str, fin: date) -> str:
+    """Resultados > Comentarios: cuántos llegaron, qué hizo tu asistente, de qué tipo son, por día y en qué posts."""
+    clave = (c.slug, "comentarios", rango, fin)
+    guardado = _cache.get(clave)
+    if guardado and guardado[0] > time.time():
+        d = guardado[1]
+    else:
+        d = await numeros_comentarios(c, rango, fin)
+        _cache[clave] = (time.time() + CACHE_SEGUNDOS, d)
+    if not d["comentarios"] and not d["spam"] and not d["menciones"]:
+        return ('<div class="tarjeta"><h2>Aún no hay comentarios en este periodo</h2>'
+                '<p class="ayuda">Cuando comenten tus publicaciones, aquí verás cuántos llegaron, de qué tipo son y '
+                'cuántos contestó tu asistente.</p><div class="acciones">'
+                '<a class="boton" href="/panel/interacciones">Configura tus interacciones</a></div></div>')
+    pct = round(d["contestados"] / d["comentarios"] * 100) if d["comentarios"] else 0
+    kpis = (
+        '<div class="hoy kpis res-kpis">'
+        + kpi("Comentarios", f'{d["comentarios"]:,}', "en tus publicaciones")
+        + kpi("Contestados", f"{pct}%", f'{d["contestados"]} de {d["comentarios"]} por tu asistente')
+        + kpi("Respuestas públicas", f'{d["publicas"]:,}', "en los comentarios")
+        + kpi("Mensajes directos", f'{d["dms"]:,}', "enviados por un comentario")
+        + (kpi("Spam ocultado", f'{d["spam"]:,}') if d["spam"] else "")
+        + (kpi("Menciones", f'{d["menciones"]:,}', "contestadas en su post") if d["menciones"] else "")
+        + "</div>"
+    )
+    if not d["comentarios"]:
+        return kpis
+    palabras = "".join(f'<span class="chip">{escape(w)} · {n}</span> ' for w, n in d["palabras"])
+    cuerpo = (
+        kpis
+        + '<div class="res-dos"><div class="tarjeta"><span class="num">Por día</span><h2>Comentarios recibidos</h2>'
+        f"{comentarios_por_dia(d)}</div>"
+        f'<div class="tarjeta"><span class="num">Por tipo</span><h2>Qué te comentan</h2>{tipos_html(d)}</div></div>'
+    )
+    if d["posts"]:
+        cuerpo += f'<div class="met">{await posts_comentados(c, d)}</div>'
+    if palabras:
+        cuerpo += ('<div class="tarjeta"><span class="num">De comentario a mensaje</span><h2>Palabras clave más usadas</h2>'
+                   f"<div>{palabras}</div></div>")
     return cuerpo
 
 
@@ -504,6 +662,8 @@ async def pagina(c: Cuenta, rango: str, fin: date | None = None, vista: str = "i
     fin = min(fin or hoy, hoy)
     if vista == "anuncios":
         cuerpo = await anuncios_html(c, fin - timedelta(days=int(rango) - 1), fin)
+    elif vista == "comentarios":
+        cuerpo = await comentarios_html(c, rango, fin)
     elif vista == "conversaciones":
         publico = json.loads(await c.store.get(metricas.CLAVE_PUBLICO) or "{}")
         cuerpo = conversaciones_html(c, await numeros_de(c, rango, fin), publico)
@@ -528,7 +688,7 @@ def leer_fin(texto: str) -> date | None:
 async def ver(request: Request, dias: str = "7", fin: str = "", ver: str = "instagram"):
     if not (c := panel.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
-    return await pagina(c, dias if dias in RANGOS else "7", leer_fin(fin), ver if ver in VISTAS else "instagram")
+    return await pagina(c, dias if dias in RANGOS else "7", leer_fin(fin), ver if ver in vistas_de(c) else "instagram")
 
 
 @router.get("/descargar")

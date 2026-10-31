@@ -187,9 +187,51 @@ def test_community_ve_comentarios_y_publicaciones(cliente, monkeypatch):
     client.portal.call(actividad)
     html = client.get("/panel/resultados?ver=conversaciones").text
     assert 'href="/panel/contenido" title="Calendario"' in html
-    assert "De comentario a mensaje" in html and "PRECIO · 1" in html and "Spam ocultado" in html
+    assert "De comentario a mensaje" not in html  # los comentarios tienen su pestaña
     assert "1 publicada" not in html  # las publicaciones van en Instagram
+    assert '>Comentarios</a>' in html
     html = client.get("/panel/resultados").text
     assert "1 publicada <small>· 1 programada" in html and "https://www.instagram.com/p/X/" in html
     assert "Instagram aún no da sus números" in html
     assert "De comentario a mensaje" not in html
+
+
+def test_pestana_comentarios(cliente, monkeypatch):
+    client, c = cliente
+    pedidos = []
+
+    async def media_basico(media_id):
+        pedidos.append(media_id)
+        return {"caption": "Pan de muerto", "media_url": "https://cdn/x.jpg", "permalink": "https://www.instagram.com/p/Y/",
+                "timestamp": "2026-10-30T18:00:00+0000", "media_type": "IMAGE"}
+
+    monkeypatch.setattr(c.instagram, "media_basico", media_basico, raising=False)
+    # Básico: no hay pestaña (no atiende comentarios) y la dirección lleva a Instagram.
+    assert ">Comentarios</a>" not in client.get("/panel/resultados").text
+    assert 'class="on">Instagram' in client.get("/panel/resultados?ver=comentarios").text
+    monkeypatch.setattr(c, "imagenes_mes", 4)
+    assert "Aún no hay comentarios" in client.get("/panel/resultados?ver=comentarios").text
+    monkeypatch.setattr(resultados, "_cache", {})
+
+    async def actividad():
+        for i, (tipo, dm, pub) in enumerate([("tipo: elogio", False, True), ("tipo: elogio", False, False),
+                                             ("tipo: pregunta", True, True), ("PRECIO", True, False)]):
+            await c.store.add_comment(f"c{i}", f"u{i}", "m1" if i < 3 else "m2", "hola")
+            await c.store.comment_result(f"c{i}", tipo, dm, pub)
+        await c.store.add_comment("s", "spam", "m1", "gana dinero")
+        await c.store.comment_result("s", resultados.SPAM, False, False)
+        await c.store.add_comment("mencion:1", "mencion", "m9", "")
+        await c.store.comment_result("mencion:1", "mención", False, True)
+
+    client.portal.call(actividad)
+    html = client.get("/panel/resultados?ver=comentarios").text
+    assert 'class="on">Comentarios' in html and "Descargar" not in html
+    assert "75%" in html and "3 de 4 por tu asistente" in html  # el spam y la mención no cuentan
+    assert "Spam ocultado" in html and "Menciones" in html
+    assert "Elogio" in html and "Pregunta" in html and "Palabra clave" in html and "1 contestado" in html
+    assert "Pan de muerto" in html and "https://www.instagram.com/p/Y/" in html and "3</b><small>comentarios" in html
+    assert "PRECIO · 1" in html and "Comentarios recibidos" in html
+    assert sorted(pedidos) == ["m1", "m2"]  # la mención no es un post tuyo
+    monkeypatch.setattr(resultados, "_cache", {})
+    client.get("/panel/resultados?ver=comentarios")
+    assert len(pedidos) == 2  # la foto y el texto quedan guardados
