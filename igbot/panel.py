@@ -380,6 +380,9 @@ h2{font-size:1.5rem;letter-spacing:-.02em;margin-bottom:.25rem}
 .punto{color:var(--acento-claro)}
 .bajada{font-size:clamp(1.1rem,2.4vw,1.35rem);line-height:1.4;color:var(--gris);margin:1.25rem auto 0;max-width:34rem}
 .nota{color:var(--gris);font-size:.9rem;margin-top:2rem}
+.entrar-correo{display:flex;flex-wrap:wrap;gap:.75rem;justify-content:center;max-width:30rem;margin:2rem auto 0}
+.entrar-correo input{flex:1 1 14rem;width:auto}
+.aviso-entrar{color:var(--acento-claro);margin:1.5rem 0 0}
 .enlace{color:var(--acento-claro);text-decoration:none;font-weight:500}
 .volver{margin:0 0 1rem;font-size:.95rem}
 .enlace:hover{text-decoration:underline}
@@ -1584,6 +1587,7 @@ def entrar() -> HTMLResponse:
         '<div class="acciones"><a class="boton" href="/conectar/instagram">Entrar con Instagram</a>'
         + ('<a class="boton secundario" href="/panel/facebook/entrar">Entrar con Facebook</a>'
            if config.FB_APP_ID else "") + "</div>"
+        + '<p class="nota">¿En el cel no abre Instagram? <a class="enlace" href="/panel/correo">Entra con tu correo ›</a></p>'
         f'<p class="nota">¿Aún no conectas tu Instagram? <a class="enlace" href="{config.SITE_URL}/conectar">Empieza aquí ›</a></p>'
         "</div></section>"
     )
