@@ -405,7 +405,7 @@ def test_los_mensajes_dependen_del_objetivo(cliente, monkeypatch):
 
     paso(client, 1, objetivo="vender-latte")
     r = client.get(f"{URL}?paso=2")
-    assert "Comunicar precio" in r.text and "Comunicar ambiente" not in r.text and "«Vender el latte»" in r.text
+    assert "Comunicar precio" in r.text and "Comunicar ambiente" not in r.text
     paso(client, 2, mensajes=["precio"])
     assert client.portal.call(nueva_campana.leer, c)["mensajes"] == ["precio"]
 

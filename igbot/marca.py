@@ -164,14 +164,14 @@ def etiquetas(lista_: tuple[str, ...]) -> str:
 
 def menu_pasos(actual: str, hechos_: set[str]) -> str:
     items = ""
-    for i, (k, nombre, desc, *_) in enumerate(PASOS, 1):
+    for i, (k, nombre, *_) in enumerate(PASOS, 1):  # sin subtítulo en la barra de pasos
         clase = "actual" if k == actual else "hecho" if k in hechos_ else ""
         marca = "✓" if k in hechos_ and k != actual else str(i)
         items += (f'<a href="{BASE}?paso={i}" class="{clase}"><b>{marca}</b>'
-                  f'<span>{nombre}<small>{desc}</small></span></a>')
+                  f'<span>{nombre}</span></a>')
     clase = "actual" if actual == RESUMEN else ""
     items += (f'<a href="{BASE}?paso={RESUMEN}" class="{clase}"><b>★</b>'
-              "<span>Resumen<small>Revisa y edita</small></span></a>")
+              "<span>Resumen</span></a>")
     avance = len(hechos_ & set(CLAVES)) * 100 // len(CLAVES)
     return ('<details class="wiz-pasos" open><summary><span class="hamb"><i></i><i></i><i></i></span>Tu marca</summary>'
             f'<nav>{items}</nav>{panel.avance(avance)}<div class="mrc-tip"><b>Tú eliges, la IA diseña</b>Entra a cualquier paso cuando'
@@ -179,9 +179,8 @@ def menu_pasos(actual: str, hechos_: set[str]) -> str:
 
 
 def cabeza(i: int) -> str:
-    _, _, _, titulo, bajada = PASOS[i - 1]
-    return (f'<div class="wiz-cab"><p class="ante">Paso {i} de {len(PASOS)}</p><h2>{titulo}</h2>'
-            f'<p class="baj">{bajada}</p></div>')
+    _, _, _, titulo, _ = PASOS[i - 1]  # la bajada ya no se muestra (sin subtítulos)
+    return f'<div class="wiz-cab"><p class="ante">Paso {i} de {len(PASOS)}</p><h2>{titulo}</h2></div>'
 
 
 def pie(i: int) -> str:
@@ -357,9 +356,7 @@ def resumen(c: Cuenta, marca: dict) -> str:
     logo_html = (f'<div class="mrc-fila">{f"<img class=mrc-logo-mini src={url} alt=>" if url else "<span class=mrc-logo-mini>Sin logo</span>"}'
                  f"<span><b>{nombre_logo}</b><small>{desc_logo}</small></span></div>")
     return (
-        '<div class="wiz-cab"><p class="ante">Resumen</p><h2>Así se verá tu contenido</h2>'
-        '<p class="baj">Esta es tu identidad visual. La usamos cada vez que creamos contenido para ti. Toca Editar para'
-        " cambiar cualquier parte.</p></div>"
+        '<div class="wiz-cab"><p class="ante">Resumen</p><h2>Así se verá tu contenido</h2></div>'
         '<div class="wiz-resumen">'
         + caja(1, "Estilo visual", "Tus estilos, en orden de preferencia.", estilos)
         + caja(2, "Colores", escape(nombre_colores), franja)

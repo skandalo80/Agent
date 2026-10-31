@@ -719,10 +719,10 @@ def riel(e: dict, prods: list[dict], actual: int, con_form: bool) -> str:
     y salta (no se pierde lo escrito); si no, un enlace."""
     listos = hechos(e, prods)
     items = []
-    for n, (titulo, bajada) in [*((n, PASOS[n]) for n in ORDEN), (RESUMEN, ("Resumen", "Revisa y guarda"))]:
+    for n, titulo in [*((n, PASOS[n][0]) for n in ORDEN), (RESUMEN, "Resumen")]:
         cls = "on" if n == actual else "ok" if n in listos else ""
         marca = "★" if n == RESUMEN else "✓" if n in listos and n != actual else str(numero(n))
-        dentro = f'<span class="n">{marca}</span><span><b>{CORTOS.get(n, titulo)}</b><small>{bajada}</small></span>'
+        dentro = f'<span class="n">{marca}</span><span><b>{CORTOS.get(n, titulo)}</b></span>'
         actual_ = ' aria-current="step"' if n == actual else ""
         items.append(f'<button class="paso {cls}" form="f-emp" name="accion" value="ir_{n}"{actual_}>{dentro}</button>'
                      if con_form else f'<a class="paso {cls}" href="/panel/empresa?paso={n}"{actual_}>{dentro}</a>')
@@ -738,9 +738,9 @@ def numero(paso: int) -> int:
 
 
 def cabeza_paso(paso: int) -> str:
-    titulo, bajada = TITULOS[paso]
+    titulo, _ = TITULOS[paso]  # la bajada ya no se muestra (sin subtítulos)
     return (f'<div class="cab-paso"><p class="antetitulo">Paso {numero(paso)} de {len(PASOS)}</p><h2>{titulo}</h2>'
-            f"<p>{bajada}</p></div>" + LEYENDA)
+            "</div>" + LEYENDA)
 
 
 def pie(paso: int, nota: str = "") -> str:
@@ -764,7 +764,6 @@ def paso_1(e: dict) -> str:
     elige = "" if e.get("giro") else '<option value="" selected disabled>Elige una opción</option>'
     return (
         f'<div class="caja-o"><h3>Información general {LLENAR_WEB}<span class="etq-o esencial">Esencial</span></span></h3>'
-        '<p class="sub">La base para que todo hable de tu negocio y no de uno genérico.</p>'
         '<div class="dos">' + _texto("nombre", "Nombre de tu empresa", e.get("nombre", ""), 80, req=True)
         + _texto("sitio_web", "Sitio web", e.get("sitio_web", ""), 200, ejemplo="tusitio.com")
         + "</div>"
@@ -783,15 +782,13 @@ def paso_1(e: dict) -> str:
 
 def paso_2(e: dict) -> str:
     return (
-        '<div class="caja-o"><h3>Tus clientes</h3><p class="sub">Piensa en tus clientes de siempre; no necesitas'
-        " un perfil técnico.</p>"
+        '<div class="caja-o"><h3>Tus clientes</h3>'
         + _opciones("clientes_tipo", "¿A quién le vendes?", CLIENTES, e.get("clientes_tipo", ""), tipo="radio")
         + _texto("cliente_ideal", "¿Quién es tu cliente ideal?", e.get("cliente_ideal", ""), 500, filas=2,
                  ejemplo="Ej.: parejas jóvenes que rentan o compran su primer depa.")
         + _texto("problema", "¿Qué problema les resuelves?", e.get("problema", ""), 500, filas=2)
         + "</div>"
-        '<div class="caja-o"><h3>Lo que te hace distinto</h3><p class="sub">Tus campañas lo repiten de muchas'
-        " formas: es lo que más vende.</p>"
+        '<div class="caja-o"><h3>Lo que te hace distinto</h3>'
         + _texto("distinto", "¿Por qué te eligen a ti?", e.get("distinto", ""), 1000, filas=3,
                  ejemplo="Ej.: diseño práctico, a tu presupuesto y sin estrés: nosotros compramos e instalamos.")
         + _texto("competencia", "¿Con quién te comparan?", e.get("competencia", ""), 300,
@@ -878,19 +875,15 @@ def paso_3(c: Cuenta, e: dict, prods: list[dict], editando: dict | None) -> str:
     filas = "".join(fila_producto(c, p) for p in prods) or (
         '<p class="vacio-o">Aún no tienes productos. Agrega el primero: con su foto y su precio tu asistente'
         " contesta mejor y tus campañas lo pueden promocionar.</p>")
-    destacados = sum(1 for p in prods if p.get("destacado"))
     form = form_producto(c, editando) if editando is not None or len(prods) < MAX_PRODUCTOS else ""
     if editando is None and not prods:
         form = form.replace('<details class="nuevo-o"', '<details open class="nuevo-o"', 1)
     return (
         f'<div class="caja-o"><h3>Tu catálogo <span class="etq-o">{len(prods)} de {MAX_PRODUCTOS}</span></h3>'
-        '<p class="sub">Marca como destacado lo que más quieres vender: las campañas lo proponen primero.'
-        + (f" Tienes {destacados} destacado{'s' if destacados != 1 else ''}." if destacados else "")
-        + f"</p>{filas}{form}</div>"
+        f"{filas}{form}</div>"
         + (TRAER_SHOPIFY if e.get("sitio_web") and len(prods) < MAX_PRODUCTOS else "")
         + '<form id="f-emp" method="post" action="/panel/empresa"><input type="hidden" name="paso" value="3">'
-        '<div class="caja-o"><h3>Otros precios o notas</h3><p class="sub">Paquetes, promociones vigentes o lo que no'
-        " cabe en el catálogo. Lo que no pongas aquí ni en tus productos, el asistente no lo inventa.</p>"
+        '<div class="caja-o"><h3>Otros precios o notas</h3>'
         + _texto("precios", "Notas de precios", e.get("precios", ""), 2000, filas=3,
                  ejemplo="Ej.: 10 % de descuento pagando de contado.")
         + "</div>" + pie(3) + "</form>"
@@ -899,13 +892,12 @@ def paso_3(c: Cuenta, e: dict, prods: list[dict], editando: dict | None) -> str:
 
 def paso_4(e: dict) -> str:
     return (
-        '<div class="caja-o"><h3>Cuándo y dónde</h3><p class="sub">Lo que tus clientes preguntan antes de ir o'
-        " escribirte.</p>"
+        '<div class="caja-o"><h3>Cuándo y dónde</h3>'
         + _texto("horarios", "Horarios", e.get("horarios", ""), 500,
                  "Por ejemplo: lunes a viernes de 9:00 a 18:00, sábados de 10:00 a 14:00.", filas=2)
         + _texto("direccion", "Dirección", e.get("direccion", ""), 300, "Si tienes local o estudio. Si no, déjalo vacío.")
         + "</div>"
-        '<div class="caja-o"><h3>Pagos y políticas</h3><p class="sub">Las vacías no se usan.</p>'
+        '<div class="caja-o"><h3>Pagos y políticas</h3>'
         + _opciones("pagos", "Formas de pago", PAGOS, e.get("pagos", []))
         + _texto("pagos_nota", "Algo más sobre pagos", e.get("pagos_nota", ""), 300,
                  ejemplo="Ej.: anticipo del 50 % para apartar fecha.")
@@ -934,7 +926,6 @@ def paso_5(e: dict, filas_extra: int = 0) -> str:
     mas = ('<button class="mini" name="accion" value="mas_faq">+ Agregar otra pregunta</button>'
            if len(pares) < MAX_PREGUNTAS else "")
     return (f'<div class="caja-o"><h3>Preguntas frecuentes <span class="etq-o">{len(_respuestas(e))} con respuesta</span></h3>'
-            '<p class="sub">Tu asistente las contesta tal cual.</p>'
             f'<input type="hidden" name="faq_n" value="{len(pares)}">{filas}<div style="margin-top:.8rem">{mas}</div></div>'
             + pie(5))
 
