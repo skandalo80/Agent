@@ -61,6 +61,13 @@
   /* Tabla "¿Cuándo pasar la conversación a tu equipo?": caso, interruptor, qué recibe el cliente */
   --pase-columnas: minmax(0, 1fr) 4rem minmax(0, 1.6fr);
 
+  /* Página de marca en el celular: tarjetas para elegir (estilos, paletas, colores, logo) */
+  --marca-columnas-cel: 2;     /* tarjetas por fila en el celular */
+  --marca-hueco-cel: .6rem;    /* espacio entre ellas */
+  --marca-op-pad: .7rem .75rem .8rem; /* relleno del texto de cada tarjeta */
+  --marca-op-titulo: .9rem;    /* nombre de la tarjeta */
+  --marca-op-texto: .76rem;    /* textos de la tarjeta */
+
   /* Conversaciones */
   --punto-chat: .6rem;         /* punto lima de no leído en cada chat, debajo de la hora */
 }
