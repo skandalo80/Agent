@@ -1030,15 +1030,35 @@ def test_menu_lateral_sin_grupos(cliente, monkeypatch):
     r = client.get("/panel/asistente").text
     # Cada sección es un renglón con su ícono, como Resultados; sin Tu asistente ni Contenido como grupos.
     nav = r.split('<nav class="lat-nav">')[1].split("</nav>")[0]
-    titulos = ["Resultados", "Conversaciones", "Probar tu asistente", "Campañas", "Calendario"]
+    titulos = ["Resultados", "Conversaciones", "Probar tu asistente", "Campañas", "Calendario", "Interacciones"]
     assert [nav.index(f'title="{t}"') for t in titulos] == sorted(nav.index(f'title="{t}"') for t in titulos)
-    assert nav.count("<svg") == 5 and "lat-sub" not in nav and "data-sub" not in nav
+    assert nav.count("<svg") == 6 and "lat-sub" not in nav and "data-sub" not in nav
     assert 'title="Tu asistente"' not in nav and 'title="Contenido"' not in nav
     assert nav.count('class="lat-item on"') == 1 and 'class="lat-item on" href="/panel/asistente"' in nav
     # Sin contenido en el plan, no salen Campañas ni Calendario.
     monkeypatch.setattr(c, "imagenes_mes", 0)
     r = client.get("/panel/asistente").text
-    assert 'title="Campañas"' not in r and 'title="Tu marca"' not in r
+    assert 'title="Campañas"' not in r and 'title="Tu marca"' not in r and 'title="Interacciones"' not in r
+
+
+def test_interacciones_guarda_la_tabla_de_comentarios(cliente, monkeypatch):
+    client, c, *_ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 5)
+    r = client.get("/panel/interacciones").text
+    assert "¿Qué contestar a cada comentario?" in r and r.count('<details class="it-fila">') == 7
+    assert 'class="lat-item on" href="/panel/interacciones"' in r
+    client.post("/panel/interacciones", headers=ORIGEN, data={
+        "pub_on_emojis": "1", "pub_modo_emojis": "fijo", "lista_emojis": ["¡Gracias! 💛", " ", "🙌"],
+        "dm_on_pregunta": "1", "dm_modo_pregunta": "fijo", "msg_pregunta": "",  # sin mensaje: se queda con la IA
+        "spam": "1"})
+    datos = json.loads(client.portal.call(c.store.get, "interacciones"))
+    emojis, pregunta = datos["comentarios"]["emojis"], datos["comentarios"]["pregunta"]
+    assert emojis["pub"] == {"on": True, "modo": "fijo", "lista": ["¡Gracias! 💛", "🙌"]} and not emojis["dm"]["on"]
+    assert pregunta["dm"]["modo"] == "ia" and not pregunta["pub"]["on"] and datos["spam"] is True
+    assert "¡Gracias! 💛" in client.get("/panel/interacciones").text
+    # Sin contenido en el plan, la página no existe para él.
+    monkeypatch.setattr(c, "imagenes_mes", 0)
+    assert client.get("/panel/interacciones", follow_redirects=False).headers["location"] == "/panel"
 
 
 def test_configuracion_abajo_arriba_de_ayuda(cliente, monkeypatch):
