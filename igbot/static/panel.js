@@ -402,10 +402,14 @@ document.querySelectorAll(".inbox[data-vivo]").forEach((inbox) => {
   });
 });
 
-// Después de enviar una respuesta desde Conversaciones, el cursor vuelve a la caja para seguir escribiendo.
-if (location.pathname === "/panel/responder") {
-  const caja = document.querySelector(".inbox .responder textarea");
-  if (caja) caja.focus();
+// El cursor se pone solo en la caja de escribir únicamente donde hay ratón: en el celular enfocarla
+// abre el teclado y tapa el chat, así que ahí el cliente toca la caja cuando quiera escribir.
+// Pasa en Probar tu asistente (data-foco) y al volver de enviar una respuesta desde Conversaciones.
+const TACTIL = window.matchMedia("(hover: none)").matches;
+if (!TACTIL) {
+  const foco = document.querySelector("[data-foco]")
+    || (location.pathname === "/panel/responder" ? document.querySelector(".inbox .responder textarea") : null);
+  if (foco) foco.focus();
 }
 
 // Skandi (el botón de ayuda): sin JavaScript la ventana abre con #skandi (:target).
