@@ -1499,6 +1499,37 @@ body:has(>.lateral) :is(.compacta+main,.compacta.delgada~main,.compacta.delgada~
 .mrc .wiz-pie{flex-direction:column;align-items:stretch}
 .mrc .wiz-pie .boton{text-align:center;white-space:nowrap}
 }
+/* Celular (lote 1). Campos de 16 px: con menos, Safari en iPhone hace zoom al tocarlos. Las barras de pasos
+   caben en el ancho: el paso actual con su nombre (recortado si hace falta) y los demás solo con su número.
+   Las pestañas de Resultados se reparten el ancho. El botón de Skandi, más chico y escondido mientras se
+   escribe; y aire abajo de cada página para que no tape lo último. */
+@media(max-width:560px){
+:is(input:not([type=checkbox],[type=radio],[type=range],[type=file],[type=hidden]),select,textarea){font-size:16px!important}
+.riel .lista,.as-pasos,.wiz-pasos:not(details){overflow:hidden}
+.riel .paso,.as-paso,.wiz-pasos :is(a,.wiz-paso){flex:none;padding:.35rem .4rem;gap:.4rem}
+.riel .paso .n,.as-n,.wiz-pasos :is(a,.wiz-paso) b{width:1.5rem;height:1.5rem;font-size:.72rem}
+.riel .paso.on,.as-paso.on,.wiz-pasos :is(a,.wiz-paso).actual{flex:1 1 auto;min-width:0;padding:.35rem .6rem}
+.riel .paso.on .n,.as-paso.on .as-n{display:none}
+.riel .paso:not(.on)>span:last-child,.as-paso:not(.on)>span:last-child{display:none}
+.riel .paso.on b,.as-paso.on b,.wiz-pasos :is(a,.wiz-paso).actual span{display:block;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.88rem}
+.res-vista{overflow:hidden}.res-vista a{flex:1 1 0;min-width:0;padding:.45rem .3rem;font-size:.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sk-boton{width:3rem;height:3rem;right:calc(.9rem + env(safe-area-inset-right,0px));bottom:calc(.9rem + env(safe-area-inset-bottom,0px))}
+.sk-boton svg{width:1.4rem;height:1.4rem}
+body:has(:is(input,textarea):focus:not(.skandi *)) .sk-boton{display:none}
+main{padding-bottom:4.5rem}
+}
+/* Lote 2. Lo de arrastrar solo se cuenta donde hay ratón: en pantallas táctiles no funciona. En celular los
+   filtros del Calendario van plegados tras "Filtros" (abiertos si hay un filtro puesto o al tocar el botón). */
+@media(hover:none){.solo-raton{display:none}}
+.cal-tog{display:none}
+@media(max-width:560px){
+.cal-filtros .cal-tog{display:inline-block}
+.cal-campos{display:none;flex-basis:100%;flex-wrap:wrap;gap:.6rem}
+.cal-filtros:is(.con-filtro,.abierta) .cal-campos{display:flex}
+.cal-filtros .cal-campos input[type=search]{max-width:none}
+.cal-filtros .cal-campos select{flex:1 1 100%;max-width:none;min-width:0}
+}
+@media(min-width:561px){.cal-campos{display:contents}}
 """
 
 

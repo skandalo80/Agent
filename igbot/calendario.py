@@ -256,14 +256,19 @@ def filtros(est: dict, nombres: list[str], n: int, descarga: str) -> str:
         return f'<option value="{escape(valor)}"{" selected" if valor == actual else ""}>{escape(texto)}</option>'
     ocultos = "".join(f'<input type="hidden" name="{k}" value="{escape(est[k])}">' for k in ("vista", "fecha", "ver")
                       if est[k])
-    return (f'<form class="cal-filtros" method="get" action="{BASE}#cal">{ocultos}'
+    con_filtro = " con-filtro" if est["q"] or est["estado"] or est["campana"] else ""
+    # En celular los campos van plegados tras el botón "Filtros" (abiertos si hay un filtro puesto); en
+    # pantallas anchas se ven siempre y el botón no sale.
+    return (f'<form class="cal-filtros{con_filtro}" method="get" action="{BASE}#cal">{ocultos}'
+            '<button type="button" class="boton secundario chico cal-tog" aria-expanded="false">Filtros</button>'
+            '<div class="cal-campos">'
             f'<input type="search" name="q" value="{escape(est["q"])}" placeholder="Buscar post o campaña…"'
             ' aria-label="Buscar post o campaña">'
             '<select name="campana" aria-label="Campaña">' + opcion("", "Todas las campañas", est["campana"])
             + "".join(opcion(x, x, est["campana"]) for x in nombres) + "</select>"
             '<select name="estado" aria-label="Estado">' + opcion("", "Todos los estados", est["estado"])
             + "".join(opcion(k, ESTADOS[k][0], est["estado"]) for k in ("borrador", "programado", "publicado"))
-            + '</select><button class="boton secundario chico cal-aplicar">Filtrar</button>'
+            + '</select><button class="boton secundario chico cal-aplicar">Filtrar</button></div>'
             f'<span class="cal-total">{n} post{"" if n == 1 else "s"}</span>'
             f'<a class="boton secundario chico cal-bajar" href="{escape(descarga)}" title="Lo que ves, en PDF">'
             '↓ Descargar</a></form>')
@@ -334,7 +339,7 @@ async def seccion(c: Cuenta, vista: str, fecha: date | None, ver: str, q: str, e
             + filtros(est, nombres, len([x for x in items if x.cuando or ver == "lista"]), enlace_descarga(est, fecha))
             + cuerpo
             + f'<div class="cal-leyenda"><span class="t">Estados:</span>{leyenda}'
-            '<span class="t">Toca un post para abrirlo, o arrástralo a otro día u hora.</span></div></div>')
+            '<span class="t">Toca un post para abrirlo<span class="solo-raton">, o arrástralo a otro día u hora</span>.</span></div></div>')
 
 
 # --- arrastrar un post a otro día u hora ---

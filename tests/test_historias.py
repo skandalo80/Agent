@@ -1,7 +1,8 @@
 """Respuestas a historias, menciones y anuncios: el asistente sabe de qué historia hablan."""
 import os
 
-os.environ.update(IG_VERIFY_TOKEN="vt", IG_APP_SECRET="secreto", IG_ACCESS_TOKEN="tok", DB_PATH=":memory:")
+os.environ.update(IG_VERIFY_TOKEN="vt", IG_APP_SECRET="secreto", IG_ACCESS_TOKEN="tok", DB_PATH=":memory:",
+                  DEBOUNCE_SECONDS="0.2")  # como test_admin y test_bot: el primero en importar app fija la espera
 
 import test_contenido  # noqa: E402
 from igbot import contenido, historias  # noqa: E402

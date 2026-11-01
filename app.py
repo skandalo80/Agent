@@ -29,7 +29,7 @@ from fastapi.exception_handlers import http_exception_handler
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
-from igbot import (acceso, admin, agenda_google, agent, ajustes, anuncios_meta, asistente, botones, campanas, cobros,
+from igbot import (acceso, adjuntos, admin, agenda_google, agent, ajustes, anuncios_meta, asistente, botones, campanas, cobros,
                    comentarios, comprimir, conectar, config, contenido, empresa, errores, facebook, historias, inicio,
                    interacciones, lentitud, limites, marca, metricas, nueva_campana, panel, reporte, resultados, semana, skandi,
                    sugeridos, tienda_shopify)
@@ -281,7 +281,12 @@ async def lifespan(app: FastAPI):
     acceso.store = store  # enlaces de entrar ya usados, en la base y no en memoria
     skandi.principal = lambda: principal
     tienda_shopify.cuentas = cobros.cuentas = lambda: cuentas
+    # Las colas y su tope común se crean dentro del bucle que va a correr: un semáforo que esperó en otro bucle
+    # (p. ej. el de una prueba anterior, o un arranque previo) ya no sirve en este.
+    global shared_slots
+    shared_slots = asyncio.Semaphore(config.MAX_CONCURRENT)
     for c in cuentas:
+        dispatchers[c.slug] = cola(c)
         await arrancar(c)
     await skandi.cargar()  # el historial de Skandi de cada cuenta, a la memoria
     loops = fondo()
@@ -555,6 +560,15 @@ async def entrar_mencion(c: Cuenta, user_id: str, mid: str, url: str) -> None:
             dispatchers[c.slug].notify(user_id)
 
 
+async def entrar_adjuntos(c: Cuenta, user_id: str, message: dict) -> None:
+    with usar(c), limites.rubro(limites.ATENCION):
+        text = await adjuntos.texto(c, message)
+        if story := ((message.get("reply_to") or {}).get("story") or {}).get("id"):
+            text = await historias.respuesta(c, user_id, str(story), text)
+        if await c.store.add_incoming(user_id, message["mid"], limites.trim(text)):
+            dispatchers[c.slug].notify(user_id)
+
+
 async def receive_entry(c: Cuenta, entry: dict) -> None:
     """Un aviso de una cuenta. Corre dentro de usar(c): lo que se lance aquí es de esa cuenta."""
     store, instagram = c.store, c.instagram
@@ -607,6 +621,10 @@ async def receive_entry(c: Cuenta, entry: dict) -> None:
         if (url := historias.url_de_mencion(message)) is not None:
             # Lo mencionaron en una historia: se describe la imagen (tarda unos segundos) y luego entra a la cola.
             in_background(entrar_mencion(c, user_id, message["mid"], url))
+            continue
+        if adjuntos.tiene(message) and not admin.is_admin(user_id):
+            # Fotos y audios: se describen o transcriben (tarda unos segundos) y luego entran a la cola.
+            in_background(entrar_adjuntos(c, user_id, message))
             continue
         if story := ((message.get("reply_to") or {}).get("story") or {}).get("id"):
             # Respondió a una historia: el asistente debe saber cuál era para contestar sobre esa.
