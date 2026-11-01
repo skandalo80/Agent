@@ -53,7 +53,7 @@ CITAS = ("schedule_total", "schedule_website", "offsite_conversion.fb_pixel_sche
 
 
 def enabled() -> bool:
-    return bool(config.FB_APP_ID and config.APP_SECRET and config.PUBLIC_URL)
+    return bool(config.FB_APP_ID and config.FB_APP_SECRET and config.PUBLIC_URL)
 
 
 def redirect_uri() -> str:
@@ -111,12 +111,12 @@ async def cuentas_del_codigo(code: str) -> tuple[dict, list[dict]]:
     base = f"{FB_GRAPH}/{config.API_VERSION}"
     async with httpx.AsyncClient(timeout=15) as http:
         r = await http.get(f"{base}/oauth/access_token", params={
-            "client_id": config.FB_APP_ID, "client_secret": config.APP_SECRET,
+            "client_id": config.FB_APP_ID, "client_secret": config.FB_APP_SECRET,
             "redirect_uri": redirect_uri(), "code": code})
         _check(r)
         r = await http.get(f"{base}/oauth/access_token", params={
             "grant_type": "fb_exchange_token", "client_id": config.FB_APP_ID,
-            "client_secret": config.APP_SECRET, "fb_exchange_token": r.json()["access_token"]})
+            "client_secret": config.FB_APP_SECRET, "fb_exchange_token": r.json()["access_token"]})
         _check(r)
         datos = r.json()
         token = {"token": datos["access_token"], "vence": time.time() + float(datos.get("expires_in") or 60 * 86400)}

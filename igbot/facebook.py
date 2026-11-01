@@ -46,7 +46,7 @@ _por_elegir: dict[str, tuple[float, str, list[dict]]] = {}  # código -> (cuánd
 
 
 def enabled() -> bool:
-    return bool(config.FB_APP_ID and config.APP_SECRET and config.PUBLIC_URL)
+    return bool(config.FB_APP_ID and config.FB_APP_SECRET and config.PUBLIC_URL)
 
 
 def redirect_uri() -> str:
@@ -95,7 +95,7 @@ async def paginas_del_codigo(code: str) -> list[dict]:
     base = f"{FB_GRAPH}/{config.API_VERSION}"
     async with httpx.AsyncClient(timeout=15) as http:
         r = await http.get(f"{base}/oauth/access_token", params={
-            "client_id": config.FB_APP_ID, "client_secret": config.APP_SECRET,
+            "client_id": config.FB_APP_ID, "client_secret": config.FB_APP_SECRET,
             "redirect_uri": redirect_uri(), "code": code})
         _check(r)
         token = r.json()["access_token"]
@@ -103,7 +103,7 @@ async def paginas_del_codigo(code: str) -> list[dict]:
         # Instagram, como Manychat) el token ya es de larga duración y no se cambia: si falla, se usa tal cual.
         r = await http.get(f"{base}/oauth/access_token", params={
             "grant_type": "fb_exchange_token", "client_id": config.FB_APP_ID,
-            "client_secret": config.APP_SECRET, "fb_exchange_token": token})
+            "client_secret": config.FB_APP_SECRET, "fb_exchange_token": token})
         if r.is_error:
             log.info("Token de Facebook sin cambiar a 60 días (%s): se usa el que llegó", r.status_code)
         else:
@@ -136,7 +136,7 @@ async def diagnostico_sin_paginas() -> None:
     async with httpx.AsyncClient(timeout=15) as http:
         for nombre, (ruta, params) in consultas.items():
             try:
-                quien = f"{config.FB_APP_ID}|{config.APP_SECRET}" if nombre == "debug_token" else _ultimo_token
+                quien = f"{config.FB_APP_ID}|{config.FB_APP_SECRET}" if nombre == "debug_token" else _ultimo_token
                 r = await http.get(base + ruta, params={**params, "access_token": quien})
                 log.warning("META SIN PAGINA %s %s: %s", nombre, r.status_code, r.text[:1500])
             except httpx.HTTPError as e:

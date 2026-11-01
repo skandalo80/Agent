@@ -247,3 +247,31 @@ def test_con_configuracion_de_meta_se_manda_config_id(con_facebook, monkeypatch)
     monkeypatch.setattr(config, "FB_CONFIG_ID", "cfg123")
     q = parse_qs(urlsplit(client.get("/panel/facebook/entrar", follow_redirects=False).headers["location"]).query)
     assert q["config_id"] == ["cfg123"] and "scope" not in q
+
+
+def test_el_codigo_se_cambia_con_el_secreto_de_la_app_de_meta(monkeypatch):
+    import asyncio
+    vistos = []
+
+    class Resp:
+        status_code = 200
+        def json(self):
+            return {"access_token": "t"}
+        def raise_for_status(self):
+            pass
+
+    class Cliente:
+        def __init__(self, *a, **k): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): pass
+        async def get(self, url, params=None, **k):
+            vistos.append(params or {})
+            return Resp()
+
+    monkeypatch.setattr(facebook.config, "FB_APP_SECRET", "secreto-meta")
+    monkeypatch.setattr(facebook.httpx, "AsyncClient", Cliente)
+    try:
+        asyncio.run(facebook.paginas_del_codigo("cod"))
+    except Exception:
+        pass
+    assert vistos and vistos[0].get("client_secret") == "secreto-meta"
