@@ -41,7 +41,7 @@ HORA = 6
 DIAS_ATRAS = 7
 DIAS_HISTORIAL = 90  # cuánto se rellena hacia atrás al conectar una cuenta
 LOTE_RELLENO = 5  # días que se rellenan por vuelta del bucle (unas 30 llamadas)
-VERSION_DIA = 2  # qué se pidió de cada día; sube cuando se agregan métricas y los días viejos se vuelven a pedir
+VERSION_DIA = 3  # qué se pidió de cada día; sube cuando se agregan métricas y los días viejos se vuelven a pedir
 CLAVE_INTENTO = "metricas_intento"
 CLAVE_RELLENO = "metricas_relleno"  # hasta qué día (hacia atrás) ya se revisó el historial; "listo" al terminar
 CLAVE_PUBLICO = "metricas_publico"
@@ -56,8 +56,10 @@ TOP_HORAS = 3
 METRICAS = {
     "reach": "alcance", "views": "vistas", "accounts_engaged": "cuentas", "total_interactions": "interacciones",
     "likes": "likes", "comments": "comentarios", "shares": "compartidos", "saves": "guardados",
-    "profile_links_taps": "clics",
+    "replies": "respuestas", "profile_links_taps": "clics",
 }
+ACCIONES = ("likes", "comentarios", "compartidos", "guardados", "respuestas")  # lo que cuenta como interacción
+REFERENCIA = "Entre 3 % y 5 % es lo normal en negocios; más de 6 % es muy bueno."
 PERFIL = {"followers_count": "seguidores", "follows_count": "siguiendo", "media_count": "publicaciones"}
 # Desgloses que se piden aparte: (métricas, breakdown) -> clave guardada por métrica. Instagram no deja mezclar
 # en una llamada métricas con desgloses distintos, y con un desglose que no existe falla toda la llamada.
@@ -270,6 +272,22 @@ def cambio(actual: int | None, antes: int | None) -> float | None:
     return (actual - antes) / antes * 100
 
 
+def tasa_dias(xs: list[dict]) -> float | None:
+    """El % de interacción de unos días: la suma de sus interacciones entre la suma de su alcance (la misma
+    fórmula que la de cada publicación, informe.tasa). None sin alcance."""
+    alcance = sum(x.get("alcance") or 0 for x in xs)
+    if not alcance:
+        return None
+    return round(sum(x.get(k, 0) for x in xs for k in ACCIONES) / alcance * 100, 1)
+
+
+def puntos(actual: float | None, antes: float | None) -> float | None:
+    """La diferencia entre dos tasas, en puntos (3,8 % contra 3,2 % son +0,6 pts, no +19 %)."""
+    if actual is None or antes is None:
+        return None
+    return round(actual - antes, 1)
+
+
 def seguidores_en(dias: dict[str, dict], dia: date) -> int | None:
     """Seguidores guardados ese día, o el día guardado más cercano antes de él."""
     previos = [d for d in dias if d <= dia.isoformat() and "seguidores" in dias[d]]
@@ -330,8 +348,14 @@ def bloques(fechas: list[date], serie: list[dict], bloque: int) -> tuple[list[da
     n = len(fechas) // bloque
     sobran = len(fechas) - n * bloque
     inicios = [fechas[sobran + i * bloque] for i in range(n)]
-    sumas = [sumar_dias(serie[sobran + i * bloque: sobran + (i + 1) * bloque]) for i in range(n)]
-    return inicios, sumas
+    return inicios, [sumar_dias(xs) for xs in trozos(serie, bloque)]
+
+
+def trozos(serie: list[dict], bloque: int) -> list[list[dict]]:
+    """Los días de cada bloque completo, contados desde el final (como `bloques`)."""
+    n = len(serie) // bloque
+    sobran = len(serie) - n * bloque
+    return [serie[sobran + i * bloque: sobran + (i + 1) * bloque] for i in range(n)]
 
 
 def suma_tipos(serie: list[dict], clave: str) -> dict[str, int]:
@@ -376,8 +400,9 @@ async def numeros(c: Cuenta, rango_dias: int, fin: date | None = None, cada: str
         fechas_g, serie_g, antes_g = fechas, serie, antes
     suma = lambda k, s=serie: sum(d.get(k, 0) for d in s)  # noqa: E731
     promedio = lambda k, s: (lambda xs: sum(xs) / len(xs) if xs else None)([d[k] for d in s if d.get(k) is not None])  # noqa: E731
-    inter = {k: suma(k) for k in ("likes", "comentarios", "compartidos", "guardados")}
+    inter = {k: suma(k) for k in ACCIONES}
     inter_antes = sum(suma(k, antes) for k in inter)
+    tasa, tasa_antes = tasa_dias(serie), tasa_dias(antes)
     relleno = await c.store.get(CLAVE_RELLENO)
     return {
         "fechas": fechas_g, "serie": serie_g, "antes": antes_g, "hay": bool(dias),
@@ -392,6 +417,10 @@ async def numeros(c: Cuenta, rango_dias: int, fin: date | None = None, cada: str
         "vistas": suma("vistas"), "vistas_cambio": cambio(suma("vistas"), suma("vistas", antes)),
         "clics": suma("clics"), "clics_cambio": cambio(suma("clics"), suma("clics", antes)),
         "interacciones": inter, "interacciones_cambio": cambio(sum(inter.values()), inter_antes),
+        "interaccion": tasa, "interaccion_cambio": puntos(tasa, tasa_antes),  # % de interacción del periodo, en pts
+        "interaccion_bloques": [tasa_dias(xs) for xs in trozos(serie, bloque)] if bloque > 1 else [tasa_dias([x]) for x in serie],
+        "interaccion_antes": [tasa_dias(xs) for xs in trozos(antes, bloque)] if bloque > 1 else [tasa_dias([x]) for x in antes],
+        "cuentas": promedio("cuentas", serie),  # cuentas distintas que interactuaron, al día
         "alcance_dia": [d.get("alcance") for d in serie_g],
         "alcance_promedio": promedio("alcance", serie),
         "alcance_cambio": cambio(promedio("alcance", serie), promedio("alcance", antes)),
@@ -599,6 +628,34 @@ def comparado(n: float | None, con: str = "vs. periodo anterior") -> str:
     return f"{pct(n)} {con}" if n is not None else "sin periodo anterior"
 
 
+def comparado_pts(n: float | None, con: str = "vs. periodo anterior") -> str:
+    """Una diferencia de tasas, en puntos."""
+    if n is None:
+        return "sin periodo anterior"
+    clase = "sube" if n > 0 else "baja" if n < 0 else ""
+    return f'<span class="met-pct {clase}">{"+" if n > 0 else ""}{n:.1f} pts</span> {con}'.replace(".0 pts", " pts")
+
+
+def interaccion_html(d: dict) -> str:
+    """Debajo de la dona: el % de interacción del periodo y qué es, las cuentas que interactuaron al día y, por
+    semana o por mes, la tasa de cada bloque."""
+    tasa = d.get("interaccion")
+    if tasa is None:
+        return ""
+    cada = d.get("cada", "dia")
+    partes = [f"<b>{tasa:.1f}%</b> de interacción: interacciones entre alcance.".replace(".0%", "%")]
+    if d.get("cuentas"):
+        partes.append(f"{cifra(d['cuentas'])} cuentas interactuaron al día, en promedio.")
+    partes.append("Incluye anuncios. " + REFERENCIA)
+    bloques_ = ""
+    if cada != "dia" and any(v is not None for v in d.get("interaccion_bloques", [])):
+        nombre = {"semana": "semana del", "mes": "mes del"}[cada]
+        bloques_ = '<ul class="met-lista chica">' + "".join(
+            f'<li>{nombre} {f:%d/%m}<b>{v:.1f}%</b></li>'.replace(".0%", "%") if v is not None else f"<li>{nombre} {f:%d/%m}<b>—</b></li>"
+            for f, v in zip(d["fechas"], d["interaccion_bloques"])) + "</ul>"
+    return f'<p class="ayuda chica">{" ".join(partes)}</p>{bloques_}'
+
+
 def kpi(etiqueta: str, valor: str, nota: str) -> str:
     return f'<div class="kpi"><span>{etiqueta}</span><b>{valor}</b><small>{nota}</small></div>'
 
@@ -638,7 +695,8 @@ def seccion(d: dict, formato: str = "", enlace_formato=None, picos: dict[date, s
             comparado(d["periodo"], "desde que empezó el periodo")),
         kpi("Vistas", cifra(d["vistas"]), comparado(d["vistas_cambio"])),
         kpi("Alcance al día", cifra(alcance_prom) if alcance_prom is not None else "—", comparado(d["alcance_cambio"])),
-        kpi("Interacciones", cifra(total_inter), comparado(d["interacciones_cambio"])),
+        kpi("Interacción", f"{d['interaccion']:.1f}%".replace(".0%", "%") if d.get("interaccion") is not None else "—",
+            comparado_pts(d.get("interaccion_cambio"))),
         kpi("Clics a tu perfil", cifra(d["clics"]), comparado(d["clics_cambio"])),
     )) + "</div>"
     # Vistas: por formato si se pidió, apiladas seguidores / otros cuando hay desglose.
@@ -697,8 +755,9 @@ def seccion(d: dict, formato: str = "", enlace_formato=None, picos: dict[date, s
                      f'+{cifra(d["nuevos"])}', "t6")
     interacciones = tarjeta("Interacciones", dona(
         [("Likes", inter["likes"]), ("Comentarios", inter["comentarios"]),
-         ("Compartidos", inter["compartidos"]), ("Guardados", inter["guardados"])],
-        cifra(total_inter), "interacciones"), clase="t6")
+         ("Compartidos", inter["compartidos"]), ("Guardados", inter["guardados"])]
+        + ([("Respuestas a historias", inter["respuestas"])] if inter.get("respuestas") else []),
+        cifra(total_inter), "interacciones") + interaccion_html(d), clase="t6")
     botones = tarjeta("Clics a tu perfil", botones_html(d["clics_tipo"], d["clics"]), cifra(d["clics"]), "t6")
     p = d["publico"]
     resumen = []

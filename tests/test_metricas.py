@@ -162,6 +162,9 @@ def test_resultados_muestra_tarjetas(cliente, monkeypatch):  # noqa: F811
     assert ">121<" in html and "+10%</span> desde que empezó el periodo" in html  # seguidores vs. el inicio del periodo
     assert "+14" in html and "7 dejaron de seguirte · neto +7" in html and "+100%</span> vs. periodo anterior" in html
     assert ">700 <small>· 40% de personas que no te siguen</small>" in html and ">63<" in html  # vistas e interacciones (9 × 7)
+    # % de interacción del periodo: 63 interacciones entre 308 de alcance (41 + ... + 47) = 20.5 %; antes 0 de 140.
+    assert "<span>Interacción</span><b>20.5%</b><small>" in html and "+20.5 pts</span> vs. periodo anterior" in html
+    assert "<b>20.5%</b> de interacción: interacciones entre alcance." in html and "Entre 3 % y 5 % es lo normal" in html
     assert "WhatsApp o SMS" in html and "Mujeres" in html and "Guadalajara<b>50" in html
     assert "Cuándo está tu público" in html and "a las 20:00, 21:00 y 09:00" in html and 'class="b mejor"' in html
     assert "<span><b>60</b></span>" in html and "<title>" not in html.split("<main")[1]
@@ -236,8 +239,44 @@ def test_publicaciones_con_numeros(cliente, monkeypatch):  # noqa: F811
     html = client.get("/panel/resultados").text
     assert "3 publicadas" in html and "Tu mejor post" in html
     assert html.index("Post bueno") < html.index("Post flojo") < html.index("Post nuevo")  # de mejor a peor
-    assert "10%" in html and "4%" in html and "Interacción promedio: 7.0%" in html
-    assert html.count("Instagram aún no da sus números") == 1
+    # El promedio es el del conjunto: (20 + 4) / (200 + 100) = 8 %, no el promedio de 10 % y 4 % (7 %).
+    assert "10%" in html and "4%" in html and "Interacción promedio: 8%" in html and "7.0%" not in html
+    assert "1.2× tu promedio" in html and html.count("Instagram aún no da sus números") == 1  # 10 / 8
+
+
+def test_post_con_pocas_cuentas_no_es_el_mejor(cliente, monkeypatch):  # noqa: F811
+    """Un post que llegó a menos de 30 cuentas muestra su tasa con aviso, va después de los demás y no compite
+    por «Tu mejor post»; las historias se miden con respuestas y compartidos y no entran al promedio."""
+    import time
+
+    from igbot import informe
+    client, c = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 4)
+    monkeypatch.setattr("igbot.resultados._cache", {})
+    numeros = {"chico": {"reach": 12, "views": 15, "likes": 3, "comments": 0, "saved": 0, "shares": 0},  # 25 %
+               "normal": {"reach": 400, "views": 600, "likes": 20, "comments": 4, "saved": 4, "shares": 4},  # 8 %
+               "hist": {"reach": 50, "views": 60, "replies": 2, "shares": 1, "profile_visits": 1, "follows": 0}}  # 6 %
+
+    async def insights(c, media_id, publicado=None, tipo="post"):
+        return numeros.get(media_id)
+
+    monkeypatch.setattr(informe, "numeros", insights)
+
+    async def publicar():
+        for n, (texto, media, tipo) in enumerate((("Post chico", "chico", "post"), ("Post normal", "normal", "post"),
+                                                  ("Una historia", "hist", "historia"))):
+            post = await c.store.add_post("panel", [], texto, time.time() - 3600 * (n + 1), tipo=tipo)
+            link = f"https://www.instagram.com/p/{n}/"
+            await c.store.set_post(post, "publicada", permalink=link)
+            await c.store.set(f"media_de:{link}", media)
+
+    client.portal.call(publicar)
+    html = client.get("/panel/resultados").text
+    assert html.index("Post normal") < html.index("Una historia") < html.index("Post chico")
+    assert "25%</b>" in html and "llegó a menos de 30 cuentas" in html
+    assert 'Tu mejor post</span></div><div class="pp-cuerpo"><p class="pp-fecha">Post ·' in html  # el normal, no el chico
+    assert "Interacción promedio: 8.5%" in html  # posts: (32 + 3) / (400 + 12); la historia no entra
+    assert "6%</b><small>interacción" in html  # la historia: (2 + 1) / 50
 
 
 def test_estadisticas_de_cada_post_se_guardan_una_vez_al_dia(cliente, monkeypatch):  # noqa: F811
@@ -286,6 +325,9 @@ def test_granularidad_semana_y_mes(cliente, monkeypatch):  # noqa: F811
     assert metricas.cada_por_defecto(7) == "dia" and metricas.cada_por_defecto(30) == "semana"
     assert metricas.salto(30, "dia") == 30 and metricas.salto(30, "semana") == 35 and metricas.salto(45, "mes") == 60
     assert metricas.leer_cada("mes", 30) == "semana" and metricas.leer_cada("dia", 30) == "dia"
+    assert metricas.tasa_dias([{"alcance": 100, "likes": 3, "respuestas": 1}, {"alcance": 100, "comentarios": 2}]) == 3.0
+    assert metricas.tasa_dias([{"likes": 3}]) is None and metricas.puntos(3.8, 3.2) == 0.6 and metricas.puntos(3.8, None) is None
+    assert metricas.trozos([1, 2, 3, 4, 5], 2) == [[2, 3], [4, 5]]
     assert metricas.sumar_dias([{"seguidores": 10, "alcance": 20, "vistas": 5, "vistas_seg": {"seguidores": 3}},
                                 {"alcance": 40, "vistas": 7, "vistas_seg": {"seguidores": 4, "otros": 1}, "v": 2}]) == {
         "seguidores": 10, "alcance": 30, "vistas": 12, "vistas_seg": {"seguidores": 7, "otros": 1}}

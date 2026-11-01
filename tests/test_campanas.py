@@ -482,6 +482,13 @@ def test_tasa_de_interaccion():
     from igbot import informe
     assert informe.tasa({"reach": 200, "likes": 10, "comments": 5, "saved": 2, "shares": 1, "views": 900}) == 9.0
     assert informe.tasa({"reach": 0, "likes": 3}) is None and informe.tasa(None) is None
+    # Una historia (Instagram da replies y no likes) cuenta respuestas y compartidos.
+    assert informe.tasa({"reach": 50, "replies": 2, "shares": 1, "views": 60}) == 6.0
+    # El conjunto es suma entre suma, no el promedio de las tasas (que daría 17.5).
+    assert informe.tasa_conjunta([{"reach": 12, "likes": 3}, {"reach": 400, "likes": 40}, None, {"reach": 0}]) == 10.4
+    assert informe.tasa_conjunta([None, {"likes": 3}]) is None
+    assert informe.pocas({"reach": 12, "likes": 3}) and not informe.pocas({"reach": 30}) and not informe.pocas(None)
+    assert not informe.pocas({"reach": 0})  # sin alcance no es "pocas": es "sin números"
     assert [informe.franja(h) for h in ("09:00", "14:00", "20:00", "")] == ["manana", "mediodia", "noche", "noche"]
 
 
