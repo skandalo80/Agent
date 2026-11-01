@@ -132,15 +132,33 @@ async def diagnostico_sin_paginas() -> None:
                                                      "instagram_business_accounts{id,username}"}),
         "me_instagram": ("/me", {"fields": "id,name,accounts{id,name}"}),
         "debug_token": ("/debug_token", {"input_token": _ultimo_token}),
+        # Con token de usuario del sistema (configuración "Solo Instagram") los activos se ven por aquí.
+        "me_negocio": ("/me", {"fields": "id,name,client_business_id"}),
+        "me_cuentas": ("/me/accounts", {"fields": "id,name,instagram_business_account{id,username}"}),
+        "me_ig_cuentas": ("/me/instagram_accounts", {"fields": "id,username"}),
+        "me_activos": ("/me/assigned_business_assets", {}),
     }
+    negocio = ""
     async with httpx.AsyncClient(timeout=15) as http:
         for nombre, (ruta, params) in consultas.items():
             try:
                 quien = f"{config.FB_APP_ID}|{config.FB_APP_SECRET}" if nombre == "debug_token" else _ultimo_token
                 r = await http.get(base + ruta, params={**params, "access_token": quien})
                 log.warning("META SIN PAGINA %s %s: %s", nombre, r.status_code, r.text[:1500])
-            except httpx.HTTPError as e:
+                if nombre == "me_negocio" and r.status_code == 200:
+                    negocio = str(r.json().get("client_business_id") or "")
+            except (httpx.HTTPError, ValueError) as e:
                 log.warning("META SIN PAGINA %s: %s", nombre, e)
+        for borde in ("owned_instagram_accounts", "instagram_accounts", "instagram_business_accounts",
+                      "client_instagram_assets"):
+            if not negocio:
+                break
+            try:
+                r = await http.get(f"{base}/{negocio}/{borde}",
+                                   params={"fields": "id,username", "access_token": _ultimo_token})
+                log.warning("META SIN PAGINA negocio_%s %s: %s", borde, r.status_code, r.text[:1500])
+            except httpx.HTTPError as e:
+                log.warning("META SIN PAGINA negocio_%s: %s", borde, e)
 
 
 def _ig(p: dict) -> dict:
