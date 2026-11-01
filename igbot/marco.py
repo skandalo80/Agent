@@ -26,9 +26,10 @@ import time
 from collections.abc import Awaitable, Callable
 from html import escape
 from pathlib import Path
+from typing import Annotated
 from urllib.parse import parse_qs
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response, StreamingResponse
 
 from . import config
@@ -131,6 +132,32 @@ def de_aqui(request: Request) -> None:
 def cuenta_de_sesion(request: Request) -> Cuenta | None:
     ig_id = sesion(request)
     return buscar(ig_id) if ig_id else None
+
+
+class SinSesion(Exception):
+    """Una ruta del panel sin sesión válida: no sigue. app.py la convierte en el redirect a /panel (ver sin_sesion)."""
+
+
+def cuenta_actual(request: Request) -> Cuenta:
+    """La guardia de sesión de las rutas del panel, como dependencia: `c: marco.Sesion` en la firma de la ruta."""
+    if not (c := cuenta_de_sesion(request)):
+        raise SinSesion()
+    return c
+
+
+def cuenta_del_formulario(request: Request) -> Cuenta:
+    """La misma guardia para los POST: antes revisa que el formulario venga de esta misma página (de_aqui)."""
+    de_aqui(request)
+    return cuenta_actual(request)
+
+
+Sesion = Annotated[Cuenta, Depends(cuenta_actual)]
+Formulario = Annotated[Cuenta, Depends(cuenta_del_formulario)]
+
+
+async def sin_sesion(request: Request, exc: SinSesion) -> RedirectResponse:
+    """Sin sesión, cualquier página del panel lleva a entrar (/panel)."""
+    return RedirectResponse("/panel", status_code=303)
 
 
 async def form(request: Request) -> dict[str, str]:
@@ -698,9 +725,7 @@ async def pagina_trabajo(c: Cuenta, t: Trabajo) -> HTMLResponse:
 
 
 @router.get("/trabajo/{tid}")
-async def ver_trabajo(request: Request, tid: str):
-    if not (c := cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def ver_trabajo(c: Sesion, tid: str):
     if not (t := _trabajos.get(tid)) or t.slug != c.slug:  # ya se olvidó, o igbot se reinició
         return RedirectResponse("/panel/contenido/campanas", status_code=303)
     return await pagina_trabajo(c, t)

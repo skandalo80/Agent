@@ -41,7 +41,7 @@ from igbot.pagina_fb import de_facebook
 from igbot.store import Store
 
 class ConCuenta(logging.Filter):
-    """Cada línea del registro dice de qué cuenta habla, para filtrar con `journalctl -u igbot | grep '\[slug\]'`."""
+    r"""Cada línea del registro dice de qué cuenta habla, para filtrar con `journalctl -u igbot | grep '\[slug\]'`."""
 
     def filter(self, record: logging.LogRecord) -> bool:
         record.cuenta = cuenta().slug or "principal"
@@ -409,6 +409,7 @@ if not config.CLIENTE:
             return await marco.no_encontrada(request)
         return await http_exception_handler(request, exc)
 
+    app.add_exception_handler(marco.SinSesion, marco.sin_sesion)  # una ruta del panel sin sesión: a entrar
     # Un error que nadie atrapó: página amable en vez de "Internal Server Error" y correo a soporte.
     app.add_exception_handler(Exception, errores.inesperado)
 

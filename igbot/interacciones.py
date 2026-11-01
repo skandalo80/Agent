@@ -547,9 +547,7 @@ async def pagina(c: Cuenta, paso: str = "", aviso: str = "") -> HTMLResponse:
 
 
 @router.get("/interacciones")
-async def ver(request: Request):
-    if not (c := marco.cuenta_de_sesion(request)):
-        return marco.entrar()
+async def ver(request: Request, c: marco.Sesion):
     if not disponible(c):
         return RedirectResponse("/panel", status_code=303)
     q = request.query_params
@@ -577,10 +575,8 @@ def _de_tabla(f, seccion: str) -> dict:
 
 
 @router.post("/interacciones")
-async def guardar(request: Request):
-    marco.de_aqui(request)
-    c = marco.cuenta_de_sesion(request)
-    if not c or not disponible(c):
+async def guardar(request: Request, c: marco.Formulario):
+    if not disponible(c):
         return RedirectResponse("/panel", status_code=303)
     f = await request.form()
     paso = str(f.get("paso", ""))

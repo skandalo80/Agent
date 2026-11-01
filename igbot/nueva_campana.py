@@ -1059,9 +1059,7 @@ def foto_de(c: Cuenta, prod: dict) -> bool:
 
 
 @router.get("/campanas/nueva")
-async def ver(request: Request):
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def ver(request: Request, c: marco.Sesion):
     if c.imagenes_mes <= 0:
         return sin_plan()
     q = request.query_params
@@ -1076,10 +1074,7 @@ async def ver(request: Request):
 
 
 @router.post("/campanas/nueva")
-async def guardar(request: Request):
-    marco.de_aqui(request)
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def guardar(request: Request, c: marco.Formulario):
     if c.imagenes_mes <= 0:
         return sin_plan()
     f = await request.form()
@@ -1249,19 +1244,14 @@ def borrador_rapido(b: dict, f, objetivos: list[dict], mensajes: list[dict]) -> 
 
 
 @router.get("/campanas/rapida")
-async def ver_rapida(request: Request):
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def ver_rapida(c: marco.Sesion):
     if c.imagenes_mes <= 0:
         return sin_plan()
     return await pagina_rapida(c)
 
 
 @router.post("/campanas/rapida")
-async def crear_rapida(request: Request):
-    marco.de_aqui(request)
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def crear_rapida(request: Request, c: marco.Formulario):
     if c.imagenes_mes <= 0:
         return sin_plan()
     hay_empresa, hay_marca = await lista_para_empezar(c)

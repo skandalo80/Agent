@@ -2385,9 +2385,7 @@ async def trabajando(c: Cuenta, titulo: str, nota: str, trabajo, destino: str = 
 # --- rutas ---
 
 @router.get("/campanas")
-async def ver(request: Request):
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def ver(request: Request, c: marco.Sesion):
     if c.imagenes_mes <= 0:
         return sin_plan()
     if request.query_params.get("nueva") == "1":  # el enlace de antes
@@ -2402,9 +2400,7 @@ def archivo_de(nombre: str) -> str:
 
 
 @router.get("/campanas/reporte")
-async def reporte(request: Request):
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def reporte(request: Request, c: marco.Sesion):
     if c.imagenes_mes <= 0:
         return sin_plan()
     pedidas = set(request.query_params.getlist("c"))
@@ -2421,9 +2417,7 @@ async def reporte(request: Request):
 
 
 @router.get("/campanas/{cid}")
-async def ver_campana(request: Request, cid: str):
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def ver_campana(request: Request, c: marco.Sesion, cid: str):
     if c.imagenes_mes <= 0:
         return sin_plan()
     if not (camp := await leer(c, cid)):
@@ -2435,10 +2429,8 @@ async def ver_campana(request: Request, cid: str):
 
 
 @router.get("/campanas/{cid}/brief")
-async def descargar_brief(request: Request, cid: str):
+async def descargar_brief(c: marco.Sesion, cid: str):
     """El brief de la campaña en PDF (también de las que ya pasaron al historial)."""
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
     if c.imagenes_mes <= 0:
         return sin_plan()
     with usar(c):
@@ -2504,10 +2496,8 @@ def documentos(camp: dict) -> bytes:
 
 
 @router.get("/campanas/{cid}/documentos")
-async def descargar_documentos(request: Request, cid: str):
+async def descargar_documentos(c: marco.Sesion, cid: str):
     """Los documentos de cada etapa del flujo (brief, plan editorial, posts y prompts), en un ZIP."""
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
     if c.imagenes_mes <= 0:
         return sin_plan()
     with usar(c):
@@ -2519,10 +2509,8 @@ async def descargar_documentos(request: Request, cid: str):
 
 
 @router.get("/campanas/{cid}/propuesta")
-async def descargar_propuesta(request: Request, cid: str):
+async def descargar_propuesta(c: marco.Sesion, cid: str):
     """La campaña en PDF, para mandarla a la marca antes de publicar."""
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
     if c.imagenes_mes <= 0:
         return sin_plan()
     with usar(c):
@@ -2584,10 +2572,7 @@ async def armar(c: Cuenta, datos: dict, camp: dict, borrador: bool = False):
 
 
 @router.post("/campanas")
-async def nueva_campana(request: Request):
-    marco.de_aqui(request)
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def nueva_campana(request: Request, c: marco.Formulario):
     if c.imagenes_mes <= 0:
         return sin_plan()
     f = await marco.form(request)
@@ -2597,10 +2582,7 @@ async def nueva_campana(request: Request):
 
 
 @router.post("/campanas/{cid}")
-async def accion(request: Request, cid: str):
-    marco.de_aqui(request)
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def accion(request: Request, c: marco.Formulario, cid: str):
     if c.imagenes_mes <= 0:
         return sin_plan()
     datos = await request.form()  # el editor del post es multipart: puede traer su imagen ("Subir imagen")

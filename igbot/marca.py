@@ -452,9 +452,7 @@ def guardar_paso(f, antes: dict, paso: str) -> tuple[dict, str]:
 
 
 @router.get("/marca")
-async def ver_marca(request: Request):
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def ver_marca(request: Request, c: marco.Sesion):
     if c.imagenes_mes <= 0:
         return sin_plan()
     paso = request.query_params.get("paso", "")
@@ -466,10 +464,7 @@ async def ver_marca(request: Request):
 
 
 @router.post("/marca")
-async def guardar_marca(request: Request):
-    marco.de_aqui(request)
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def guardar_marca(request: Request, c: marco.Formulario):
     if c.imagenes_mes <= 0:
         return sin_plan()
     f = await request.form()

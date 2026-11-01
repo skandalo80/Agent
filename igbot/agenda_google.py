@@ -198,9 +198,7 @@ AVISOS = {
 
 
 @router.get("")
-async def ver(request: Request):
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def ver(request: Request, c: marco.Sesion):
     return await pagina(c, request.query_params.get("aviso", ""))
 
 
@@ -253,10 +251,7 @@ async def pagina(c: Cuenta, aviso: str = ""):
 
 
 @router.post("/conectar")
-async def conectar(request: Request):
-    marco.de_aqui(request)
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def conectar(c: marco.Formulario):
     if not enabled():
         return RedirectResponse("/panel/google", status_code=303)
     state = nuevo_state(c)
@@ -309,10 +304,7 @@ def _volver(aviso: str) -> RedirectResponse:
 
 
 @router.post("/guardar")
-async def guardar_opciones(request: Request):
-    marco.de_aqui(request)
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def guardar_opciones(request: Request, c: marco.Formulario):
     f = await marco.form(request)
     con = await conexion(c)
     if con:
@@ -323,10 +315,7 @@ async def guardar_opciones(request: Request):
 
 
 @router.post("/desconectar")
-async def desconectar(request: Request):
-    marco.de_aqui(request)
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def desconectar(c: marco.Formulario):
     if token := (await conexion(c)).get("refresh_token"):
         await revocar(token)
     await guardar(c, {})

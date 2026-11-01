@@ -106,10 +106,7 @@ def _volver(aviso: str) -> RedirectResponse:
 # --- conectar ---
 
 @router.post("/{prov}/conectar")
-async def conectar(request: Request, prov: str):
-    marco.de_aqui(request)
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def conectar(c: marco.Formulario, prov: str):
     if not enabled(prov):
         return RedirectResponse("/panel/conexion", status_code=303)
     state = nuevo_state(c, prov)
@@ -140,9 +137,7 @@ async def _token_mercadopago(datos: dict) -> dict:
 
 
 @router.get("/{prov}/callback")
-async def callback(request: Request, prov: str):
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def callback(request: Request, c: marco.Sesion, prov: str):
     q = request.query_params
     if not q.get("code"):
         return _volver("cancelado")
@@ -171,10 +166,7 @@ async def callback(request: Request, prov: str):
 
 
 @router.post("/{prov}/desconectar")
-async def desconectar(request: Request, prov: str):
-    marco.de_aqui(request)
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def desconectar(c: marco.Formulario, prov: str):
     if prov in NOMBRES:
         await guardar(c, prov, {})
     return RedirectResponse("/panel/conexion?aviso=desconectado", status_code=303)

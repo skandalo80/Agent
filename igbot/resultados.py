@@ -26,8 +26,8 @@ from datetime import date, datetime, timedelta
 from html import escape
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi import APIRouter
+from fastapi.responses import HTMLResponse, Response
 
 from . import anuncios_meta, config, marco, metricas
 from .comentarios import SPAM
@@ -894,10 +894,8 @@ def leer_rango(dias: str, desde: str, fin: date | None, hoy: date) -> tuple[str,
 
 
 @router.get("")
-async def ver(request: Request, dias: str = "7", fin: str = "", ver: str = "instagram", desde: str = "",
+async def ver(c: marco.Sesion, dias: str = "7", fin: str = "", ver: str = "instagram", desde: str = "",
               formato: str = "", cada: str = ""):
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
     hoy = datetime.now(ZoneInfo(c.timezone)).date()
     rango, fin_ = leer_rango(dias, desde, leer_fin(fin), hoy)
     return await pagina(c, rango, fin_, ver if ver in vistas_de(c) else "instagram",
@@ -961,12 +959,10 @@ COLUMNAS_POSTS = ["fecha", "hora", "tipo", "texto", "enlace", "alcance", "vistas
 
 
 @router.get("/descargar")
-async def descargar(request: Request, dias: str = "7", fin: str = "", ver: str = "instagram", desde: str = "",
+async def descargar(c: marco.Sesion, dias: str = "7", fin: str = "", ver: str = "instagram", desde: str = "",
                     archivo: str = "pdf", que: str = "cuenta", cada: str = ""):
     """Lo que se ve en Resultados (Instagram o Conversaciones, en su periodo): en PDF o CSV, del periodo
     día por día (`que=cuenta`) o una fila por publicación (`que=posts`, solo Instagram)."""
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
     from . import informe
     ver = ver if ver in VISTAS_PDF else "instagram"
     hoy = datetime.now(ZoneInfo(c.timezone)).date()

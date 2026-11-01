@@ -92,10 +92,7 @@ def _dialogo() -> RedirectResponse:
 
 
 @router.post("/conectar")
-async def conectar_cuenta(request: Request):
-    marco.de_aqui(request)
-    if not marco.cuenta_de_sesion(request):
-        return RedirectResponse("/panel", status_code=303)
+async def conectar_cuenta(c: marco.Formulario):
     return _dialogo() if enabled() else RedirectResponse("/panel/anuncios", status_code=303)
 
 
@@ -143,10 +140,8 @@ async def _guardar_cuenta(c: Cuenta, token: dict, cuenta: dict) -> None:
 
 
 @router.get("/callback")
-async def callback(request: Request):
+async def callback(request: Request, c: marco.Sesion):
     p = request.query_params
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
     if p.get("error") or not p.get("code"):
         return _volver("cancelada")
     if not (enabled() and conectar.state_valido(p.get("state", ""), request.cookies.get(STATE_COOKIE))):
@@ -186,10 +181,7 @@ async def callback(request: Request):
 
 
 @router.post("/elegir")
-async def elegir(request: Request):
-    marco.de_aqui(request)
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def elegir(request: Request, c: marco.Formulario):
     t, token, cuentas = _por_elegir.pop(request.cookies.get(ELEGIR_COOKIE, ""), (0, {}, []))
     cuenta_id = (await marco.form(request)).get("cuenta", "")
     elegida = next((x for x in cuentas if x["id"] == cuenta_id), None)
@@ -202,10 +194,7 @@ async def elegir(request: Request):
 
 
 @router.post("/desconectar")
-async def desconectar(request: Request):
-    marco.de_aqui(request)
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def desconectar(c: marco.Formulario):
     await guardar(c, {})
     return _volver("desconectada")
 
@@ -220,9 +209,7 @@ AVISOS = {
 
 
 @router.get("")
-async def ver(request: Request):
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def ver(request: Request, c: marco.Sesion):
     aviso = request.query_params.get("aviso", "")
     datos = await conexion(c)
     boton = ('<form method="post" action="/panel/anuncios/conectar"><div class="acciones">'

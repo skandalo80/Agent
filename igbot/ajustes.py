@@ -16,7 +16,6 @@ import time
 from html import escape
 
 from fastapi import APIRouter, Request
-from fastapi.responses import RedirectResponse
 
 from . import config, marco
 from .cuenta import Cuenta, usar
@@ -252,10 +251,7 @@ async def guardar_del_form(c: Cuenta, form) -> None:
 
 
 @router.post("/ajustes")  # el formulario anterior; ahora todo se guarda con /panel/guardar
-async def guardar(request: Request):
-    marco.de_aqui(request)
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def guardar(request: Request, c: marco.Formulario):
     await guardar_del_form(c, await request.form())
     aviso = "Guardado: tu asistente ya trabaja con estos ajustes."
     from . import asistente  # van en el paso Tu equipo
