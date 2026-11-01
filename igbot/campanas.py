@@ -184,6 +184,7 @@ Reglas:
 - Si hay <lo_que_dicen> (cosas buenas que dijeron sus clientes), úsalo en "Lo que dicen tus clientes", parafraseado y sin nombres. No inventes otras.
 - Si hay <lo_que_funciono> (lo que mejor le ha funcionado en sus campañas), los posts que repiten eso lo llevan con la misma fuerza (mismo tipo de gancho y de cierre), y los que prueban algo nuevo lo hacen a fondo, sin diluirlo.
 - Si hay <lo_que_no_le_gusto> (temas y formatos que el dueño cambió o descartó en campañas anteriores), esos posts van distintos a lo de siempre: más concretos, con otro ángulo. Si hay <lo_que_aprueba_tal_cual>, ese estilo le gusta: conserva su forma.
+- Si hay <fechas_del_periodo> (fechas comerciales de su país que caen en la campaña o justo después), el post más cercano a cada una la aprovecha si le queda al negocio y al objetivo; no inventes otras fechas ni promociones.
 - Si la línea dice "medio: historia", es una historia de Instagram: vertical a pantalla completa (9:16), dura 24 horas y no lleva texto publicado. "titulo" se lee en dos segundos (máximo 6 palabras), "subtitulo" es una línea corta o "", "caption" es "" y "palabra" y "dm" van "". La imagen es vertical, con el sujeto al centro y aire arriba y abajo. Si no dice medio, es un post del feed.
 {reglas}
 
@@ -206,6 +207,7 @@ Reglas:
 - Si hay <lo_que_preguntan>, como máximo {tope} posts responden a esas dudas; en esos, "responde" es el tema que contestan (tal cual viene); en los demás, "". Si hay <lo_que_dicen>, úsalo en "Lo que dicen tus clientes", parafraseado y sin nombres.
 - Si hay <lo_que_funciono> (lo que mejor le ha funcionado en sus campañas), las líneas con rol "repite" lo llevan con la misma fuerza (mismo tipo de gancho y de cierre) y las de rol "prueba" hacen algo distinto a fondo, sin diluirlo.
 - Si hay <lo_que_no_le_gusto> (temas y formatos que el dueño cambió o descartó en campañas anteriores), esos posts van distintos a lo de siempre: más concretos, con otro ángulo. Si hay <lo_que_aprueba_tal_cual>, ese estilo le gusta: conserva su forma.
+- Si hay <fechas_del_periodo> (fechas comerciales de su país que caen en la campaña o justo después), el post más cercano a cada una la aprovecha si le queda al negocio y al objetivo; no inventes otras fechas ni promociones. Si la ficha trae "Inventario en su tienda", úsalo solo si aporta (pocas unidades son urgencia real) y sin cifras que no estén ahí.
 - Usa solo datos de <empresa>, del brief o de la campaña. No inventes precios, promociones, horarios, cifras ni testimonios.
 - "Dato curioso" es la excepción: su ficha no trae pilar ni dato porque el post no habla de la empresa. Cuenta un hecho real del giro o la industria de la empresa (historia, ciencia, costumbres, un mito o realidad), de conocimiento general y que puedas asegurar; si dudas de algo, elige otro dato. Sin cifras exactas, estudios, fuentes, personas ni lugares concretos que no puedas asegurar. La empresa no es el tema ni se presenta su producto: solo aparece en la llamada a la acción del final. El hecho va en "verificar" para que el dueño lo confirme.
 - Español de México, tuteando, con el carácter de la marca.
@@ -779,7 +781,7 @@ async def proponer(c: Cuenta, camp: dict, anteriores: list[dict] | None = None, 
                   f"<tema>{escape(camp['tema']) or 'Sin tema: un poco de todo del negocio.'}</tema>\n"
                   + parametros(camp) + "\n"
                   + (await de_tus_clientes(c, respondidas) if camp.get("clientes") else "")
-                  + funciono_tag(camp) + await lo_que_no_le_gusto(c)
+                  + funciono_tag(camp) + await lo_que_no_le_gusto(c) + await brief.fechas_tag(c, camp)
                   + (f"<ya_publicado>\n{ya}\n</ya_publicado>\n\n" if ya else "")
                   + ("<regla>sí</regla>\n\n" if camp.get("regla") else "")
                   + f"<posts>\n{lineas}\n</posts>")
@@ -819,7 +821,7 @@ async def escribir_desde_brief(c: Cuenta, camp: dict, fichas: list[dict], ya: st
             f"<campaña>{escape(camp['nombre'])}</campaña>\n"
             + (f"<tema>{escape(camp['tema'])}</tema>\n" if camp.get("tema") else "")
             + parametros(camp) + "\n" + brief.variedad_tag(camp) + brief.referencias_tag(camp)
-            + clientes + funciono_tag(camp) + await lo_que_no_le_gusto(c)
+            + clientes + funciono_tag(camp) + await lo_que_no_le_gusto(c) + await brief.fechas_tag(c, camp)
             + (f"<ya_publicado>\n{ya}\n</ya_publicado>\n\n" if ya else "")
             + ("<regla>sí</regla>\n\n" if camp.get("regla") else ""))
     await planear(base + opciones_visuales(camp, await marca_de(c)), camp, fichas,

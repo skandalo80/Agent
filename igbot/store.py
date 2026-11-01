@@ -1133,6 +1133,12 @@ class Store:
         return [{"origen": o, "externo": e, "ad_id": a, "monto": m, "moneda": mo, "detalle": json.loads(d),
                  "created_at": t} for o, e, a, m, mo, d, t in await cur.fetchall()]
 
+    async def ventas_recientes(self, since: float, limite: int = 500) -> list[dict]:
+        """El detalle (folio y productos) de las ventas desde `since`, para saber qué se vende más."""
+        cur = await self.db.execute(
+            "SELECT detalle FROM ventas WHERE created_at >= ? ORDER BY created_at DESC LIMIT ?", (since, limite))
+        return [json.loads(d) for (d,) in await cur.fetchall()]
+
     async def ventas_desde(self, since: float) -> tuple[int, float, str] | None:
         """Ventas desde `since`: (cuántas, monto, moneda más usada). None si la cuenta nunca ha tenido una."""
         cur = await self.db.execute("SELECT 1 FROM ventas LIMIT 1")

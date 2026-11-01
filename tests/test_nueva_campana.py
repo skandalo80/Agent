@@ -1576,3 +1576,46 @@ def test_lo_que_edita_o_descarta_se_recuerda_para_la_siguiente_campana(cliente, 
     llenar(client)
     generar(client)
     assert all("<lo_que_no_le_gusto>" in p for p, s in llamadas if "estratega" in s or "Escribes los posts" in s)
+
+
+def test_fechas_comerciales_e_inventario_de_shopify_en_la_campana(cliente, monkeypatch):
+    """Promocionar un producto: el más vendido del mes en su Shopify va primero y sugerido; el inventario de la tienda
+    y las fechas comerciales del país llegan al brief y a los posts como datos."""
+    import time
+
+    from igbot import tienda_shopify
+    client, c, *_ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 10)
+    llamadas = []
+    import app as bot
+    monkeypatch.setattr(bot.agent, "run_claude", claude_de_campana(llamadas))
+    listo(client, c)
+    otro = {**PRODUCTO, "id": "p2", "nombre": "Cold brew"}
+    client.portal.call(c.store.set, "productos", json.dumps([otro, PRODUCTO]))
+    client.portal.call(c.store.set, tienda_shopify.CLAVE, json.dumps({"tienda": "lunar.myshopify.com", "token": "shpat_1"}))
+    for i, productos in enumerate((["2 × Latte de calabaza", "1 × Cold brew"], ["3 × Latte de calabaza"])):
+        client.portal.call(c.store.add_venta, "shopify", f"v{i}", "u1", "", 150.0, "MXN", {"folio": f"#{i}", "productos": productos},
+                           time.time() - 86400 * (i + 1))
+
+    async def existencias(c_, buscar):
+        return f"Producto: {buscar}\n- único: 4 disponibles"
+
+    monkeypatch.setattr(tienda_shopify, "existencias", existencias)
+    T, P, O = nueva_campana.TIPO, nueva_campana.PRODUCTO, nueva_campana.OFERTA
+    paso(client, T, ir=P, tipo="producto")
+    r = client.get(f"{URL}?paso={P}").text
+    assert r.count("Más vendido este mes") == 2 and r.index("Latte de calabaza") < r.index("Cold brew")
+    paso(client, P, ir=O, producto="p1")
+    paso(client, O, ir=6, accion="conocer", versiones="2")
+    paso(client, 6, ir=7, variedad="coherencia")
+    paso(client, 7, ir=8, nombre="", inicio="2099-11-02", semanas="2", dias=["0", "2"], horarios=["manana"])
+    generar(client)
+    brief_prompt = next(p for p, s in llamadas if "estratega de contenido" in s)
+    assert "<fechas_del_periodo>\n" in brief_prompt and "El Buen Fin" in brief_prompt and "Día de Muertos" in brief_prompt
+    assert "<inventario>\nProducto: Latte de calabaza\n- único: 4 disponibles\n</inventario>" in brief_prompt
+    posts_prompt = next(p for p, s in llamadas if "Escribes los posts" in s)
+    assert "<fechas_del_periodo>" in posts_prompt and "Inventario en su tienda: Producto: Latte de calabaza - único: 4 disponibles" in posts_prompt
+    # Sin tienda conectada no se pregunta nada y el país "Otro" solo trae las fechas comunes.
+    client.portal.call(c.store.set, tienda_shopify.CLAVE, "")
+    assert client.portal.call(tienda_shopify.inventario_de, c, "Latte") == ""
+    assert client.portal.call(tienda_shopify.mas_vendidos, c, [otro, PRODUCTO]) == ["p1", "p2"]

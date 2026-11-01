@@ -26,7 +26,7 @@ from html import escape
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
-from . import brief, campanas, empresa, panel, tools
+from . import brief, campanas, empresa, panel, tienda_shopify, tools
 from .contenido import TOKEN_FOTO, archivo, guardar_fotos, marca_de, modo_de, sin_plan, url_imagen
 from .cuenta import Cuenta, usar
 
@@ -593,8 +593,10 @@ def paso_tipo(b: dict) -> str:
             + f'<div class="wiz-ops dos">{ops}</div>' + pie(b, TIPO))
 
 
-def paso_producto(b: dict, prods: list[tuple[dict, str]]) -> str:
-    """Sus productos y servicios (Tu empresa o Shopify) como tarjetas con su foto y su precio."""
+def paso_producto(b: dict, prods: list[tuple[dict, str]], vendidos: list[str] = ()) -> str:
+    """Sus productos y servicios (Tu empresa o Shopify) como tarjetas con su foto y su precio. Los que más se vendieron
+    este mes en su tienda (tienda_shopify.mas_vendidos) van primero, sugeridos."""
+    prods = sorted(prods, key=lambda x: vendidos.index(x[0]["id"]) if x[0]["id"] in vendidos else len(vendidos))
     if not prods:
         return (cab(b, PRODUCTO, "¿Qué quieres promocionar?")
                 + nota("Todavía no tienes productos.", 'Agrégalos en <a href="/panel/empresa">Tu empresa</a> (o tráelos de'
@@ -603,7 +605,8 @@ def paso_producto(b: dict, prods: list[tuple[dict, str]]) -> str:
         op("producto", x["id"], x["nombre"], " · ".join(v for v in (precio_de(x), dict(empresa.TIPOS).get(x.get("tipo"), "")) if v),
            marcada=x["id"] == b["producto"],
            imagen=f'<span class="wiz-img" style="--fondo:#26262a{f" url({u})" if u else ""}">'
-                  f'{"" if u else "Sin foto"}</span>')
+                  f'{"" if u else "Sin foto"}</span>',
+           em="Más vendido este mes" if x["id"] in vendidos else "", sugerido=x["id"] in vendidos)
         for x, u in prods)
     return (cab(b, PRODUCTO, "¿Qué quieres promocionar?")
             + f'<div class="wiz-ops cuatro prods-cam">{ops}</div>'
@@ -999,7 +1002,8 @@ async def pagina(c: Cuenta, paso: int, aviso: str = "", b: dict | None = None):
         if paso == TIPO:
             contenido = paso_tipo(b)
         elif paso == PRODUCTO:
-            contenido = paso_producto(b, [(x, url_imagen(c, x["imagenes"][0]) if foto_de(c, x) else "") for x in prods])
+            contenido = paso_producto(b, [(x, url_imagen(c, x["imagenes"][0]) if foto_de(c, x) else "") for x in prods],
+                                      await tienda_shopify.mas_vendidos(c, prods))
         elif paso == OFERTA:
             contenido = paso_oferta(b, prods)
         elif paso == 1:
