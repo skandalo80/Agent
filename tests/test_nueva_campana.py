@@ -1058,3 +1058,152 @@ def test_solo_datos_curiosos_hablan_del_giro(cliente, monkeypatch):
     assert any("<temas_de_los_posts>Dato curioso</temas_de_los_posts>" in p for p, _ in llamadas)
     prompt, sistema = next((p, s) for p, s in llamadas if "ya tiene su brief" in s and "community manager" in s)
     assert "| pilar: " not in prompt and "| dato: " not in prompt and "del giro o la industria" in sistema
+
+
+def claude_que_olvida_un_post(llamadas, veces: int):
+    """Como claude_de_campana, pero las primeras `veces` veces que escribe posts devuelve uno menos."""
+    base = claude_de_campana(llamadas)
+    cuenta = {"n": 0}
+
+    async def fake(prompt, system, mcp=None, allowed=(), max_turns=5, model=None):
+        respuesta = await base(prompt, system, mcp, allowed, max_turns, model)
+        if "Escribes los posts" in system:
+            cuenta["n"] += 1
+            if cuenta["n"] <= veces:
+                datos = json.loads(respuesta)
+                datos["posts"] = datos["posts"][:-1]
+                return json.dumps(datos)
+        return respuesta
+    return fake
+
+
+def test_los_posts_que_faltan_se_piden_otra_vez(cliente, monkeypatch):
+    client, c, _, _ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 10)
+    import app as bot
+    llamadas = []
+    monkeypatch.setattr(bot.agent, "run_claude", claude_que_olvida_un_post(llamadas, 1))
+    listo(client, c)
+    client.portal.call(c.store.set, "productos", json.dumps([PRODUCTO]))
+    llenar(client)
+    generar(client)
+    camp = leer(client, c)
+    de_posts = [p for p, s in llamadas if "Escribes los posts" in s]
+    assert len(camp["posts"]) == 6 and "sin_escribir" not in camp
+    assert len(de_posts) == 2 and de_posts[1].split("<posts>")[-1].count("\n- ") == 1  # solo la ficha que faltó
+    assert "<ya_escritos>" in de_posts[1]
+    assert "no alcanzó a escribir" not in client.get(campanas.url_de(camp)).text
+
+
+def test_si_siguen_faltando_posts_la_campana_lo_dice(cliente, monkeypatch):
+    client, c, _, _ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 10)
+    import app as bot
+    monkeypatch.setattr(bot.agent, "run_claude", claude_que_olvida_un_post([], 99))
+    listo(client, c)
+    client.portal.call(c.store.set, "productos", json.dumps([PRODUCTO]))
+    llenar(client)
+    generar(client)
+    camp = leer(client, c)
+    assert len(camp["posts"]) == 5 and camp["sin_escribir"] == 1
+    assert "La IA no alcanzó a escribir 1 de los 6 posts" in client.get(campanas.url_de(camp)).text
+
+
+def test_una_tanda_que_falla_no_tira_la_campana(cliente, monkeypatch):
+    client, c, _, _ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 10)
+    import app as bot
+    base, fallos = claude_de_campana([]), {"n": 0}
+
+    async def fake(prompt, system, mcp=None, allowed=(), max_turns=5, model=None):
+        if "Escribes los posts" in system and fallos["n"] == 0:
+            fallos["n"] += 1
+            raise RuntimeError("Claude no contestó en 240 s")
+        return await base(prompt, system, mcp, allowed, max_turns, model)
+    monkeypatch.setattr(bot.agent, "run_claude", fake)
+    listo(client, c)
+    client.portal.call(c.store.set, "productos", json.dumps([PRODUCTO]))
+    llenar(client)
+    generar(client)
+    assert len(leer(client, c)["posts"]) == 6
+
+
+def test_promocion_2x1_conserva_el_tema_promocion(cliente, monkeypatch):
+    client, c, _, _ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 10)
+    import app as bot
+    llamadas = []
+    monkeypatch.setattr(bot.agent, "run_claude", claude_de_campana(llamadas))
+    listo(client, c)
+    client.portal.call(c.store.set, "productos", json.dumps([PRODUCTO]))
+    T, P, O = nueva_campana.TIPO, nueva_campana.PRODUCTO, nueva_campana.OFERTA
+    paso(client, T, ir=P, tipo="producto")
+    paso(client, P, ir=O, producto="p1")
+    paso(client, O, ir=6, accion="promo", promo="2x1", versiones="2")
+    paso(client, 6, ir=7, variedad="coherencia")
+    paso(client, 7, ir=8, nombre="", inicio="2099-01-05", semanas="1", dias=["0", "2"], horarios=["manana"])
+    generar(client)
+    camp = leer(client, c)
+    assert "2x1" in camp["producto"] and {p["tipo"] for p in camp["posts"]} == {"promo", "producto"}
+    plan = next(p for p, s in llamadas if "director creativo" in s)
+    assert "tema: Promoción" in plan
+
+
+def revision_de(verdictos: list[dict], vistas: list):
+    """OpenAI falso: la revisión con visión contesta los verdictos en orden; lo demás, como el Claude falso."""
+    base = claude_de_campana([])
+
+    async def fake(sistema, prompt, max_tokens=16000, imagenes=()):
+        if "corrector de pruebas" in sistema:
+            vistas.append((prompt, list(imagenes)))
+            return verdictos.pop(0) if verdictos else {}
+        if "director de arte" in sistema:
+            return prompts_para(prompt, "A detailed art-directed prompt")
+        return json.loads(await base(prompt, sistema))
+    return fake
+
+
+def test_la_pieza_con_texto_se_revisa_y_se_repite_sin_cupo(cliente, monkeypatch):
+    """Tras generar una pieza con texto, OpenAI con visión revisa los textos; si salieron mal se genera otra vez y la
+    fallida no cuenta en el cupo. Si la segunda también falla, el post queda marcado para que el dueño la mire."""
+    from igbot import imagenes, openai_texto
+    client, c, _, proveedor = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 10)
+    import app as bot
+    monkeypatch.setattr(bot.agent, "run_claude", claude_de_campana([]))
+    monkeypatch.setattr(campanas.config, "OPENAI_API_KEY", "sk-prueba")
+    vistas, verdictos = [], [{"faltan": [], "mal_escritos": [{"esperado": "Post 1", "se_lee": "Pots 1"}], "extra": []}, {}]
+    monkeypatch.setattr(openai_texto, "json_de", revision_de(verdictos, vistas))
+    listo(client, c)
+    client.portal.call(c.store.set, "productos", json.dumps([PRODUCTO]))
+    llenar(client)
+    generar(client)
+    camp = leer(client, c)
+    u = campanas.url_de(camp)
+    texto = next(p for p in camp["posts"] if p["formato"] == "texto")
+    texto["plan"]["foto"]["textos"] = ["Tueste de la semana"]
+    client.portal.call(c.store.set, "campanas", json.dumps([camp]))
+    client.post(u, headers=ORIGEN, data={"accion": "generar", "k": str(texto["k"])})
+    assert len(proveedor.llamadas) == 2 and len(vistas) == 2  # se generó dos veces y se revisó las dos
+    assert f"«{texto['titulo']}»" in vistas[0][0] and "«Tueste de la semana»" in vistas[0][0] and vistas[0][1]
+    assert client.portal.call(imagenes.usadas, c.store) == (1, 0)  # la fallida se devolvió al cupo
+    eventos = client.portal.call(c.store.events, "imagen_descartada", 0, 4e9)
+    assert len(eventos) == 1 and "Pots 1" in eventos[0][1]["motivo"]
+    p = campanas.buscar_post(leer(client, c), texto["k"])
+    assert p["post_id"] and "revisar_imagen" not in p
+    # Las dos veces mal: se queda la segunda, marcada.
+    verdictos += [{"mal_escritos": [{"esperado": "Post 1", "se_lee": "Post l"}]}] * 2
+    client.post(u, headers=ORIGEN, data={"accion": "generar", "k": str(texto["k"])})
+    p = campanas.buscar_post(leer(client, c), texto["k"])
+    assert "se lee «Post l»" in p["revisar_imagen"]
+    r = client.get(f"{u}?post={texto['k']}")
+    assert "Revisa el texto de la imagen antes de aprobar" in r.text and "Revisa el texto</span>" in r.text
+    assert client.portal.call(imagenes.usadas, c.store) == (2, 0)
+    # Una pieza sin texto (Foto sola) no se revisa ni pide espacio para un titular.
+    foto = {**texto, "k": 98, "formato": "foto", "titulo": "Foto"}
+    camp = leer(client, c)
+    camp["posts"].append(foto)
+    client.portal.call(c.store.set, "campanas", json.dumps([camp]))
+    n = len(vistas)
+    client.post(u, headers=ORIGEN, data={"accion": "generar", "k": "98"})
+    assert len(vistas) == n and "lower third" not in proveedor.llamadas[-1][0]

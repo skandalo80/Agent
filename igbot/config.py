@@ -105,8 +105,12 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_IMAGE_MODEL = os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-2.5-flare")
 # Vertical 2:3; el servidor la recorta a 4:5 (1080x1350).
 OPENAI_IMAGE_SIZE = os.getenv("OPENAI_IMAGE_SIZE", "1024x1536")
-# low, medium o high (más calidad = más tokens = más caro).
-OPENAI_IMAGE_QUALITY = os.getenv("OPENAI_IMAGE_QUALITY", "medium")
+# low, medium o high (más calidad = más tokens = más caro). high desde 2026-11-01: la tipografía de las piezas con
+# texto y el detalle del producto se notan.
+OPENAI_IMAGE_QUALITY = os.getenv("OPENAI_IMAGE_QUALITY", "high")
+# Después de generar una pieza con texto, OpenAI con visión revisa que los textos salieron tal cual; si no, se
+# genera una vez más sin contar en el cupo. REVISAR_IMAGENES=0 lo apaga.
+REVISAR_IMAGENES = os.getenv("REVISAR_IMAGENES", "1").strip() != "0"
 # Clave de la API de Gemini (aistudio.google.com/apikey; cuenta de prepago). Solo con IMAGE_PROVIDER=gemini.
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_IMAGE_MODEL = os.getenv("GEMINI_IMAGE_MODEL", "gemini-3.1-flash-lite-image")

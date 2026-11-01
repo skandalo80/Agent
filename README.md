@@ -192,7 +192,7 @@ publicarse con el mismo flujo de las publicaciones de los administradores.
 
 En `.env`: `OPENAI_API_KEY` (platform.openai.com/api-keys; el tope de gasto se pone
 en la cuenta de OpenAI), opcional `OPENAI_IMAGE_MODEL` (`gpt-image-2.5-flare`) y
-`OPENAI_IMAGE_QUALITY` (`medium`), y,
+`OPENAI_IMAGE_QUALITY` (`high`), y,
 por cuenta, `IMAGES_PER_MONTH` (Community 40, Pro 80; 0 = sin contenido). Para
 probar en el servidor:
 
