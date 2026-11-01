@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
-from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageStat
+from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageOps, ImageStat
 
 from . import config, limites, tools
 from .cuenta import cuenta
@@ -186,6 +186,14 @@ def prompt_final(idea: str, plantilla: str, historia: bool = False, titular: boo
             "Do not include any text, letters, numbers, logos or watermarks.")
 
 
+ESQUINA_LOGO = ("Leave the bottom-right corner (about a fifth of the width and an eighth of the height) as calm,"
+                " clean background with no text and no key element: the brand's real logo is placed there afterwards.")
+
+
+def _esquina(m: "Marca") -> str:
+    return f"\n{ESQUINA_LOGO}" if m.logo and m.logo_modo else ""
+
+
 # Diseño libre: el generador arma el post completo, con el texto dentro del diseño.
 # El texto no se puede cambiar después sin generar otra imagen.
 LIBRE = "libre"
@@ -212,7 +220,7 @@ def prompt_libre(idea: str, texto: "Texto", marca: "Marca | None" = None, histor
         f"Typography: in the spirit of the {m.fuente} typeface, {'bold' if m.peso >= 700 else 'semibold' if m.peso >= 600 else 'regular'} headline,"
         " strong hierarchy, generous margins, readable on a phone.\n"
         f"Brand colors: main {m.principal}, accent {m.acento}, background {m.fondo}.\n"
-        "No logos, watermarks, fake buttons or extra text."
+        "No logos, watermarks, fake buttons or extra text." + _esquina(m)
     )
 
 
@@ -238,7 +246,7 @@ def prompt_infografia(idea: str, texto: "Texto", marca: "Marca | None" = None, h
         " punctuation mark), and no other words, letters or numbers:\n" + "\n".join(lineas) + "\n\n"
         f"Typography: in the spirit of the {m.fuente} typeface, readable on a phone, generous margins.\n"
         f"Brand colors: main {m.principal}, accent {m.acento}, background {m.fondo}.\n"
-        "No logos, watermarks or fake buttons."
+        "No logos, watermarks or fake buttons." + _esquina(m)
     )
 
 
@@ -269,7 +277,7 @@ def prompt_anuncio(idea: str, texto: "Texto", marca: "Marca | None" = None, hist
         " between the headline and the small line.\n"
         f"Brand colors, used with restraint (at most two plus neutrals): main {m.principal}, accent {m.acento},"
         f" background {m.fondo}.\n"
-        "Realistic, believable photography with soft, natural light. No logos, watermarks or fake buttons."
+        "Realistic, believable photography with soft, natural light. No logos, watermarks or fake buttons." + _esquina(m)
     )
 
 
@@ -291,6 +299,8 @@ class Marca:
     principal: str = "#1D1D1F"  # texto sobre fondos claros
     acento: str = ACENTO  # precio y detalles; fondo de la plantilla Banda
     fondo: str = "#F7F5F1"  # fondo de la plantilla Marco
+    logo: bytes | None = None  # el PNG o JPG del logo de Tu marca, si se va a poner en la pieza
+    logo_modo: str = ""  # "discreta" (chico en la esquina), "visible" (más grande) o "" (sin logo)
 
     @classmethod
     def de(cls, datos: dict) -> "Marca":
@@ -492,6 +502,82 @@ def rotular_historia(base: Image.Image, texto: Texto, m: Marca) -> bytes:
     return out.getvalue()
 
 
+# --- el logo de Tu marca sobre la pieza ---
+
+LOGO_ANCHO = {"discreta": 0.11, "visible": 0.20}  # del ancho de la pieza
+LOGO_ALTO = {"discreta": 0.075, "visible": 0.13}  # del alto de la pieza (máximo)
+MARGEN_LOGO = 56
+ARRIBA_HISTORIA = 260  # lo que tapa Instagram arriba de una historia (foto de perfil, hora)
+LOGO_ARRIBA = ("editorial", "banda", "marco")  # plantillas con el texto abajo: el logo va arriba a la derecha
+
+
+def _logo_rgba(data: bytes) -> Image.Image | None:
+    """El logo con transparencia real o, si vino sin ella (un JPG, o el PNG que se guardó como JPG), con su fondo
+    liso vuelto transparente a partir del color de sus esquinas. Recortado a lo que se ve."""
+    img = ImageOps.exif_transpose(Image.open(io.BytesIO(data))).convert("RGBA")
+    alpha = img.getchannel("A")
+    if alpha.getextrema()[0] == 255:  # sin transparencia: el fondo es el color de las esquinas, si coinciden
+        w, h = img.size
+        esquinas = [img.getpixel((x, y))[:3] for x in (0, w - 1) for y in (0, h - 1)]
+        if max(max(c) - min(c) for c in zip(*esquinas)) <= 24:
+            fondo = Image.new("RGB", img.size, tuple(sum(c) // 4 for c in zip(*esquinas)))
+            dif = ImageChops.difference(img.convert("RGB"), fondo).convert("L")
+            alpha = dif.point(lambda v: 255 if v > 40 else v * 6)
+            img.putalpha(alpha)
+    caja = img.getchannel("A").getbbox()
+    if not caja:
+        return None
+    return img.crop(caja)
+
+
+def _luz(img: Image.Image, caja: tuple[int, int, int, int]) -> float:
+    r, g, b = ImageStat.Stat(img.crop(caja).convert("RGB")).mean[:3]
+    return 0.299 * r + 0.587 * g + 0.114 * b
+
+
+def poner_logo(data: bytes, m: Marca, plantilla: str = LIBRE, historia: bool = False) -> bytes:
+    """La pieza con el logo de Tu marca tal cual (nunca redibujado) en una esquina, del tamaño de su presencia
+    (`m.logo_modo`). Abajo a la derecha, salvo en las plantillas con el texto abajo (arriba a la derecha) y en las
+    historias (arriba, debajo de lo que tapa Instagram). Si el logo no contrasta con el fondo, va sobre una pastilla
+    translúcida. Sin logo o sin modo, la pieza vuelve igual."""
+    if not m.logo or m.logo_modo not in LOGO_ANCHO:
+        return data
+    logo = _logo_rgba(m.logo)
+    if logo is None:
+        return data
+    img = Image.open(io.BytesIO(data)).convert("RGB")
+    W, H = img.size
+    ancho, alto = int(W * LOGO_ANCHO[m.logo_modo]), int(H * LOGO_ALTO[m.logo_modo])
+    escala = min(ancho / logo.size[0], alto / logo.size[1])
+    logo = logo.resize((max(1, round(logo.size[0] * escala)), max(1, round(logo.size[1] * escala))),
+                       Image.Resampling.LANCZOS)
+    lw, lh = logo.size
+    x = W - MARGEN_LOGO - lw
+    if historia:
+        y = ARRIBA_HISTORIA + MARGEN_LOGO // 2
+    elif plantilla in LOGO_ARRIBA:
+        y = MARGEN_LOGO
+    else:
+        y = H - MARGEN_LOGO - lh
+    caja = (x, y, x + lw, y + lh)
+    fondo_claro = _luz(img, caja) > 128
+    logo_rgb = Image.new("RGB", logo.size, (128, 128, 128))
+    logo_rgb.paste(logo.convert("RGB"), mask=logo.getchannel("A"))
+    opaco = logo.getchannel("A").point(lambda v: 255 if v > 128 else 0)
+    luz_logo = ImageStat.Stat(logo_rgb.convert("L"), mask=opaco).mean[0] if opaco.getbbox() else 128
+    if abs(luz_logo - _luz(img, caja)) < 70:  # casi el mismo tono que el fondo: una pastilla detrás
+        capa = Image.new("RGBA", img.size, (0, 0, 0, 0))
+        d = ImageDraw.Draw(capa)
+        aire = max(10, lh // 5)
+        color = (255, 255, 255, 215) if luz_logo < 128 else (24, 24, 26, 200)
+        d.rounded_rectangle((x - aire, y - aire, x + lw + aire, y + lh + aire), radius=aire + 6, fill=color)
+        img = Image.alpha_composite(img.convert("RGBA"), capa).convert("RGB")
+    img.paste(logo, (x, y), logo)
+    out = io.BytesIO()
+    img.save(out, "JPEG", quality=92)
+    return out.getvalue()
+
+
 # --- cupo del mes ---
 
 def _mes() -> str:
@@ -619,7 +705,7 @@ async def crear_pieza(store: Store, user_id: str, idea: str, plantilla: str, tex
                       else prompt_infografia(idea, texto, marca, historia, puntos) if plantilla == LIBRE and infografia
                       else prompt_libre(idea, texto, marca, historia) if plantilla == LIBRE
                       else prompt_final(idea, plantilla, historia, titular))
-            fiel = {"fiel": True} if anuncio and con_producto and fotos else {}
+            fiel = {"fiel": True} if con_producto and fotos else {}  # el producto real se respeta al máximo
             crudo = await proveedor.generar(prompt, list(fotos), **fiel)
         async with _turno:
             # Un diseño con el texto dentro se ve completo: en una historia, con franjas arriba y abajo (recortar
@@ -635,6 +721,8 @@ async def crear_pieza(store: Store, user_id: str, idea: str, plantilla: str, tex
             # En diseño libre el texto ya viene en el diseño, y una foto sin título va tal cual: no se rotula.
             final = (base if plantilla == LIBRE or not texto.titulo
                      else await asyncio.to_thread(rotular, base, plantilla, texto, marca))
+            if marca and marca.logo_modo:
+                final = await asyncio.to_thread(poner_logo, final, marca, plantilla, historia)
     except Exception:
         await devolver(store, tipo)
         raise
@@ -664,13 +752,17 @@ async def crear_subida(store: Store, user_id: str, data: bytes, plantilla: str, 
         base = await asyncio.to_thread(_jpg, data, historia)
         final = (base if plantilla == LIBRE or not texto.titulo or plantilla not in PLANTILLAS
                  else await asyncio.to_thread(rotular, base, plantilla, texto, marca))
+        if marca and marca.logo_modo:
+            final = await asyncio.to_thread(poner_logo, final, marca, plantilla, historia)
     hecha = await _guardar(store, user_id, final, base, "panel:subida")
     log.info("Pieza %s (subida, sin cupo) para %s", hecha["media_id"], user_id)
     return {**hecha, "tipo": "local"}
 
 
-async def crear_local(store: Store, user_id: str, como: str, *args, historia: bool = False) -> dict:
-    """Una pieza hecha aquí, sin generador (solo_texto o collage): no usa el cupo de imágenes."""
+async def crear_local(store: Store, user_id: str, como: str, *args, historia: bool = False,
+                      marca: Marca | None = None) -> dict:
+    """Una pieza hecha aquí, sin generador (solo_texto o collage): no usa el cupo de imágenes. Con `marca` y su
+    logo, el logo va encima como en las generadas."""
     hacer = {"texto": solo_texto, "collage": collage}[como]
     async with _turno:
         if historia and como == "collage":
@@ -679,6 +771,8 @@ async def crear_local(store: Store, user_id: str, como: str, *args, historia: bo
             final = await asyncio.to_thread(hacer, *args)
             if historia:  # el solo texto, centrado sobre su mismo fondo
                 final = await asyncio.to_thread(a_historia, final)
+        if marca and marca.logo_modo:
+            final = await asyncio.to_thread(poner_logo, final, marca, LIBRE, historia)
     hecha = await _guardar(store, user_id, final, None, f"panel:{como}")
     log.info("Pieza %s (%s, sin cupo) para %s", hecha["media_id"], como, user_id)
     return {**hecha, "tipo": "local"}
@@ -753,4 +847,6 @@ async def rerotular(store: Store, media_id: int, plantilla: str, texto: Texto, m
         raise ErrorImagen("Esa imagen no se generó aquí; no se le puede cambiar el texto.")
     async with _turno:
         final = await asyncio.to_thread(rotular, sin_texto.read_bytes(), plantilla, texto, marca)
+        if marca and marca.logo_modo:
+            final = await asyncio.to_thread(poner_logo, final, marca, plantilla, es_historia(Image.open(sin_texto)))
     pieza.write_bytes(final)

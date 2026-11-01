@@ -1012,7 +1012,8 @@ def test_identidad_de_marca_y_logo(cliente, monkeypatch):
     client.post(MARCA, headers=ORIGEN, data={"paso": "4", "logo_presencia": ["discreta", "siempre"], "orden_logo": "siempre"},
                 files={"logo": ("logo.png", png_.getvalue(), "image/png")})
     logo = client.portal.call(contenido.marca_de, c)["logo"]
-    assert contenido.archivo(c, logo).is_file()
+    assert contenido.archivo(c, logo).is_file() and contenido.png_logo(c, logo).is_file()  # el PNG, con transparencia
+    assert Image.open(contenido.png_logo(c, logo)).mode == "RGBA"
     r = client.get(f"{MARCA}?paso=4")
     assert 'alt="Tu logo"' in r.text and f'src="/media/{c.media_slug}/{logo}.jpg?v=' in r.text
     assert 'name="logo_presencia" value="siempre" checked' in r.text and 'name="orden_logo" value="siempre,discreta"' in r.text
@@ -1020,7 +1021,7 @@ def test_identidad_de_marca_y_logo(cliente, monkeypatch):
     # También sale en el círculo de tu cuenta, abajo en el menú lateral, en todas las páginas.
     assert f'<img class="lat-avatar" src="/media/{c.media_slug}/{logo}.jpg?v=' in client.get("/panel/asistente").text
     r = client.post(MARCA, headers=ORIGEN, data={"paso": "4", "accion": "quitar_logo"})
-    assert "quitamos tu logo" in r.text and not contenido.archivo(c, logo).is_file()
+    assert "quitamos tu logo" in r.text and not contenido.archivo(c, logo).is_file() and not contenido.png_logo(c, logo).is_file()
     assert '<img class="lat-avatar"' not in r.text and '<span class="lat-avatar">' in r.text
 
 

@@ -18,6 +18,7 @@ Las opciones y sus textos están en igbot/estilos.py. Lo que se elegía antes aq
 que pasan a Crear campaña; recursos visuales y fotos del negocio, porque qué se ve se elige en cada
 campaña) se conserva tal cual en kv "marca".
 """
+import asyncio
 import json
 import logging
 from html import escape
@@ -26,7 +27,8 @@ from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
 from . import imagenes, panel
-from .contenido import archivo, estilos_de, guardar_fotos, marca_de, sin_plan, url_imagen, usos_color
+from .contenido import (archivo, estilos_de, guardar_fotos, marca_de, png_logo, preparar_logo, sin_plan, url_imagen,
+                        usos_color)
 from .cuenta import Cuenta
 from .estilos import (COLORES, COMBINACION_INICIAL, COMBINACIONES, ESTILOS, LETRAS, LOGO_INICIAL, LOGO_PRESENCIA,
                       MAX_ESTILOS, MUESTRA_TEXTO, MUESTRA_TITULAR, PALETA_INICIAL, PALETAS, RECOMENDADOS,
@@ -471,6 +473,7 @@ async def guardar_marca(request: Request):
 
     # El logo (paso 4).
     if accion == "quitar_logo" and datos.get("logo"):
+        png_logo(c, datos["logo"]).unlink(missing_ok=True)
         archivo(c, datos.pop("logo")).unlink(missing_ok=True)
         aviso = "Listo: quitamos tu logo."
     logo = f.get("logo")
@@ -479,7 +482,13 @@ async def guardar_marca(request: Request):
         if tokens:
             if datos.get("logo"):
                 archivo(c, datos["logo"]).unlink(missing_ok=True)
+                png_logo(c, datos["logo"]).unlink(missing_ok=True)
             datos["logo"] = tokens[0]
+            try:  # además del JPG (para verlo), el PNG con su transparencia: es el que va sobre las piezas
+                await logo.seek(0)
+                png_logo(c, tokens[0]).write_bytes(await asyncio.to_thread(preparar_logo, await logo.read()))
+            except Exception:
+                log.exception("No se pudo guardar el logo con transparencia")
         else:
             aviso = "No se pudo leer el logo (usa JPG o PNG de hasta 10 MB)."
 

@@ -1084,6 +1084,33 @@ def otro_collage(grupos: list[list[str]], antes: list[str], azar: random.Random 
     return nuevas
 
 
+def kit_de(c: Cuenta, marca: dict, p: dict) -> imagenes.Marca:
+    """El kit de marca de este post: con el logo de Tu marca según su presencia y si el post es comercial."""
+    return kit(marca, c, formato_de(p), p.get("tipo", ""))
+
+
+async def guardar_ancla(c: Cuenta, camp: dict, token: str) -> None:
+    """La primera pieza de una campaña Consistente queda como imagen ancla: las demás la reciben como referencia de
+    estilo para que la cuadrícula se vea realmente uniforme. Sobre la campaña recién leída."""
+    camp["ancla"] = token
+    if fresca := await leer(c, camp["id"]):
+        fresca["ancla"] = token
+        await guardar(c, fresca)
+
+
+def ancla_de(c: Cuenta, camp: dict) -> bytes | None:
+    """La imagen ancla de una campaña Consistente (sin su texto si la hay), si sigue en disco."""
+    if camp.get("variedad") != "reconocible" or not camp.get("ancla"):
+        return None
+    for nombre in (f"{camp['ancla']}.base", camp["ancla"]):
+        if archivo(c, nombre).is_file():
+            return archivo(c, nombre).read_bytes()
+    return None
+
+
+MAX_REFS_PIEZA = 3  # fotos de referencia por pieza: más diluyen la señal y suben el costo de cada llamada
+
+
 async def generar_imagen(c: Cuenta, camp: dict, p: dict, extra: bool) -> int:
     """La pieza de un post de la campaña según su formato: crea (o actualiza) su post en borrador, como
     Crear post. Solo texto y collage se arman aquí, sin el generador ni el cupo."""
@@ -1102,7 +1129,7 @@ async def generar_imagen(c: Cuenta, camp: dict, p: dict, extra: bool) -> int:
             hecha = await pieza_con_ia(c, camp, p, marca, pieza_, usuario, extra)
         elif formato == "texto":
             hecha = await imagenes.crear_local(c.store, PANEL, "texto", texto_imagen(pieza_, usuario), kit(marca),
-                                               tema_de(p["tipo"])[0], historia=historia)
+                                               tema_de(p["tipo"])[0], historia=historia, marca=kit_de(c, marca, p))
         elif formato == "collage":
             grupos = await fotos_para_collage(c, camp, p, marca)
             if sum(len(g) for g in grupos) < MIN_FOTOS_COLLAGE:
@@ -1146,8 +1173,12 @@ async def generar_imagen(c: Cuenta, camp: dict, p: dict, extra: bool) -> int:
                 if referencias:
                     idea += f"\n{ESTILO_REFERENCIA}"
             hecha = await imagenes.crear_pieza(c.store, PANEL, idea, plantilla, texto_imagen(pieza_, usuario),
-                                               referencias, permitir_extra=extra, marca=kit(marca), historia=historia)
+                                               referencias, permitir_extra=extra, marca=kit_de(c, marca, p),
+                                               historia=historia)
         post_id = await poner_pieza(c, p, hecha, pieza_)
+        if camp.get("variedad") == "reconocible" and not camp.get("ancla") and hecha.get("token") and hecha.get(
+                "tipo") != "local":
+            await guardar_ancla(c, camp, hecha["token"])
         log.info("@%s: campaña, %s %s (%s) con imagen %s", usuario, medio_de(p), post_id, formato, hecha["media_id"])
     return post_id
 
@@ -1166,41 +1197,81 @@ async def pieza_con_ia(c: Cuenta, camp: dict, p: dict, marca: dict, pieza_: dict
         idea = ("A single design split vertically down the middle into two halves, one option on each side, same"
                 f" light and style on both.\n{idea}")
     # Las fotos de referencia de la campaña van en cada pieza (su estilo manda); las del producto, solo donde sale.
+    # En total, a lo más MAX_REFS_PIEZA: en una campaña Consistente la primera es la pieza ancla.
     estilo = [archivo(c, t).read_bytes() for t in camp.get("referencias", [])[:brief.MAX_REFERENCIAS]
               if archivo(c, t).is_file()]
+    ancla = ancla_de(c, camp)
+    if ancla:
+        estilo = [ancla] + estilo
     producto = []
     anuncio = formato == "anuncio"
+    k = kit_de(c, marca, p)
     if anuncio and camp.get("producto_id"):  # el anuncio: el producto real va primero y manda
         tokens = await fotos_producto(c, camp)
         producto = [archivo(c, t).read_bytes() for t in tokens[:2] if archivo(c, t).is_file()]
+        estilo = estilo[:MAX_REFS_PIEZA - len(producto)]
         if producto:
             idea += (f"\nThe first {len(producto)} reference image{'s show' if len(producto) > 1 else ' shows'} the real"
                      " product: keep it exactly as it is." + (f" The other {len(estilo)} are the visual style to follow"
                                                               " (light, palette, mood), not their content." if estilo else ""))
+        if ancla and len(estilo) >= 1:
+            idea += f"\n{ANCLA}"
         t = texto_imagen(pieza_, usuario)
         return await pieza_revisada(c, p, [t.titulo, t.subtitulo], lambda: imagenes.crear_pieza(
-            c.store, PANEL, idea, imagenes.LIBRE, t, producto + estilo, permitir_extra=extra, marca=kit(marca),
+            c.store, PANEL, idea, imagenes.LIBRE, t, producto + estilo, permitir_extra=extra, marca=k,
             historia=es_historia(p), anuncio=True, con_producto=bool(producto)))
     if p.get("ve") == "productos" or (not p.get("ve") and camp.get("producto_id")):
         tokens = (await fotos_producto(c, camp))[:2] or (
             marca.get("fotos", []) if camp.get("variedad") == "reconocible" and not estilo else [])
-        producto = [archivo(c, t).read_bytes() for t in tokens[:3] if archivo(c, t).is_file()]
+        producto = [archivo(c, t).read_bytes() for t in tokens[:2] if archivo(c, t).is_file()]
+    estilo = estilo[:MAX_REFS_PIEZA - len(producto)]
     if estilo:
         idea += (f"\nThe first {len(estilo)} reference image{'s are' if len(estilo) > 1 else ' is'} the visual style to"
                  " follow: match their light, color palette, textures, photo treatment and mood very closely, but do not"
                  " copy their subjects, objects, people, places, text or layout.")
         if producto:
             idea += f" The other {len(producto)} show the real product: keep it faithful."
+        if ancla:
+            idea += f"\n{ANCLA}"
     elif producto:
         idea += f"\n{ESTILO_REFERENCIA}"
     referencias = estilo + producto
+    con_producto = bool(producto)
     if formato not in CON_TEXTO:  # imagen sin texto (Foto sola, Bento, collage): sin espacio para un titular
         return await imagenes.crear_pieza(c.store, PANEL, idea, plantilla_de(marca), imagenes.Texto(""), referencias,
-                                          permitir_extra=extra, marca=kit(marca), historia=es_historia(p), titular=False)
+                                          permitir_extra=extra, marca=k, historia=es_historia(p), titular=False,
+                                          con_producto=con_producto)
     t, puntos = texto_imagen(pieza_, usuario), p["plan"]["foto"].get("textos", [])
     return await pieza_revisada(c, p, [t.titulo, t.subtitulo, t.precio, *puntos, t.firma], lambda: imagenes.crear_pieza(
-        c.store, PANEL, idea, imagenes.LIBRE, t, referencias, permitir_extra=extra, marca=kit(marca),
-        historia=es_historia(p), infografia=True, puntos=puntos))
+        c.store, PANEL, idea, imagenes.LIBRE, t, referencias, permitir_extra=extra, marca=k,
+        historia=es_historia(p), infografia=True, puntos=puntos, con_producto=con_producto),
+        plan_b=plan_b_de(c, p, marca, k, idea, t, referencias, extra, con_producto))
+
+
+ANCLA = ("The very first reference image is another post of this same campaign: match its light, color palette,"
+         " treatment, framing and mood so closely that the two read as one set, without repeating its subject or text.")
+
+
+def plan_b_de(c: Cuenta, p: dict, marca: dict, k: imagenes.Marca, idea: str, t: imagenes.Texto, referencias: list,
+              extra: bool, con_producto: bool):
+    """Qué hacer si la IA no logra escribir bien el texto de la pieza dos veces: en Foto con titular, una foto sin
+    texto rotulada con la plantilla de Tu marca (el texto sale exacto); en Diseño de texto, la pieza de solo texto
+    hecha aquí (sin cupo). En los demás formatos no hay plan B (None)."""
+    formato = formato_de(p)
+    if formato == "titular":
+        limpia = re.sub(r'\s*[«"“][^«»"“”\n]{1,80}[»"”]', "", idea)  # la misma imagen, sin sus textos citados
+
+        async def con_plantilla() -> dict:
+            return await imagenes.crear_pieza(c.store, PANEL, limpia, plantilla_de(marca), t, referencias,
+                                              permitir_extra=extra, marca=k, historia=es_historia(p),
+                                              con_producto=con_producto)
+        return con_plantilla
+    if formato == "texto":
+        async def solo_texto() -> dict:
+            return await imagenes.crear_local(c.store, PANEL, "texto", t, kit(marca), tema_de(p["tipo"])[0],
+                                              historia=es_historia(p), marca=k)
+        return solo_texto
+    return None
 
 
 SISTEMA_REVISION = """Eres corrector de pruebas de una agencia. Ves una pieza de Instagram que diseñó una IA y la lista de los textos que debía llevar escritos, tal cual. Revisa solo el texto.
@@ -1231,9 +1302,10 @@ async def revisar_textos(c: Cuenta, hecha: dict, textos: list[str]) -> str:
     return "; ".join(partes)[:300]
 
 
-async def pieza_revisada(c: Cuenta, p: dict, textos: list[str], crear) -> dict:
+async def pieza_revisada(c: Cuenta, p: dict, textos: list[str], crear, plan_b=None) -> dict:
     """Genera la pieza con `crear`, revisa sus textos y, si salieron mal, la genera una vez más (la fallida no
-    cuenta en el cupo del cliente). Si la segunda también falla, se queda con ella y lo marca en el post
+    cuenta en el cupo del cliente). Si la segunda también falla y hay `plan_b` (una pieza con el texto puesto por
+    código), se hace esa y la fallida tampoco cuenta; si no, se queda con ella y lo marca en el post
     (p["revisar_imagen"]) para que el dueño la mire antes de aprobar."""
     hecha = await crear()
     motivo = await revisar_textos(c, hecha, textos)
@@ -1246,15 +1318,30 @@ async def pieza_revisada(c: Cuenta, p: dict, textos: list[str], crear) -> dict:
     except imagenes.ErrorImagen:
         p["revisar_imagen"] = motivo
         return hecha
-    await imagenes.devolver(c.store, hecha["tipo"])
-    await c.store.add_event(PANEL, "imagen_descartada", {"media": hecha["media_id"], "tipo": hecha["tipo"],
-                                                          "motivo": motivo[:200]})
+    await descartar(c, hecha, motivo)
     motivo = await revisar_textos(c, otra, textos)
+    if motivo and plan_b:
+        log.info("Pieza %s otra vez con texto mal escrito (%s); se hace con plantilla", otra["media_id"], motivo)
+        try:
+            tercera = await plan_b()
+        except imagenes.ErrorImagen:
+            p["revisar_imagen"] = motivo
+            return otra
+        await descartar(c, otra, motivo)
+        p.pop("revisar_imagen", None)
+        return tercera
     if motivo:
         p["revisar_imagen"] = motivo
     else:
         p.pop("revisar_imagen", None)
     return otra
+
+
+async def descartar(c: Cuenta, hecha: dict, motivo: str) -> None:
+    """Una pieza que no sirvió: su imagen vuelve al cupo del cliente y queda registrada."""
+    await imagenes.devolver(c.store, hecha["tipo"])
+    await c.store.add_event(PANEL, "imagen_descartada", {"media": hecha["media_id"], "tipo": hecha["tipo"],
+                                                          "motivo": motivo[:200]})
 
 
 SISTEMA_PROMPTS = """Eres el director de arte de una campaña de Instagram. Escribes de una vez el prompt para el generador de imágenes de cada <post> de <posts>. Cada uno trae su formato, su plan visual (función, protagonista, escenario, acción, encuadre, luz, composición, relación con la marca, qué la hace distinta y qué evitar), el estilo y el color que le tocan y, si el dueño la cambió, su idea.
@@ -1522,7 +1609,7 @@ async def subir_imagen(c: Cuenta, camp: dict, p: dict, data: bytes) -> int:
         pieza_ = pieza_de(camp, p, plantilla)
         try:
             hecha = await imagenes.crear_subida(c.store, PANEL, data, plantilla, texto_imagen(pieza_, usuario),
-                                                kit(marca), historia=es_historia(p))
+                                                kit_de(c, marca, p), historia=es_historia(p))
         except (OSError, ValueError, Image.UnidentifiedImageError):
             raise imagenes.ErrorImagen("No pudimos leer esa imagen. Sube una foto JPG o PNG.")
         post_id = await poner_pieza(c, p, hecha, pieza_)

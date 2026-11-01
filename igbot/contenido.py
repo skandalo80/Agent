@@ -48,7 +48,8 @@ from PIL import Image, ImageOps
 from . import config, imagenes, informe, panel, posicionamiento, tools
 from .admin import PANEL, parse_when
 from .comentarios import Rule, shortcode
-from .estilos import ESTILO_INICIAL, ESTILOS, MAX_ESTILOS, USO_COLOR, VIEJOS_ESTILOS, VIEJOS_USOS
+from .estilos import (ESTILO_INICIAL, ESTILOS, LOGO_INICIAL, LOGO_PRESENCIA, MAX_ESTILOS, USO_COLOR, VIEJOS_ESTILOS,
+                      VIEJOS_USOS)
 from .cuenta import Cuenta, usar
 from .store import Store
 
@@ -110,8 +111,64 @@ async def marca_post(c: Cuenta, p: dict) -> dict:
     return {**await marca_de(c), **p.get("marca", {})}
 
 
-def kit(datos: dict) -> imagenes.Marca:
-    return imagenes.Marca.de(datos)
+def kit(datos: dict, c: Cuenta | None = None, formato: str = "", tema: str = "") -> imagenes.Marca:
+    """El kit de marca para rotular. Con la cuenta, lleva también el logo de Tu marca y cuánto se ve en esta pieza
+    (según la presencia elegida y si el post es comercial: anuncio, producto o promoción)."""
+    m = imagenes.Marca.de(datos)
+    if c is not None and (modo := modo_logo(datos, comercial(formato, tema))):
+        if logo := logo_bytes(c, datos):
+            m.logo, m.logo_modo = logo, modo
+    return m
+
+
+COMERCIALES = ("producto", "beneficios", "promo", "oferta", "lanzamiento")  # temas donde el logo "aporta valor"
+
+
+def comercial(formato: str, tema: str) -> bool:
+    return formato == "anuncio" or tema in COMERCIALES
+
+
+def modo_logo(datos: dict, comercial_: bool) -> str:
+    """Cómo va el logo en una pieza según la presencia elegida en Tu marca (varias, en orden de preferencia):
+    "visible", "discreta" o "" (sin logo). "Siempre presente" y "Firma visible" lo ponen grande; "Solo cuando aporta
+    valor", solo en piezas comerciales (y si no, se pasa a la siguiente preferencia); "Sin logotipo" no lo pone."""
+    if not datos.get("logo"):
+        return ""
+    elegidos = [k for k in datos.get("logos_presencia", []) if k in LOGO_PRESENCIA] or (
+        [datos["logo_presencia"]] if datos.get("logo_presencia") in LOGO_PRESENCIA else [LOGO_INICIAL])
+    for k in elegidos:
+        if k in ("siempre", "visible"):
+            return "visible"
+        if k == "discreta":
+            return "discreta"
+        if k == "clave" and comercial_:
+            return "visible"
+        if k == "sin":
+            return ""
+    return ""
+
+
+def logo_bytes(c: Cuenta, datos: dict) -> bytes | None:
+    """El logo guardado: el PNG con transparencia si lo hay (logos subidos desde 2026-11), si no el JPG."""
+    token = datos.get("logo")
+    if not token or not TOKEN_FOTO.match(token):
+        return None
+    png = png_logo(c, token)
+    ruta = png if png.is_file() else archivo(c, token)
+    return ruta.read_bytes() if ruta.is_file() else None
+
+
+def png_logo(c: Cuenta, token: str) -> Path:
+    return Path(c.media_dir) / f"{token}.logo.png"
+
+
+def preparar_logo(data: bytes) -> bytes:
+    """El logo como PNG con su transparencia, de hasta 1000 px (para ponerlo tal cual sobre las piezas)."""
+    img = ImageOps.exif_transpose(Image.open(io.BytesIO(data))).convert("RGBA")
+    img.thumbnail((1000, 1000))
+    out = io.BytesIO()
+    img.save(out, "PNG", optimize=True)
+    return out.getvalue()
 
 
 def plantilla_de(datos: dict) -> str:
@@ -438,7 +495,7 @@ async def generar(c: Cuenta, objetivo: str = "", tema: str = "", fotos: list[str
             if referencias:
                 idea += f"\n{ESTILO_REFERENCIA}"
         hecha = await imagenes.crear_pieza(c.store, PANEL, idea, p["plantilla"], texto_imagen(p, await panel.usuario(c)),
-                                           referencias, permitir_extra=extra, marca=kit(marca),
+                                           referencias, permitir_extra=extra, marca=kit(marca, c),
                                            historia=p.get("medio") == "historia")
         if post_id is None:
             post_id = await c.store.add_post(PANEL, [hecha["media_id"]], caption, sugerida())
