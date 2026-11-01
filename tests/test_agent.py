@@ -3,8 +3,6 @@ import asyncio
 import os
 from types import SimpleNamespace
 
-os.environ.update(IG_VERIFY_TOKEN="vt", IG_APP_SECRET="secreto", IG_ACCESS_TOKEN="tok", DB_PATH=":memory:")
-
 import pytest  # noqa: E402
 
 from igbot import agent, limites  # noqa: E402

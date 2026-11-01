@@ -9,8 +9,6 @@ from collections import Counter
 from datetime import date, datetime, timedelta
 from functools import partial
 
-os.environ.update(IG_VERIFY_TOKEN="vt", IG_APP_SECRET="secreto", IG_ACCESS_TOKEN="tok", DB_PATH=":memory:")
-
 from PIL import Image  # noqa: E402
 from test_contenido import ORIGEN, cliente  # noqa: E402
 

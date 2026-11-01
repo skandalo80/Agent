@@ -1,0 +1,4 @@
+# Solo para correr las pruebas: pip install -r requirements-dev.txt
+pytest>=9
+pytest-asyncio>=1.4
+coverage>=7

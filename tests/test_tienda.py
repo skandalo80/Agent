@@ -1,8 +1,5 @@
 """Tienda de Nortex: lectura de hojas y cotización por volumen (sin red)."""
 import asyncio
-import os
-
-os.environ.update(IG_VERIFY_TOKEN="vt", IG_APP_SECRET="secreto", IG_ACCESS_TOKEN="tok", DB_PATH=":memory:")
 
 import pytest  # noqa: E402
 

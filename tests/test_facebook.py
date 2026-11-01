@@ -7,8 +7,6 @@ import os
 import time
 from urllib.parse import parse_qs, urlsplit
 
-os.environ.update(IG_VERIFY_TOKEN="vt", IG_APP_SECRET="secreto", IG_ACCESS_TOKEN="tok", DB_PATH=":memory:")
-
 import httpx  # noqa: E402
 import pytest  # noqa: E402
 

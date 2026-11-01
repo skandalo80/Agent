@@ -1,0 +1,8 @@
+[run]
+source = igbot, app
+omit = igbot/__init__.py
+
+[report]
+skip_covered = false
+show_missing = false
+precision = 1

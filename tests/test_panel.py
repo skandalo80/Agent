@@ -7,8 +7,6 @@ import re
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-os.environ.update(IG_VERIFY_TOKEN="vt", IG_APP_SECRET="secreto", IG_ACCESS_TOKEN="tok", DB_PATH=":memory:")
-
 from fastapi.testclient import TestClient  # noqa: E402
 
 import app as bot  # noqa: E402

@@ -1,8 +1,5 @@
 """Comentarios con palabra clave -> DM (sin red ni Claude)."""
 import asyncio
-import os
-
-os.environ.update(IG_VERIFY_TOKEN="vt", IG_APP_SECRET="secreto", IG_ACCESS_TOKEN="tok", DB_PATH=":memory:")
 
 from igbot.cuenta import cuenta  # noqa: E402
 from igbot import comentarios as c  # noqa: E402

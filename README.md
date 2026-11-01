@@ -62,7 +62,7 @@ Respaldo diario de la memoria (opcional, `crontab -e`):
 ```
 (necesita `sudo apt install sqlite3`; guarda una copia por día de la semana)
 
-Pruebas locales: `pip install pytest && python -m pytest -q`
+Pruebas locales: `pip install -r requirements-dev.txt && python -m pytest -q`. Cobertura: `coverage run -m pytest -q && coverage report` (la configuración está en `.coveragerc`). El entorno mínimo de las pruebas lo pone `tests/conftest.py`; el fixture `cuenta_de_prueba` da la cuenta principal con una base nueva en memoria que se cierra sola.
 
 ## Ventas: cotizaciones y pasar a humano
 

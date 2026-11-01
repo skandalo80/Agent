@@ -3,8 +3,6 @@ import asyncio
 import json
 import os
 
-os.environ.update(IG_VERIFY_TOKEN="vt", IG_APP_SECRET="secreto", IG_ACCESS_TOKEN="tok", DB_PATH=":memory:")
-
 from igbot import comentarios, interacciones as it  # noqa: E402
 from igbot.cuenta import cuenta  # noqa: E402
 from igbot.store import Store  # noqa: E402
