@@ -141,6 +141,30 @@ def test_bucle_de_fondo_pasa_por_cada_cuenta(monkeypatch):
     assert vistas == [("", ""), ("otra", "otra")]
 
 
+def test_el_bucle_de_fondo_atiende_las_cuentas_en_paralelo_y_corta_las_atascadas(monkeypatch):
+    import app as bot
+
+    lenta = dataclasses.replace(bot.principal, slug="lenta")
+    otra = dataclasses.replace(bot.principal, slug="otra")
+    monkeypatch.setattr(bot, "cuentas", [lenta, otra])
+    vistas = []
+
+    async def paso(c):
+        if c.slug == "lenta":
+            await asyncio.sleep(10)  # Meta caído para esta cuenta: no debe frenar a las demás
+        vistas.append(c.slug)
+
+    async def main():
+        task = asyncio.create_task(bot.cada_cuenta(paso, 3600, a_la_vez=2, tope=0.1))
+        await asyncio.sleep(0.05)
+        assert vistas == ["otra"]  # la otra no esperó a la lenta
+        await asyncio.sleep(0.1)
+        task.cancel()
+
+    asyncio.run(main())
+    assert vistas == ["otra"]  # la lenta se cortó al tope sin anotar nada
+
+
 def test_el_plan_pone_los_topes_y_el_env_gana():
     from igbot.cuenta import Cuenta
     c = Cuenta.desde_env("x", {"IG_ACCESS_TOKEN": "t", "PLAN": "community"})

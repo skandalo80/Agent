@@ -68,6 +68,9 @@ DEBOUNCE_SECONDS = float(os.getenv("DEBOUNCE_SECONDS", "5"))
 MAX_CONCURRENT = int(os.getenv("MAX_CONCURRENT", "4"))
 # Y de una misma cuenta, para que un cliente con mucho tráfico no frene a los demás.
 MAX_CONCURRENT_PER_ACCOUNT = int(os.getenv("MAX_CONCURRENT_PER_ACCOUNT", "3"))
+# Bucles de fondo (publicar, métricas, tokens...): cuentas que atienden a la vez y tope por cuenta y paso.
+FONDO_A_LA_VEZ = int(os.getenv("FONDO_A_LA_VEZ", "5"))
+FONDO_TOPE_SEG = float(os.getenv("FONDO_TOPE_SEG", "900"))
 
 # --- Google (opcional: sin esto el bot no agenda ni manda correos) ---
 # Credenciales OAuth de tu cuenta de Gmail; ver "Agenda y correo" en el README.
