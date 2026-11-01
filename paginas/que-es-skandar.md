@@ -10,11 +10,12 @@ Tus redes sociales, trabajando: tus anuncios traen el mensaje, Skandar lo contes
 
 ## Qué hace
 
-- **Asistente virtual.** Contesta al instante los mensajes de Instagram y de Facebook Messenger, también los que llegan de anuncios, con la información del negocio: productos, precios, horarios, disponibilidad y preguntas frecuentes. Recuerda a cada cliente, usa el tono que elige el dueño y se pausa cuando alguien pide a una persona o cuando el dueño contesta a mano.
+- **Asistente virtual.** Contesta al instante los mensajes de Instagram y de Facebook Messenger, también los que llegan de anuncios, con la información del negocio: productos, precios, horarios, disponibilidad y preguntas frecuentes. Recuerda a cada cliente, usa el tono que elige el dueño y se pausa cuando alguien pide a una persona o cuando el dueño contesta a mano. Si alguien responde a una historia publicada desde la plataforma, sabe de qué historia y de qué campaña se trata.
 - **Community Manager.** Arma campañas con calendario, genera cada imagen y cada texto con la marca del negocio y publica en Instagram y en la página de Facebook a la hora programada. También arma campañas para promocionar un producto o servicio con su oferta (descuento, 2x1, 3x2) y sus fechas.
 - **Citas y cobros.** Con Google Calendar conectado, el asistente revisa los horarios libres y agenda la cita en el calendario del negocio. Con Mercado Pago o Stripe conectado, manda un link de pago por el chat.
 - **Medición de anuncios.** Cada chat que llega de un anuncio queda marcado con ese anuncio. Los pagos por link y las compras en Shopify aparecen en el chat de quien pagó, con el anuncio que lo trajo.
-- **Comenta y recibe por DM.** Cada publicación puede llevar una palabra clave: quien la comenta recibe la información por mensaje directo.
+- **Comentarios y menciones.** En el plan Community Manager, el asistente contesta cada comentario según su tipo (pregunta, elogio, quiere comprar, queja), en público, por mensaje directo o ambos, agradece las menciones y oculta el spam. En Resultados se ve cuántos comentarios llegaron y cuántos se contestaron.
+- **Comenta y recibe por DM.** Cada publicación, o toda la cuenta, puede llevar palabras clave: quien la comenta recibe la información por mensaje directo.
 
 ## Para quién es
 
@@ -30,7 +31,8 @@ Sobre todo para negocios que ya pagan anuncios en Instagram o Facebook y quieren
 
 - Se necesita una cuenta profesional de Instagram, de Empresa o de Creador.
 - Las cuentas se conectan con la API oficial de Meta (Instagram y Facebook).
-- Todo se configura desde un panel en el navegador; no hay que instalar nada.
+- Se entra al panel con el correo, Google o Facebook, y el Instagram se conecta con Meta, también desde el celular.
+- Todo se configura desde un panel en el navegador; no hay que instalar nada. Al entrar, la página de Inicio muestra lo de hoy: los chats que esperan, las próximas publicaciones y el uso del plan.
 - El dueño aprueba cada publicación antes de que salga.
 
 ## Qué no hace
