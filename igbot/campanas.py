@@ -41,7 +41,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from PIL import Image
 
-from . import brief, config, empresa, imagenes, informe, limites, marco, metricas, openai_texto, semana, tools
+from . import brief, config, empresa, fechas, imagenes, informe, limites, marco, metricas, openai_texto, semana, tools
 from .admin import PANEL
 from .contenido import (DESDE, ESTADOS, ESTILO_REFERENCIA, HASHTAGS_FIJO, IMAGEN, MAX_CAPTION, archivo, contexto_marca,
                         cuando, estilo_foto, limitar_hashtags, regla_hashtags,
@@ -395,16 +395,6 @@ def visibles(camp: dict) -> list[str]:
 def lunes_que_viene() -> date:
     hoy = tools.now().date()
     return hoy + timedelta(days=7 - hoy.weekday())
-
-
-def fecha_corta(dia: str) -> str:
-    d = date.fromisoformat(dia)
-    return f"{DIAS[d.weekday()]} {d.day}"
-
-
-def fecha_larga(dia: str) -> str:
-    d = date.fromisoformat(dia)
-    return f"{DIAS[d.weekday()]} {d.day} {MESES[d.month - 1]}"
 
 
 def momento(dia: str, hora: str) -> float:
@@ -773,7 +763,7 @@ async def proponer(c: Cuenta, camp: dict, anteriores: list[dict] | None = None, 
     if camp.get("brief"):
         nuevos = await escribir_desde_brief(c, camp, fichas, ya, respondidas, tope, siguiente)
     else:
-        lineas = "\n".join(f"- {f['dia']} ({fecha_larga(f['dia'])}) | tema: {TEMAS[f['tipo']][0]} | formato:"
+        lineas = "\n".join(f"- {f['dia']} ({fechas.larga(f['dia'])}) | tema: {TEMAS[f['tipo']][0]} | formato:"
                            f" {FORMATOS[f['formato']][0]}" + (" | medio: historia" if es_historia(f) else "")
                            for f in fichas)
         prompt = (f"<negocio>\n{await negocio_de(c)}\n</negocio>\n\n{await de_la_marca(c)}"
@@ -873,7 +863,7 @@ async def escribir_desde_brief(c: Cuenta, camp: dict, fichas: list[dict], ya: st
 
 
 def linea_ficha(camp: dict, f: dict) -> str:
-    return (f"{f['dia']} ({fecha_larga(f['dia'])}, {semana_de(camp, f['dia'])}) | tema: {TEMAS[f['tipo']][0]}"
+    return (f"{f['dia']} ({fechas.larga(f['dia'])}, {semana_de(camp, f['dia'])}) | tema: {TEMAS[f['tipo']][0]}"
             f" | formato: {FORMATOS[f['formato']][0]}" + (f" | se ve: {escape(ve_de(camp, f['ve']))}" if f["ve"] else "")
             + (f" | rol: {f['rol']}" if f.get("rol") else "")
             + (f" | pilar: {escape(f['pilar'])}" if f["pilar"] else "") + (f" | dato: {f['dato']}" if f["dato"] else "")
@@ -1768,7 +1758,7 @@ async def calendario(c: Cuenta, camp: dict, sel: str) -> str:
             # Los días de fuera también reciben posts: al soltar uno ahí, la campaña se estira.
             celdas.append(f'<div class="dia-cam{clase}" id="d-{iso}" data-dia="{iso}"'
                           + (" data-publica" if iso in publica else "") + ">"
-                          f'<span class="fecha">{fecha_corta(iso)}</span>{posts}'
+                          f'<span class="fecha">{fechas.corta(iso)}</span>{posts}'
                           + ('<span class="fuera-cam">Fuera de la campaña</span>' if fuera and not posts else "")
                           + "</div>")
         lunes, hasta = date.fromisoformat(dias[7 * n]), date.fromisoformat(dias[7 * n + 6])
@@ -1815,7 +1805,7 @@ async def detalle(c: Cuenta, camp: dict, p: dict, quedan_ia: int) -> str:
     usa = costo(p)
     gasto = f"usa {usa} de tu cupo" if usa else "no usa tu cupo"
     dias = sorted(set(visibles(camp)) | set(rango(camp)) | {p["dia"]})
-    opciones = "".join(f'<option value="{d}"{" selected" if d == p["dia"] else ""}>{fecha_larga(d)}</option>' for d in dias)
+    opciones = "".join(f'<option value="{d}"{" selected" if d == p["dia"] else ""}>{fechas.larga(d)}</option>' for d in dias)
     formato = formato_de(p)
     solo = " readonly" if fija else ""
     historia = " h" if es_historia(p) else ""  # la imagen de una historia es 9:16
@@ -1913,7 +1903,7 @@ async def detalle(c: Cuenta, camp: dict, p: dict, quedan_ia: int) -> str:
         f'<input type="hidden" name="k" value="{p["k"]}">{campo_desde()}'
         '<div class="top"><div>'
         f'<div class="etqs-cam"><span class="medio-cam m-{medio_de(p)}">{MEDIOS[medio_de(p)][0]}</span>{marca_estado}</div>'
-        f'<h2 id="d-nombre">{escape(p["titulo"])}</h2><p>{fecha_larga(p["dia"])} · {p["hora"]}</p>'
+        f'<h2 id="d-nombre">{escape(p["titulo"])}</h2><p>{fechas.larga(p["dia"])} · {p["hora"]}</p>'
         + (f'<p class="cli-cam">Responde a lo que te preguntan: {escape(p["responde"])}</p>' if p.get("responde") else "")
         + f'</div><div class="cierre">{ir_a_campana(url_de(camp))}'
         f'<a class="x" href="{cerrar_a(url_de(camp))}" aria-label="Cerrar">×</a></div></div>'
@@ -2452,7 +2442,7 @@ def documentos(camp: dict) -> bytes:
     posts = sorted(camp.get("posts", []), key=lambda p: (p["dia"], p["hora"]))
 
     def cab(i: int, p: dict) -> str:
-        return (f"## {i}. {fecha_larga(p['dia'])} {p['hora']} · {'Historia' if es_historia(p) else 'Post'}"
+        return (f"## {i}. {fechas.larga(p['dia'])} {p['hora']} · {'Historia' if es_historia(p) else 'Post'}"
                 f" · {FORMATOS[formato_de(p)][0]}\n\n")
 
     brief_md = [f"# Brief: {b.get('titulo', '')}\n\n{b.get('resumen', '')}\n\n## La idea\n"]
@@ -2613,7 +2603,7 @@ async def accion(request: Request, c: marco.Formulario, cid: str):
         if (fin - ini).days + 1 > MAX_DIAS:
             return await pagina_campana(c, camp, f"Una campaña puede durar hasta {MAX_DIAS // 7} semanas.")
         if fuera := sorted(p["dia"] for p in camp["posts"] if not ini.isoformat() <= p["dia"] <= fin.isoformat()):
-            return await pagina_campana(c, camp, f"El post del {fecha_larga(fuera[0])} quedaría fuera de la campaña:"
+            return await pagina_campana(c, camp, f"El post del {fechas.larga(fuera[0])} quedaría fuera de la campaña:"
                                         " muévelo antes, o elige fechas que lo incluyan.")
         camp.update(nombre=f.get("nombre", "").strip()[:MAX_NOMBRE] or camp["nombre"], inicio=ini.isoformat(),
                     fin=fin.isoformat())

@@ -25,7 +25,7 @@ from pathlib import Path
 
 from PIL import Image, ImageOps
 
-from . import config, tools
+from . import config, fechas, tools
 from .comentarios import shortcode
 from .cuenta import Cuenta
 from .pdf_marca import GRIS, LINEA, NEGRO, Cotizacion
@@ -367,9 +367,7 @@ def pct(n: float | None) -> str:
     return "—" if n is None else f"{n:.1f}%"
 
 
-def fecha(d: date) -> str:
-    from .campanas import MESES
-    return f"{d.day} {MESES[d.month - 1]} {d.year}"
+fecha = fechas.con_anio  # "3 nov 2026"
 
 
 def miniatura(foto: Path) -> Image.Image:
@@ -517,7 +515,7 @@ async def propuesta(c: Cuenta, camp: dict, marca: dict, cuenta: str) -> bytes:
 
 
 def _propuesta(c: Cuenta, camp: dict, marca: dict, cuenta: str, publicados: dict, medias: dict) -> bytes:
-    from .campanas import FORMATOS, MESES, PUBLICAR, fecha_larga, formato_de, tema_de
+    from .campanas import FORMATOS, MESES, PUBLICAR, formato_de, tema_de
 
     inicio, fin = date.fromisoformat(camp["inicio"]), fin_de(camp)
     doc = Propuesta(f"@{cuenta.lstrip('@')}", f"{fecha(inicio)} – {fecha(fin)}", fecha(tools.now().date()),
@@ -554,7 +552,7 @@ def _propuesta(c: Cuenta, camp: dict, marca: dict, cuenta: str, publicados: dict
         foto = Path(c.media_dir) / f"{media[0]}.jpg" if media else None
         etiquetas = f"{tema_de(p['tipo'])[0]} · {FORMATOS[formato_de(p)][0]}" + (
             f" · Responde: {p['responde']}" if p.get("responde") else "")
-        doc.post(n, f"{fecha_larga(p['dia'])} · {p['hora']}", p.get("titulo") or "", etiquetas,
+        doc.post(n, f"{fechas.larga(p['dia'])} · {p['hora']}", p.get("titulo") or "", etiquetas,
                  (post or {}).get("caption") or p.get("caption", ""), foto if foto and foto.is_file() else None,
                  p.get("idea", ""))
     doc.ln(6)

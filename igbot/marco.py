@@ -496,17 +496,6 @@ def entrar(request: Request | None = None, aviso: str = "") -> HTMLResponse:
     )
 
 
-def hace(t: float) -> str:
-    s = time.time() - t
-    if s < 60:
-        return "hace un momento"
-    if s < config.HORA:
-        return f"hace {int(s // 60)} min"
-    if s < config.DIA:
-        return f"hace {int(s // 3600)} h"
-    return "ayer" if s < 2 * 86400 else f"hace {int(s // 86400)} días"
-
-
 def avance(pct: int) -> str:
     """La barra de avance que va abajo de la barra de pasos (Tu asistente, Tu marca, Tu empresa, Crear campaña)."""
     return f'<div class="avance-pasos" aria-hidden="true"><i style="width:{pct}%"></i></div>'

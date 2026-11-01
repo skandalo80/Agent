@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 
 from claude_agent_sdk import create_sdk_mcp_server, tool
 
-from . import catalog, config, conversiones_meta, tienda
+from . import catalog, config, conversiones_meta, fechas, tienda
 from .cuenta import cuenta
 from .google import Google
 from .instagram import Instagram
@@ -37,7 +37,7 @@ def error(text: str) -> dict:
 
 
 def tz() -> ZoneInfo:
-    return ZoneInfo(cuenta().timezone)
+    return fechas.zona(cuenta())
 
 
 def now() -> datetime:

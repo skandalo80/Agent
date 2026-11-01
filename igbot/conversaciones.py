@@ -17,7 +17,7 @@ from pathlib import Path
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
-from . import config, marco
+from . import config, fechas, marco
 from .cuenta import Cuenta, usar
 from .store import MANUAL
 
@@ -109,7 +109,7 @@ async def partes(c: Cuenta, ver: str = "", buscar: str = "", hoja: int = 1, chat
     import asyncio
 
     ahora = time.time()
-    zona = ZoneInfo(c.timezone)
+    zona = fechas.zona(c)
     hoy = datetime.fromtimestamp(ahora, zona)
     buscar = buscar.strip()[:60]
     # Quién pidió una persona: el asistente lo pasó contigo (pasar_a_humano) durante su pausa actual.
@@ -251,7 +251,7 @@ async def _hilo(c: Cuenta, u: str, ver: str, buscar: str, hoja: int, n: int, aho
     horas = max(1, round((hasta - ahora) / config.HORA))
     ocultos = _ocultos(ver, buscar, hoja, u) + f'<input type="hidden" name="usuario" value="{escape(u)}">'
 
-    sub = (f"Último mensaje {marco.hace(ultimo_cliente)}" if ultimo_cliente else "Aún no te escribe")
+    sub = (f"Último mensaje {fechas.hace(ultimo_cliente)}" if ultimo_cliente else "Aún no te escribe")
     if anuncio := (await c.store.anuncios_de([u])).get(u):
         sub += " · Llegó por " + (f"el anuncio «{escape(anuncio['titulo'][:80])}»" if anuncio["titulo"] else "un anuncio")
     if ventas := await c.store.ventas_de(u):

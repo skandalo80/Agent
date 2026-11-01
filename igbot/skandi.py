@@ -39,7 +39,6 @@ pidieron soporte marcados.
 import logging
 import os
 import re
-from datetime import datetime
 from html import escape
 from pathlib import Path
 from urllib.parse import urlparse
@@ -47,9 +46,8 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from starlette.routing import Match
-from zoneinfo import ZoneInfo
 
-from . import config, marco
+from . import config, fechas, marco
 from .cuenta import Cuenta, usar
 
 log = logging.getLogger("igbot.skandi")
@@ -187,10 +185,9 @@ def titulo(chat: dict) -> str:
     return primera if len(primera) <= 70 else primera[:69] + "…"
 
 
-def cuando(t: float, zona: str) -> str:
-    momento = datetime.fromtimestamp(t, ZoneInfo(zona))
-    meses = "ene feb mar abr may jun jul ago sep oct nov dic".split()
-    return f"{momento.day} {meses[momento.month - 1]}, {momento:%H:%M}"
+def cuando(t: float, c: Cuenta) -> str:
+    momento = fechas.en_zona(c, t)
+    return f"{momento.day} {fechas.MESES[momento.month - 1]}, {momento:%H:%M}"
 
 
 def boton_chat(accion: str, contenido: str, chat_id: int | None = None, clase: str = "") -> str:
@@ -206,7 +203,7 @@ def historial(c: Cuenta, actual: dict | None) -> str:
     """El ícono de historial y su lista (se abre y cierra sin JavaScript)."""
     lista = _chats.get(clave(c), [])
     filas = "".join(
-        boton_chat("abrir", f"<b>{escape(titulo(x))}</b><small>{cuando(x['actualizado'], c.timezone)}</small>",
+        boton_chat("abrir", f"<b>{escape(titulo(x))}</b><small>{cuando(x['actualizado'], c)}</small>",
                    x["id"], "on" if actual and x["id"] == actual["id"] else "")
         for x in lista) or '<p class="vacio">Aquí vas a ver tus conversaciones anteriores.</p>'
     return ('<details class="sk-hist"><summary aria-label="Conversaciones anteriores" title="Conversaciones anteriores">'
@@ -589,13 +586,13 @@ async def ver_chats(request: Request, c: marco.Sesion, ver: str = "todos", p: in
                       for k, n in FILTROS.items())
     filas = "".join(
         f'<a class="skc-fila{" on" if x["id"] == chat else ""}" href="{escape(enlace(chat_=x["id"]))}">'
-        f'<b>{escape(titulo(x))}</b><small>{escape(quien_es(x))} · {cuando(x["actualizado"], c.timezone)}'
+        f'<b>{escape(titulo(x))}</b><small>{escape(quien_es(x))} · {cuando(x["actualizado"], c)}'
         f' · {len(x["mensajes"]) // 2} preguntas'
         + (' <span class="skc-marca">Soporte</span>' if x["soporte"] else "") + "</small></a>"
         for x in chats) or '<p class="vacio">Todavía no hay conversaciones aquí.</p>'
     abierto_ = await pr.store.chat_skandi(chat) if chat else None
     detalle = (
-        f'<div class="skc-chat"><h2>{escape(quien_es(abierto_))} · {cuando(abierto_["creado"], c.timezone)}'
+        f'<div class="skc-chat"><h2>{escape(quien_es(abierto_))} · {cuando(abierto_["creado"], c)}'
         + (' <span class="skc-marca">Soporte</span>' if abierto_["soporte"] else "") + '</h2>'
         '<div class="sk-mensajes">' + "".join(mensaje(r, t) for r, t in abierto_["mensajes"]) + "</div></div>"
         if abierto_ else '<div class="skc-chat"><p class="vacio">Elige una conversación para verla.</p></div>')
