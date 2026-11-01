@@ -1,5 +1,6 @@
 """La cuenta actual: cada conversación lee los datos de su propia cuenta."""
 import asyncio
+import time
 import dataclasses
 import os
 
@@ -174,3 +175,42 @@ def test_el_plan_pone_los_topes_y_el_env_gana():
     assert (c.imagenes_mes, c.mensajes_mes, c.posts_mes) == (40, 2500, 30)
     c = Cuenta.desde_env("x", {"IG_ACCESS_TOKEN": "t"})  # sin plan: sin topes ni contenido
     assert (c.imagenes_mes, c.mensajes_mes, c.posts_mes) == (0, 0, 0)
+
+
+def test_la_limpieza_borra_el_historial_viejo_y_deja_el_reciente():
+    from igbot.store import Store
+
+    async def main():
+        store = Store(":memory:")
+        await store.open()
+        ahora = time.time()
+        await store.add_incoming("ana", "m1", "hola")
+        await store.add_event("ana", "interes", {})
+        await store.add_sent("eco")
+        await store.db.execute("UPDATE messages SET created_at = ?", (ahora - 400 * 86400,))
+        await store.db.execute("UPDATE sent SET sent_at = ?", (ahora - 8 * 86400,))
+        await store.db.commit()
+        borrado = await store.purgar(365, ahora)
+        await store.compactar()
+        quedan = await (await store.db.execute("SELECT COUNT(*) FROM events")).fetchone()
+        await store.close()
+        return borrado, quedan[0]
+
+    borrado, eventos = asyncio.run(main())
+    assert borrado == {"sent": 1, "messages": 1, "events": 0, "comments": 0}
+    assert eventos == 1
+
+
+def test_con_retencion_cero_no_se_borra_el_historial():
+    from igbot.store import Store
+
+    async def main():
+        store = Store(":memory:")
+        await store.open()
+        await store.add_incoming("ana", "m1", "hola")
+        await store.db.execute("UPDATE messages SET created_at = 0")
+        borrado = await store.purgar(0)
+        await store.close()
+        return borrado
+
+    assert asyncio.run(main()) == {"sent": 0}

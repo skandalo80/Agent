@@ -230,6 +230,14 @@ async def metricas_del_dia(c: Cuenta) -> None:
     await metricas.tick(c)  # seguidores, alcance y vistas de cada día, para Resultados
 
 
+async def limpiar(c: Cuenta) -> None:
+    """Una vez al día: borra el historial de más de RETENCION_DIAS y compacta la base."""
+    borrado = await c.store.purgar(config.RETENCION_DIAS)
+    await c.store.compactar()
+    if total := sum(borrado.values()):
+        log.info("Limpieza de %s: %d fila(s) borradas %s", nombre(c), total, borrado)
+
+
 async def cada_cuenta(paso, every: float, a_la_vez: int = 0, tope: float = 0) -> None:
     """Un solo bucle de fondo por tarea, que pasa por todas las cuentas.
 
@@ -277,6 +285,7 @@ def fondo() -> list[asyncio.Task]:
         asyncio.create_task(cada_cuenta(reporte_semanal, 600)),
         asyncio.create_task(cada_cuenta(sugeridos_del_lunes, 600)),
         asyncio.create_task(cada_cuenta(metricas_del_dia, 600)),
+        asyncio.create_task(cada_cuenta(limpiar, 86400)),
         asyncio.create_task(lentitud.vigilar_bucle()),
     ]
 
