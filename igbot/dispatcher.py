@@ -37,6 +37,7 @@ class Dispatcher:
         retries: int = 3,
         retry_delay: float = 20,
         shared: asyncio.Semaphore | None = None,
+        on_failed: Handler | None = None,
     ):
         self.store = store
         self.handle = handle
@@ -45,6 +46,7 @@ class Dispatcher:
         self.shared = shared
         self.retries = retries
         self.retry_delay = retry_delay
+        self.on_failed = on_failed  # qué hacer con los DMs que se dan por perdidos (avisar a la persona)
         self.active: dict[str, asyncio.Task] = {}
         self.dirty: set[str] = set()
 
@@ -91,6 +93,11 @@ class Dispatcher:
                     if failures >= self.retries:
                         await self.store.mark_failed([r[0] for r in rows])
                         failures = 0
+                        if self.on_failed:
+                            try:
+                                await self.on_failed(user_id, rows)
+                            except Exception:
+                                log.exception("No se pudo avisar a %s que no se le contestó", user_id)
                     else:
                         await asyncio.sleep(self.retry_delay * failures)
         finally:

@@ -1027,6 +1027,31 @@ def test_responder_un_dato_sin_pausar_y_guardarlo_como_faq(cliente, monkeypatch)
     assert 'name="seguir"' not in r.text and "deja de contestar" in r.text
 
 
+def test_el_asistente_no_pudo_contestar_se_ve_en_el_chat_y_reactivar_retoma(cliente):
+    import time
+    from igbot import limites
+    client, c, *_ = cliente
+    store = c.store
+    p = client.portal.call
+    p(store.add_incoming, "beto", "m1", "¿Tienen en rojo?")
+    p(store.mark_failed, [i for i, _ in p(store.pending, "beto")])
+
+    async def avisar():
+        with panel.usar(c):
+            return await limites.avisar_sin_respuesta(store, "beto", "fallo")
+
+    assert p(avisar) is True and c.instagram.sent == [("beto", limites.SIN_RESPUESTA)]
+    assert p(avisar) is False and len(c.instagram.sent) == 1  # una vez al día
+    r = client.get("/panel/asistente?chat=beto")
+    assert "<b>El asistente no pudo contestar:</b> falló varias veces" in r.text
+    # El dueño toma el chat y lo suelta: lo que quedó sin contestar vuelve a la cola.
+    client.post("/panel/pausas", headers=ORIGEN, data={"usuario": "beto", "accion": "tomar"})
+    r = client.post("/panel/pausas", headers=ORIGEN, data={"usuario": "beto", "accion": "reactivar"})
+    assert "Lo que quedó sin contestar lo responde en un momento" in r.text
+    assert [t for _, t in p(store.pending, "beto")] == ["¿Tienen en rojo?"]
+    assert p(store.paused_until, "beto") < time.time()
+
+
 def test_menu_js_antes_de_pintar(cliente):
     client, *_ = cliente
     html = client.get("/panel").text

@@ -73,11 +73,17 @@ def test_si_falla_varias_veces_sale_de_la_cola():
         async def handle(user_id, rows):
             raise RuntimeError("Claude caído")
 
-        d = Dispatcher(store, handle, debounce=0, max_concurrent=1, retries=2, retry_delay=0)
+        perdidos = []
+
+        async def avisar(user_id, rows):
+            perdidos.append((user_id, [t for _, t in rows]))
+
+        d = Dispatcher(store, handle, debounce=0, max_concurrent=1, retries=2, retry_delay=0, on_failed=avisar)
         await store.add_incoming("ana", "m1", "hola")
         d.notify("ana")
         await d.drain()
         assert await store.pending("ana") == []
+        assert perdidos == [("ana", ["hola"])]  # se le avisa a la persona que se le contesta después
         await store.close()
 
     asyncio.run(main())

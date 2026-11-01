@@ -2342,6 +2342,8 @@ async def cambiar_pausa(request: Request):
     if accion == "reactivar":
         await c.store.unpause(usuario_chat)
         aviso = f"Listo: tu asistente vuelve a contestarle a {nombre}."
+        if await c.store.reabrir(usuario_chat, conversaciones.VENTANA):  # el bucle retomar lo levanta en un minuto
+            aviso += " Lo que quedó sin contestar lo responde en un momento."
     else:
         await c.store.pause(usuario_chat, time.time() + c.human_pause_hours * 3600)
         aviso = f"Listo: {nombre} sigue en pausa {c.human_pause_hours:g} h más."

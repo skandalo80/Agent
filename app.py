@@ -30,7 +30,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 
 from igbot import (acceso, adjuntos, admin, agenda_google, agent, ajustes, anuncios_meta, asistente, botones, campanas, cobros,
-                   comentarios, comprimir, conectar, config, contenido, empresa, errores, facebook, historias, inicio,
+                   comentarios, comprimir, conectar, config, contenido, conversaciones, empresa, errores, facebook, historias, inicio,
                    interacciones, lentitud, limites, marca, metricas, nueva_campana, panel, reporte, resultados, semana, skandi,
                    sugeridos, tienda_shopify)
 from igbot.cuenta import Cuenta, cargar, cuenta, de_carpeta, usar
@@ -111,6 +111,7 @@ async def over_limits(user_id: str, rows: list[tuple[int, str]]) -> bool:
     if await limites.over_budget(store):
         log.warning("Presupuesto diario de Claude agotado; no se contesta a %s", user_id)
         await store.mark_seen([i for i, _ in rows])
+        await limites.avisar_sin_respuesta(store, user_id, "presupuesto")
         if await limites.first_budget_alert(store) and google and cuenta().owner_email:
             try:
                 await google.send_email(
@@ -145,9 +146,19 @@ def atender(c: Cuenta):
 shared_slots = asyncio.Semaphore(config.MAX_CONCURRENT)
 
 
+def sin_respuesta(c: Cuenta):
+    async def handler(user_id: str, rows: list[tuple[int, str]]) -> None:
+        if admin.is_key(user_id):
+            return
+        with usar(c):
+            log.warning("No se pudo contestar a %s (%s) tras varios intentos; se le avisa", user_id, nombre(c))
+            await limites.avisar_sin_respuesta(c.store, user_id, "fallo")
+    return handler
+
+
 def cola(c: Cuenta) -> Dispatcher:
     return Dispatcher(c.store, atender(c), config.DEBOUNCE_SECONDS,
-                      config.MAX_CONCURRENT_PER_ACCOUNT, shared=shared_slots)
+                      config.MAX_CONCURRENT_PER_ACCOUNT, shared=shared_slots, on_failed=sin_respuesta(c))
 
 
 dispatchers = {c.slug: cola(c) for c in cuentas}
@@ -231,8 +242,25 @@ async def cada_cuenta(paso, every: float) -> None:
         await asyncio.sleep(every)
 
 
+_retomado: dict[str, float] = {}  # por cuenta, hasta cuándo se revisaron las pausas vencidas
+
+
+async def retomar(c: Cuenta) -> None:
+    """Cuando termina una pausa (el dueño atendió el chat y ya pasaron sus horas), lo que el cliente escribió
+    después del último mensaje nuestro vuelve a la cola y el asistente lo contesta; antes se quedaba sin
+    respuesta. También levanta lo pendiente que haya quedado sin tarea (p. ej. un chat reactivado desde el panel)."""
+    ahora = time.time()
+    desde = _retomado.get(c.slug, ahora - 60)
+    for user_id in await c.store.pausas_vencidas(desde, ahora):
+        if n := await c.store.reabrir(user_id, conversaciones.VENTANA):
+            log.info("Terminó la pausa de %s (%s): el asistente retoma %d mensaje(s)", user_id, nombre(c), n)
+    _retomado[c.slug] = ahora
+    await dispatchers[c.slug].resume_pending()
+
+
 def fondo() -> list[asyncio.Task]:
     return [
+        asyncio.create_task(cada_cuenta(retomar, 60)),
         asyncio.create_task(cada_cuenta(renovar_token, 3600)),
         asyncio.create_task(cada_cuenta(publicar, 30)),
         asyncio.create_task(cada_cuenta(reporte_semanal, 600)),
