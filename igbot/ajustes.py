@@ -144,6 +144,8 @@ async def conexion(c: Cuenta) -> tuple[str, str]:
     renovado = float(await c.store.get("ig_token_refreshed_at") or 0)
     if c.ig_via == "facebook":  # va con el token de su página, que no vence
         fila("ok", "Instagram conectado", f"@{escape(await panel.usuario(c))} · a través de tu página de Facebook")
+    elif c.ig_via == "sistema":  # Conectar con Meta sin página: su token no vence
+        fila("ok", "Instagram conectado", f"@{escape(await panel.usuario(c))} · a través de Meta")
     elif renovado:
         dias = int((ahora - renovado) // 86400)
         quedan = TOKEN_DIAS - dias
