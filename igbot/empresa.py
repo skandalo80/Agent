@@ -356,6 +356,26 @@ def huella(e: dict, prods: list[dict]) -> str:
     return hashlib.sha256(texto.encode()).hexdigest()[:16]
 
 
+async def agregar_faq(c: Cuenta, pregunta: str, respuesta: str) -> bool:
+    """Guarda un par pregunta/respuesta en las preguntas frecuentes del perfil (desde Conversaciones, cuando el
+    dueño aclara un dato que el asistente no tenía) y manda el perfil a la misma revisión que al guardarlo.
+    False si ya estaba o no cabe."""
+    pregunta, respuesta = " ".join(pregunta.split())[:300], respuesta.strip()[:1000]
+    if not pregunta or not respuesta:
+        return False
+    e = dict(await de(c) or await precarga(c))
+    faq = [q for q in e.get("faq", []) if isinstance(q, dict) and (q.get("p") or q.get("r"))]
+    if any(q.get("p", "").strip().lower() == pregunta.lower() for q in faq) or len(faq) >= MAX_PREGUNTAS:
+        return False
+    e["faq"] = faq + [{"p": pregunta, "r": respuesta}]
+    await antes_de_guardar(c)
+    e["actualizado"] = int(time.time())
+    await c.store.set(CLAVE, json.dumps(e, ensure_ascii=False))
+    programar_revision(c, ya=True)
+    log.info("@%s guardó una pregunta frecuente desde Conversaciones", await panel.usuario(c))
+    return True
+
+
 # --- después de guardar: el prompt del asistente y las opciones de campaña ---
 
 async def aplicar(c: Cuenta) -> None:

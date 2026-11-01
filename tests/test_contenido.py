@@ -989,6 +989,43 @@ def test_pregunta_sin_dato_no_pausa_y_avisa_en_tu_asistente(cliente):
     assert "Pregunta sin dato" not in client.get("/panel/asistente?ver=curso").text
 
 
+def test_responder_un_dato_sin_pausar_y_guardarlo_como_faq(cliente, monkeypatch):
+    from igbot import empresa, tools as t
+    client, c, *_ = cliente
+    store = c.store
+    p = client.portal.call
+    monkeypatch.setattr(empresa, "programar_revision", lambda c, ya=False: None)  # se prueba aparte
+    p(store.add_incoming, "beto", "m1", "¿Hacen envíos a Mérida?")
+    sin_dato = {x.name: x for x in t.human_tools(store, None, "beto")}["pregunta_sin_dato"]
+    with panel.usar(c):
+        p(sin_dato.handler, {"pregunta": "¿Hacen envíos a Mérida?"})
+    r = client.get("/panel/asistente?ver=curso&chat=beto")
+    # La caja de respuesta ofrece seguir con el asistente y guardar la respuesta, las dos marcadas.
+    assert 'name="seguir" value="1" checked' in r.text and 'name="guardar_faq" value="1" checked' in r.text
+    assert 'name="pregunta" value="¿Hacen envíos a Mérida?"' in r.text and "deja de contestar" not in r.text
+    r = client.post("/panel/responder", headers=ORIGEN, data={"usuario": "beto", "texto": "Sí, llegan en 3 días.",
+                                                              "pregunta": "¿Hacen envíos a Mérida?", "seguir": "1",
+                                                              "guardar_faq": "1", "ver": "curso"})
+    assert c.instagram.sent == [("beto", "Sí, llegan en 3 días.")]
+    assert "Tu asistente sigue contestando este chat" in r.text and "preguntas frecuentes" in r.text
+    assert p(store.paused_until, "beto") == 0  # no se pausó
+    assert "Pregunta sin dato" not in client.get("/panel/asistente?ver=curso").text
+    e = p(empresa.de, c)
+    assert e["faq"][-1] == {"p": "¿Hacen envíos a Mérida?", "r": "Sí, llegan en 3 días."}
+    # La misma pregunta otra vez no se duplica.
+    assert p(empresa.agregar_faq, c, "¿hacen envíos a mérida?", "Otra") is False
+    # Sin la casilla "seguir", pausa como siempre.
+    with panel.usar(c):
+        p(sin_dato.handler, {"pregunta": "¿Cuánto tarda?"})
+    r = client.post("/panel/responder", headers=ORIGEN, data={"usuario": "beto", "texto": "3 días",
+                                                              "pregunta": "¿Cuánto tarda?", "ver": "curso"})
+    assert "no contesta en este chat" in r.text and p(store.paused_until, "beto") > 0
+    # Un chat sin pregunta abierta: la caja no ofrece las opciones.
+    p(store.add_incoming, "caro", "m2", "Hola")
+    r = client.get("/panel/asistente?chat=caro")
+    assert 'name="seguir"' not in r.text and "deja de contestar" in r.text
+
+
 def test_menu_js_antes_de_pintar(cliente):
     client, *_ = cliente
     html = client.get("/panel").text

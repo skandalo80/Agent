@@ -119,6 +119,8 @@ CSS = """
 .mensajes .hora-msg{font-size:.7rem;color:var(--gris);margin:-.3rem 0 .8rem;text-align:right}
 .mensajes .hora-msg.izq{text-align:left}
 .responder{border-top:1px solid var(--linea-clara);padding:1rem 1.5rem;margin:0}
+.responder .opcion{position:static;width:auto;height:auto;overflow:visible;clip:auto;display:flex;gap:.5rem;align-items:flex-start;margin:.6rem 0 0;font-size:.9rem;color:var(--gris)}
+.responder .opcion input{margin-top:.2rem;accent-color:var(--acento)}
 .responder label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 .responder textarea{width:100%;box-sizing:border-box;font:inherit;font-size:.95rem;border:1px solid var(--linea-clara);border-radius:1rem;padding:.75rem 1rem;resize:vertical;min-height:4.5rem}
 .responder .pie{display:flex;justify-content:space-between;align-items:center;gap:1rem;margin-top:.6rem}
@@ -388,13 +390,28 @@ async def _hilo(c: Cuenta, u: str, ver: str, buscar: str, hoja: int, n: int, aho
         burbujas.append('<p class="dia">Aún no hay mensajes guardados en este chat.</p>')
 
     if ultimo_cliente and ahora - ultimo_cliente < VENTANA:
+        if preguntas and not en_pausa:
+            # Está aclarando un dato que el asistente no tenía: por omisión el asistente sigue con el chat y la
+            # respuesta se guarda como pregunta frecuente, para que la próxima vez ya la sepa.
+            pregunta = preguntas[-1][0][:300]
+            opciones = (
+                f'<input type="hidden" name="pregunta" value="{escape(pregunta)}">'
+                '<label class="opcion"><input type="checkbox" name="seguir" value="1" checked> Que tu asistente siga'
+                " contestando este chat (si lo quitas, lo atiendes tú las próximas"
+                f" {c.human_pause_hours:g} h)</label>"
+                '<label class="opcion"><input type="checkbox" name="guardar_faq" value="1" checked> Guardar como'
+                f" pregunta frecuente: tu asistente responderá así cuando le pregunten «{escape(pregunta[:120])}»</label>")
+            pie = "Le llega por Instagram como mensaje tuyo."
+        else:
+            opciones = ""
+            pie = ("Le llega por Instagram como mensaje tuyo. Al enviarlo, tu asistente deja de contestar en este"
+                   f" chat {c.human_pause_hours:g} h.")
         responder = (
             f'<form method="post" action="/panel/responder#chats" class="responder">{ocultos}'
             f'<label for="respuesta">Tu respuesta</label>'
             f'<textarea id="respuesta" name="texto" maxlength="{MAX_RESPUESTA}" required'
-            f' placeholder="Escribe tu respuesta a {escape(nombre)}"></textarea>'
-            '<div class="pie"><span>Le llega por Instagram como mensaje tuyo. Al enviarlo, tu asistente deja de'
-            f" contestar en este chat {c.human_pause_hours:g} h.</span>"
+            f' placeholder="Escribe tu respuesta a {escape(nombre)}"></textarea>{opciones}'
+            f'<div class="pie"><span>{pie}</span>'
             '<button class="boton">Enviar</button></div></form>')
     else:
         responder = ('<p class="responder cerrado">Instagram solo deja contestar dentro de las 24 horas desde el último'
