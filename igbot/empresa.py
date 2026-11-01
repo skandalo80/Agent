@@ -62,7 +62,7 @@ MAX_CARACTER = 3
 # (clave, máximo) de los textos de cada paso; las listas de opciones van aparte.
 CAMPOS = {
     1: [("nombre", 80), ("giro", 60), ("giro_otro", 60), ("frase", 160), ("descripcion", 1500), ("zona", 160),
-        ("sitio_web", 200)],
+        ("sitio_web", 200), ("pais", 2)],
     2: [("clientes_tipo", 20), ("cliente_ideal", 500), ("problema", 500), ("distinto", 1000), ("competencia", 300)],
     3: [("precios", 2000)],
     4: [("horarios", 500), ("direccion", 300), ("pagos_nota", 300), ("envios", 1000), ("cambios", 1000),
@@ -172,6 +172,37 @@ async def precarga(c: Cuenta) -> dict:
     return {k: v for k, v in e.items() if v}
 
 
+# País donde atiende: decide el español en que se escribe su contenido (código, nombre, cómo se trata a la gente).
+PAISES = [("MX", "México", "tuteando"), ("AR", "Argentina", "con voseo rioplatense (vos, tenés, querés)"),
+          ("CO", "Colombia", "tuteando"), ("CL", "Chile", "tuteando"), ("PE", "Perú", "tuteando"),
+          ("ES", "España", "tuteando (vosotros en plural)"), ("US", "Estados Unidos", "tuteando"),
+          ("EC", "Ecuador", "tuteando"), ("GT", "Guatemala", "tuteando"), ("UY", "Uruguay", "con voseo (vos, tenés)"),
+          ("CR", "Costa Rica", "tuteando"), ("PA", "Panamá", "tuteando"), ("DO", "República Dominicana", "tuteando"),
+          ("BO", "Bolivia", "tuteando"), ("PY", "Paraguay", "con voseo (vos, tenés)"), ("VE", "Venezuela", "tuteando"),
+          ("HN", "Honduras", "tuteando"), ("SV", "El Salvador", "tuteando"), ("NI", "Nicaragua", "tuteando"),
+          ("PR", "Puerto Rico", "tuteando"), ("XX", "Otro", "tuteando")]
+PAIS_INICIAL = "MX"
+IDIOMA_FIJO = "Español de México, tuteando"  # lo que dicen los prompts de fábrica; con_idioma lo cambia por el del país
+
+
+def pais_de(e: dict) -> tuple[str, str, str]:
+    codigo = e.get("pais") if e.get("pais") in {k for k, *_ in PAISES} else PAIS_INICIAL
+    return next(p for p in PAISES if p[0] == codigo)
+
+
+def idioma(e: dict) -> str:
+    """En qué español se escribe el contenido de esta empresa, según su país: "Español de Argentina, con voseo…"."""
+    codigo, nombre, trato = pais_de(e)
+    return f"Español {'neutro de Latinoamérica' if codigo in ('XX', 'US') else 'de ' + nombre}, {trato}"
+
+
+def con_idioma(sistema: str, e: dict) -> str:
+    """Un prompt del sistema con el español del país de la empresa en vez del de fábrica (México)."""
+    if pais_de(e)[0] == PAIS_INICIAL:
+        return sistema
+    return sistema.replace(IDIOMA_FIJO, idioma(e)).replace("Español de México", idioma(e))
+
+
 def nombre_giro(e: dict) -> str:
     return e.get("giro_otro", "").strip() if e.get("giro") == OTRO else e.get("giro", "")
 
@@ -199,7 +230,9 @@ def secciones(e: dict, prods: list[dict], para_contenido: bool) -> list[tuple[st
     negocio = [f"{e.get('nombre', '').strip()} ({nombre_giro(e)})" if nombre_giro(e) else e.get("nombre", "").strip(),
                e.get("frase", "").strip(), e.get("descripcion", "").strip()]
     if zona := e.get("zona", "").strip():
-        negocio.append(f"Dónde atiende: {zona}.")
+        negocio.append(f"Dónde atiende: {zona}" + (f" ({pais_de(e)[1]})." if e.get("pais") else "."))
+    elif e.get("pais"):
+        negocio.append(f"País: {pais_de(e)[1]}.")
     if atiende := etiquetas(e.get("atiende", []), ATIENDE):
         negocio.append(f"Cómo atiende: {atiende}.")
     if web := e.get("sitio_web", "").strip():
@@ -296,6 +329,8 @@ def del_form(f, paso: int, antes: dict) -> dict:
     if paso == 1:
         if e["giro"] not in GIROS + [OTRO]:
             e["giro"] = ""
+        if e["pais"] not in {k for k, *_ in PAISES}:
+            e["pais"] = antes.get("pais", "")
         e["sitio_web"] = url_limpia(e["sitio_web"])
     if paso == 2 and e["clientes_tipo"] not in dict(CLIENTES):
         e["clientes_tipo"] = ""
@@ -775,6 +810,10 @@ def paso_1(e: dict) -> str:
         + '<div class="campo-o"><label for="e-giro" class="t">¿A qué se dedica? *</label>'
         f'<select id="e-giro" name="giro">{elige}{giros}</select></div></div>'
         + '<div class="si-otro">' + _texto("giro_otro", "¿Cuál es tu giro?", e.get("giro_otro", ""), 60) + "</div>"
+        + '<div class="dos"><div class="campo-o"><label for="e-pais" class="t">País</label>'
+        f'<select id="e-pais" name="pais">' + "".join(
+            f'<option value="{k}"{" selected" if k == pais_de(e)[0] else ""}>{escape(n)}</option>' for k, n, _ in PAISES)
+        + '</select><p class="ay">Tu contenido se escribe en el español de tu país.</p></div></div>'
         + _opciones("atiende", "¿Cómo atiendes?", ATIENDE, e.get("atiende", []))
         + "</div>" + pie(1, "* Obligatorio. Lo demás lo puedes llenar después.")
     )

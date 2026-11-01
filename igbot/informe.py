@@ -18,6 +18,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import re
 import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -210,13 +211,24 @@ async def ganadores(c: Cuenta, camps: list[dict]) -> dict:
             **{k: por(renglones, k) for k in ("tema", "formato", "franja")}}
 
 
+def gancho_de(p: dict) -> str:
+    """La primera frase del caption (lo que hace detenerse), para que la siguiente campaña no la repita."""
+    caption = " ".join(str(p.get("caption") or "").split())
+    if not caption:
+        return ""
+    corte = re.search(r"[.!?…]\s|\n", caption + " ")
+    return caption[:corte.end()].strip() if corte and corte.end() <= 110 else caption[:100].rsplit(" ", 1)[0]
+
+
 def ya_hecho(camps: list[dict]) -> tuple[list[str], list[str]]:
-    """Los títulos que ya salieron en sus campañas y las preguntas de clientes que ya respondieron."""
+    """Lo que ya salió en sus campañas (título y, si lo hay, su gancho: "Título — primera frase") y las preguntas de
+    clientes que ya respondieron. Con el gancho, el modelo evita repetir también la forma de abrir, no solo el asunto."""
     titulos, respondidas = [], []
     for x in camps:
         for p in x["posts"]:
-            if p.get("titulo") and p["titulo"] not in titulos:
-                titulos.append(p["titulo"])
+            if p.get("titulo") and not any(t == p["titulo"] or t.startswith(p["titulo"] + " — ") for t in titulos):
+                gancho = gancho_de(p)
+                titulos.append(f"{p['titulo']} — {gancho}" if gancho and gancho != p["titulo"] else p["titulo"])
             if p.get("responde") and p["responde"] not in respondidas:
                 respondidas.append(p["responde"])
     return titulos, respondidas

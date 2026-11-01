@@ -334,7 +334,7 @@ async def conceptos(c: Cuenta, camp: dict, otras: list[dict]) -> list[dict]:
               + campanas.parametros(camp) + "\n" + temas_tag(camp) + variedad_tag(camp) + referencias_tag(camp)
               + (await campanas.de_tus_clientes(c) if camp.get("clientes") else "")
               + (f"<ideas_anteriores>\n{ya}\n</ideas_anteriores>" if ya else ""))
-    sistema = SISTEMA.format(n=N_CONCEPTOS, max_pilares=MAX_PILARES)
+    sistema = empresa.con_idioma(SISTEMA.format(n=N_CONCEPTOS, max_pilares=MAX_PILARES), await empresa.de(c))
     respuesta = _json(await agent.run_claude(prompt, sistema, max_turns=1, model=config.CONTENT_MODEL))
     salida = [x for x in (limpio(x) for x in respuesta.get("conceptos") or []) if x][:N_CONCEPTOS]
     if not salida:

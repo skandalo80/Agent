@@ -51,7 +51,8 @@ def claude_de_campana(llamadas):
                 {"dia": d, "titulo": f"Post {i + 1}", "subtitulo": "", "caption": f"Texto {i + 1} #cafe",
                  "idea": "" if formato.split(" | ")[0] == "Solo texto" else f"Foto {i + 1}",
                  "prompt": "" if formato.split(" | ")[0] == "Solo texto" else f"Photo {i + 1}",
-                 "responde": "Horario de fin de semana" if i == 0 and "<lo_que_preguntan>" in prompt else ""}
+                 "responde": "Horario de fin de semana" if i == 0 and "<lo_que_preguntan>" in prompt else "",
+                 "palabra": "INFO" if "<regla>" in prompt else "", "dm": "Te mando la info." if "<regla>" in prompt else ""}
                 for i, (d, formato) in enumerate(LINEA.findall(prompt.split("<posts>")[-1]))]})
         if "otra versión" in system:
             foto = {"protagonista": "Una barista", "escenario": "la barra", "accion": "muele café",

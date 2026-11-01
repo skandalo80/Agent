@@ -192,16 +192,20 @@ def test_marca_crear_aprobar_y_publicar(cliente, monkeypatch):
     r = client.get(f"{MARCA}?paso=4")
     assert r.text.count('name="logo_presencia"') == 5 and "Sin logotipo" in r.text and "Paso 4 de 4" in r.text
     assert "url(/panel/static/tarjetas/marca/logo-sin.webp)" in r.text and "Recursos visuales" not in r.text
-    r = client.post(MARCA, headers=ORIGEN, data={"paso": "4", "logo_presencia": "visible"}, follow_redirects=False,
+    assert 'name="hashtags"' in r.text and r.text.count('name="n_hashtags"') == 3 and 'value="6" checked' in r.text
+    r = client.post(MARCA, headers=ORIGEN, data={"paso": "4", "logo_presencia": "visible", "hashtags": "#cafelunar, puebla",
+                                                 "n_hashtags": "3"}, follow_redirects=False,
                     files={"logo": ("logo.png", png(), "image/png")})
     assert r.headers["location"] == f"{MARCA}?paso=resumen"
     guardada = client.portal.call(contenido.marca_de, c)
     assert guardada["logos_presencia"] == ["visible"] and guardada["pasos"] == ["estilo", "colores", "tipografia", "logotipo"]
+    assert guardada["hashtags"] == ["#cafelunar", "#puebla"] and guardada["n_hashtags"] == "3"
     # Ya configurada, Tu marca abre en el resumen, con Editar en cada parte.
     r = client.get("/panel/contenido/marca")
     assert "Así se verá tu contenido" in r.text and r.text.count(">Editar</a>") == 4 and "Completar" not in r.text
     assert "Colores propios · Natural / Sin protagonismo de marca" in r.text and "Playfair Display + Inter" in r.text
     assert "Firma visible" in r.text and "Recursos visuales" not in r.text
+    assert "<b>Hashtags:</b> hasta 3 por post · #cafelunar #puebla" in r.text
     assert '<a class="boton secundario" href="/panel/contenido/campanas/nueva">Crear una campaña</a>' in r.text
     # Cada paso: Aplicar guarda y se queda en el paso; Siguiente guarda y avanza.
     r = client.get(f"{MARCA}?paso=3").text

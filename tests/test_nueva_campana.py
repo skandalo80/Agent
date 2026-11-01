@@ -1364,3 +1364,113 @@ def test_si_el_texto_sale_mal_dos_veces_hay_plan_b_con_plantilla(cliente, monkey
     assert len(proveedor.llamadas) == 5 and client.portal.call(imagenes.usadas, c.store) == (1, 0)
     p = campanas.buscar_post(leer(client, c), texto["k"])
     assert p["post_id"] and "revisar_imagen" not in p
+
+
+def test_la_regla_solo_va_en_los_posts_que_tienen_algo_que_mandar():
+    """Con <regla>, el redactor deja "palabra" vacía en los posts sin nada útil que mandar: esos van sin regla."""
+    fichas = [{"dia": f"2099-01-0{i}", "hora": "09:00", "tipo": t, "formato": "texto", "rol": "", "ve": ""}
+              for i, t in ((5, "producto"), (6, "dato"))]
+    posts = campanas.leer_posts({"posts": [
+        {"dia": "2099-01-05", "titulo": "Precio", "caption": "Comenta PRECIO", "palabra": "PRECIO", "dm": "Cuesta 75"},
+        {"dia": "2099-01-06", "titulo": "Dato", "caption": "Un dato", "palabra": "", "dm": ""}]}, fichas, 1, True, 3, 0)
+    assert posts[0]["regla"]["activa"] and posts[0]["regla"]["clave"] == "PRECIO" and "regla" not in posts[1]
+    assert "los posts que ofrecen algo concreto y útil que mandar por DM" in campanas.SISTEMA_BRIEF
+    assert "los posts que ofrecen algo concreto y útil que mandar por DM" in campanas.SISTEMA
+
+
+def test_aprobar_todas_avisa_de_los_posts_con_cosas_por_confirmar(cliente, monkeypatch):
+    """Aprobar todas: si hay posts con afirmaciones por confirmar que no se han marcado como revisadas, primero una
+    tarjeta con cuáles son; "Ya lo revisé" los quita del aviso; "Aprobar de todos modos" los programa igual."""
+    client, c, _, _ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 10)
+    import app as bot
+    monkeypatch.setattr(bot.agent, "run_claude", claude_de_campana([]))
+    listo(client, c)
+    client.portal.call(c.store.set, "productos", json.dumps([PRODUCTO]))
+    llenar(client)
+    generar(client)
+    camp = leer(client, c)
+    u = campanas.url_de(camp)
+    client.post(u, headers=ORIGEN, data={"accion": "generar_todas"})
+    camp = leer(client, c)
+    a, b = camp["posts"][0], camp["posts"][1]
+    a["verificar"], b["verificar"] = ["Precio de 75 MXN"], ["Horario de 8 a 20"]
+    client.portal.call(c.store.set, "campanas", json.dumps([camp]))
+    r = client.get(u).text
+    assert r.count(">Por confirmar</span>") == 2
+    r = client.post(u, headers=ORIGEN, data={"accion": "aprobar_todas"}).text
+    assert "2 de 6 posts tienen cosas por confirmar" in r and "Precio de 75 MXN" in r and "Aprobar de todos modos" in r
+    assert all(client.portal.call(c.store.post, p["post_id"])["status"] == "borrador" for p in leer(client, c)["posts"])
+    # "Ya lo revisé" en el detalle del primero.
+    r = client.get(f"{u}?post={a['k']}").text
+    assert 'value="verificado">Ya lo revisé</button>' in r
+    r = client.post(u, headers=ORIGEN, data={"accion": "verificado", "k": str(a["k"])}).text
+    assert "ya quedó revisado" in r and "✓ Ya lo revisaste" in r
+    assert campanas.buscar_post(leer(client, c), a["k"])["verificado"] is True
+    r = client.post(u, headers=ORIGEN, data={"accion": "aprobar_todas"}).text
+    assert "1 de 6 posts tienen cosas por confirmar" in r and "Horario de 8 a 20" in r
+    # Aprobar de todos modos: se programan todos.
+    r = client.post(u, headers=ORIGEN, data={"accion": "aprobar_todas", "confirmado": "1"}).text
+    assert "Listo: 6 posts programados" in r
+    assert all(client.portal.call(c.store.post, p["post_id"])["status"] == "programada" for p in leer(client, c)["posts"])
+    assert client.get(u).text.count(">Por confirmar</span>") == 1  # el chip sigue de recordatorio hasta que se publique
+
+
+def test_los_hashtags_de_tu_marca_van_en_cada_post_y_se_acotan(cliente, monkeypatch):
+    """Tu marca: los hashtags de la marca van siempre y el total no pasa del máximo elegido; la regla llega al
+    redactor y el caption se corrige si no la cumplió."""
+    client, c, llamadas, _ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 10)
+    import app as bot
+    monkeypatch.setattr(bot.agent, "run_claude", claude_de_campana(llamadas))
+    listo(client, c)
+    marca = json.loads(client.portal.call(c.store.get, "marca"))
+    marca.update(hashtags=["#cafelunar", "#puebla"], n_hashtags="3")
+    client.portal.call(c.store.set, "marca", json.dumps(marca))
+    client.portal.call(c.store.set, "productos", json.dumps([PRODUCTO]))
+    llenar(client)
+    generar(client)
+    camp = leer(client, c)
+    sistema = next(s for _, s in llamadas if "Escribes los posts" in s)
+    assert "y luego hasta 3 hashtags, siempre con los de la marca (#cafelunar #puebla)" in sistema
+    assert "de 3 a 6 hashtags" not in sistema
+    assert all(p["caption"].endswith("\n\n#cafelunar #puebla #cafe") for p in camp["posts"])  # el fake daba "#cafe"
+    # Sin hashtags: se quitan todos.
+    assert contenido.limitar_hashtags("Hola #a #b", {"n_hashtags": "0"}) == "Hola"
+    assert contenido.regla_hashtags({"n_hashtags": "0"}) == "y sin ningún hashtag"
+    # Ya cumple: el caption se queda tal cual, con sus hashtags donde estaban.
+    assert contenido.limitar_hashtags("Hola #cafelunar y más #x", {"hashtags": ["#cafelunar"]}) == "Hola #cafelunar y más #x"
+    assert contenido.limitar_hashtags("Hola #a #b #c #d #e #f #g", {}) == "Hola\n\n#a #b #c #d #e #f"
+    assert contenido.leer_hashtags("#CaféLunar, puebla #puebla  cafe!") == ["#CaféLunar", "#puebla", "#cafe"]
+
+
+def test_el_contenido_se_escribe_en_el_espanol_del_pais(cliente, monkeypatch):
+    """Perfil de empresa › País: los prompts del brief, el plan y los posts piden ese español en vez del de México."""
+    from igbot import empresa
+    client, c, llamadas, _ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 10)
+    import app as bot
+    monkeypatch.setattr(bot.agent, "run_claude", claude_de_campana(llamadas))
+    listo(client, c)
+    e = json.loads(client.portal.call(c.store.get, "empresa"))
+    client.portal.call(c.store.set, "empresa", json.dumps({**e, "pais": "AR"}))
+    client.portal.call(c.store.set, "productos", json.dumps([PRODUCTO]))
+    llenar(client)
+    generar(client)
+    sistemas = [s for _, s in llamadas]
+    con_pais = [s for s in sistemas if "Español de Argentina, con voseo rioplatense (vos, tenés, querés)" in s]
+    assert len(con_pais) >= 3 and not any("Español de México" in s for s in sistemas)  # brief, plan y posts
+    assert empresa.idioma({}) == "Español de México, tuteando" and empresa.con_idioma("x Español de México, tuteando", {}) == "x Español de México, tuteando"
+    assert empresa.idioma({"pais": "ES"}) == "Español de España, tuteando (vosotros en plural)"
+    assert empresa.idioma({"pais": "XX"}) == empresa.idioma({"pais": "US"}) == "Español neutro de Latinoamérica, tuteando"
+    assert "País: Argentina" in client.portal.call(contenido.negocio_de, c) or "(Argentina)" in client.portal.call(contenido.negocio_de, c)
+
+
+def test_lo_ya_publicado_lleva_el_gancho_de_cada_post():
+    from igbot import informe
+    camps = [{"posts": [{"titulo": "El tueste", "caption": "¿Sabes qué pasa a los 200 grados? Mucho. #cafe"},
+                        {"titulo": "El tueste", "caption": "Otra vez"}, {"titulo": "Sin texto", "caption": ""},
+                        {"titulo": "Largo", "caption": "x" * 300}]}]
+    titulos, _ = informe.ya_hecho(camps)
+    assert titulos[0] == "El tueste — ¿Sabes qué pasa a los 200 grados?" and titulos[1] == "Sin texto"
+    assert titulos[2].startswith("Largo — xxx") and len(titulos) == 3

@@ -326,3 +326,15 @@ def test_una_sola_revision_al_recorrer_los_pasos(cliente, monkeypatch):
     client.portal.call(c.store.set, empresa.CLAVE, json.dumps({**e, "actualizado": 1}))
     client.portal.call(empresa.revisar_y_aplicar, c)
     assert len(revisiones) == 3  # cambió algo que el asistente no lee: no se revisa
+
+
+def test_el_pais_se_guarda_y_decide_el_espanol(cliente):
+    client, c, *_ = cliente
+    r = client.get("/panel/empresa").text
+    assert '<select id="e-pais" name="pais">' in r and '<option value="MX" selected>México</option>' in r
+    client.post("/panel/empresa", headers=ORIGEN, data={**PASO_1, "pais": "AR"}, follow_redirects=False)
+    e = client.portal.call(empresa.de, c)
+    assert e["pais"] == "AR" and empresa.idioma(e).startswith("Español de Argentina, con voseo")
+    assert "Puebla centro (Argentina)" in client.portal.call(test_contenido.contenido.empresa_texto, c)
+    client.post("/panel/empresa", headers=ORIGEN, data={**PASO_1, "pais": "ZZ"}, follow_redirects=False)
+    assert client.portal.call(empresa.de, c)["pais"] == "AR"  # uno inválido no borra el guardado

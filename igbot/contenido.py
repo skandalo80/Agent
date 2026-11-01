@@ -111,6 +111,62 @@ async def marca_post(c: Cuenta, p: dict) -> dict:
     return {**await marca_de(c), **p.get("marca", {})}
 
 
+# Hashtags (Tu marca › Logotipo): los de la marca y cuántos lleva cada post.
+N_HASHTAGS = {"0": "Sin hashtags", "3": "Hasta 3", "6": "De 3 a 6"}
+N_HASHTAGS_INICIAL = "6"
+MAX_HASHTAGS_MARCA = 10
+HASHTAG = re.compile(r"#[\w\u00C0-\u024F]+")
+HASHTAGS_FIJO = "y luego de 3 a 6 hashtags"  # lo que dicen los prompts de fábrica; regla_hashtags lo cambia
+
+
+def hashtags_de(marca: dict) -> list[str]:
+    return [h for h in marca.get("hashtags", []) if isinstance(h, str) and HASHTAG.fullmatch(h)][:MAX_HASHTAGS_MARCA]
+
+
+def leer_hashtags(texto: str) -> list[str]:
+    """Los hashtags que escribió el dueño ("#cafelunar, cafedeespecialidad"), limpios y sin repetir."""
+    vistos, lista = set(), []
+    for crudo in re.split(r"[\s,;]+", str(texto)):
+        h = "#" + re.sub(r"[^\w\u00C0-\u024F]", "", crudo.lstrip("#"))
+        if len(h) > 1 and h.lower() not in vistos:
+            vistos.add(h.lower())
+            lista.append(h)
+    return lista[:MAX_HASHTAGS_MARCA]
+
+
+def n_hashtags_de(marca: dict) -> int:
+    v = str(marca.get("n_hashtags", N_HASHTAGS_INICIAL))
+    return int(v if v in N_HASHTAGS else N_HASHTAGS_INICIAL)
+
+
+def regla_hashtags(marca: dict) -> str:
+    """La regla de hashtags para el redactor, en lugar de HASHTAGS_FIJO."""
+    n, propios = n_hashtags_de(marca), " ".join(hashtags_de(marca))
+    if n == 0:
+        return "y sin ningún hashtag"
+    base = "y luego hasta 3 hashtags" if n == 3 else HASHTAGS_FIJO
+    return base + (f", siempre con los de la marca ({propios}) y el resto propios de ese post" if propios else "")
+
+
+def limitar_hashtags(caption: str, marca: dict) -> str:
+    """El caption con los hashtags como pide Tu marca: ninguno, o los de la marca primero y a lo más n en total. Si ya
+    cumple, vuelve igual (los hashtags se quedan donde los puso el redactor)."""
+    n, propios = n_hashtags_de(marca), hashtags_de(marca)
+    hay = HASHTAG.findall(caption)
+    bajos = {h.lower() for h in hay}
+    if (n == 0 and not hay) or (n and len(hay) <= n and all(h.lower() in bajos for h in propios)):
+        return caption
+    sin = re.sub(r" {2,}", " ", HASHTAG.sub("", caption)).replace(" \n", "\n")
+    sin = re.sub(r"\n{3,}", "\n\n", sin).strip()
+    if n == 0:
+        return sin
+    lista: list[str] = []
+    for h in propios + hay:
+        if h.lower() not in {x.lower() for x in lista}:
+            lista.append(h)
+    return sin + "\n\n" + " ".join(lista[:max(n, len(propios))])
+
+
 def kit(datos: dict, c: Cuenta | None = None, formato: str = "", tema: str = "") -> imagenes.Marca:
     """El kit de marca para rotular. Con la cuenta, lleva también el logo de Tu marca y cuánto se ve en esta pieza
     (según la presencia elegida y si el post es comercial: anuncio, producto o promoción)."""
@@ -436,7 +492,11 @@ async def escribir(c: Cuenta, objetivo: str, tema: str, n_fotos: int, con_precio
               + (f"<precio_del_dueño>{escape(precio)}</precio_del_dueño>\n" if precio else "") +
               f"<fotos_de_referencia>{n_fotos}</fotos_de_referencia>\n<hoy>{tools.now():%Y-%m-%d}</hoy>"
               + (f"\n<estilo_de_la_marca>{estilo}</estilo_de_la_marca>" if estilo else ""))
-    texto = leer_respuesta(await agent.run_claude(prompt, SISTEMA, max_turns=1, model=config.CONTENT_MODEL))
+    from . import empresa  # import tardío: empresa importa este módulo
+    marca = await marca_de(c)
+    sistema = empresa.con_idioma(SISTEMA, await empresa.de(c)).replace(HASHTAGS_FIJO, regla_hashtags(marca))
+    texto = leer_respuesta(await agent.run_claude(prompt, sistema, max_turns=1, model=config.CONTENT_MODEL))
+    texto["caption"] = limitar_hashtags(texto["caption"], marca)
     if precio:
         texto["precio"] = precio  # el que escribió el dueño, tal cual
     elif not con_precio:
