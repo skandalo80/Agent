@@ -142,6 +142,24 @@ document.querySelectorAll('.filtros [data-filtro]').forEach(function (b) {
     vigia.observe(b);
   });
 
+  // Escenas de la portada y de "Un día con Skandar" (estilos en escenas.css): cada una corre cuando se ve
+  // y vuelve a empezar al terminar su ciclo (data-ciclo, en ms); fuera de pantalla se detiene y se reinicia.
+  document.querySelectorAll('.escena[data-ciclo]').forEach(function (escena) {
+    var ciclo = parseInt(escena.dataset.ciclo, 10) || 12000;
+    var reloj = null;
+    var correr = function () {
+      escena.classList.remove('corre');
+      void escena.offsetWidth; // reinicia las animaciones
+      escena.classList.add('corre');
+      reloj = setTimeout(correr, ciclo + 1800);
+    };
+    var vigiaEscena = new IntersectionObserver(function (entradas) {
+      if (entradas[0].isIntersecting) { if (!reloj) correr(); }
+      else { clearTimeout(reloj); reloj = null; escena.classList.remove('corre'); }
+    }, { threshold: 0.35 });
+    vigiaEscena.observe(escena);
+  });
+
   // Chat del teléfono: el cliente escribe, el asistente "teclea" y contesta; al final llega la tarjeta del anuncio.
   var chat = document.querySelector('.telefono .chat');
   if (!chat) return;

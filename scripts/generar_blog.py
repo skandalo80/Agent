@@ -33,7 +33,7 @@ GIROS = RAIZ / "giros"
 PAGINAS = RAIZ / "paginas"
 WEB = RAIZ / "web"
 SITIO = "https://skandar.online"
-CSS_VERSION = "2026-10-31a"
+CSS_VERSION = "2026-11-01a"
 
 # Orden en el índice: el primero es el destacado.
 ORDEN = [
@@ -186,7 +186,7 @@ PIE = """</main>
     </div>
   </div>
 </footer>
-<script src="/sitio.js?v=2026-10-31a"></script>
+<script src="/sitio.js?v=2026-11-01b"></script>
 </body>
 </html>
 """
