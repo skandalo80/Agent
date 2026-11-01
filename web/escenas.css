@@ -71,6 +71,7 @@
 .flota-eti { font-size: 9px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; color: var(--naranja); margin-bottom: 4px; }
 .flota b { font-size: 14px; }
 .flota small { color: var(--tenue); font-size: 11px; }
+.flota-meta { display: flex; align-items: center; gap: 5px; margin-top: 4px; color: var(--texto); }
 
 /* Portada */
 .portada-hook .portada-rejilla { grid-template-columns: 1.05fr .95fr; }
