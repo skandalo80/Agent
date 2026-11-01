@@ -41,6 +41,8 @@ from igbot.pagina_fb import de_facebook
 from igbot.store import Store
 
 logging.basicConfig(level=logging.INFO)
+# httpx anota cada URL completa en INFO, y algunas llevan llaves (client_secret, access_token).
+logging.getLogger("httpx").setLevel(logging.WARNING)
 log = logging.getLogger("igbot")
 
 cuentas = cargar()
@@ -484,7 +486,7 @@ def signature_ok(body: bytes, header: str | None) -> bool:
     # /conectar) según cómo se conectó la cuenta; se aceptan las dos.
     given = header.removeprefix("sha256=")
     return any(hmac.compare_digest(hmac.new(secret.encode(), body, hashlib.sha256).hexdigest(), given)
-               for secret in {config.APP_SECRET, config.IG_OAUTH_SECRET})
+               for secret in {config.APP_SECRET, config.IG_OAUTH_SECRET, config.FB_APP_SECRET})
 
 
 def message_text(message: dict) -> str:

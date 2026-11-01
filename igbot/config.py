@@ -83,8 +83,10 @@ IG_APP_ID = os.getenv("IG_APP_ID", "")
 IG_OAUTH_SECRET = os.getenv("IG_OAUTH_SECRET", "") or APP_SECRET
 SITE_URL = os.getenv("SITE_URL", "https://skandar.online").rstrip("/")
 # Login de Facebook (conectar la página de Facebook y, con ella, su Instagram): el identificador de la app
-# de Meta (Configuración > Básica), no el de Instagram. Su secreto es IG_APP_SECRET. Sin esto no sale el botón.
+# de Meta (Configuración > Básica), no el de Instagram. Sin esto no sale el botón.
 FB_APP_ID = os.getenv("FB_APP_ID", "")
+# La "Clave secreta de la app" de Meta (Configuración > Básica), distinta del secreto de Instagram.
+FB_APP_SECRET = os.getenv("FB_APP_SECRET", "").strip() or APP_SECRET
 FB_SCOPES = os.getenv("FB_SCOPES", "").replace(" ", "")
 # El "ID de configuración" del login de Facebook para empresas (Meta > Inicio de sesión con Facebook para empresas >
 # Configuraciones). Si está, se usa en vez de la lista de permisos.
