@@ -1,7 +1,7 @@
 (cabeceras-bot) {
     header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains"
-        Content-Security-Policy "default-src 'none'; script-src 'self'; font-src 'self'; img-src 'self' https://*.cdninstagram.com https://*.fbcdn.net; style-src 'unsafe-inline'; frame-ancestors 'none'"
+        Content-Security-Policy "default-src 'none'; script-src 'self'; font-src 'self'; img-src 'self' https://*.cdninstagram.com https://*.fbcdn.net; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'"
         X-Content-Type-Options "nosniff"
         X-Frame-Options "DENY"
         Referrer-Policy "no-referrer"

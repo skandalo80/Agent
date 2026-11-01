@@ -13,6 +13,7 @@ lista y el chat abierto con el HTML que manda el servidor, sin recargar.
 import time
 from datetime import datetime
 from html import escape
+from pathlib import Path
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
@@ -52,110 +53,7 @@ MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "
 MESES_LARGOS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre",
                 "octubre", "noviembre", "diciembre"]
 
-CSS = """
-.inbox{display:grid;grid-template-columns:24rem minmax(0,1fr);background:var(--blanco);border-radius:1.5rem;overflow:hidden;min-height:38rem;margin-bottom:1.25rem;scroll-margin-top:1rem}
-.inbox .lista{border-right:1px solid var(--linea-clara);display:flex;flex-direction:column;min-width:0}
-.inbox .lista-vivo{display:flex;flex-direction:column;flex:1;min-width:0}
-.inbox .buscar{padding:1rem 1rem .5rem;margin:0}
-.inbox input[type=search]{width:100%;box-sizing:border-box;font:inherit;font-size:.95rem;padding:.65rem 1rem .65rem 2.4rem;border:1px solid var(--linea-clara);border-radius:999px;background:var(--claro) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%23C9B8D1' stroke-width='2' viewBox='0 0 24 24'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-4-4'/%3E%3C/svg%3E") no-repeat .9rem center}
-.inbox .buscar button{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
-.js .inbox .buscar button{display:none}
-.filtros-chat{display:flex;gap:.1rem;padding:0 .75rem;overflow-x:auto;border-bottom:1px solid var(--linea-clara);font-size:.82rem}
-.filtros-chat a{flex:1;text-align:center;padding:.7rem .45rem;color:var(--gris);text-decoration:none;font-weight:500;border-bottom:2px solid transparent;white-space:nowrap}
-.filtros-chat a.on{color:var(--negro);border-color:var(--acento);font-weight:600}
-.filtros-chat b{display:inline-block;min-width:1.2rem;padding:0 .35rem;margin-left:.25rem;border-radius:999px;background:var(--acento);color:var(--tinta);font-size:.7rem;text-align:center;line-height:1.2rem}
-.filtros-chat b.gris{background:var(--claro);color:var(--gris)}
-.inbox .cuantos{font-size:.75rem;color:var(--gris);padding:.5rem 1rem 0;margin:0}
-.conv{display:flex;gap:.75rem;padding:.85rem 1rem;text-decoration:none;color:inherit;border-bottom:1px solid var(--linea-clara);position:relative}
-.conv:hover{background:rgba(255,255,255,.04)}.conv.on{background:var(--claro)}
-.inbox .avatar{flex:none;width:2.6rem;height:2.6rem;border-radius:50%;background:#3F4147;color:var(--negro);display:grid;place-items:center;font-weight:600;font-size:.95rem}
-.conv .txt{min-width:0;flex:1}
-.conv .arriba{display:flex;justify-content:space-between;gap:.5rem;font-size:.9rem}
-.conv .arriba b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.conv .arriba small{color:var(--gris);font-size:.75rem;white-space:nowrap}
-.conv .ult{display:block;font-size:.85rem;color:var(--texto2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:.1rem 0 .25rem}
-.conv.sin .ult{color:var(--negro);font-weight:600;padding-right:1.25rem}
-.conv .lo-tiene{display:block;font-size:.7rem;color:var(--gris)}
-.conv .lo-tiene.rojo{color:var(--naranja-t);font-weight:600}
-.lados{display:flex;gap:.25rem;margin:0 1rem .5rem;padding:.2rem;border-radius:999px;background:var(--claro)}
-.lados a{flex:1;display:flex;align-items:center;justify-content:center;padding:.45rem .75rem;border-radius:999px;color:var(--gris);text-decoration:none;font-weight:600;font-size:.9rem}
-.lados a.on{background:var(--acento);color:var(--tinta)}
-.lados b{display:inline-block;min-width:1.1rem;margin-left:.35rem;padding:0 .3rem;border-radius:999px;background:var(--neon);color:#1B1C1F;text-align:center;font-size:.7rem;line-height:1.1rem}
-.conv .razon{display:inline-block;margin-right:.4rem;padding:0 .45rem;border-radius:999px;background:var(--claro);color:var(--gris);font-weight:600}
-.conv .razon.anuncio{background:rgba(255,138,61,.16);color:var(--naranja-t)}
-.conv .razon.dato{background:rgba(255,138,61,.16);color:var(--naranja-t)}
-.conv .razon.molesto{background:rgba(255,69,58,.18);color:#ff8a80}
-.lat-item{position:relative}
-.punto-menu{position:absolute;width:.5rem;height:.5rem;border-radius:50%;background:var(--neon);margin:-1.1rem 0 0 1rem;box-shadow:0 0 0 2px #18191C}
-/* Como en WhatsApp: el punto de no leído va a la derecha, debajo de la hora. */
-.punto-sin{position:absolute;right:1rem;top:2.5rem;width:var(--punto-chat);height:var(--punto-chat);border-radius:50%;background:var(--neon)}
-.inbox .vacio{padding:1.5rem 1rem;font-size:.9rem;color:var(--gris)}
-.inbox .lista-vivo .paginas{margin:auto 0 0;padding:.75rem;justify-content:center}
-.hilo{display:flex;flex-direction:column;min-width:0}
-.hilo .cab{display:flex;align-items:center;gap:.85rem;padding:1rem 1.5rem;border-bottom:1px solid var(--linea-clara)}
-.hilo .cab .nom{flex:1;min-width:0}.hilo .cab .nom small{display:block;color:var(--gris);font-size:.8rem}
-.quien-contesta{display:flex;align-items:center;border:1px solid var(--linea-clara);border-radius:999px;padding:.2rem;background:var(--claro);margin:0}
-.quien-contesta button{font:inherit;font-size:.85rem;font-weight:600;border:0;background:transparent;padding:.4rem .9rem;border-radius:999px;cursor:pointer;color:var(--gris)}
-.quien-contesta button[aria-pressed=true]{background:var(--acento);color:var(--tinta);cursor:default}
-.venta-chat{position:relative}
-.venta-chat summary{list-style:none;cursor:pointer;font-size:.85rem;font-weight:600;border:1px solid var(--linea-clara);border-radius:999px;padding:.45rem .9rem;color:var(--gris);white-space:nowrap}
-.venta-chat summary::-webkit-details-marker{display:none}
-.venta-chat[open] summary{color:var(--naranja-t);border-color:rgba(255,138,61,.5)}
-.venta-chat .caja{position:absolute;right:0;top:calc(100% + .5rem);z-index:5;width:17rem;padding:1rem;border-radius:1rem;background:var(--claro);border:1px solid var(--linea-clara);box-shadow:0 12px 30px rgba(0,0,0,.35)}
-.venta-chat form{display:flex;flex-direction:column;gap:.5rem;margin:0}
-.venta-chat label{font-size:.85rem;font-weight:600}
-.venta-chat .fila{display:flex;gap:.5rem}
-.venta-chat input,.venta-chat select{font:inherit;font-size:.9rem;border:1px solid var(--linea-clara);border-radius:.75rem;padding:.5rem .7rem;background:var(--suave);color:inherit;min-width:0}
-.venta-chat input{flex:1}
-.venta-chat small{font-size:.75rem;color:var(--gris)}
-.venta-chat .marcada{flex-direction:row;justify-content:space-between;align-items:center;font-size:.85rem;padding-bottom:.6rem;margin-bottom:.6rem;border-bottom:1px solid var(--linea-clara)}
-.venta-chat .marcada button{font:inherit;font-size:.85rem;background:none;border:0;padding:0;cursor:pointer}
-.hilo .alerta{margin:1rem 1.5rem 0;padding:.75rem 1rem;border-radius:1rem;background:rgba(255,138,61,.12);border:1px solid rgba(255,138,61,.35);color:#E4E4E2;font-size:.9rem}
-.hilo .alerta b,.hilo .alerta strong{color:var(--naranja-t)}
-.hilo .alerta.tuyo{background:var(--claro);border-color:var(--linea-clara);color:#E4E4E2}
-.hilo .alerta form{display:inline;margin:0}
-.hilo .alerta button{font:inherit;font-weight:600;background:none;border:0;padding:0;color:inherit;text-decoration:underline;cursor:pointer}
-/* column-reverse: el chat abre ya abajo, en lo más nuevo, sin JS. */
-.mensajes{flex:1;padding:1.25rem 1.5rem;background:var(--suave);overflow:auto;max-height:32rem;display:flex;flex-direction:column-reverse}
-.mensajes>div{display:flex;flex-direction:column}
-.mensajes .dia{text-align:center;font-size:.75rem;color:var(--gris);margin:.5rem 0 1rem}
-.mensajes .anteriores{text-align:center;font-size:.85rem;margin-bottom:1rem}
-.mensajes .burbuja.de-cliente{background:var(--claro);border:1px solid var(--linea-clara);border-bottom-left-radius:.35rem}
-.mensajes .burbuja.de-bot{background:#3F4147;color:var(--negro);margin-left:auto;border-bottom-right-radius:.35rem}
-.mensajes .burbuja.de-ti{background:var(--acento);color:var(--tinta);margin-left:auto;border-bottom-right-radius:.35rem}
-.mensajes .hora-msg{font-size:.7rem;color:var(--gris);margin:-.3rem 0 .8rem;text-align:right}
-.mensajes .hora-msg.izq{text-align:left}
-.responder{border-top:1px solid var(--linea-clara);padding:1rem 1.5rem;margin:0}
-.responder .opcion{position:static;width:auto;height:auto;overflow:visible;clip:auto;display:flex;gap:.5rem;align-items:flex-start;margin:.6rem 0 0;font-size:.9rem;color:var(--gris)}
-.responder .opcion input{margin-top:.2rem;accent-color:var(--acento)}
-.responder label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
-.responder textarea{width:100%;box-sizing:border-box;font:inherit;font-size:.95rem;border:1px solid var(--linea-clara);border-radius:1rem;padding:.75rem 1rem;resize:vertical;min-height:4.5rem}
-.responder .pie{display:flex;justify-content:space-between;align-items:center;gap:1rem;margin-top:.6rem}
-.responder .pie span{font-size:.8rem;color:var(--gris)}
-.responder.cerrado{font-size:.9rem;color:var(--gris)}
-.hilo .elige{flex:1;display:grid;place-items:center;text-align:center;color:var(--gris);padding:2rem}
-.volver{display:none}
-@media(max-width:860px){.inbox{grid-template-columns:minmax(0,1fr)}.inbox .lista{border-right:0}.inbox.abierto .lista{display:none}.inbox:not(.abierto) .hilo{display:none}
-.volver{display:block;padding:.75rem 1.25rem 0;font-size:.9rem}.hilo .cab{flex-wrap:wrap;padding:.75rem 1.25rem}.hilo .cab .nom{flex-basis:calc(100% - 3.5rem)}
-.quien-contesta{flex-basis:100%;justify-content:center}.quien-contesta button{flex:1}.mensajes,.responder{padding-left:1.25rem;padding-right:1.25rem}.hilo .alerta{margin:.75rem 1.25rem 0}}
-/* Celular con un chat abierto: el chat ocupa toda la pantalla bajo la cabecera, como WhatsApp. Los avisos
-   de arriba y el botón de Skandi se esconden; el cuadro de respuesta queda fijo abajo y sube con el teclado. */
-@media(max-width:860px){
-body:has(.inbox.abierto) main .contenedor>:not(.inbox),body:has(.inbox.abierto) .sk-boton{display:none}
-.inbox.abierto{position:fixed;left:0;right:0;top:calc(3.25rem + 1px);bottom:0;z-index:20;display:flex;flex-direction:column;min-height:0;margin:0;border-radius:0}
-.inbox.abierto .hilo{flex:1;min-height:0}
-.inbox.abierto .volver{padding-top:.6rem}
-.inbox.abierto .cab{padding:.5rem 1.25rem .75rem;gap:.6rem .75rem}
-.inbox.abierto .cab .avatar{display:none}
-.inbox.abierto .cab .nom{flex:1 1 100%}
-.inbox.abierto .venta-chat{flex:none}
-.inbox.abierto .quien-contesta{flex:1 1 10rem}
-.inbox.abierto .mensajes{max-height:none;min-height:0}
-.inbox.abierto .responder{padding:.65rem 1.25rem calc(.65rem + env(safe-area-inset-bottom,0px))}
-.inbox.abierto .responder textarea{min-height:3rem}
-.inbox.abierto .responder .pie{margin-top:.45rem}.inbox.abierto .responder .pie span{font-size:.72rem;line-height:1.3}
-}
-"""
+CSS = (Path(__file__).resolve().parent / "static" / "css" / "conversaciones.css").read_text(encoding="utf-8")
 
 
 def enlace(ver: str, buscar: str = "", hoja: int = 1, chat: str = "", n: int = 0) -> str:

@@ -480,7 +480,7 @@ async def pagina(c: Cuenta, paso: str = "", aviso: str = "", nota: str = "", per
                   "Siguiente</button>"
                   f'<input type="hidden" name="paso" value="{paso}">{cuerpo}</form>')
     return panel.pagina(
-        f"<style>{ESTILO}{panel.COMUN}</style>"
+        f"<style>{ESTILO}</style>"
         + await panel.menu_de(c, "asistente", sub="configura")
         + panel.encabezado("Tu asistente · Configura")
         + '<main class="as-main"><div class="contenedor">'

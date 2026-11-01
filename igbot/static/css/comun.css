@@ -1,0 +1,145 @@
+:root{--caja-fondo:#1B1C1F;--t-color:#F5F5F4}
+/* Antetítulo: chico, en mayúsculas y naranja, en todas las páginas. */
+:is(.antetitulo,.wiz-cab .ante,.as-num,.cab-paso .antetitulo,.camino>.num){display:block;font-size:var(--t-ante);font-weight:var(--peso-ante);letter-spacing:var(--espaciado-ante);text-transform:uppercase;color:var(--acento);line-height:1.4;margin:0 0 .5rem}
+.titulo-fila .antetitulo{margin:0}
+/* Título del paso o de la página y su bajada. */
+:is(.wiz-cab h2,.as-cont .as-h,.cab-paso h2,.camino>h2){font-size:var(--t-titulo);font-weight:var(--peso-titulo);letter-spacing:-.02em;line-height:1.2;margin:0 0 var(--titulo-abajo)}
+/* Sin subtítulo: el título del paso deja su espacio; solo se acerca a un aviso (lo que falta) o a la leyenda de íconos. */
+:is(.wiz-cab h2,.as-cont .as-h,.cab-paso h2):has(+p){margin-bottom:.4rem}
+.cab-paso h2{margin-bottom:.75rem}
+/* Título de tarjeta grande sin subtítulo: el mismo espacio antes del primer campo. */
+:is(.caja-o>h3,.as-caja>legend,.as-pases-t):not(:has(+.sub,+.ayuda)){margin-bottom:var(--tarjeta-titulo-abajo)}
+:is(.wiz-cab .baj,.as-cont .as-baj,.cab-paso p:not(.antetitulo)){font-size:var(--t-bajada);line-height:1.55;color:var(--texto2);margin:0 0 1.5rem;max-width:52rem}
+/* La hoja de cada paso de configuración y de Crear campaña, y las tarjetas de adentro. */
+:is(.wiz-main,.as-cont,.hoja-o){padding:var(--hoja-pad);border:0}
+:is(.as-cont .as-caja,.hoja-o .caja-o,.wiz-res,.wiz-bloque,.bloq-cam>div){background:var(--caja-fondo);padding:var(--caja-pad);border:0;border-radius:var(--caja-radio)!important;box-shadow:6px 9px 18px rgba(12,11,16,.45),var(--clay-luz)}
+.bloqueo-cam{max-width:none}
+/* Título de tarjeta: el mismo en todas (cabecera de resumen, cajas de pasos, Resultados). */
+:is(.cab-tarjeta h3,.as-caja h3,.caja-o h3,.wiz-bloque h3,.wiz-sub,.bloq-cam b,.met-cab>span){font-size:var(--t-tarjeta);font-weight:var(--peso-tarjeta);letter-spacing:0;text-transform:none;color:var(--t-color);line-height:1.3}
+.cab-tarjeta{display:flex;justify-content:space-between;align-items:center;gap:1rem;margin:0 0 .5rem}
+.cab-tarjeta h3{margin:0}
+/* Editar: el mismo botón chico con borde naranja en cada resumen. */
+.cab-tarjeta .editar,.editar{flex:none;font:inherit;font-size:.82rem;font-weight:600;line-height:1.3;color:var(--acento);background:none;border:1px solid rgba(255,138,61,.45);border-radius:999px;padding:.25rem .8rem;text-decoration:none;cursor:pointer;position:static}
+.editar:hover{background:rgba(255,138,61,.1);border-color:var(--acento)}
+/* Pie de cada paso de Configuración: ← Anterior a la izquierda; Aplicar (guarda y te quedas) y Siguiente (guarda y
+   avanza) a la derecha, en naranja. Igual en las tres páginas de Configuración (medidas en ajustes.css). */
+.pie-config{display:flex;align-items:center;gap:var(--pie-hueco) 1rem;flex-wrap:wrap;margin-top:var(--pie-arriba);padding-top:var(--pie-linea);border-top:1px solid rgba(255,255,255,.08)}
+.pie-config .pie-nota{font-size:.85rem;color:var(--texto2)}
+.pie-config .pie-der{display:flex;gap:var(--pie-hueco);margin-left:auto;flex-wrap:wrap}
+.pie-config .boton{padding:var(--boton-pad);font-size:var(--t-boton);line-height:1.2;text-align:center}
+.pie-config .boton.aplicar{background:transparent;color:var(--acento);border:1px solid var(--acento);box-shadow:none}
+.pie-config .boton.aplicar:hover{background:rgba(255,138,61,.1)}
+@media(max-width:560px){.pie-config .pie-der{width:100%}.pie-config .pie-der .boton{flex:1}}
+/* Resumen: dos columnas de tarjetas, con el mismo hueco. */
+:is(.as-resumen,.wiz-resumen,.resumen-tarjetas){display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--hueco)}
+.resumen-tarjetas .caja-o{margin:0}
+.wiz-res>p,.resumen-tarjetas .caja-o>p{margin:0;font-size:var(--t-texto-tarjeta);color:#E4E4E2;line-height:1.55}
+/* Barra de avance: siempre dentro de la barra de pasos, abajo, en lima. */
+:is(.as-pasos,.riel,.wiz-pasos){position:relative!important;top:auto;padding:.6rem .7rem 1.05rem}
+.avance-pasos{position:absolute;left:1.3rem;right:1.3rem;bottom:.45rem;height:.3rem;border-radius:999px;background:#2E3035;overflow:hidden;box-shadow:inset 2px 2px 4px rgba(0,0,0,.4)}
+.avance-pasos i{display:block;height:100%;border-radius:999px;background:var(--neon)}
+.wiz-pasos .sep{display:none}
+/* Cada paso de la barra: mismo relleno, círculo y letras en las cuatro páginas (tamaños en ajustes.css). */
+:is(.as-pasos,.riel,.wiz-pasos) :is(.as-paso,.paso,a,.wiz-paso){display:flex;align-items:center;align-self:flex-start;gap:var(--paso-hueco);padding:var(--paso-pad);line-height:1.2;color:var(--t-color);font-size:var(--t-paso);font-weight:400}
+:is(.as-paso.on,.riel .paso.on,.wiz-pasos a.actual,.wiz-pasos .wiz-paso.actual){background:var(--paso-activo)}
+:is(.as-paso:not(.on),.riel .paso:not(.on),.wiz-pasos a:not(.actual),.wiz-pasos .wiz-paso:not(.actual)):hover{background:rgba(255,255,255,.04)}
+:is(.as-paso b,.riel .paso b,.wiz-pasos a>span,.wiz-pasos .wiz-paso){font-size:var(--t-paso);font-weight:var(--peso-paso);color:var(--t-color);line-height:1.2}
+:is(.as-pasos,.riel,.wiz-pasos) :is(.as-paso,.paso,a,.wiz-paso) small{display:block;margin:.1rem 0 0;font-size:var(--t-paso-sub);font-weight:400;color:var(--texto2);line-height:1.3}
+:is(.as-pasos .as-n,.riel .paso .n,.wiz-pasos a>b,.wiz-pasos .wiz-paso>b){width:var(--paso-circulo);height:var(--paso-circulo);font-size:var(--t-paso-num);font-weight:700}
+/* Márgenes de la página (ajustes.css): el menú y el contenido, en computadora. En el celular siguen los de antes. */
+@media(min-width:901px){
+.lateral{inset:var(--menu-margen) auto var(--menu-margen) var(--menu-margen);width:var(--menu-ancho)}
+html.menu-plegado .lateral{width:var(--menu-ancho-plegado)}
+body:has(>.lateral){padding-left:calc(var(--menu-margen) + var(--menu-ancho) + var(--margen-izq))}
+html.menu-plegado body:has(>.lateral){padding-left:calc(var(--menu-margen) + var(--menu-ancho-plegado) + var(--margen-izq))}
+body:has(>.lateral) .contenedor{padding-left:0;padding-right:var(--margen-der)}
+body:has(>.lateral) main{padding-top:var(--margen-arriba);padding-bottom:var(--margen-abajo)}
+body:has(>.lateral) .compacta{padding-top:var(--margen-arriba)}
+body:has(>.lateral) :is(.compacta+main,.compacta.delgada~main,.compacta.delgada~.oscuro-pag>main){padding-top:1.5rem}
+}
+/* Menú lateral compacto (medidas en ajustes.css): todas las opciones caben al 100% sin deslizar,
+   también con la tarjeta de pasos iniciales. En pantallas bajas se aprieta un poco más. Igual en el celular,
+   donde el menú se abre con la hamburguesa. */
+.lat-item,html.menu-plegado .lat-item{padding-top:var(--menu-item-relleno);padding-bottom:var(--menu-item-relleno);font-size:var(--menu-item-letra)}
+.lat-nav,.lat-abajo{gap:var(--menu-hueco)}
+.lat-cabeza,html.menu-plegado .lat-cabeza{padding-bottom:var(--menu-separacion);margin-bottom:var(--menu-separacion)}
+.lat-etiqueta{padding-top:var(--menu-separacion);padding-bottom:.25rem}
+.lat-abajo{padding:var(--menu-separacion) 0 .35rem}
+.lat-abajo [data-abrir-skandi]{margin-top:.25rem;padding-top:calc(var(--menu-item-relleno) + .25rem)}
+.lat-pie{padding-top:.5rem}
+.pasos-ini>summary{padding-top:.45rem;padding-bottom:.45rem}
+@media(max-height:800px){:root{--menu-item-relleno:var(--menu-item-relleno-bajo);--menu-separacion:var(--menu-separacion-bajo)}}
+@media(max-height:700px){:root{--menu-item-relleno:var(--menu-item-relleno-mini);--menu-separacion:var(--menu-separacion-mini)}}
+/* Celular: si aun así no cabe (teléfono chico), se desliza el menú completo y no una cajita a la mitad
+   que corta las opciones. Con el menú abierto, Skandi minimizada no tapa tu cuenta. */
+@media(max-width:900px){.lateral{overflow-y:auto}.lat-nav{flex:1 0 auto;overflow:visible}}
+.lateral:target~.skandi.minimizada,html.menu-abierto .skandi.minimizada{display:none!important}
+@media(max-width:900px){:is(.as-resumen,.wiz-resumen,.resumen-tarjetas){grid-template-columns:1fr}.avance-pasos{display:none}}
+/* Barra de pasos .wiz-pasos (marca y nueva campaña) en el celular: el paso actual con su nombre y los demás
+   solo con su círculo, para que quepan todos sin deslizar. */
+@media(max-width:900px){
+.wiz-pasos :is(a,.wiz-paso):not(.actual) small,.wiz-pasos :is(a,.wiz-paso).actual small{display:none}
+.wiz-pasos :is(a,.wiz-paso):not(.actual)>span{display:none}
+.wiz-pasos>nav{align-items:center}.wiz-pasos :is(a,.wiz-paso){align-self:center}
+.wiz-pasos :is(a,.wiz-paso).actual{flex:1 1 auto;min-width:0}
+.wiz-pasos :is(a,.wiz-paso).actual>span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wiz-pasos :is(a,.wiz-paso).actual>b{display:none}
+}
+/* Página de marca (.mrc) en el celular: las tarjetas para elegir en columnas (ajustes.css) y el pie del resumen apilado. */
+@media(max-width:560px){
+.mrc .wiz-ops,.mrc .wiz-ops.tres{grid-template-columns:repeat(var(--marca-columnas-cel),minmax(0,1fr));gap:var(--marca-hueco-cel)}
+.mrc .wiz-op .cuerpo{padding:var(--marca-op-pad)}
+.mrc .wiz-op b{font-size:var(--marca-op-titulo)}
+.mrc .wiz-op :is(small,.mrc-lema,.mrc-sensa){font-size:var(--marca-op-texto)}
+.mrc .mrc-sensa{display:none}
+.mrc .mrc-reco{font-size:.66rem}
+.mrc .mrc-recomienda .ico{height:auto;aspect-ratio:1/1}
+.mrc .mrc-colores{grid-template-columns:repeat(2,minmax(0,1fr))}
+.mrc .mrc-subir input[type=file]{max-width:100%}
+.mrc .wiz-pie{flex-direction:column;align-items:stretch}
+.mrc .wiz-pie .boton{text-align:center;white-space:nowrap}
+}
+/* Celular (lote 1). Campos de 16 px: con menos, Safari en iPhone hace zoom al tocarlos. Las barras de pasos
+   caben en el ancho: el paso actual con su nombre (recortado si hace falta) y los demás solo con su número.
+   Las pestañas de Resultados se deslizan de lado. El botón de Skandi, más chico y escondido mientras se
+   escribe; y aire abajo de cada página para que no tape lo último. */
+@media(max-width:560px){
+:is(input:not([type=checkbox],[type=radio],[type=range],[type=file],[type=hidden]),select,textarea){font-size:16px!important}
+.riel .lista,.as-pasos,.wiz-pasos:not(details){overflow:hidden}
+.riel .paso,.as-paso,.wiz-pasos :is(a,.wiz-paso){flex:none;padding:.35rem .4rem;gap:.4rem}
+.riel .paso .n,.as-n,.wiz-pasos :is(a,.wiz-paso) b{width:1.5rem;height:1.5rem;font-size:.72rem}
+.riel .paso.on,.as-paso.on,.wiz-pasos :is(a,.wiz-paso).actual{flex:1 1 auto;min-width:0;padding:.35rem .6rem}
+.riel .paso.on .n,.as-paso.on .as-n{display:none}
+.riel .paso:not(.on)>span:last-child,.as-paso:not(.on)>span:last-child{display:none}
+.riel .paso.on b,.as-paso.on b,.wiz-pasos :is(a,.wiz-paso).actual span{display:block;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.88rem}
+.res-vista{overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}.res-vista a{flex:0 0 auto;padding:.45rem .7rem;font-size:.8rem;white-space:nowrap}
+.sk-boton{width:3rem;height:3rem;right:calc(.9rem + env(safe-area-inset-right,0px));bottom:calc(.9rem + env(safe-area-inset-bottom,0px))}
+.sk-boton svg{width:1.4rem;height:1.4rem}
+body:has(:is(input,textarea):focus:not(.skandi *)) .sk-boton{display:none}
+main{padding-bottom:4.5rem}
+}
+/* Lote 2. Lo de arrastrar solo se cuenta donde hay ratón: en pantallas táctiles no funciona. En celular los
+   filtros del Calendario van plegados tras "Filtros" (abiertos si hay un filtro puesto o al tocar el botón). */
+@media(hover:none){.solo-raton{display:none}}
+.cal-tog{display:none}
+@media(max-width:560px){
+.cal-filtros .cal-tog{display:inline-block}
+.cal-campos{display:none;flex-basis:100%;flex-wrap:wrap;gap:.6rem}
+.cal-filtros:is(.con-filtro,.abierta) .cal-campos{display:flex}
+.cal-filtros .cal-campos input[type=search]{max-width:none}
+.cal-filtros .cal-campos select{flex:1 1 100%;max-width:none;min-width:0}
+}
+@media(min-width:561px){.cal-campos{display:contents}}
+/* Lote 3. Márgenes seguros del iPhone (muesca y barra de inicio) cuando la consola abre como app desde el
+   inicio del celular: la cabecera baja lo de la muesca y lo fijo abajo respeta la barra. Y las tarjetas de
+   personalidad en celular muestran su ejemplo solo en la elegida: la lista pasa de siete pantallas a dos. */
+@media(max-width:900px){
+header.movil{padding-top:env(safe-area-inset-top,0px);padding-left:calc(1.25rem + env(safe-area-inset-left,0px));padding-right:calc(1.25rem + env(safe-area-inset-right,0px));height:auto;min-height:3.25rem}
+.inbox.abierto{top:calc(3.25rem + 1px + env(safe-area-inset-top,0px))}
+.lateral{top:calc(.75rem + env(safe-area-inset-top,0px))}
+main{padding-bottom:calc(4.5rem + env(safe-area-inset-bottom,0px))}
+}
+@media(max-width:560px){
+.as-tarjetas .as-pers:not(:has(input:checked)) :is(.as-lbl,.as-dlg){display:none}
+.as-tarjetas .as-pers:not(:has(input:checked)) .as-uso{margin-bottom:0}
+}
