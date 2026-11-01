@@ -363,6 +363,40 @@ async def existencias(c: Cuenta, buscar: str) -> str:
     return "\n".join(lineas)[:3000]
 
 
+DIAS_VENDIDOS = 30
+MAX_INVENTARIO = 600
+
+
+async def inventario_de(c: Cuenta, nombre: str) -> str:
+    """Lo que hay en la tienda de ese producto, para los prompts de la campaña; "" si no hay tienda conectada, no
+    hay datos o la tienda falla (una campaña nunca se detiene por esto)."""
+    if not nombre.strip() or not await conexion(c):
+        return ""
+    try:
+        texto = await existencias(c, nombre)
+    except Exception:
+        log.exception("Inventario de %s para la campaña de %s", nombre, c.slug)
+        return ""
+    return "" if texto.startswith(("No hay datos", "No se pudo", "La tienda no tiene")) else texto[:MAX_INVENTARIO]
+
+
+def _nombre(linea: str) -> str:
+    return re.sub(r"^\d+\s*×\s*", "", linea).strip().casefold()
+
+
+async def mas_vendidos(c: Cuenta, productos: list[dict], dias: int = DIAS_VENDIDOS) -> list[str]:
+    """Los ids de sus productos que más se vendieron en los últimos `dias` (ventas que llegaron de la tienda), de
+    mayor a menor; [] si no hay ventas. Se cruzan por nombre: el catálogo importado de Shopify usa el título."""
+    vendidos: dict[str, int] = {}
+    for detalle in await c.store.ventas_recientes(time.time() - dias * 86400):
+        for linea in detalle.get("productos") or []:
+            n = re.match(r"^(\d+)\s*×", str(linea))
+            vendidos[_nombre(str(linea))] = vendidos.get(_nombre(str(linea)), 0) + (int(n.group(1)) if n else 1)
+    con_ventas = [(vendidos[str(p.get("nombre", "")).strip().casefold()], p["id"]) for p in productos
+                  if str(p.get("nombre", "")).strip().casefold() in vendidos]
+    return [pid for _, pid in sorted(con_ventas, key=lambda x: -x[0])]
+
+
 def herramientas(c: Cuenta) -> list:
     """La herramienta `existencias` para el asistente de una cuenta con su tienda conectada."""
     from claude_agent_sdk import tool
