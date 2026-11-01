@@ -400,4 +400,16 @@ sudo systemctl start igbot-respaldo && ls ~/respaldos   # prueba ahora mismo
 
 Esto protege contra borrados o una base dañada, pero vive en el mismo disco. Para cubrir que se pierda la instancia, haz de vez en cuando un respaldo del volumen de arranque en Oracle Cloud (Storage → Boot volumes → Create backup; la capa gratuita incluye 5).
 
+Los domingos el mismo script manda el respaldo por correo (`RESPALDO_EMAIL`, o `MAIL_FROM`) en un ZIP cifrado con AES-256 con la frase `RESPALDO_CLAVE` del `.env`: las bases llevan los tokens de los clientes y un correo se queda guardado para siempre. Sin `RESPALDO_CLAVE` no se manda nada, solo un aviso. Se abre con 7-Zip, Keka o `7z x respaldo.zip`. Guarda la frase fuera del servidor (gestor de contraseñas).
+
+## Dependencias con fallas conocidas
+
+Antes de cada deploy conviene revisar las dependencias contra la base de avisos de seguridad de Python:
+
+```bash
+cd ~/ig-bot && bash deploy/revisar-dependencias.sh
+```
+
+Instala `pip-audit` en el venv si falta y revisa `requirements.txt`. Si marca algo, sube esa versión en `requirements.txt` (y corre las pruebas) antes de desplegar.
+
 Para restaurar: `sudo systemctl stop igbot`, copia el `.db` del día a `data/` y `sudo systemctl start igbot`.
