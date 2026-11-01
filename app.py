@@ -418,8 +418,11 @@ def health():
     return {"ok": True}
 
 
-# Los íconos y el logo de skandar.online (web/), para que el panel lleve los mismos.
+# El logo sale de skandar.online (web/). Los íconos de pestaña y de pantalla de inicio son los de
+# la plataforma (igbot/static/iconos/: Sk grafito sobre naranja), distintos a los de la web
+# (Sk sobre grafito) para que se distinga la pestaña del panel de la del sitio.
 WEB = Path(__file__).resolve().parent / "web"
+ICONOS_PLATAFORMA = Path(__file__).resolve().parent / "igbot" / "static" / "iconos"
 ICONOS = {"favicon.ico": "image/x-icon", "favicon-32.png": "image/png", "apple-touch-icon.png": "image/png",
           "icono-192.png": "image/png", "icono-512.png": "image/png",
           "logo-skandar.svg": "image/svg+xml", "logo-sk.svg": "image/svg+xml"}
@@ -435,7 +438,8 @@ MANIFIESTO = {
 
 def _icono(nombre: str):
     def ver():
-        return FileResponse(WEB / nombre, media_type=ICONOS[nombre],
+        carpeta = WEB if nombre.endswith(".svg") else ICONOS_PLATAFORMA
+        return FileResponse(carpeta / nombre, media_type=ICONOS[nombre],
                             headers={"Cache-Control": "public, max-age=604800"})
     return ver
 
