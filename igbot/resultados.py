@@ -29,7 +29,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
-from . import anuncios_meta, metricas, panel
+from . import anuncios_meta, config, metricas, panel
 from .comentarios import SPAM
 from .cuenta import Cuenta
 
@@ -588,7 +588,7 @@ TIPOS_COMENTARIO = {
 }
 MENCION = "mencion"  # interacciones.mencion las guarda en comments con este user_id
 MAX_POSTS_COMENTARIOS = 5
-POST_INFO_SEGUNDOS = 6 * 3600  # la foto de Instagram (su URL vence) y el texto de cada post, guardados un rato
+POST_INFO_SEGUNDOS = 6 * config.HORA  # la foto de Instagram (su URL vence) y el texto de cada post, guardados un rato
 
 
 def tipo_de(matched: str) -> str:
@@ -757,7 +757,7 @@ async def anuncios_html(c: Cuenta, ini: date, fin: date) -> str:
     llegaron). Solo salen las columnas con datos: una tienda ve compras y ventas; un spa, cotizaciones y citas."""
     zona = ZoneInfo(c.timezone)
     desde = datetime(ini.year, ini.month, ini.day, tzinfo=zona).timestamp()
-    hasta = datetime(fin.year, fin.month, fin.day, tzinfo=zona).timestamp() + 86400
+    hasta = datetime(fin.year, fin.month, fin.day, tzinfo=zona).timestamp() + config.DIA
     nuestros = await c.store.por_anuncio(desde, hasta)
     datos = await anuncios_meta.conexion(c)
     meta = await anuncios_meta.por_anuncio(c, ini, fin)

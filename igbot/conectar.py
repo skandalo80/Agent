@@ -112,7 +112,7 @@ async def solicitud(request: Request):
     correo = form.get("correo", "").strip()[:254]
     if not USUARIO.match(usuario) or not nombre or not CORREO.match(correo):
         return back("/conectar?error=datos#paso-1")
-    if await store.solicitudes_since(time.time() - 3600) >= MAX_SOLICITUDES_POR_HORA:
+    if await store.solicitudes_since(time.time() - config.HORA) >= MAX_SOLICITUDES_POR_HORA:
         log.warning("Demasiadas solicitudes en la última hora; se ignora @%s", usuario)
         return back("/conectar?enviado=1#paso-2")
     await store.add_solicitud(usuario, nombre, correo)
@@ -230,7 +230,7 @@ async def exchange(code: str) -> tuple[str, float]:
         })
         check(r)
         data = r.json()
-        return data["access_token"], time.time() + float(data.get("expires_in", 60 * 24 * 3600))
+        return data["access_token"], time.time() + float(data.get("expires_in", 60 * 24 * config.HORA))
 
 
 async def whoami(token: str) -> tuple[str, str, int, int]:

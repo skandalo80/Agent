@@ -168,7 +168,7 @@ def parse_when(text: str) -> float:
         raise ValueError("cuando debe ser 'ahora' o 'AAAA-MM-DD HH:MM'.") from None
     if when.timestamp() < time.time() - 60:
         raise ValueError(f"Esa hora ya pasó ({fmt(when)}).")
-    if when.timestamp() > time.time() + 75 * 86400:
+    if when.timestamp() > time.time() + 75 * config.DIA:
         raise ValueError("Solo se puede programar hasta 75 días adelante.")
     return when.timestamp()
 

@@ -32,7 +32,7 @@ from datetime import date, datetime, timedelta
 from html import escape
 from zoneinfo import ZoneInfo
 
-from . import informe, tools
+from . import config, informe, tools
 from .cuenta import Cuenta, usar
 
 log = logging.getLogger("igbot.metricas")
@@ -92,7 +92,7 @@ def desglose(m: dict) -> dict[str, int]:
 async def insights_del_dia(c: Cuenta, dia: date) -> dict:
     """Los números de un día completo (de 0:00 a 0:00 en la zona de la cuenta)."""
     desde = int(datetime(dia.year, dia.month, dia.day, tzinfo=ZoneInfo(c.timezone)).timestamp())
-    rango = {"period": "day", "metric_type": "total_value", "since": desde, "until": desde + 86400}
+    rango = {"period": "day", "metric_type": "total_value", "since": desde, "until": desde + config.DIA}
     try:
         datos = await c.instagram.insights_cuenta(",".join(METRICAS), **rango)
     except RuntimeError as e:  # alguna no existe para esta cuenta: se piden una por una
@@ -168,7 +168,7 @@ async def horas_activas(c: Cuenta) -> dict[str, float]:
                 suma[int(h)] = suma.get(int(h), 0) + float(n or 0)
     if not dias:
         return {}
-    corrimiento = int((datetime.now(ZoneInfo(c.timezone)).utcoffset() or timedelta()).total_seconds() // 3600)
+    corrimiento = int((datetime.now(ZoneInfo(c.timezone)).utcoffset() or timedelta()).total_seconds() // config.HORA)
     return {str((h + corrimiento) % 24): round(n / dias, 1) for h, n in sorted(suma.items())}
 
 
@@ -231,7 +231,7 @@ async def guardar_temas(c: Cuenta, hoy: date) -> None:
     temas = json.loads(await c.store.get(CLAVE_TEMAS) or "{}")
     for dias in TEMAS_DIAS:
         try:
-            texto = await reporte.topics(c.store, hasta - dias * 86400, hasta, f"los últimos {dias} días")
+            texto = await reporte.topics(c.store, hasta - dias * config.DIA, hasta, f"los últimos {dias} días")
         except Exception:
             log.exception("No se pudieron resumir los temas de %d días para %s", dias, c.slug or "la principal")
             continue

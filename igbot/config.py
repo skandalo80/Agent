@@ -65,6 +65,11 @@ CLAUDE_TIMEOUT_SECONDS = float(os.getenv("CLAUDE_TIMEOUT_SECONDS", "240"))
 # Segundos que se espera a que el usuario termine de escribir antes de contestar.
 DEBOUNCE_SECONDS = float(os.getenv("DEBOUNCE_SECONDS", "5"))
 # Conversaciones que se atienden a la vez (cada una abre un proceso del Agent SDK).
+# Tiempos en segundos, para leer "7 * DIA" en vez de "604800".
+MINUTO = 60
+HORA = 3600
+DIA = 86400
+
 MAX_CONCURRENT = int(os.getenv("MAX_CONCURRENT", "4"))
 # Y de una misma cuenta, para que un cliente con mucho tráfico no frene a los demás.
 MAX_CONCURRENT_PER_ACCOUNT = int(os.getenv("MAX_CONCURRENT_PER_ACCOUNT", "3"))

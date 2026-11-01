@@ -22,7 +22,7 @@ from .tools import now, tz
 
 log = logging.getLogger("igbot.reporte")
 
-WEEK = 7 * 86400
+WEEK = 7 * config.DIA
 
 TOPICS_SYSTEM = (
     "Analizas los mensajes que clientes le mandaron por Instagram a un negocio en {periodo}."

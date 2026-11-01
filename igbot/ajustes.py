@@ -108,7 +108,7 @@ def campos(c: Cuenta, avisos: bool = True) -> str:
 
 
 _revision: dict[str, tuple[float, bool | None]] = {}  # cuenta -> (cuándo, si tiene el permiso de estadísticas)
-REVISION_TTL = 6 * 3600
+REVISION_TTL = 6 * config.HORA
 
 
 async def permiso_estadisticas(c: Cuenta) -> bool | None:
@@ -147,7 +147,7 @@ async def conexion(c: Cuenta) -> tuple[str, str]:
     elif c.ig_via == "sistema":  # Conectar con Meta sin página: su token no vence
         fila("ok", "Instagram conectado", f"@{escape(await panel.usuario(c))} · a través de Meta")
     elif renovado:
-        dias = int((ahora - renovado) // 86400)
+        dias = int((ahora - renovado) // config.DIA)
         quedan = TOKEN_DIAS - dias
         fila("ok" if quedan > 7 else "mal", "Instagram conectado",
              f"@{escape(await panel.usuario(c))} · el acceso se renovó hace {dias} día{'s' if dias != 1 else ''},"

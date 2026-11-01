@@ -531,7 +531,7 @@ def pagina_web(v: dict, aviso: str = "") -> HTMLResponse:
 
 
 def con_cookie(response, token: str):
-    response.set_cookie(COOKIE_WEB, token, max_age=30 * 86400, path="/ayuda", httponly=True,
+    response.set_cookie(COOKIE_WEB, token, max_age=30 * config.DIA, path="/ayuda", httponly=True,
                         secure=True, samesite="lax")
     return response
 

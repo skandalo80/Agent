@@ -55,7 +55,7 @@ async def temas(c: Cuenta) -> dict:
         if guardado := await c.store.get(clave):
             return json.loads(guardado)
         hasta = time.time()
-        desde = hasta - DIAS * 86400
+        desde = hasta - DIAS * config.DIA
         filas = ([("DM", u, t) for u, t in await c.store.client_messages(desde, hasta, 300)]
                  + [("comentario", u, t) for u, t in await c.store.client_comments(desde, hasta, 150)])
         if not filas:

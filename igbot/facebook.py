@@ -319,7 +319,7 @@ async def terminar(p: dict, sesion: str):
             " Instagram; después puedes conectar tu página desde tu panel.")
     ig_id, usuario = str(ig["id"]), ig.get("username", "")
     if not (c := panel.buscar(ig_id)):
-        nueva = await conectar.store.save_conexion(ig_id, usuario, p["access_token"], time.time() + 3650 * 86400)
+        nueva = await conectar.store.save_conexion(ig_id, usuario, p["access_token"], time.time() + 3650 * config.DIA)
         grande = (int(ig.get("followers_count") or 0) > config.CUENTA_GRANDE_SEGUIDORES
                   or int(ig.get("media_count") or 0) > config.CUENTA_GRANDE_POSTS)
         try:
@@ -349,7 +349,7 @@ async def terminar_sin_pagina(ig: dict, sesion: str):
         return _volver("otro_instagram")
     c = panel.buscar(ig_id)
     if not c or c.ig_via == "sistema":  # nueva, o ya conectada así: el token nuevo reemplaza al anterior
-        nueva = await conectar.store.save_conexion(ig_id, usuario, token, time.time() + 3650 * 86400)
+        nueva = await conectar.store.save_conexion(ig_id, usuario, token, time.time() + 3650 * config.DIA)
         grande = (int(ig.get("followers_count") or 0) > config.CUENTA_GRANDE_SEGUIDORES
                   or int(ig.get("media_count") or 0) > config.CUENTA_GRANDE_POSTS)
         try:

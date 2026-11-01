@@ -15,7 +15,7 @@ zona horaria del negocio. Los administradores no tienen tope.
 import contextvars
 import logging
 
-from . import tools
+from . import config, tools
 from .cuenta import cuenta
 from .store import Store
 
@@ -90,7 +90,7 @@ async def cabe_generacion(store: Store, ahora: float | None = None) -> bool:
     from . import config, unavez
     if config.GENERACIONES_HORA <= 0:
         return True
-    return await unavez.cabe(store, "generaciones", config.GENERACIONES_HORA, 3600, ahora)
+    return await unavez.cabe(store, "generaciones", config.GENERACIONES_HORA, config.HORA, ahora)
 
 
 TOPE_GENERACIONES = ("Ya pediste muchas propuestas en la última hora. Espera un rato y vuelve a intentar; lo que ya"

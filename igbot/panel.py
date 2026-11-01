@@ -244,8 +244,8 @@ def cookie_sesion(ig_id: str, vence: int) -> str:
 
 
 def iniciar_sesion(response, ig_id: str) -> None:
-    vence = int(time.time()) + SESSION_DAYS * 86400
-    response.set_cookie(COOKIE, cookie_sesion(ig_id, vence), max_age=SESSION_DAYS * 86400,
+    vence = int(time.time()) + SESSION_DAYS * config.DIA
+    response.set_cookie(COOKIE, cookie_sesion(ig_id, vence), max_age=SESSION_DAYS * config.DIA,
                         path="/panel", secure=True, httponly=True, samesite="lax")
 
 
@@ -1721,7 +1721,7 @@ async def menu_de(c: Cuenta, menu: str, sub: str = "", luces: dict[str, str] | N
     Conversaciones lleva un punto lima si hay chats del lado "Tú" esperando tu respuesta."""
     from .limites import LIMIT_NOTICE
     ahora = time.time()
-    if await c.store.pendientes_tuyos(ahora, ahora - c.human_pause_hours * 3600 - 60,
+    if await c.store.pendientes_tuyos(ahora, ahora - c.human_pause_hours * config.HORA - 60,
                                       ahora - conversaciones.SIN_RESPUESTA, LIMIT_NOTICE):
         luces = {**(luces or {}), "chats": "pendiente"}
     return cabecera(salir=True, menu=menu, cuenta=c, sub=sub, perfil=await usuario(c), foto=await foto_perfil(c),
@@ -1921,9 +1921,9 @@ def hace(t: float) -> str:
     s = time.time() - t
     if s < 60:
         return "hace un momento"
-    if s < 3600:
+    if s < config.HORA:
         return f"hace {int(s // 60)} min"
-    if s < 86400:
+    if s < config.DIA:
         return f"hace {int(s // 3600)} h"
     return "ayer" if s < 2 * 86400 else f"hace {int(s // 86400)} días"
 
@@ -2189,7 +2189,7 @@ async def no_encontrada(request: Request) -> HTMLResponse:
 # Viven en memoria: si igbot se reinicia a la mitad, lo que ya salió se queda guardado y el resto se pide otra vez.
 ESPERA_TRABAJO = 2.0  # segundos que la respuesta espera: lo rápido llega ya terminado, sin página de espera
 RECARGA_TRABAJO = 3  # cada cuánto se recarga la página de espera
-GUARDAR_TRABAJO = 3600  # los terminados se olvidan después de esto
+GUARDAR_TRABAJO = config.HORA  # los terminados se olvidan después de esto
 _trabajos: dict[str, "Trabajo"] = {}
 
 
@@ -2370,7 +2370,7 @@ async def cambiar_pausa(request: Request):
     if accion == "tomar":
         if not await c.store.has_chat(usuario_chat):
             return await panel_de(c, "No encontramos ese chat.", **bandeja)
-        await c.store.pause(usuario_chat, time.time() + c.human_pause_hours * 3600)
+        await c.store.pause(usuario_chat, time.time() + c.human_pause_hours * config.HORA)
         with usar(c):
             nombre = await c.instagram.username(usuario_chat)
         log.info("@%s tomó el chat de %s desde el panel", await usuario(c), usuario_chat)
@@ -2391,7 +2391,7 @@ async def cambiar_pausa(request: Request):
         if await c.store.reabrir(usuario_chat, conversaciones.VENTANA):  # el bucle retomar lo levanta en un minuto
             aviso += " Lo que quedó sin contestar lo responde en un momento."
     else:
-        await c.store.pause(usuario_chat, time.time() + c.human_pause_hours * 3600)
+        await c.store.pause(usuario_chat, time.time() + c.human_pause_hours * config.HORA)
         aviso = f"Listo: {nombre} sigue en pausa {c.human_pause_hours:g} h más."
     log.info("@%s cambió la pausa de %s desde el panel (%s)", await usuario(c), usuario_chat, accion)
     return await panel_de(c, aviso, **bandeja)
@@ -2475,7 +2475,7 @@ async def responder(request: Request):
         await c.store.add_event(usuario_chat, "sin_dato_listo", {})
         aviso = "Enviado. Tu asistente sigue contestando este chat."
     else:
-        await c.store.pause(usuario_chat, time.time() + c.human_pause_hours * 3600)
+        await c.store.pause(usuario_chat, time.time() + c.human_pause_hours * config.HORA)
         aviso = f"Enviado. Tu asistente no contesta en este chat las próximas {c.human_pause_hours:g} h."
     if pregunta and f.get("guardar_faq"):
         from . import empresa  # import tardío: empresa importa el panel

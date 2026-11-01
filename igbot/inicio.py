@@ -17,7 +17,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
-from . import conversaciones, metricas, panel
+from . import config, conversaciones, metricas, panel
 from .cuenta import Cuenta, usar
 
 router = APIRouter(prefix="/panel/inicio")
@@ -67,7 +67,7 @@ def te_falta(pasos: list[tuple[str, str, bool]]) -> str:
 
 async def hoy(c: Cuenta, inicio_dia: float, pendientes: int) -> str:
     store = c.store
-    ayer = inicio_dia - 86400
+    ayer = inicio_dia - config.DIA
     contesto = await store.all_bot_replies_since(inicio_dia)
     contesto_ayer = await store.all_bot_replies_since(ayer) - contesto
     dif = contesto - contesto_ayer
@@ -99,7 +99,7 @@ async def te_esperan(c: Cuenta, ahora: float) -> str:
     """Los chats del lado "Tú" que esperan tu respuesta: primero los que te pasó el asistente."""
     from .limites import LIMIT_NOTICE
     from .tools import RAZONES
-    humano_desde = ahora - c.human_pause_hours * 3600 - 60
+    humano_desde = ahora - c.human_pause_hours * config.HORA - 60
     filas = []
     for filtro in ("nuevos", "sin"):
         pagina, _, _ = await c.store.chats_page(
@@ -209,7 +209,7 @@ async def pagina(c: Cuenta):
     hoy_ = datetime.fromtimestamp(ahora, zona)
     inicio_dia = datetime(hoy_.year, hoy_.month, hoy_.day, tzinfo=zona).timestamp()
     from .limites import LIMIT_NOTICE
-    pendientes = await c.store.pendientes_tuyos(ahora, ahora - c.human_pause_hours * 3600 - 60,
+    pendientes = await c.store.pendientes_tuyos(ahora, ahora - c.human_pause_hours * config.HORA - 60,
                                                 ahora - conversaciones.SIN_RESPUESTA, LIMIT_NOTICE)
     botones = '<a class="boton secundario chico" href="/panel/probar#ultimo">Probar tu asistente</a>'
     if c.imagenes_mes > 0:

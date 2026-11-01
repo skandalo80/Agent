@@ -16,6 +16,8 @@ from pathlib import Path
 
 import aiosqlite
 
+from . import config
+
 # Así empieza lo que contestó el dueño a mano (ver add_owner_message).
 MANUAL = "[contestó una persona del equipo]"
 BUSY_MS = 5000  # cuánto espera una escritura si otra está en curso
@@ -294,10 +296,10 @@ class Store:
         de mensajes enviados (`sent`) solo sirven para reconocer el eco de Meta: duran una semana."""
         ahora = ahora or time.time()
         borrado: dict[str, int] = {}
-        cur = await self.db.execute("DELETE FROM sent WHERE sent_at < ?", (ahora - 7 * 86400,))
+        cur = await self.db.execute("DELETE FROM sent WHERE sent_at < ?", (ahora - 7 * config.DIA,))
         borrado["sent"] = cur.rowcount
         if dias > 0:
-            limite = ahora - dias * 86400
+            limite = ahora - dias * config.DIA
             for tabla in ("messages", "events", "comments"):
                 cur = await self.db.execute(f"DELETE FROM {tabla} WHERE created_at < ?", (limite,))
                 borrado[tabla] = cur.rowcount
@@ -577,18 +579,6 @@ class Store:
         )
         return list(await cur.fetchall())
 
-    async def recent_chats(self, limit: int) -> list[tuple[str, float, str, str, str]]:
-        """Los últimos chats con clientes: (usuario, hora, rol y texto del último mensaje,
-        último mensaje del cliente), del más reciente al más viejo."""
-        cur = await self.db.execute(
-            "SELECT m.user_id, m.created_at, m.role, m.text, COALESCE((SELECT u.text FROM messages u"
-            " WHERE u.user_id = m.user_id AND u.role = 'user' ORDER BY u.id DESC LIMIT 1), '')"
-            " FROM messages m JOIN (SELECT MAX(id) AS id FROM messages WHERE user_id NOT LIKE 'admin:%'"
-            " GROUP BY user_id) ultimo ON m.id = ultimo.id ORDER BY m.id DESC LIMIT ?",
-            (limit,),
-        )
-        return list(await cur.fetchall())
-
     def _chats(self, now: float, humano_desde: float, revisar_antes: float, aviso_limite: str) -> tuple[str, dict]:
         """El WITH que da cada chat con clientes y su estado, para la bandeja de Conversaciones.
         Del lado "Tú" (el chat está en pausa: lo atiende una persona):
@@ -680,12 +670,6 @@ class Store:
     async def has_chat(self, user_id: str) -> bool:
         cur = await self.db.execute("SELECT 1 FROM messages WHERE user_id = ? LIMIT 1", (user_id,))
         return await cur.fetchone() is not None
-
-    async def client_messages_since(self, since: float) -> int:
-        cur = await self.db.execute(
-            "SELECT COUNT(*) FROM messages WHERE role = 'user' AND user_id NOT LIKE 'admin:%' AND created_at >= ?",
-            (since,))
-        return (await cur.fetchone())[0]
 
     async def all_bot_replies_since(self, since: float) -> int:
         """Respuestas del bot a todos los clientes desde `since` (las del dueño llevan mid)."""
@@ -792,24 +776,6 @@ class Store:
         cur = await self.db.execute(sql + " ORDER BY publish_at, id", args)
         return [self._post(r) for r in await cur.fetchall()]
 
-    async def published_page(self, user_id: str, limit: int, offset: int) -> tuple[list[dict], int]:
-        """Una página de lo publicado (de lo más nuevo a lo más viejo) y cuántos hay en total."""
-        cur = await self.db.execute("SELECT COUNT(*) FROM posts WHERE status = 'publicada' AND user_id = ?",
-                                    (user_id,))
-        total = (await cur.fetchone())[0]
-        cur = await self.db.execute(
-            f"SELECT {self.POST_FIELDS} FROM posts WHERE status = 'publicada' AND user_id = ?"
-            " ORDER BY publish_at DESC, id DESC LIMIT ? OFFSET ?", (user_id, limit, offset))
-        return [self._post(r) for r in await cur.fetchall()], total
-
-    async def published_with(self, user_id: str, codes: list[str], since: float) -> list[dict]:
-        """Lo publicado cuyo link lleva alguno de esos códigos de Instagram, o que salió desde `since`."""
-        donde = " OR ".join(["instr(permalink, ?) > 0"] * len(codes) + ["publish_at >= ?"])
-        cur = await self.db.execute(
-            f"SELECT {self.POST_FIELDS} FROM posts WHERE status = 'publicada' AND user_id = ? AND ({donde})"
-            " ORDER BY publish_at DESC, id DESC", (user_id, *codes, since))
-        return [self._post(r) for r in await cur.fetchall()]
-
     async def posts_count(self, statuses: tuple[str, ...], since: float) -> int:
         """Cuántos posts con esos estados salen (o se crearon, si no tienen hora) desde `since`."""
         marks = ",".join("?" * len(statuses))
@@ -910,12 +876,6 @@ class Store:
             "cotizaciones_pdf": await one(f"SELECT COUNT(*) FROM quotes WHERE {window}", since, until),
             "total_pdf": await one(f"SELECT SUM(total) FROM quotes WHERE {window}", since, until),
         }
-
-    async def has_client_messages(self) -> bool:
-        """Si algún cliente ya escribió (sin contar a los administradores)."""
-        cur = await self.db.execute(
-            "SELECT 1 FROM messages WHERE role = 'user' AND user_id NOT LIKE 'admin:%' LIMIT 1")
-        return await cur.fetchone() is not None
 
     async def message_times(self, since: float, until: float, chunk: int = 1000):
         """(usuario, rol, hora, 1 si contestó una persona) de los mensajes con clientes, en orden.

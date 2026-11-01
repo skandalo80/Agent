@@ -22,7 +22,7 @@ log = logging.getLogger("igbot.instagram")
 
 GRAPH = "https://graph.instagram.com"
 MAX_CHARS = 1000  # límite de Instagram por mensaje de texto
-REFRESH_EVERY = 7 * 24 * 3600  # el token dura 60 días; lo renovamos cada semana
+REFRESH_EVERY = 7 * 24 * config.HORA  # el token dura 60 días; lo renovamos cada semana
 # Con el login de Facebook, "me" es la página: estas rutas son de la página (mensajes, botones de inicio y
 # avisos); las demás (publicaciones, estadísticas, datos de la cuenta) van con el id del Instagram.
 DE_LA_PAGINA = ("me/messages", "me/messenger_profile", "me/subscribed_apps")
@@ -361,7 +361,7 @@ class Instagram:
         data = r.json()
         await self.store.set("ig_token", data["access_token"])
         await self.store.set("ig_token_refreshed_at", str(time.time()))
-        days = int(data.get("expires_in", 0)) // 86400
+        days = int(data.get("expires_in", 0)) // config.DIA
         log.info("Token de Instagram renovado; vence en %d días", days)
 
     async def refresh_if_due(self) -> None:
