@@ -53,4 +53,4 @@ Al cerrar el mes, compara las publicaciones por su interacción respecto al alca
 
 ## Cómo lo hacemos en la plataforma
 
-En el plan Community Manager eliges el objetivo, el mensaje, los formatos y la cantidad de posts. La plataforma arma el calendario con tema, formato y hora de cada publicación, escribe los textos y genera las imágenes con tu marca. Apruebas cada post y sale solo a la hora programada.
+En el plan Community Manager escribes un [brief](/blog/como-escribir-el-brief-de-una-campana) con lo que quieres lograr y la plataforma te propone tres caminos. Eliges uno y recibes los posts del mes con tema, formato y hora, con textos que puedes editar. Apruebas, las imágenes se generan con tu marca y cada post sale solo a la hora programada en Instagram y Facebook.
