@@ -256,15 +256,22 @@ def conecta(request: Request):
     if not (correo := correo_alta(request)):
         return RedirectResponse("/panel", status_code=303)
     from . import facebook
+    # Como Manychat ("Connect via Meta"): el login de Meta para empresas se queda en Safari y deja entrar con la
+    # cuenta de Instagram o la de Facebook. La pantalla de Instagram (www.instagram.com/oauth) en el iPhone la abre
+    # la app de Instagram y se queda en "Loading" (enlace universal), así que ahí no se ofrece.
+    iphone = any(x in request.headers.get("user-agent", "") for x in ("iPhone", "iPad", "iPod"))
+    meta = ('<a class="boton" href="/panel/facebook/entrar">Conectar con Meta</a>' if facebook.enabled() else "")
+    solo_ig = ("" if iphone else
+               f'<a class="boton{" secundario" if meta else ""}" href="/conectar/instagram">Solo con Instagram</a>')
     return pagina(
-        "Enlaza tu Instagram",
-        f"Ya comprobamos {escape(correo)}. Último paso: enlaza el Instagram de tu negocio para que tu asistente"
+        "Conecta tu Instagram",
+        f"Ya comprobamos {escape(correo)}. Último paso: conecta el Instagram de tu negocio para que tu asistente"
         " pueda contestar por ti.",
-        '<div class="acciones"><a class="boton" href="/conectar/instagram">Enlazar con Instagram</a>'
-        + ('<a class="boton secundario" href="/panel/facebook/entrar">Enlazar con Facebook</a>'
-           if facebook.enabled() else "") + "</div>"
-        '<p class="nota">Si en el iPhone Instagram se queda cargando, usa Facebook: tu Instagram tiene que'
-        " estar enlazado a una página de Facebook.</p>")
+        f'<div class="acciones">{meta}{solo_ig}</div>'
+        '<p class="nota">Con Meta entras con tu Instagram o tu Facebook, eliges tu portafolio comercial y tu'
+        " cuenta de Instagram, y das los permisos."
+        + (" Si tu Instagram no tiene portafolio ni página de Facebook, termina en tu computadora: entra a"
+           " console.skandar.online con este mismo correo." if iphone else "") + "</p>")
 
 
 # --- entrar con Google: solo el correo (openid email), con el mismo cliente web de Google Calendar ---
