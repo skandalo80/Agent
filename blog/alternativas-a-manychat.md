@@ -48,4 +48,4 @@ Muchos negocios combinan las dos cosas: la inteligencia artificial contesta lo r
 - Si necesitas WhatsApp y muchas integraciones: un constructor de flujos o un CRM.
 - Si tienes equipo de ventas: un CRM con bandeja compartida.
 - Si solo te falta organizar publicaciones: una herramienta de programación.
-- Si quieres que tu Instagram conteste solo y que tu contenido salga de tus mensajes: un asistente con inteligencia artificial como Skandar.
+- Si quieres que tu Instagram conteste solo, agende, cobre y publique con tu marca: un asistente con inteligencia artificial como Skandar.

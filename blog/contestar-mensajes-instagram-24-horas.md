@@ -58,6 +58,10 @@ Automatizar no significa dejar al cliente solo. Una queja, un pedido especial o 
 
 Lo explicamos a detalle en [cuándo un asistente debe pasar la conversación a una persona](/blog/asistente-virtual-pasar-a-persona).
 
+## Cómo lo hace Skandar
+
+Tu asistente contesta por Instagram y Messenger a cualquier hora con tu información, tus precios y tu tono. Agenda citas en tu Google Calendar, cobra con links de Mercado Pago o Stripe dentro del chat y, cuando alguien pide a una persona, se pausa y te avisa por correo. Todo se configura desde el celular en un panel guiado.
+
 ## En resumen
 
 Contestar las 24 horas ya no exige un equipo de guardia. Identifica las preguntas que se repiten, reúne tus respuestas y deja que un asistente las dé por ti, con la regla clara de pasar a una persona cuando hace falta.
