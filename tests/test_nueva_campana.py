@@ -25,15 +25,15 @@ def paso(client, n, ir=None, **datos):
                        data={"paso": str(n), "ir": str(ir or n + 1), **datos})
 
 
-def llenar(client, objetivo="interaccion"):
+def llenar(client, objetivo="interaccion", variedad="coherencia", visual=("productos",)):
     """Los siete pasos, con lo mínimo de cada uno."""
     assert paso(client, 1, objetivo=objetivo).headers["location"] == f"{URL}?paso=2"
     paso(client, 2, mensajes=["producto"], con_producto="1", producto="p1", accion="promo", descuento="20", desde="2099-01-05",
          hasta="2099-01-18")
     paso(client, 3, enfoques=["consejos", "historias"])
     paso(client, 4, formatos=["texto", "titular"], textos_img=["minimo", "titular"])
-    paso(client, 5, visual=["productos"])
-    paso(client, 6, variedad="coherencia")
+    paso(client, 5, visual=list(visual))
+    paso(client, 6, variedad=variedad)
     return paso(client, 7, nombre="Otoño", inicio=LUNES.isoformat(), semanas="1", n_posts="6",
                 dias=["0", "2", "4"], horarios=["manana"])
 
@@ -1191,7 +1191,10 @@ def test_la_pieza_con_texto_se_revisa_y_se_repite_sin_cupo(cliente, monkeypatch)
     assert len(eventos) == 1 and "Pots 1" in eventos[0][1]["motivo"]
     p = campanas.buscar_post(leer(client, c), texto["k"])
     assert p["post_id"] and "revisar_imagen" not in p
-    # Las dos veces mal: se queda la segunda, marcada.
+    # Las dos veces mal en un formato sin plan B (Esto o aquello): se queda la segunda, marcada.
+    camp = leer(client, c)
+    campanas.buscar_post(camp, texto["k"])["formato"] = "vs"
+    client.portal.call(c.store.set, "campanas", json.dumps([camp]))
     verdictos += [{"mal_escritos": [{"esperado": "Post 1", "se_lee": "Post l"}]}] * 2
     client.post(u, headers=ORIGEN, data={"accion": "generar", "k": str(texto["k"])})
     p = campanas.buscar_post(leer(client, c), texto["k"])
@@ -1207,3 +1210,157 @@ def test_la_pieza_con_texto_se_revisa_y_se_repite_sin_cupo(cliente, monkeypatch)
     n = len(vistas)
     client.post(u, headers=ORIGEN, data={"accion": "generar", "k": "98"})
     assert len(vistas) == n and "lower third" not in proveedor.llamadas[-1][0]
+
+
+def con_logo(client, c, presencia: list[str], color=(20, 40, 160)) -> str:
+    """Tu marca con un logo azul (PNG con transparencia) y su presencia; devuelve el token."""
+    from igbot import contenido as cont
+    marca = json.loads(client.portal.call(c.store.get, "marca") or "{}")
+    token = "logo" + "x" * 20
+    img = Image.new("RGBA", (200, 120), (0, 0, 0, 0))
+    for x in range(20, 180):
+        for y in range(20, 100):
+            img.putpixel((x, y), (*color, 255))
+    cont.png_logo(c, token).parent.mkdir(parents=True, exist_ok=True)
+    img.save(cont.png_logo(c, token), "PNG")
+    img.convert("RGB").save(cont.archivo(c, token), "JPEG")
+    marca.update(logo=token, logos_presencia=presencia, logo_presencia=presencia[0])
+    client.portal.call(c.store.set, "marca", json.dumps(marca))
+    return token
+
+
+def imagen_de(client, c, p) -> Image.Image:
+    post = client.portal.call(c.store.post, p["post_id"])
+    token = client.portal.call(c.store.media, post["media_ids"][0])[0]
+    return Image.open(contenido.archivo(c, token))
+
+
+def azul_abajo_derecha(img: Image.Image) -> bool:
+    from igbot import imagenes
+    px = img.getpixel((img.size[0] - imagenes.MARGEN_LOGO - 10, img.size[1] - imagenes.MARGEN_LOGO - 10))
+    return px[2] > 120 > px[0]
+
+
+def test_el_logo_de_tu_marca_va_sobre_las_piezas_segun_su_presencia(cliente, monkeypatch):
+    """Firma discreta: en todas las piezas, chico, abajo a la derecha; y el prompt de la IA deja esa esquina libre.
+    "Solo cuando aporta valor": solo en los posts comerciales (producto, promoción, anuncio)."""
+    from igbot import imagenes
+    client, c, _, proveedor = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 10)
+    import app as bot
+    monkeypatch.setattr(bot.agent, "run_claude", claude_de_campana([]))
+    listo(client, c)
+    con_logo(client, c, ["discreta"])
+    client.portal.call(c.store.set, "productos", json.dumps([PRODUCTO]))
+    llenar(client)
+    generar(client)
+    camp = leer(client, c)
+    u = campanas.url_de(camp)
+    texto = next(p for p in camp["posts"] if p["formato"] == "texto")
+    client.post(u, headers=ORIGEN, data={"accion": "generar", "k": str(texto["k"])})
+    assert imagenes.ESQUINA_LOGO in proveedor.llamadas[-1][0]
+    assert azul_abajo_derecha(imagen_de(client, c, campanas.buscar_post(leer(client, c), texto["k"])))
+    # "Solo cuando aporta valor": un consejo no lleva logo; un post de producto sí.
+    con_logo(client, c, ["clave"])
+    camp = leer(client, c)
+    consejo = next(p for p in camp["posts"] if p["tipo"] not in contenido.COMERCIALES)
+    producto = {**consejo, "k": 97, "tipo": "producto"}
+    camp["posts"].append(producto)
+    client.portal.call(c.store.set, "campanas", json.dumps([camp]))
+    client.post(u, headers=ORIGEN, data={"accion": "generar", "k": str(consejo["k"])})
+    assert imagenes.ESQUINA_LOGO not in proveedor.llamadas[-1][0]
+    assert not azul_abajo_derecha(imagen_de(client, c, campanas.buscar_post(leer(client, c), consejo["k"])))
+    client.post(u, headers=ORIGEN, data={"accion": "generar", "k": "97"})
+    assert imagenes.ESQUINA_LOGO in proveedor.llamadas[-1][0]
+    assert azul_abajo_derecha(imagen_de(client, c, campanas.buscar_post(leer(client, c), 97)))
+    # Sin logotipo: nada, aunque sea comercial.
+    con_logo(client, c, ["sin"])
+    client.post(u, headers=ORIGEN, data={"accion": "generar", "k": "97"})
+    assert imagenes.ESQUINA_LOGO not in proveedor.llamadas[-1][0]
+    assert not azul_abajo_derecha(imagen_de(client, c, campanas.buscar_post(leer(client, c), 97)))
+
+
+def test_consistente_usa_la_primera_pieza_como_ancla_y_acota_las_referencias(cliente, monkeypatch):
+    """Variedad Consistente: la primera imagen de la campaña queda de ancla y las demás la reciben como primera
+    referencia de estilo. Con fotos del producto, estas van con fidelidad alta y en total no pasan de 3 referencias."""
+    client, c, _, proveedor = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 10)
+    import app as bot
+    monkeypatch.setattr(bot.agent, "run_claude", claude_de_campana([]))
+    listo(client, c)
+    fotos = []
+    for i in range(3):  # tres fotos del producto en el Perfil de empresa
+        token = f"prod{i}" + "y" * 19
+        contenido.archivo(c, token).parent.mkdir(parents=True, exist_ok=True)
+        contenido.archivo(c, token).write_bytes(foto_bytes((100 + i, 50, 50)))
+        fotos.append(token)
+    client.portal.call(c.store.set, "productos", json.dumps([{**PRODUCTO, "imagenes": fotos}]))
+    llenar(client, variedad="reconocible", visual=["productos", "propias"])  # con sus propias fotos del producto
+    generar(client)
+    camp = leer(client, c)
+    u = campanas.url_de(camp)
+    client.post(u, headers=ORIGEN, data={"accion": "generar_todas"})
+    camp = leer(client, c)
+    assert camp["ancla"] and all(p["post_id"] for p in camp["posts"])
+    primera = camp["posts"][0]
+    assert campanas.ancla_de(c, camp) == imagen_bytes(client, c, primera)
+    # La primera llamada llevó solo el producto (2 fotos, fieles); las siguientes, el ancla primero y el producto después.
+    assert len(proveedor.llamadas[0][1]) == 2 and proveedor.fiel
+    for prompt, refs in proveedor.llamadas[1:]:
+        assert refs[0] == campanas.ancla_de(c, camp) and len(refs) == 3 and campanas.ANCLA in prompt
+    assert "keep it faithful" in proveedor.llamadas[1][0]
+    # En Equilibrado no hay ancla.
+    llenar(client, variedad="coherencia")
+    generar(client)
+    otra = leer(client, c)
+    client.post(campanas.url_de(otra), headers=ORIGEN, data={"accion": "generar", "k": str(otra["posts"][0]["k"])})
+    assert "ancla" not in leer(client, c) and campanas.ANCLA not in proveedor.llamadas[-1][0]
+
+
+def foto_bytes(color) -> bytes:
+    out = io.BytesIO()
+    Image.new("RGB", (900, 1100), color).save(out, "JPEG")
+    return out.getvalue()
+
+
+def imagen_bytes(client, c, p) -> bytes:
+    post = client.portal.call(c.store.post, p["post_id"])
+    token = client.portal.call(c.store.media, post["media_ids"][0])[0]
+    return contenido.archivo(c, token).read_bytes()
+
+
+def test_si_el_texto_sale_mal_dos_veces_hay_plan_b_con_plantilla(cliente, monkeypatch):
+    """Foto con titular: a la tercera, una foto sin texto rotulada con la plantilla (el texto exacto); Diseño de texto:
+    la pieza de solo texto hecha aquí. Las dos fallidas vuelven al cupo y el post no queda marcado."""
+    from igbot import imagenes, openai_texto
+    client, c, _, proveedor = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 10)
+    import app as bot
+    monkeypatch.setattr(bot.agent, "run_claude", claude_de_campana([]))
+    monkeypatch.setattr(campanas.config, "OPENAI_API_KEY", "sk-prueba")
+    mal = {"mal_escritos": [{"esperado": "Post 1", "se_lee": "Pots 1"}]}
+    vistas, verdictos = [], [mal, mal]
+    monkeypatch.setattr(openai_texto, "json_de", revision_de(verdictos, vistas))
+    listo(client, c)
+    client.portal.call(c.store.set, "productos", json.dumps([PRODUCTO]))
+    llenar(client)
+    generar(client)
+    camp = leer(client, c)
+    u = campanas.url_de(camp)
+    titular = next(p for p in camp["posts"] if p["formato"] == "titular")
+    client.post(u, headers=ORIGEN, data={"accion": "generar", "k": str(titular["k"])})
+    assert len(proveedor.llamadas) == 3 and len(vistas) == 2  # dos diseños revisados y una foto para la plantilla
+    foto_prompt = proveedor.llamadas[-1][0]
+    assert "Do not include any text" in foto_prompt and "Design a finished" not in foto_prompt and "«" not in foto_prompt
+    p = campanas.buscar_post(leer(client, c), titular["k"])
+    assert p["post_id"] and "revisar_imagen" not in p
+    assert client.portal.call(imagenes.usadas, c.store) == (1, 0)
+    assert len(client.portal.call(c.store.events, "imagen_descartada", 0, 4e9)) == 2
+    assert imagen_de(client, c, p).size == (1080, 1350)
+    # Diseño de texto: la pieza de solo texto, sin generador ni cupo.
+    verdictos += [mal, mal]
+    texto = next(p for p in camp["posts"] if p["formato"] == "texto")
+    client.post(u, headers=ORIGEN, data={"accion": "generar", "k": str(texto["k"])})
+    assert len(proveedor.llamadas) == 5 and client.portal.call(imagenes.usadas, c.store) == (1, 0)
+    p = campanas.buscar_post(leer(client, c), texto["k"])
+    assert p["post_id"] and "revisar_imagen" not in p

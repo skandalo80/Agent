@@ -9,7 +9,7 @@ os.environ.update(IG_VERIFY_TOKEN="vt", IG_APP_SECRET="secreto", IG_ACCESS_TOKEN
 
 import httpx  # noqa: E402
 import pytest  # noqa: E402
-from PIL import Image  # noqa: E402
+from PIL import Image, ImageDraw  # noqa: E402
 
 from igbot import imagenes  # noqa: E402
 from igbot.cuenta import cuenta  # noqa: E402
@@ -263,3 +263,58 @@ def test_post_con_texto_no_se_corta_arriba_ni_abajo():
     out = Image.open(io.BytesIO(imagenes._post_completo(buf.getvalue())))
     assert out.size == (imagenes.ANCHO, imagenes.ALTO)
     # un fondo con textura: recorte normal, sin franjas (no hay color que extender)
+
+
+def logo_png(color=(20, 40, 160), fondo=None) -> bytes:
+    """Un logo de 200x120: transparente, o sobre un fondo liso (como el JPG que guarda Tu marca)."""
+    img = Image.new("RGBA", (200, 120), (*fondo, 255) if fondo else (0, 0, 0, 0))
+    ImageDraw.Draw(img).rectangle((20, 20, 180, 100), fill=(*color, 255))
+    out = io.BytesIO()
+    img.save(out, "PNG")
+    return out.getvalue()
+
+
+def test_el_logo_va_tal_cual_en_la_esquina_segun_su_presencia():
+    """Discreta: chico abajo a la derecha; visible: más grande; sin modo o sin logo: la pieza igual."""
+    pieza = imagenes.rotular(foto(1600, 900), "minimal", TEXTO)
+    assert imagenes.poner_logo(pieza, imagenes.Marca()) == pieza
+    assert imagenes.poner_logo(pieza, imagenes.Marca(logo=logo_png(), logo_modo="")) == pieza
+    chica = Image.open(io.BytesIO(imagenes.poner_logo(pieza, imagenes.Marca(logo=logo_png(), logo_modo="discreta"))))
+    grande = Image.open(io.BytesIO(imagenes.poner_logo(pieza, imagenes.Marca(logo=logo_png(), logo_modo="visible"))))
+    assert chica.size == grande.size == (1080, 1350)
+    # El azul del logo aparece en la esquina inferior derecha; en la de arriba no.
+    x, y = 1080 - imagenes.MARGEN_LOGO - 10, 1350 - imagenes.MARGEN_LOGO - 10
+    assert chica.getpixel((x, y))[2] > 120 > chica.getpixel((x, y))[0] and chica.getpixel((x, 60))[0] > 120
+    # El grande cubre más: su azul empieza más a la izquierda.
+    assert grande.getpixel((1080 - imagenes.MARGEN_LOGO - 190, y))[2] > 120 and chica.getpixel((1080 - imagenes.MARGEN_LOGO - 190, y))[0] > 120
+
+
+def test_el_logo_sube_en_las_plantillas_con_texto_abajo_y_en_las_historias():
+    for plantilla in imagenes.LOGO_ARRIBA:
+        pieza = imagenes.rotular(foto(1600, 900), plantilla, TEXTO)
+        con = Image.open(io.BytesIO(imagenes.poner_logo(pieza, imagenes.Marca(logo=logo_png(), logo_modo="discreta"), plantilla)))
+        assert con.getpixel((1080 - imagenes.MARGEN_LOGO - 10, imagenes.MARGEN_LOGO + 10))[2] > 120, plantilla
+    historia = imagenes.rotular(foto(900, 1600), "editorial", TEXTO)
+    con = Image.open(io.BytesIO(imagenes.poner_logo(historia, imagenes.Marca(logo=logo_png(), logo_modo="visible"), historia=True)))
+    assert con.size == (1080, 1920)
+    assert con.getpixel((1080 - imagenes.MARGEN_LOGO - 10, imagenes.ARRIBA_HISTORIA + imagenes.MARGEN_LOGO // 2 + 10))[2] > 120
+
+
+def test_un_logo_sin_transparencia_pierde_su_fondo_y_uno_sin_contraste_lleva_pastilla():
+    # Un JPG con fondo blanco liso: el blanco se vuelve transparente (no queda un cuadro blanco sobre la foto).
+    pieza = imagenes.rotular(foto(1600, 900), "minimal", TEXTO)
+    con = Image.open(io.BytesIO(imagenes.poner_logo(pieza, imagenes.Marca(logo=logo_png(fondo=(255, 255, 255)), logo_modo="visible"))))
+    x, y = 1080 - imagenes.MARGEN_LOGO - 3, 1350 - imagenes.MARGEN_LOGO - 3  # la orilla del logo, que era blanca
+    assert max(con.getpixel((x, y))) < 235
+    # Un logo casi del color del fondo: una pastilla clara detrás para que se lea.
+    oscura = io.BytesIO()
+    Image.new("RGB", (1080, 1350), (30, 30, 34)).save(oscura, "JPEG")
+    con = Image.open(io.BytesIO(imagenes.poner_logo(oscura.getvalue(), imagenes.Marca(logo=logo_png((40, 40, 44)), logo_modo="discreta"))))
+    assert min(con.getpixel((1080 - imagenes.MARGEN_LOGO + 4, 1350 - imagenes.MARGEN_LOGO + 4))) > 180
+
+
+def test_los_disenos_de_la_ia_dejan_libre_la_esquina_del_logo():
+    con = imagenes.Marca(logo=logo_png(), logo_modo="discreta")
+    for prompt in (imagenes.prompt_libre, imagenes.prompt_infografia, imagenes.prompt_anuncio):
+        assert imagenes.ESQUINA_LOGO in prompt("Una taza", TEXTO, con) and imagenes.ESQUINA_LOGO not in prompt("Una taza", TEXTO)
+    assert imagenes.ESQUINA_LOGO not in imagenes.prompt_final("Una taza", "editorial")
