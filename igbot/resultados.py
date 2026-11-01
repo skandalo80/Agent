@@ -290,8 +290,9 @@ async def posts_con_numeros(c: Cuenta, publicadas: list[dict], inicio: datetime 
         else:
             media = await c.store.media(post["media_ids"][0]) if post["media_ids"] else None
             imagen = contenido.url_imagen(c, media[0]) if media else ""
-        salida.append({"post": post, "datos": d, "tasa": informe.tasa(d), "imagen": imagen})
-    salida.sort(key=lambda x: (x["tasa"] is None, -(x["tasa"] or 0)))
+        salida.append({"post": post, "datos": d, "tasa": informe.tasa(d), "pocas": informe.pocas(d), "imagen": imagen})
+    # De mejor a peor; los que llegaron a muy pocas cuentas (su tasa dice poco) después, y sin números al final.
+    salida.sort(key=lambda x: (x["tasa"] is None, x["pocas"], -(x["tasa"] or 0)))
     return salida
 
 
@@ -316,15 +317,15 @@ def por_formato_html(posts: list[dict]) -> str:
         n = len(xs)
         vistas = sum(x["datos"].get("views", 0) for x in xs) / n
         alcance = sum(x["datos"].get("reach", 0) for x in xs) / n
-        con = [x["tasa"] for x in xs if x["tasa"] is not None]
-        inter = sum(x["datos"].get("replies", 0) + x["datos"].get("shares", 0) if tipo == "historia" else informe.interacciones(x["datos"]) for x in xs) / n
-        tasa = f"{sum(con) / len(con):.1f}%".replace(".0%", "%") if con else "—"
+        inter = sum(informe.interacciones(x["datos"]) for x in xs) / n
+        conjunta = informe.tasa_conjunta([x["datos"] for x in xs])
+        tasa = f"{conjunta:.1f}%".replace(".0%", "%") if conjunta is not None else "—"
         filas.append(f"<tr><td>{TIPOS_POST[tipo]}<small> · {n}</small></td><td>{metricas.cifra(vistas)}</td>"
                      f"<td>{metricas.cifra(alcance)}</td><td>{metricas.cifra(inter)}</td><td><b>{tasa}</b></td></tr>")
     return ('<div class="res-formatos"><span class="num">Por formato</span>'
             '<table><tr><th>Formato</th><th>Vistas</th><th>Alcance</th><th>Interacciones</th><th>Interacción</th></tr>'
-            + "".join(filas) + "</table><p class=\"ayuda chica\">Promedios por publicación del periodo. En historias, "
-            "las interacciones son respuestas y compartidos.</p></div>")
+            + "".join(filas) + "</table><p class=\"ayuda chica\">Promedios por publicación del periodo; la interacción es "
+            "la suma de interacciones entre la suma de alcance. En historias, las interacciones son respuestas y compartidos.</p></div>")
 
 
 def numero_post(etiqueta: str, valor) -> str:
@@ -332,6 +333,7 @@ def numero_post(etiqueta: str, valor) -> str:
 
 
 def tarjeta_post(c: Cuenta, x: dict, mejor: bool = False, promedio: float | None = None) -> str:
+    from . import informe
     p, d = x["post"], x["datos"] or {}
     cuando = datetime.fromtimestamp(p["publish_at"] or p["created_at"], ZoneInfo(c.timezone))
     foto = (f'<img src="{escape(x["imagen"])}" alt="" loading="lazy" referrerpolicy="no-referrer">'
@@ -343,6 +345,8 @@ def tarjeta_post(c: Cuenta, x: dict, mejor: bool = False, promedio: float | None
     tipo = TIPOS_POST.get(p.get("tipo") or "post", "Post") + (" · desde Instagram" if p.get("externo") else "")
     if mejor and promedio and x["tasa"]:
         tasa += f'<small class="pp-vs">{x["tasa"] / promedio:.1f}× tu promedio</small>'.replace(".0×", "×")
+    elif x.get("pocas"):
+        tasa += f'<small class="pp-vs">llegó a menos de {informe.MIN_ALCANCE} cuentas</small>'
     if p.get("tipo") == "historia":
         nums = (numero_post("alcance", d.get("reach")) + numero_post("vistas", d.get("views"))
                 + numero_post("respuestas", d.get("replies")) + numero_post("compartidos", d.get("shares")))
@@ -372,11 +376,15 @@ async def seccion_publicaciones(c: Cuenta, d: dict) -> str:
     if not posts:
         return (f'<section class="met-c ancho res-posts">{cabeza}<p class="ayuda">No hubo publicaciones en este periodo.</p>'
                 '<div class="acciones"><a class="boton secundario" href="/panel/contenido">Ir a Calendario</a></div></section>')
+    from . import informe
     con = [x for x in posts if x["tasa"] is not None]
-    promedio = sum(x["tasa"] for x in con) / len(con) if con else None
+    # El promedio es el del conjunto (suma de interacciones entre suma de alcance) de posts y reels; las historias
+    # se miden aparte, en Por formato.
+    promedio = informe.tasa_conjunta([x["datos"] for x in con if x["post"].get("tipo") != "historia"])
     nota = (f'<p class="ayuda chica">Interacción promedio: {promedio:.1f}% (likes, comentarios, guardados y'
-            ' compartidos entre el alcance). Ordenados de mejor a peor.</p>' if con else "")
-    primero, resto = (posts[0], posts[1:]) if con else (None, posts)
+            ' compartidos entre el alcance de tus posts y reels). Ordenados de mejor a peor.</p>'.replace(".0%", "%")
+            if promedio is not None else "")
+    primero, resto = (posts[0], posts[1:]) if con and not posts[0]["pocas"] else (None, posts)
     return (f'<section class="met-c ancho res-posts">{cabeza}{nota}{por_formato_html(posts)}'
             + (tarjeta_post(c, primero, mejor=True, promedio=promedio) if primero else "")
             + (f'<div class="pp-grid">{"".join(tarjeta_post(c, x) for x in resto)}</div>' if resto else "")
@@ -915,7 +923,8 @@ def csv_cuenta(m: dict, d: dict) -> bytes:
     columnas = ["dia", "seguidores", "seguidores_nuevos", "dejaron_de_seguir", "alcance", "alcance_seguidores",
                 "alcance_no_seguidores", "vistas", "vistas_seguidores", "vistas_no_seguidores", "vistas_posts",
                 "vistas_reels", "vistas_historias", "vistas_anuncios", "interacciones", "likes", "comentarios",
-                "compartidos", "guardados", "clics_perfil", "mensajes_recibidos"]
+                "compartidos", "guardados", "respuestas_historias", "interaccion_pct", "cuentas_que_interactuaron",
+                "clics_perfil", "mensajes_recibidos"]
     por_dia = {(d["inicio"] + timedelta(days=i)).date(): n for i, n in enumerate(d["por_dia"])}
     filas = []
     for f, x in zip(m["dias_fechas"], m["serie"] if "dias_serie" not in m else m["dias_serie"]):
@@ -927,7 +936,8 @@ def csv_cuenta(m: dict, d: dict) -> bytes:
                       tipos.get("posts") if tipos else None, tipos.get("reels") if tipos else None,
                       tipos.get("historias") if tipos else None, tipos.get("anuncios") if tipos else None,
                       x.get("interacciones"), x.get("likes"), x.get("comentarios"), x.get("compartidos"),
-                      x.get("guardados"), x.get("clics"), por_dia.get(f)])
+                      x.get("guardados"), x.get("respuestas"), metricas.tasa_dias([x]) if x else None, x.get("cuentas"),
+                      x.get("clics"), por_dia.get(f)])
     return csv_de(filas, columnas)
 
 

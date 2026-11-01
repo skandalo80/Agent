@@ -33,6 +33,8 @@ from .pdf_marca import GRIS, LINEA, NEGRO, Cotizacion
 log = logging.getLogger("igbot.informe")
 
 ACCIONES = ("likes", "comments", "saved", "shares")
+ACCIONES_HISTORIA = ("replies", "shares")  # una historia no tiene likes ni guardados: cuentan respuestas y compartidos
+MIN_ALCANCE = 30  # un post que llegó a menos cuentas muestra su tasa, pero no compite por el mejor ni entra en promedios
 MADURO = 3 * config.DIA  # publicado hace al menos esto para contar en "qué funcionó"
 MAX_HISTORIAL = 30
 MAX_REPORTE = 6  # campañas por PDF
@@ -49,14 +51,32 @@ Responde solo un JSON: {"conclusiones": ["...", "...", "..."]}"""
 
 
 def tasa(d: dict | None) -> float | None:
-    """Tasa de interacción por alcance, en %."""
+    """Tasa de interacción por alcance de una publicación, en %: la que usan Metricool y Hootsuite."""
     if not d or not d.get("reach"):
         return None
     return round(interacciones(d) / d["reach"] * 100, 1)
 
 
 def interacciones(d: dict | None) -> int:
-    return sum(d.get(k, 0) for k in ACCIONES) if d else 0
+    """Likes, comentarios, guardados y compartidos; en una historia (Instagram le da replies y no likes),
+    respuestas y compartidos."""
+    if not d:
+        return 0
+    return sum(d.get(k, 0) for k in (ACCIONES_HISTORIA if "replies" in d and "likes" not in d else ACCIONES))
+
+
+def tasa_conjunta(datos: list[dict | None]) -> float | None:
+    """La tasa de varias publicaciones juntas (una campaña, un formato, un tema, un periodo): la suma de sus
+    interacciones entre la suma de su alcance, en %. Nunca el promedio de las tasas: un post que llegó a 12
+    cuentas pesaría igual que uno que llegó a 2 000."""
+    con = [d for d in datos if d and d.get("reach")]
+    alcance = sum(d["reach"] for d in con)
+    return round(sum(interacciones(d) for d in con) / alcance * 100, 1) if alcance else None
+
+
+def pocas(d: dict | None) -> bool:
+    """Si la publicación llegó a tan pocas cuentas que su tasa no dice nada (3 likes de 12 personas = 25 %)."""
+    return bool(d) and 0 < d.get("reach", 0) < MIN_ALCANCE
 
 
 def franja(hora: str) -> str:
@@ -265,19 +285,25 @@ async def filas(c: Cuenta, camps: list[dict]) -> list[dict]:
     return salida
 
 
+def cuenta_para_promedios(f: dict) -> bool:
+    """Un renglón entra en «Qué funcionó» si ya maduró, tiene números y llegó a suficientes cuentas."""
+    return f["maduro"] and f["tasa"] is not None and not pocas(f["datos"])
+
+
 def por(renglones: list[dict], clave: str) -> list[tuple[str, float, int]]:
-    """Tasa de interacción promedio por tema, formato u horario (solo los posts con 3 días o más)."""
-    grupos: dict[str, list[float]] = {}
+    """Tasa de interacción conjunta por tema, formato u horario (solo los posts con 3 días o más y alcance
+    suficiente), de mejor a peor."""
+    grupos: dict[str, list[dict]] = {}
     for f in renglones:
-        if f["maduro"] and f["tasa"] is not None:
-            grupos.setdefault(f[clave], []).append(f["tasa"])
-    return sorted(((k, round(sum(v) / len(v), 1), len(v)) for k, v in grupos.items()), key=lambda x: -x[1])
+        if cuenta_para_promedios(f):
+            grupos.setdefault(f[clave], []).append(f["datos"])
+    return sorted(((k, tasa_conjunta(v), len(v)) for k, v in grupos.items()), key=lambda x: -x[1])
 
 
 async def ganadores(c: Cuenta, camps: list[dict]) -> dict:
-    """Tasa promedio por tema, formato y horario de todas las campañas (para Repetir lo que funcionó)."""
+    """Tasa conjunta por tema, formato y horario de todas las campañas (para Repetir lo que funcionó)."""
     renglones = await filas(c, camps)
-    return {"posts": sum(1 for f in renglones if f["maduro"] and f["tasa"] is not None),
+    return {"posts": sum(1 for f in renglones if cuenta_para_promedios(f)),
             **{k: por(renglones, k) for k in ("tema", "formato", "franja")}}
 
 
@@ -383,7 +409,7 @@ class Reporte(Cotizacion):
             x += anchos[0]
             self.set_xy(x, y)
             self.font(8.5, bold=True)
-            titulo = f"{i}. {f['titulo']}" + ("*" if not f["maduro"] else "")
+            titulo = f"{i}. {f['titulo']}" + ("*" if not f["maduro"] else "") + ("†" if pocas(f["datos"]) else "")
             self.cell(anchos[1] - 2, 4.4, titulo[:44] + ("…" if len(titulo) > 44 else ""))
             self.set_xy(x, y + 4.6)
             self.font(7.2, color=GRIS)
@@ -634,7 +660,7 @@ async def pdf(c: Cuenta, camps: list[dict], marca: dict, cuenta: str) -> bytes:
     grupos = {k: por(renglones, k) for k in ("tema", "formato", "franja")}
     lista = []
     if con_datos:
-        resumen = {"posts_con_resultados": sum(1 for f in renglones if f["maduro"] and f["tasa"] is not None),
+        resumen = {"posts_con_resultados": sum(1 for f in renglones if cuenta_para_promedios(f)),
                    **{f"tasa_por_{k}": [(nombres[k].get(g, g), v, n) for g, v, n in lista_]
                       for k, lista_ in grupos.items()},
                    "mejores": [(f["titulo"], nombres["tema"].get(f["tema"]), nombres["formato"].get(f["formato"]),
@@ -658,11 +684,11 @@ def _pdf(c: Cuenta, camps: list[dict], marca: dict, cuenta: str, renglones: list
                f"Del {fecha(inicio)} al {fecha(fin)}.")
 
     con_datos = [f for f in renglones if f["datos"]]
-    tasas = [f["tasa"] for f in renglones if f["tasa"] is not None]
+    tasa_total = tasa_conjunta([f["datos"] for f in con_datos])
     doc.datos([("Posts publicados", cifra(len(renglones))),
                ("Alcance total", cifra(sum(f["datos"].get("reach", 0) for f in con_datos))),
                ("Interacciones", cifra(sum(interacciones(f["datos"]) for f in con_datos))),
-               ("Interacción promedio", pct(round(sum(tasas) / len(tasas), 1)) if tasas else "—")])
+               ("Interacción", pct(tasa_total) if tasa_total is not None else "—")])
 
     if not renglones:
         doc.seccion("Todavía no hay resultados", ["Estas campañas aún no tienen posts publicados."])
@@ -682,9 +708,12 @@ def _pdf(c: Cuenta, camps: list[dict], marca: dict, cuenta: str, renglones: list
     doc.font(7.5, color=GRIS)
     doc.multi_cell(doc.epw, 4, "Interacción: likes, comentarios, guardados y compartidos entre el alcance (las cuentas"
                    " que vieron el post), en %. Es la tasa de interacción por alcance que usan Metricool, Hootsuite y"
-                   " Later; compara bien posts que llegaron a distinta cantidad de gente."
+                   " Later; compara bien posts que llegaron a distinta cantidad de gente. La del conjunto es la suma"
+                   " de interacciones entre la suma de alcance."
                    + (" * Publicado hace menos de 3 días: sigue juntando interacciones y no cuenta en «Qué"
-                      " funcionó»." if any(not f["maduro"] for f in renglones) else ""),
+                      " funcionó»." if any(not f["maduro"] for f in renglones) else "")
+                   + (f" † Llegó a menos de {MIN_ALCANCE} cuentas: su tasa dice poco y no cuenta en «Qué funcionó»."
+                      if any(pocas(f["datos"]) for f in renglones) else ""),
                    new_x="LMARGIN", new_y="NEXT")
     doc.ln(6)
 
@@ -694,8 +723,8 @@ def _pdf(c: Cuenta, camps: list[dict], marca: dict, cuenta: str, renglones: list
         doc.font(11, bold=True, color=NEGRO)
         doc.cell(doc.epw, 7, "Qué funcionó", new_x="LMARGIN", new_y="NEXT")
         doc.font(8.5, color=GRIS)
-        doc.cell(doc.epw, 5, "Tasa de interacción promedio de los posts con 3 días o más publicados.", new_x="LMARGIN",
-                 new_y="NEXT")
+        doc.cell(doc.epw, 5, "Interacción de los posts con 3 días o más publicados: la suma de sus interacciones entre"
+                             " la suma de su alcance.", new_x="LMARGIN", new_y="NEXT")
         doc.ln(3)
         doc.barras("Por tema", grupos["tema"], nombres["tema"])
         doc.barras("Por formato", grupos["formato"], nombres["formato"])
@@ -747,9 +776,11 @@ async def posts_pdf(c: Cuenta, titulo: str, filas: list[list], cuenta: str) -> b
         if not filas:
             doc.seccion("Publicaciones", ["No hubo publicaciones en este periodo."])
             return doc.bytes()
-        con = [f[11] for f in filas if f[11] is not None]
+        tasa_total = tasa_conjunta([
+            {"reach": f[5], "likes": f[7] or 0, "comments": f[8] or 0, "saved": f[9] or 0, "shares": f[10] or 0}
+            for f in filas if f[5] and f[2] != "historia"])
         doc.datos([("Publicaciones", cifra(len(filas))),
-                   ("Interacción promedio", f"{sum(con) / len(con):.1f}%" if con else "-"),
+                   ("Interacción", f"{tasa_total:.1f}%" if tasa_total is not None else "-"),
                    ("Alcance total", cifra(sum(f[5] or 0 for f in filas))),
                    ("Vistas totales", cifra(sum(f[6] or 0 for f in filas)))])
         doc.por_dia([(f"{f[0][8:10]}/{f[0][5:7]} · {f[3][:38]}" if f[3] else f"{f[0][8:10]}/{f[0][5:7]}",
@@ -824,13 +855,14 @@ def _resultados_pdf(c: Cuenta, titulo: str, d: dict, m: dict, cuenta: str, vista
                ("Vistas", cifra(m["vistas"]) + (f" ({otros / (seg.get('seguidores', 0) + otros):.0%} de no seguidores)"
                                                 if seg.get("seguidores", 0) + otros else "")),
                ("Interacciones", cifra(sum(inter.values()))),
-               ("Likes", cifra(inter["likes"])), ("Clics a tu perfil", cifra(m["clics"]))])
+               ("Interacción", f"{m['interaccion']:.1f}%" if m.get("interaccion") is not None else "-"),
+               ("Clics a tu perfil", cifra(m["clics"]))])
     if cada != "dia":
         from .resultados import nota_comparacion
         doc.seccion("Comparación", [nota_comparacion(len(m.get("dias_fechas") or m["fechas"]), cada) + "."])
     doc.datos([("Vistas vs. periodo anterior", signo(m.get("vistas_cambio"))),
                ("Alcance vs. anterior", signo(m.get("alcance_cambio"))),
-               ("Interacciones vs. anterior", signo(m.get("interacciones_cambio"))),
+               ("Interacción vs. anterior", f"{m['interaccion_cambio']:+.1f} pts" if m.get("interaccion_cambio") is not None else "-"),
                ("Clics vs. anterior", signo(m.get("clics_cambio"))), ("", "")])
     tipos = m.get("vistas_tipo") or {}
     if tipos:

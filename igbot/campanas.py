@@ -560,7 +560,7 @@ def lo_que_funciono(gano: dict) -> str:
     for dim, (titulo, nombre) in nombres.items():
         if mejores := [(k, tasa) for k, tasa, veces in gano.get(dim, []) if veces >= MIN_PROBADO]:
             k, tasa = mejores[0]
-            lineas.append(f"- {titulo}: {nombre(k)} ({tasa}% de interacción en promedio)")
+            lineas.append(f"- {titulo}: {nombre(k)} ({tasa}% de interacción)")
     return "\n".join(lineas)
 
 
@@ -2130,7 +2130,7 @@ async def tarjeta_campana(c: Cuenta, camp: dict, cual: str, hoy: date, marcar: b
     renglones = await informe.filas(c, [camp]) if cual != "proxima" and completa else []
     con = [f["datos"] for f in renglones if f["datos"]]
     publicados, alcance = len(renglones), sum(d.get("reach", 0) for d in con)
-    tasa = round(sum(informe.interacciones(d) for d in con) / alcance * 100, 1) if alcance else None
+    tasa = informe.tasa_conjunta(con)
     total_posts = n or len(camp["posts"])
     if cual == "proxima":
         mets = (("Posts", str(total_posts)), ("Con imagen", str(sum(1 for p in camp["posts"] if p.get("post_id")))),

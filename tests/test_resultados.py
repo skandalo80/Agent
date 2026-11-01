@@ -321,7 +321,8 @@ def test_rango_personalizado_y_descargas(cliente, monkeypatch):
     assert lineas[0].startswith("dia,seguidores,seguidores_nuevos,dejaron_de_seguir,alcance,alcance_seguidores,")
     assert lineas[0].endswith(",clics_perfil,mensajes_recibidos") and len(lineas) == 8  # 7 días completos (hasta ayer)
     ayer = [x for x in lineas if x.startswith((hoy - timedelta(days=1)).isoformat())][0]
-    assert ayer == f"{(hoy - timedelta(days=1)).isoformat()},101,2,1,41,30,10,100,60,40,70,30,,,7,5,,,,1,0"  # el mensaje fue hoy
+    # ... likes 5 y nada más: 5 / 41 = 12.2 % de interacción, sin cuentas que interactuaron; el mensaje fue hoy
+    assert ayer == f"{(hoy - timedelta(days=1)).isoformat()},101,2,1,41,30,10,100,60,40,70,30,,,7,5,,,,,12.2,,1,0"
     r = client.get(f"/panel/resultados/descargar?desde={desde.isoformat()}&fin={fin.isoformat()}&archivo=csv")
     assert f"resultados-instagram-{desde.isoformat()}-al-{fin.isoformat()}.csv" in r.headers["content-disposition"]
     assert len(r.content.decode("utf-8-sig").splitlines()) == 11
