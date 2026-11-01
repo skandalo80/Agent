@@ -43,6 +43,9 @@ CUENTAS = [c.strip() for c in os.getenv("CUENTAS", "").split(",") if c.strip()]
 # Meta manda los avisos de todas las cuentas de la app al mismo webhook. El
 # proceso que los recibe se los reenvía tal cual a los de las otras cuentas
 # (lista separada por comas, p. ej. http://127.0.0.1:8002/webhook).
+# Etiqueta Human Agent de Meta: deja que una PERSONA conteste hasta 7 días después del último mensaje del cliente
+# (sin ella, 24 h). Hace falta pedir el permiso "Human Agent" en App Review; hasta entonces, 0.
+HUMAN_AGENT_TAG = os.getenv("HUMAN_AGENT_TAG", "0") == "1"
 FORWARD_WEBHOOKS = [u.strip() for u in os.getenv("FORWARD_WEBHOOKS", "").split(",") if u.strip()]
 
 # Modelo barato para reconocer variantes de las palabras clave en comentarios.

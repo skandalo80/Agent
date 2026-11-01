@@ -1052,6 +1052,25 @@ def test_el_asistente_no_pudo_contestar_se_ve_en_el_chat_y_reactivar_retoma(clie
     assert p(store.paused_until, "beto") < time.time()
 
 
+def test_con_human_agent_el_panel_contesta_hasta_7_dias(cliente, monkeypatch):
+    from igbot import config
+    client, c, *_ = cliente
+    store = c.store
+    p = client.portal.call
+    p(store.add_incoming, "caro", "m2", "Hola, ¿precios?")
+    p(store.db.execute, "UPDATE messages SET created_at = created_at - 90000 WHERE role = 'user'")  # hace 25 h
+    assert "Instagram solo deja contestar dentro de las 24 horas" in client.get("/panel/asistente?chat=caro").text
+    monkeypatch.setattr(config, "HUMAN_AGENT_TAG", True)
+    r = client.get("/panel/asistente?chat=caro")
+    assert 'action="/panel/responder#chats"' in r.text and "7 días" not in r.text
+    r = client.post("/panel/responder", headers=ORIGEN, data={"usuario": "caro", "texto": "Te paso la lista."})
+    assert "Enviado." in r.text and c.instagram.sent == [("caro", "Te paso la lista.")]
+    p(store.db.execute, "UPDATE messages SET created_at = created_at - 600000 WHERE role = 'user'")  # más de 7 días
+    r = client.post("/panel/responder", headers=ORIGEN, data={"usuario": "caro", "texto": "¿Sigues ahí?"})
+    assert "Ya pasaron 7 días" in r.text and len(c.instagram.sent) == 1
+    assert "dentro de los 7 días" in client.get("/panel/asistente?chat=caro").text
+
+
 def test_menu_js_antes_de_pintar(cliente):
     client, *_ = cliente
     html = client.get("/panel").text

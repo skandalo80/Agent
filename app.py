@@ -614,8 +614,8 @@ async def entrar_mencion(c: Cuenta, user_id: str, mid: str, url: str) -> None:
 async def entrar_adjuntos(c: Cuenta, user_id: str, message: dict) -> None:
     with usar(c), limites.rubro(limites.ATENCION):
         text = await adjuntos.texto(c, message)
-        if story := ((message.get("reply_to") or {}).get("story") or {}).get("id"):
-            text = await historias.respuesta(c, user_id, str(story), text)
+        if story := (message.get("reply_to") or {}).get("story") or {}:
+            text = await historias.respuesta(c, user_id, str(story.get("id")), text, story.get("url") or "")
         if await c.store.add_incoming(user_id, message["mid"], limites.trim(text)):
             dispatchers[c.slug].notify(user_id)
 
@@ -673,13 +673,14 @@ async def receive_entry(c: Cuenta, entry: dict) -> None:
             # Lo mencionaron en una historia: se describe la imagen (tarda unos segundos) y luego entra a la cola.
             in_background(entrar_mencion(c, user_id, message["mid"], url))
             continue
-        if adjuntos.tiene(message) and not admin.is_admin(user_id):
-            # Fotos y audios: se describen o transcriben (tarda unos segundos) y luego entran a la cola.
+        story = (message.get("reply_to") or {}).get("story") or {}
+        if (adjuntos.tiene(message) or story.get("id")) and not admin.is_admin(user_id):
+            # Fotos, audios y respuestas a historias: se describen o transcriben (tarda unos segundos) y luego
+            # entran a la cola. El asistente debe saber de qué historia hablan para contestar sobre esa.
             in_background(entrar_adjuntos(c, user_id, message))
             continue
-        if story := ((message.get("reply_to") or {}).get("story") or {}).get("id"):
-            # Respondió a una historia: el asistente debe saber cuál era para contestar sobre esa.
-            text = await historias.respuesta(c, user_id, str(story), message.get("text", ""))
+        if story.get("id"):
+            text = await historias.respuesta(c, user_id, str(story["id"]), message.get("text", ""), story.get("url") or "")
         if not admin.is_admin(user_id):
             text = limites.trim(text)
         else:

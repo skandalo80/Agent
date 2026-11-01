@@ -2426,12 +2426,13 @@ async def responder(request: Request):
         return await panel_de(c, "No encontramos ese chat.", **(bandeja | {"chat": ""}))
     if not texto:
         return await panel_de(c, "Escribe tu respuesta antes de enviarla.", **bandeja)
-    if time.time() - await c.store.last_message_from(usuario_chat) >= conversaciones.VENTANA:
-        return await panel_de(c, "Ya pasaron 24 horas desde su último mensaje: Instagram no deja contestarle"
+    if time.time() - await c.store.last_message_from(usuario_chat) >= conversaciones.ventana_panel():
+        plazo = "7 días" if config.HUMAN_AGENT_TAG else "24 horas"
+        return await panel_de(c, f"Ya pasaron {plazo} desde su último mensaje: Instagram no deja contestarle"
                               " hasta que te vuelva a escribir.", **bandeja)
     try:
         with usar(c):
-            await c.instagram.send_text(usuario_chat, texto)
+            await c.instagram.send_text(usuario_chat, texto, humano=True)  # lo escribió una persona: etiqueta Human Agent
     except Exception:
         log.exception("No se pudo mandar la respuesta del panel a %s", usuario_chat)
         return await panel_de(c, "Instagram no aceptó el mensaje. Intenta de nuevo en un momento o contéstale"

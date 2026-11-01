@@ -46,7 +46,7 @@ class FakeInstagram:
     def __init__(self):
         self.sent = []
 
-    async def send_text(self, user_id, text):
+    async def send_text(self, user_id, text, humano=False):
         self.sent.append((user_id, text))
 
     async def subscribe(self, fields):

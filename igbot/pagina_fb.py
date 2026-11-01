@@ -76,11 +76,12 @@ class Pagina:
 
     # --- Messenger ---
 
-    async def enviar(self, recipient: dict, message: dict) -> None:
+    async def enviar(self, recipient: dict, message: dict, **extra) -> None:
+        """`extra`: p. ej. la etiqueta Human Agent ({"messaging_type": "MESSAGE_TAG", "tag": "HUMAN_AGENT"})."""
         if psid := recipient.get("id"):
             recipient = {"id": psid.removeprefix(PREFIJO)}
         data = await self._graph("POST", f"{await self.page_id()}/messages", json={
-            "recipient": recipient, "message": message, "messaging_type": "RESPONSE"})
+            "recipient": recipient, "message": message, "messaging_type": "RESPONSE", **extra})
         # Igual que en Instagram: se anota para reconocer el eco y no confundirlo con el dueño.
         if mid := data.get("message_id"):
             await self.store.add_sent(mid)
