@@ -54,13 +54,14 @@ def redirect_uri() -> str:
     return f"{config.PUBLIC_URL}/panel/facebook/callback"
 
 
-def _dialogo() -> RedirectResponse:
+def _dialogo(solo_ig: bool = False) -> RedirectResponse:
     state = conectar.nuevo_state()
+    config_id = config.FB_CONFIG_ID_IG if solo_ig and config.FB_CONFIG_ID_IG else config.FB_CONFIG_ID
     url = f"https://www.facebook.com/{config.API_VERSION}/dialog/oauth?" + urlencode({
         "client_id": config.FB_APP_ID, "redirect_uri": redirect_uri(), "state": state,
         "response_type": "code",
         # Login de Facebook para empresas: la "configuración" de Meta dice qué permisos pide; sin ella, la lista.
-        **({"config_id": config.FB_CONFIG_ID} if config.FB_CONFIG_ID else {"scope": SCOPES})})
+        **({"config_id": config_id} if config_id else {"scope": SCOPES})})
     r = RedirectResponse(url, status_code=303)
     r.set_cookie(STATE_COOKIE, state, max_age=TTL, path="/panel/facebook", secure=True, httponly=True,
                  samesite="lax")
@@ -68,9 +69,9 @@ def _dialogo() -> RedirectResponse:
 
 
 @router.get("/entrar")
-def entrar():
-    """Desde la página de entrar: iniciar sesión con Facebook."""
-    return _dialogo() if enabled() else RedirectResponse("/panel", status_code=303)
+def entrar(solo: str = ""):
+    """Desde la página de entrar: iniciar sesión con Facebook. ?solo=ig: la configuración "Solo Instagram"."""
+    return _dialogo(solo == "ig") if enabled() else RedirectResponse("/panel", status_code=303)
 
 
 @router.post("/conectar")
@@ -101,11 +102,37 @@ async def paginas_del_codigo(code: str) -> list[dict]:
             "grant_type": "fb_exchange_token", "client_id": config.FB_APP_ID,
             "client_secret": config.APP_SECRET, "fb_exchange_token": r.json()["access_token"]})
         _check(r)
+        global _ultimo_token
+        _ultimo_token = r.json()["access_token"]
         r = await http.get(f"{base}/me/accounts", params={
-            "access_token": r.json()["access_token"], "limit": 100,
+            "access_token": _ultimo_token, "limit": 100,
             "fields": "id,name,access_token,instagram_business_account{id,username,followers_count,media_count}"})
         _check(r)
         return [p for p in r.json().get("data", []) if p.get("id") and p.get("access_token")]
+
+
+_ultimo_token = ""  # el token de usuario del último login (solo para el diagnóstico de abajo)
+
+
+async def diagnostico_sin_paginas() -> None:
+    """Sin páginas: deja en el registro qué Instagram ve Meta en sus portafolios (prueba de "Solo Instagram").
+    Leer con: sudo journalctl -u igbot --since "10 min ago" | grep "META SIN PAGINA"."""
+    if not _ultimo_token:
+        return
+    base = f"{FB_GRAPH}/{config.API_VERSION}"
+    consultas = {
+        "permisos": ("/me/permissions", {}),
+        "portafolios": ("/me/businesses", {"fields": "id,name,owned_instagram_accounts{id,username},"
+                                                     "instagram_business_accounts{id,username}"}),
+        "me_instagram": ("/me", {"fields": "id,name,accounts{id,name}"}),
+    }
+    async with httpx.AsyncClient(timeout=15) as http:
+        for nombre, (ruta, params) in consultas.items():
+            try:
+                r = await http.get(base + ruta, params={**params, "access_token": _ultimo_token})
+                log.warning("META SIN PAGINA %s %s: %s", nombre, r.status_code, r.text[:1500])
+            except httpx.HTTPError as e:
+                log.warning("META SIN PAGINA %s: %s", nombre, e)
 
 
 def _ig(p: dict) -> dict:
@@ -144,6 +171,7 @@ async def callback(request: Request):
         return _volver("fallo") if sesion else _sin_sesion(
             "No pudimos conectar", "Facebook no nos dejó entrar esta vez. Intenta de nuevo en un momento.")
     if not paginas:
+        await diagnostico_sin_paginas()
         return _volver("sin_paginas") if sesion else _sin_sesion(
             "No encontramos tu página", "Tu Facebook no tiene páginas, o no nos diste permiso de usarlas."
             " Crea una página para tu negocio o entra con tu Instagram.")
