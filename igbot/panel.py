@@ -699,6 +699,9 @@ label.check input[type=email]{flex:1;max-width:22rem;margin:0}
 .fmt-cam.f-collage{background:#862839}.fmt-cam.f-vs{background:#8e2c3e}.fmt-cam.f-bento{background:#962f42}
 .cli-cam{display:inline-block;width:max-content;max-width:100%;font-size:.7rem;font-weight:600;color:#C6FA2C;background:rgba(198,250,44,.08);border:1px solid rgba(198,250,44,.35);border-radius:999px;padding:.05rem .45rem;margin:0}
 p.cli-cam{margin:.5rem 0 0;font-size:.78rem;border-radius:.6rem;padding:.3rem .6rem;width:auto}
+.cli-cam.ver,.cli-cam.rev-img{color:#FF8A3D;background:rgba(255,138,61,.1);border-color:rgba(255,138,61,.4)}
+.verificar .boton{margin-left:.5rem;vertical-align:middle}.verificar .ok{color:#C6FA2C;margin-left:.5rem}
+.tarjeta.extra ul.confirmar{margin:.4rem 0 .8rem 1.1rem;padding:0;font-size:.9rem;color:var(--secundario,#A8A8AE)}
 .clientes-cam{margin-top:1rem}
 .lista-cam{margin:.5rem 0 1rem}
 .tabs-cam{display:flex;gap:.4rem;border-bottom:1px solid var(--linea-clara);margin:0 0 1rem}

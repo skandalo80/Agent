@@ -27,8 +27,8 @@ from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
 from . import imagenes, panel
-from .contenido import (archivo, estilos_de, guardar_fotos, marca_de, png_logo, preparar_logo, sin_plan, url_imagen,
-                        usos_color)
+from .contenido import (N_HASHTAGS, archivo, estilos_de, guardar_fotos, hashtags_de, leer_hashtags, marca_de, n_hashtags_de,
+                        png_logo, preparar_logo, sin_plan, url_imagen, usos_color)
 from .cuenta import Cuenta
 from .estilos import (COLORES, COMBINACION_INICIAL, COMBINACIONES, ESTILOS, LETRAS, LOGO_INICIAL, LOGO_PRESENCIA,
                       MAX_ESTILOS, MUESTRA_TEXTO, MUESTRA_TITULAR, PALETA_INICIAL, PALETAS, RECOMENDADOS,
@@ -326,7 +326,20 @@ def paso_logotipo(c: Cuenta, marca: dict) -> str:
             " la primera es la que más usamos.</p>"
             f'<input type="hidden" name="orden_logo" value="{",".join(elegidos)}">'
             f'<div class="wiz-ops mrc-logos" data-orden="orden_logo" data-campo="logo_presencia"'
-            f' data-max="{len(LOGO_PRESENCIA)}">{tarjetas}</div>')
+            f' data-max="{len(LOGO_PRESENCIA)}">{tarjetas}</div>' + hashtags_html(marca))
+
+
+def hashtags_html(marca: dict) -> str:
+    """Tus hashtags (opcional): los de la marca, que van en cada post, y cuántos lleva cada post en total."""
+    n = str(n_hashtags_de(marca))
+    opciones = "".join(f'<label class="opc"><input type="radio" name="n_hashtags" value="{k}"{" checked" if k == n else ""}>{v}</label>'
+                       for k, v in N_HASHTAGS.items())
+    return ('<h3 class="wiz-sub">Tus hashtags <span class="suave">· opcional</span></h3>'
+            '<p class="ayuda">Los de tu marca van en todos tus posts; el resto los elige la IA según cada post.</p>'
+            '<label class="t" for="m-hashtags">Hashtags de tu marca</label>'
+            f'<input type="text" id="m-hashtags" name="hashtags" maxlength="300" value="{escape(" ".join(hashtags_de(marca)))}"'
+            ' placeholder="#tumarca #tuciudad">'
+            f'<fieldset class="campo-o grupo-o"><legend class="t">¿Cuántos hashtags por post?</legend><div class="opcs">{opciones}</div></fieldset>')
 
 
 def resumen(c: Cuenta, marca: dict) -> str:
@@ -356,7 +369,9 @@ def resumen(c: Cuenta, marca: dict) -> str:
     nombre_logo = " + ".join(LOGO_PRESENCIA[k][0] for k in logos)
     desc_logo = LOGO_PRESENCIA[logos[0]][1] if len(logos) == 1 else "Varía según la publicación; la primera es la que más usamos."
     logo_html = (f'<div class="mrc-fila">{f"<img class=mrc-logo-mini src={url} alt=>" if url else "<span class=mrc-logo-mini>Sin logo</span>"}'
-                 f"<span><b>{nombre_logo}</b><small>{desc_logo}</small></span></div>")
+                 f"<span><b>{nombre_logo}</b><small>{desc_logo}</small></span></div>"
+                 f'<p class="mrc-hashtags"><b>Hashtags:</b> {N_HASHTAGS[str(n_hashtags_de(marca))].lower()} por post'
+                 + (f" · {escape(' '.join(hashtags_de(marca)))}" if hashtags_de(marca) else "") + "</p>")
     return (
         '<div class="wiz-cab"><p class="ante">Resumen</p><h2>Así se verá tu contenido</h2></div>'
         '<div class="wiz-resumen">'
@@ -428,6 +443,10 @@ def guardar_paso(f, antes: dict, paso: str) -> tuple[dict, str]:
     elif paso == "logotipo":
         logos = en_orden(f, "logo_presencia", "orden_logo", LOGO_PRESENCIA, len(LOGO_PRESENCIA)) or logos_de(antes)
         datos["logos_presencia"], datos["logo_presencia"] = logos, logos[0]
+        if "hashtags" in f:
+            datos["hashtags"] = leer_hashtags(f.get("hashtags", ""))
+        if f.get("n_hashtags") in N_HASHTAGS:
+            datos["n_hashtags"] = f["n_hashtags"]
     datos["pasos"] = [k for k in CLAVES if k in set(antes.get("pasos", [])) | {paso}]
     return datos, ""
 
