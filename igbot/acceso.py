@@ -269,10 +269,8 @@ def conecta(request: Request):
         f"Ya comprobamos {escape(correo)}. Último paso: conecta el Instagram de tu negocio para que tu asistente"
         " pueda contestar por ti.",
         f'<div class="acciones">{meta}{solo_ig}</div>'
-        '<p class="nota">Con Meta entras con tu Instagram o tu Facebook, eliges tu portafolio comercial y tu'
-        " cuenta de Instagram, y das los permisos."
-        + (" Si tu Instagram no tiene portafolio ni página de Facebook, termina en tu computadora: entra a"
-           " console.skandar.online con este mismo correo." if iphone else "") + "</p>")
+        '<p class="nota">Con Meta entras con tu Instagram o tu Facebook, eliges tu cuenta de Instagram y das los'
+        " permisos. No necesitas página de Facebook.</p>")
 
 
 # --- entrar con Google: solo el correo (openid email), con el mismo cliente web de Google Calendar ---

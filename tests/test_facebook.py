@@ -275,3 +275,65 @@ def test_el_codigo_se_cambia_con_el_secreto_de_la_app_de_meta(monkeypatch):
     except Exception:
         pass
     assert vistos and vistos[0].get("client_secret") == "secreto-meta"
+
+
+def test_sin_pagina_va_por_graph_facebook_con_el_id_del_instagram_tambien_los_mensajes():
+    with usar(con_cuenta(IG_ACCOUNT_ID="1784", IG_VIA="sistema")):
+        assert api("me/messages") == f"https://graph.facebook.com/{config.API_VERSION}/1784/messages"
+        assert api("me/media") == f"https://graph.facebook.com/{config.API_VERSION}/1784/media"
+        assert api("me/subscribed_apps") == f"https://graph.facebook.com/{config.API_VERSION}/1784/subscribed_apps"
+
+
+def test_conectar_con_meta_sin_pagina_crea_la_cuenta(con_facebook, monkeypatch):
+    client, *_ = con_facebook
+    client.cookies.clear()  # alguien nuevo desde el celular
+
+    async def del_codigo(code):
+        return []  # "Solo Instagram": sin páginas
+
+    async def sin_pagina():
+        return {"id": "3003", "username": "skandi.prueba", "followers_count": 10, "token": "t-sistema"}
+
+    monkeypatch.setattr(facebook, "paginas_del_codigo", del_codigo)
+    monkeypatch.setattr(facebook, "instagram_sin_pagina", sin_pagina)
+    q = parse_qs(urlsplit(client.get("/panel/facebook/entrar?solo=ig", follow_redirects=False).headers["location"]).query)
+    r = client.get(f"/panel/facebook/callback?code=x&state={q['state'][0]}", follow_redirects=False)
+    assert r.headers["location"] == "https://console.skandar.online/panel" and "panel=" in r.headers["set-cookie"]
+    nueva = bot.buscar("3003")
+    assert nueva and nueva.ig_via == "sistema"
+    env = open(f"clientes/{nueva.slug}/.env").read()
+    assert "IG_ACCESS_TOKEN=t-sistema" in env and "IG_VIA=sistema" in env
+    assert "a través de Meta" in client.get("/panel/conexion").text
+
+
+def test_instagram_sin_pagina_lee_la_cuenta_elegida(monkeypatch):
+    vistos = []
+
+    class Resp:
+        def __init__(self, datos):
+            self.datos, self.status_code, self.is_error = datos, 200, False
+        def json(self):
+            return self.datos
+        def raise_for_status(self):
+            pass
+
+    class Cliente:
+        def __init__(self, *a, **k): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): pass
+        async def get(self, url, params=None, **k):
+            vistos.append(url)
+            if url.endswith("/debug_token"):
+                return Resp({"data": {"type": "SYSTEM_USER", "user_id": "u9"}})
+            if url.endswith("/u9/assigned_instagram_accounts"):
+                return Resp({"data": [{"id": "1784"}]})
+            return Resp({"id": "1784", "username": "skandiconsulting"})
+
+    monkeypatch.setattr(facebook.httpx, "AsyncClient", Cliente)
+
+    async def correr():
+        facebook._token_actual.set("t-sis")
+        return await facebook.instagram_sin_pagina()
+
+    ig = asyncio.run(correr())
+    assert ig == {"id": "1784", "username": "skandiconsulting", "token": "t-sis"}

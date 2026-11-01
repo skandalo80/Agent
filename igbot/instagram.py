@@ -2,7 +2,9 @@
 
 Una cuenta se conecta de dos formas: con el login de Instagram (lo normal; token de Instagram, en
 graph.instagram.com) o con el login de Facebook (IG_VIA=facebook en su .env; el token es el de su página
-y todo va por graph.facebook.com con el id de su Instagram en lugar de "me"). Los métodos son los mismos.
+y todo va por graph.facebook.com con el id de su Instagram en lugar de "me"). Con "Conectar con Meta" sin página
+(IG_VIA=sistema) el token es de usuario del sistema de su portafolio y todo, mensajes incluidos, va por
+graph.facebook.com con el id de su Instagram. Los métodos son los mismos.
 """
 import asyncio
 import hashlib
@@ -30,8 +32,16 @@ def por_facebook() -> bool:
     return cuenta().ig_via == "facebook"
 
 
+def sin_pagina() -> bool:
+    return cuenta().ig_via == "sistema"
+
+
 def api(path: str) -> str:
     """La dirección de la API para `path`, según cómo se conectó la cuenta."""
+    if sin_pagina():
+        if path == "me" or path.startswith("me/"):
+            path = cuenta().ig_account_id + path[2:]
+        return f"{FB_GRAPH}/{config.API_VERSION}/{path}"
     if not por_facebook():
         return f"{GRAPH}/{config.API_VERSION}/{path}"
     if (path == "me" or path.startswith("me/")) and not path.startswith(DE_LA_PAGINA):
@@ -70,6 +80,8 @@ class Instagram:
             headers={"Authorization": f"Bearer {await self.token()}"},
             json={"recipient": recipient, "message": message},
         )
+        if r.is_error:
+            log.error("Meta no aceptó el mensaje (%s): %s", r.status_code, r.text[:500])
         r.raise_for_status()
         # Se anota el id para reconocer el eco y no confundirlo con el dueño.
         if mid := r.json().get("message_id"):
@@ -202,6 +214,8 @@ class Instagram:
             params={"subscribed_fields": fields},
             headers={"Authorization": f"Bearer {await self.token()}"},
         )
+        if r.is_error:
+            log.error("Meta no suscribió la cuenta (%s): %s", r.status_code, r.text[:500])
         r.raise_for_status()
         log.info("Cuenta suscrita a: %s", fields)
 
@@ -343,8 +357,8 @@ class Instagram:
 
     async def refresh_if_due(self) -> None:
         """Renueva el token si ya pasó una semana (lo llama el bucle de fondo de app.py)."""
-        if por_facebook():
-            return  # el token de una página no vence
+        if por_facebook() or sin_pagina():
+            return  # el token de una página o de un usuario del sistema no vence
         last = float(await self.store.get("ig_token_refreshed_at") or 0)
         if time.time() - last > REFRESH_EVERY:
             await self.refresh_token()

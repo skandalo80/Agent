@@ -11,6 +11,7 @@ Dos caminos, con el mismo login de Facebook:
 El token de usuario se cambia por uno de 60 días y con él se piden sus páginas; el token de cada página
 que sale así no vence. Sin FB_APP_ID en .env no sale nada de esto.
 """
+import contextvars
 import logging
 import secrets
 import time
@@ -108,22 +109,53 @@ async def paginas_del_codigo(code: str) -> list[dict]:
             log.info("Token de Facebook sin cambiar a 60 días (%s): se usa el que llegó", r.status_code)
         else:
             token = r.json().get("access_token", token)
-        global _ultimo_token
-        _ultimo_token = token
+        _token_actual.set(token)
         r = await http.get(f"{base}/me/accounts", params={
-            "access_token": _ultimo_token, "limit": 100,
+            "access_token": token, "limit": 100,
             "fields": "id,name,access_token,instagram_business_account{id,username,followers_count,media_count}"})
         _check(r)
         return [p for p in r.json().get("data", []) if p.get("id") and p.get("access_token")]
 
 
-_ultimo_token = ""  # el token de usuario del último login (solo para el diagnóstico de abajo)
+# El token del login en curso (lo deja paginas_del_codigo en el contexto de esa misma petición).
+_token_actual: contextvars.ContextVar[str] = contextvars.ContextVar("token_facebook", default="")
+
+
+async def instagram_sin_pagina() -> dict:
+    """Con "Solo Instagram" (token de usuario del sistema de su portafolio, sin página): el Instagram que eligió
+    en Meta, con su token. Vacío si no hay."""
+    if not (token := _token_actual.get()):
+        return {}
+    base = f"{FB_GRAPH}/{config.API_VERSION}"
+    async with httpx.AsyncClient(timeout=15) as http:
+        try:
+            r = await http.get(f"{base}/debug_token", params={
+                "input_token": token, "access_token": f"{config.FB_APP_ID}|{config.FB_APP_SECRET}"})
+            datos = (r.json().get("data") or {}) if r.status_code == 200 else {}
+            if datos.get("type") != "SYSTEM_USER" or not (uid := str(datos.get("user_id") or "")):
+                return {}
+            r = await http.get(f"{base}/{uid}/assigned_instagram_accounts", params={"access_token": token})
+            _check(r)
+            ids = [str(x["id"]) for x in r.json().get("data", []) if x.get("id")]
+            if not ids:
+                return {}
+            if len(ids) > 1:
+                log.warning("Eligió %d Instagram en Meta; se conecta el primero (%s)", len(ids), ids[0])
+            r = await http.get(f"{base}/{ids[0]}", params={
+                "fields": "id,username,followers_count,media_count", "access_token": token})
+            if r.is_error:
+                log.warning("No se pudo leer el Instagram %s: %s", ids[0], r.text[:300])
+            ig = r.json() if r.status_code == 200 else {}
+        except (httpx.HTTPError, ValueError):
+            log.exception("No se pudo leer el Instagram de Meta sin página")
+            return {}
+    return {**ig, "id": ids[0], "token": token}
 
 
 async def diagnostico_sin_paginas() -> None:
     """Sin páginas: deja en el registro qué Instagram ve Meta en sus portafolios (prueba de "Solo Instagram").
     Leer con: sudo journalctl -u igbot --since "10 min ago" | grep "META SIN PAGINA"."""
-    if not _ultimo_token:
+    if not (token := _token_actual.get()):
         return
     base = f"{FB_GRAPH}/{config.API_VERSION}"
     consultas = {
@@ -131,7 +163,7 @@ async def diagnostico_sin_paginas() -> None:
         "portafolios": ("/me/businesses", {"fields": "id,name,owned_instagram_accounts{id,username},"
                                                      "instagram_business_accounts{id,username}"}),
         "me_instagram": ("/me", {"fields": "id,name,accounts{id,name}"}),
-        "debug_token": ("/debug_token", {"input_token": _ultimo_token}),
+        "debug_token": ("/debug_token", {"input_token": token}),
         # Con token de usuario del sistema (configuración "Solo Instagram") los activos se ven por aquí.
         "me_negocio": ("/me", {"fields": "id,name,client_business_id"}),
         "me_cuentas": ("/me/accounts", {"fields": "id,name,instagram_business_account{id,username}"}),
@@ -142,7 +174,7 @@ async def diagnostico_sin_paginas() -> None:
     async with httpx.AsyncClient(timeout=15) as http:
         for nombre, (ruta, params) in consultas.items():
             try:
-                quien = f"{config.FB_APP_ID}|{config.FB_APP_SECRET}" if nombre == "debug_token" else _ultimo_token
+                quien = f"{config.FB_APP_ID}|{config.FB_APP_SECRET}" if nombre == "debug_token" else token
                 r = await http.get(base + ruta, params={**params, "access_token": quien})
                 log.warning("META SIN PAGINA %s %s: %s", nombre, r.status_code, r.text[:1500])
                 if nombre == "me_negocio" and r.status_code == 200:
@@ -162,7 +194,7 @@ async def diagnostico_sin_paginas() -> None:
             ruta, _, q = ruta.partition("?")
             params = dict(x.split("=", 1) for x in q.split("&") if x)
             try:
-                r = await http.get(base + ruta, params={**params, "access_token": _ultimo_token,
+                r = await http.get(base + ruta, params={**params, "access_token": token,
                                                         **({"system_user_id": uid} if "system_user_access" in ruta else {})})
                 texto = r.text if "system_user_access" not in ruta else ("con datos" if '"access_token"' in r.text else r.text)
                 log.warning("META SIN PAGINA %s %s: %s", ruta, r.status_code, texto[:1500])
@@ -206,6 +238,10 @@ async def callback(request: Request):
         return _volver("fallo") if sesion else _sin_sesion(
             "No pudimos conectar", "Facebook no nos dejó entrar esta vez. Intenta de nuevo en un momento.")
     if not paginas:
+        if ig := await instagram_sin_pagina():
+            r = await terminar_sin_pagina(ig, sesion)
+            r.delete_cookie(STATE_COOKIE, path="/panel/facebook")
+            return r
         await diagnostico_sin_paginas()
         return _volver("sin_paginas") if sesion else _sin_sesion(
             "No encontramos tu página", "Tu Facebook no tiene páginas, o no nos diste permiso de usarlas."
@@ -306,7 +342,38 @@ async def terminar(p: dict, sesion: str):
     return r
 
 
+async def terminar_sin_pagina(ig: dict, sesion: str):
+    """Conectar con Meta sin página: crea su cuenta (o entra a la que ya tiene) con el token del portafolio."""
+    ig_id, usuario, token = str(ig["id"]), ig.get("username", ""), ig["token"]
+    if sesion and sesion != ig_id:
+        return _volver("otro_instagram")
+    c = panel.buscar(ig_id)
+    if not c or c.ig_via == "sistema":  # nueva, o ya conectada así: el token nuevo reemplaza al anterior
+        nueva = await conectar.store.save_conexion(ig_id, usuario, token, time.time() + 3650 * 86400)
+        grande = (int(ig.get("followers_count") or 0) > config.CUENTA_GRANDE_SEGUIDORES
+                  or int(ig.get("media_count") or 0) > config.CUENTA_GRANDE_POSTS)
+        try:
+            c = await panel.alta(ig_id, usuario, token, grande, via="sistema") if panel.alta else None
+        except Exception:
+            log.exception("No se pudo dar de alta a @%s con Meta sin página", usuario)
+            c = None
+        if not c:
+            return _sin_sesion("No pudimos conectar", "Algo falló al crear tu cuenta. Escríbenos y lo vemos.")
+        if nueva:
+            await conectar.avisar(
+                f"Instagram conectado con Meta: @{usuario}",
+                f"@{usuario} entró con Conectar con Meta, sin página de Facebook. Su asistente quedó en pausa hasta"
+                " que lo encienda desde su panel." + (" Es una cuenta grande: quedó en revisión." if grande else ""))
+    log.info("@%s entró con Meta sin página (%s)", usuario, ig_id)
+    r = RedirectResponse(f"{config.PUBLIC_URL}/panel", status_code=303)
+    panel.iniciar_sesion(r, ig_id)
+    from . import acceso
+    acceso.ultimo(r, "facebook")
+    return r
+
+
 AVISOS = {
+    "otro_instagram": "Elegiste en Meta otro Instagram que el de esta cuenta. Sal y entra con ese, o elige este.",
     "conectada": "Listo: conectamos tu página. Tu asistente ya contesta Messenger y los comentarios de tu página.",
     "cancelada": "No se conectó tu página. Puedes intentarlo de nuevo cuando quieras.",
     "fallo": "No pudimos conectar tu página esta vez. Intenta de nuevo en un momento.",
