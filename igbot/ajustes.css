@@ -34,13 +34,15 @@
   --margen-der: 1.75rem;       /* de las tarjetas a la orilla derecha */
   --margen-abajo: 3rem;        /* debajo de la última tarjeta */
 
-  /* Menú lateral en computadora: compacto para que quepa entero al 100% sin deslizar (2026-11-01) */
+  /* Menú lateral (computadora y celular): compacto para que quepa entero al 100% sin deslizar (2026-11-01) */
   --menu-item-relleno: .55rem; /* relleno de arriba y abajo de cada opción */
   --menu-item-letra: 1rem;     /* letra de cada opción */
   --menu-hueco: .1rem;         /* espacio entre opciones */
   --menu-separacion: .55rem;   /* aire bajo el logo, sobre "Configuración" y sobre Ayuda */
   --menu-item-relleno-bajo: .45rem; /* en pantallas de menos de 800 px de alto */
   --menu-separacion-bajo: .45rem;
+  --menu-item-relleno-mini: .35rem; /* en pantallas de menos de 700 px de alto (celular con la barra del navegador) */
+  --menu-separacion-mini: .35rem;
 
   /* Barra de pasos de arriba (las tres páginas de Configuración y Crear campaña) */
   --paso-pad: .55rem .6rem;    /* relleno de cada paso */
