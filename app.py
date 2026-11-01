@@ -31,7 +31,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 
 from igbot import (acceso, adjuntos, admin, agenda_google, agent, ajustes, anuncios_meta, asistente, botones, campanas, cobros,
                    comentarios, comprimir, conectar, config, contenido, conversaciones, empresa, errores, facebook, historias, inicio,
-                   interacciones, lentitud, limites, marca, metricas, nueva_campana, panel, reporte, resultados, semana, skandi,
+                   interacciones, lentitud, limites, marca, metricas, nueva_campana, panel, reporte, resultados, salud, semana, skandi,
                    sugeridos, tienda_shopify)
 from igbot.cuenta import Cuenta, cargar, cuenta, de_carpeta, usar
 from igbot.dispatcher import Dispatcher
@@ -77,8 +77,10 @@ async def handle(user_id: str, rows: list[tuple[int, str]]) -> None:
     respuesta se descarta y se vuelve a generar con todos, para mandar una
     sola. No se descarta si ya agendó, canceló o mandó un correo.
     """
+    inicio = time.perf_counter()
     with limites.rubro(limites.ATENCION):
         await _handle(user_id, rows)
+    salud.anotar_respuesta(cuenta().slug, time.perf_counter() - inicio)
 
 
 async def _handle(user_id: str, rows: list[tuple[int, str]]) -> None:
@@ -287,6 +289,9 @@ async def retomar(c: Cuenta) -> None:
     await dispatchers[c.slug].resume_pending()
 
 
+salud.fuentes.update(cuentas=lambda: cuentas, dispatchers=lambda: dispatchers, trabajos=lambda: panel._trabajos)
+
+
 def fondo() -> list[asyncio.Task]:
     return [
         asyncio.create_task(cada_cuenta(retomar, 60)),
@@ -380,6 +385,7 @@ if not config.CLIENTE:
     app.include_router(resultados.router)
     app.include_router(inicio.router)
     app.include_router(skandi.router)
+    app.include_router(salud.router)
     app.include_router(skandi.web_router)
     app.include_router(tienda_shopify.router)
     app.include_router(facebook.router)
