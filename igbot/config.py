@@ -89,6 +89,9 @@ FB_SCOPES = os.getenv("FB_SCOPES", "").replace(" ", "")
 # El "ID de configuración" del login de Facebook para empresas (Meta > Inicio de sesión con Facebook para empresas >
 # Configuraciones). Si está, se usa en vez de la lista de permisos.
 FB_CONFIG_ID = os.getenv("FB_CONFIG_ID", "").strip()
+# Configuración "Solo Instagram" del login de Meta para empresas (sin páginas, como "Connect via Meta" de Manychat).
+# Si está, "Conectar con Meta" al crear la cuenta la usa.
+FB_CONFIG_ID_IG = os.getenv("FB_CONFIG_ID_IG", "").strip()
 # Conecta tu cuenta de anuncios (anuncios_meta.py): otra configuración del mismo login, solo con ads_read.
 # Sin ella se piden los permisos por nombre (ads_read y business_management).
 FB_ADS_CONFIG_ID = os.getenv("FB_ADS_CONFIG_ID", "").strip()

@@ -260,7 +260,8 @@ def conecta(request: Request):
     # cuenta de Instagram o la de Facebook. La pantalla de Instagram (www.instagram.com/oauth) en el iPhone la abre
     # la app de Instagram y se queda en "Loading" (enlace universal), así que ahí no se ofrece.
     iphone = any(x in request.headers.get("user-agent", "") for x in ("iPhone", "iPad", "iPod"))
-    meta = ('<a class="boton" href="/panel/facebook/entrar">Conectar con Meta</a>' if facebook.enabled() else "")
+    meta = ('<a class="boton" href="/panel/facebook/entrar?solo=ig">Conectar con Meta</a>' if facebook.enabled()
+            else "")
     solo_ig = ("" if iphone else
                f'<a class="boton{" secundario" if meta else ""}" href="/conectar/instagram">Solo con Instagram</a>')
     return pagina(
