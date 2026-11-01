@@ -43,6 +43,9 @@ CUENTAS = [c.strip() for c in os.getenv("CUENTAS", "").split(",") if c.strip()]
 # Meta manda los avisos de todas las cuentas de la app al mismo webhook. El
 # proceso que los recibe se los reenvía tal cual a los de las otras cuentas
 # (lista separada por comas, p. ej. http://127.0.0.1:8002/webhook).
+# Etiqueta Human Agent de Meta: deja que una PERSONA conteste hasta 7 días después del último mensaje del cliente
+# (sin ella, 24 h). Hace falta pedir el permiso "Human Agent" en App Review; hasta entonces, 0.
+HUMAN_AGENT_TAG = os.getenv("HUMAN_AGENT_TAG", "0") == "1"
 FORWARD_WEBHOOKS = [u.strip() for u in os.getenv("FORWARD_WEBHOOKS", "").split(",") if u.strip()]
 
 # Modelo barato para reconocer variantes de las palabras clave en comentarios.
@@ -65,6 +68,11 @@ DEBOUNCE_SECONDS = float(os.getenv("DEBOUNCE_SECONDS", "5"))
 MAX_CONCURRENT = int(os.getenv("MAX_CONCURRENT", "4"))
 # Y de una misma cuenta, para que un cliente con mucho tráfico no frene a los demás.
 MAX_CONCURRENT_PER_ACCOUNT = int(os.getenv("MAX_CONCURRENT_PER_ACCOUNT", "3"))
+# Bucles de fondo (publicar, métricas, tokens...): cuentas que atienden a la vez y tope por cuenta y paso.
+FONDO_A_LA_VEZ = int(os.getenv("FONDO_A_LA_VEZ", "5"))
+FONDO_TOPE_SEG = float(os.getenv("FONDO_TOPE_SEG", "900"))
+# Historial que se guarda por cuenta (mensajes, eventos y comentarios), en días; 0 = para siempre.
+RETENCION_DIAS = int(os.getenv("RETENCION_DIAS", "365"))
 
 # --- Google (opcional: sin esto el bot no agenda ni manda correos) ---
 # Credenciales OAuth de tu cuenta de Gmail; ver "Agenda y correo" en el README.

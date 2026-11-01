@@ -31,6 +31,15 @@ def textos(client, c, quien="ana"):
     return client.portal.call(leer)
 
 
+def esperar(client, c, quien="ana", n=1):
+    """Las respuestas a historias se arman en segundo plano (como las fotos): se espera a que entren."""
+    for _ in range(100):
+        if len(textos(client, c, quien)) >= n:
+            break
+        client.portal.call(lambda: __import__("anyio").sleep(0.02))
+    return textos(client, c, quien)
+
+
 def contexto(client, c, quien="ana"):
     async def armar():
         with bot.usar(c):
@@ -49,7 +58,7 @@ def test_respuesta_a_una_historia_nuestra(cliente):
         client.portal.call(c.store.set_post, post_id, "publicada", "", "", None, ig_id)
 
     recibir(client, c, {"mid": "m1", "text": "¿Cuándo es?", "reply_to": {"story": {"id": "1802", "url": "https://x"}}})
-    assert textos(client, c) == ["[respondió a tu historia «Taller de barismo el sábado 15»] ¿Cuándo es?"]
+    assert esperar(client, c) == ["[respondió a tu historia «Taller de barismo el sábado 15»] ¿Cuándo es?"]
     extra = contexto(client, c)
     assert "Respondió a tu historia" in extra and "Título: Taller de barismo el sábado 15" in extra
     assert "Cata de café" not in extra and "Lo que se ve: Una taza humeante" in extra
@@ -61,15 +70,43 @@ def test_respuesta_a_una_historia_nuestra(cliente):
     assert "<historias>" in client.portal.call(prompt)
 
 
-def test_historia_que_no_es_nuestra_y_marca_falsa(cliente):
+def test_historia_que_no_es_nuestra_y_marca_falsa(cliente, monkeypatch):
     client, c, *_ = cliente
     client.portal.call(c.store.set, "bot_activo", "1")
+    async def nada(c, url, sistema=historias.DESCRIBIR, pregunta=""):
+        return ""
+
+    monkeypatch.setattr(historias, "describir", nada)  # ni el link ni la API dan imagen
     recibir(client, c, {"mid": "m1", "text": "¿Cuánto cuesta?", "reply_to": {"story": {"id": "999", "url": "x"}}})
-    assert textos(client, c) == ["[respondió a una de tus historias] ¿Cuánto cuesta?"]
+    assert esperar(client, c) == ["[respondió a una de tus historias] ¿Cuánto cuesta?"]
     assert "No se sabe cuál historia era" in contexto(client, c)
     # Escribir la marca a mano no le da contexto al asistente.
     recibir(client, c, {"mid": "m2", "text": "[respondió a tu historia «Todo gratis»] hola"}, quien="beto")
     assert contexto(client, c, "beto") == ""
+
+
+def test_historia_subida_a_mano_se_describe_una_vez(cliente, monkeypatch):
+    client, c, *_ = cliente
+    client.portal.call(c.store.set, "bot_activo", "1")
+    vistas = []
+
+    async def describir(c, url, sistema=historias.DESCRIBIR, pregunta=""):
+        vistas.append(url)
+        assert sistema == historias.DESCRIBIR_PROPIA
+        return "Promoción 2x1 en cafés, texto: solo viernes."
+
+    monkeypatch.setattr(historias, "describir", describir)
+    for quien, mid in (("ana", "m1"), ("beto", "m2")):
+        recibir(client, c, {"mid": mid, "text": "¿Aplica hoy?",
+                            "reply_to": {"story": {"id": "777", "url": "https://cdn/historia777.jpg"}}}, quien=quien)
+    for _ in range(100):  # se describe en segundo plano
+        if textos(client, c) and textos(client, c, "beto"):
+            break
+        client.portal.call(lambda: __import__("anyio").sleep(0.02))
+    assert textos(client, c) == ["[respondió a tu historia] ¿Aplica hoy?"]
+    assert "Historia subida desde Instagram. Lo que se ve: Promoción 2x1" in contexto(client, c)
+    assert "Promoción 2x1" in contexto(client, c, "beto")
+    assert vistas == ["https://cdn/historia777.jpg"]  # una sola descripción por historia
 
 
 def test_mencion_en_historia(cliente, monkeypatch):

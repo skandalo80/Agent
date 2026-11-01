@@ -24,6 +24,16 @@ log = logging.getLogger("igbot.lento")
 LENTO_SEG = 2.0
 BLOQUEO_SEG = 1.0
 
+# Cuántas veces pasó hoy (lo muestra /panel/salud); se reinicia al cambiar el día.
+CONTADORES: dict = {"dia": "", "lentos": 0, "bloqueos": 0}
+
+
+def contar(clave: str) -> None:
+    hoy = time.strftime("%Y-%m-%d")
+    if CONTADORES["dia"] != hoy:
+        CONTADORES.update(dia=hoy, lentos=0, bloqueos=0)
+    CONTADORES[clave] += 1
+
 # Lo que lleva gastado la petición en curso: {"db": [veces, segundos], ...}.
 GASTO: ContextVar[dict | None] = ContextVar("gasto", default=None)
 
@@ -101,6 +111,7 @@ class Medir:
                 return
             listo = True
             if (total := time.perf_counter() - inicio) >= LENTO_SEG:
+                contar("lentos")
                 log.warning(linea(scope.get("method", ""), scope.get("path", ""), total, gasto))
 
         async def enviar(msg):
@@ -120,4 +131,5 @@ async def vigilar_bucle(cada: float = 0.5) -> None:
         t = time.perf_counter()
         await asyncio.sleep(cada)
         if (tarde := time.perf_counter() - t - cada) >= BLOQUEO_SEG:
+            contar("bloqueos")
             log.warning("BLOQUEO el bucle estuvo detenido %.2fs", tarde)

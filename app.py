@@ -31,7 +31,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 
 from igbot import (acceso, adjuntos, admin, agenda_google, agent, ajustes, anuncios_meta, asistente, botones, campanas, cobros,
                    comentarios, comprimir, conectar, config, contenido, conversaciones, empresa, errores, facebook, historias, inicio,
-                   interacciones, lentitud, limites, marca, metricas, nueva_campana, panel, reporte, resultados, semana, skandi,
+                   interacciones, lentitud, limites, marca, metricas, nueva_campana, panel, reporte, resultados, salud, semana, skandi,
                    sugeridos, tienda_shopify)
 from igbot.cuenta import Cuenta, cargar, cuenta, de_carpeta, usar
 from igbot.dispatcher import Dispatcher
@@ -40,7 +40,17 @@ from igbot.instagram import Instagram
 from igbot.pagina_fb import de_facebook
 from igbot.store import Store
 
-logging.basicConfig(level=logging.INFO)
+class ConCuenta(logging.Filter):
+    """Cada línea del registro dice de qué cuenta habla, para filtrar con `journalctl -u igbot | grep '\[slug\]'`."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.cuenta = cuenta().slug or "principal"
+        return True
+
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:[%(cuenta)s] %(message)s")
+for _h in logging.getLogger().handlers:
+    _h.addFilter(ConCuenta())
 # httpx anota cada URL completa en INFO, y algunas llevan llaves (client_secret, access_token).
 logging.getLogger("httpx").setLevel(logging.WARNING)
 log = logging.getLogger("igbot")
@@ -67,8 +77,10 @@ async def handle(user_id: str, rows: list[tuple[int, str]]) -> None:
     respuesta se descarta y se vuelve a generar con todos, para mandar una
     sola. No se descarta si ya agendó, canceló o mandó un correo.
     """
+    inicio = time.perf_counter()
     with limites.rubro(limites.ATENCION):
         await _handle(user_id, rows)
+    salud.anotar_respuesta(cuenta().slug, time.perf_counter() - inicio)
 
 
 async def _handle(user_id: str, rows: list[tuple[int, str]]) -> None:
@@ -230,15 +242,34 @@ async def metricas_del_dia(c: Cuenta) -> None:
     await metricas.tick(c)  # seguidores, alcance y vistas de cada día, para Resultados
 
 
-async def cada_cuenta(paso, every: float) -> None:
-    """Un solo bucle de fondo por tarea, que pasa por todas las cuentas."""
-    while True:
-        for c in cuentas:
+async def limpiar(c: Cuenta) -> None:
+    """Una vez al día: borra el historial de más de RETENCION_DIAS y compacta la base."""
+    borrado = await c.store.purgar(config.RETENCION_DIAS)
+    await c.store.compactar()
+    if total := sum(borrado.values()):
+        log.info("Limpieza de %s: %d fila(s) borradas %s", nombre(c), total, borrado)
+
+
+async def cada_cuenta(paso, every: float, a_la_vez: int = 0, tope: float = 0) -> None:
+    """Un solo bucle de fondo por tarea, que pasa por todas las cuentas.
+
+    Las cuentas van en paralelo (hasta `a_la_vez`), así una cuenta lenta o con Meta caído no retrasa a las
+    demás; y cada paso tiene un tope de tiempo para que un atasco en una cuenta no detenga el bucle."""
+    turno = asyncio.Semaphore(a_la_vez or config.FONDO_A_LA_VEZ)
+    tope = tope or config.FONDO_TOPE_SEG
+
+    async def una(c: Cuenta) -> None:
+        async with turno:
             with usar(c):
                 try:
-                    await paso(c)
+                    await asyncio.wait_for(paso(c), tope)
+                except asyncio.TimeoutError:
+                    log.error("%s tardó más de %.0f s en la cuenta %s: se cortó", paso.__name__, tope, nombre(c))
                 except Exception:
                     log.exception("Falló %s en la cuenta %s", paso.__name__, nombre(c))
+
+    while True:
+        await asyncio.gather(*(una(c) for c in list(cuentas)))
         await asyncio.sleep(every)
 
 
@@ -258,6 +289,9 @@ async def retomar(c: Cuenta) -> None:
     await dispatchers[c.slug].resume_pending()
 
 
+salud.fuentes.update(cuentas=lambda: cuentas, dispatchers=lambda: dispatchers, trabajos=lambda: panel._trabajos)
+
+
 def fondo() -> list[asyncio.Task]:
     return [
         asyncio.create_task(cada_cuenta(retomar, 60)),
@@ -266,7 +300,9 @@ def fondo() -> list[asyncio.Task]:
         asyncio.create_task(cada_cuenta(reporte_semanal, 600)),
         asyncio.create_task(cada_cuenta(sugeridos_del_lunes, 600)),
         asyncio.create_task(cada_cuenta(metricas_del_dia, 600)),
+        asyncio.create_task(cada_cuenta(limpiar, 86400)),
         asyncio.create_task(lentitud.vigilar_bucle()),
+        asyncio.create_task(salud.vigilar()),
     ]
 
 
@@ -316,6 +352,11 @@ async def lifespan(app: FastAPI):
     for c in cuentas:
         dispatchers[c.slug] = cola(c)
         await arrancar(c)
+    salud.avisar = conectar.avisar
+    with usar(principal):
+        if (n := await salud.anotar_arranque(principal.store)) >= salud.REINICIOS_MAX:
+            await salud.alertar("reinicios seguidos", f"El bot arrancó {n} veces en la última hora. Si no fueron deploys, "
+                                "se está cayendo: revisa journalctl -u igbot y /panel/salud.")
     await skandi.cargar()  # el historial de Skandi de cada cuenta, a la memoria
     loops = fondo()
     yield
@@ -350,6 +391,7 @@ if not config.CLIENTE:
     app.include_router(resultados.router)
     app.include_router(inicio.router)
     app.include_router(skandi.router)
+    app.include_router(salud.router)
     app.include_router(skandi.web_router)
     app.include_router(tienda_shopify.router)
     app.include_router(facebook.router)
@@ -614,8 +656,8 @@ async def entrar_mencion(c: Cuenta, user_id: str, mid: str, url: str) -> None:
 async def entrar_adjuntos(c: Cuenta, user_id: str, message: dict) -> None:
     with usar(c), limites.rubro(limites.ATENCION):
         text = await adjuntos.texto(c, message)
-        if story := ((message.get("reply_to") or {}).get("story") or {}).get("id"):
-            text = await historias.respuesta(c, user_id, str(story), text)
+        if story := (message.get("reply_to") or {}).get("story") or {}:
+            text = await historias.respuesta(c, user_id, str(story.get("id")), text, story.get("url") or "")
         if await c.store.add_incoming(user_id, message["mid"], limites.trim(text)):
             dispatchers[c.slug].notify(user_id)
 
@@ -673,13 +715,14 @@ async def receive_entry(c: Cuenta, entry: dict) -> None:
             # Lo mencionaron en una historia: se describe la imagen (tarda unos segundos) y luego entra a la cola.
             in_background(entrar_mencion(c, user_id, message["mid"], url))
             continue
-        if adjuntos.tiene(message) and not admin.is_admin(user_id):
-            # Fotos y audios: se describen o transcriben (tarda unos segundos) y luego entran a la cola.
+        story = (message.get("reply_to") or {}).get("story") or {}
+        if (adjuntos.tiene(message) or story.get("id")) and not admin.is_admin(user_id):
+            # Fotos, audios y respuestas a historias: se describen o transcriben (tarda unos segundos) y luego
+            # entran a la cola. El asistente debe saber de qué historia hablan para contestar sobre esa.
             in_background(entrar_adjuntos(c, user_id, message))
             continue
-        if story := ((message.get("reply_to") or {}).get("story") or {}).get("id"):
-            # Respondió a una historia: el asistente debe saber cuál era para contestar sobre esa.
-            text = await historias.respuesta(c, user_id, str(story), message.get("text", ""))
+        if story.get("id"):
+            text = await historias.respuesta(c, user_id, str(story["id"]), message.get("text", ""), story.get("url") or "")
         if not admin.is_admin(user_id):
             text = limites.trim(text)
         else:

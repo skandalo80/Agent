@@ -18,6 +18,7 @@ import aiosqlite
 
 # Así empieza lo que contestó el dueño a mano (ver add_owner_message).
 MANUAL = "[contestó una persona del equipo]"
+BUSY_MS = 5000  # cuánto espera una escritura si otra está en curso
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS messages (
@@ -32,6 +33,7 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE INDEX IF NOT EXISTS messages_user ON messages (user_id, id);
 CREATE INDEX IF NOT EXISTS messages_pending ON messages (status) WHERE status = 'pending';
 CREATE INDEX IF NOT EXISTS messages_time ON messages (created_at);
+CREATE INDEX IF NOT EXISTS messages_user_role ON messages (user_id, role, created_at);
 
 CREATE TABLE IF NOT EXISTS summaries (
     user_id TEXT PRIMARY KEY,
@@ -99,6 +101,7 @@ CREATE TABLE IF NOT EXISTS comments (
     replied    INTEGER NOT NULL DEFAULT 0, -- respuesta pública
     created_at REAL NOT NULL
 );
+CREATE INDEX IF NOT EXISTS comments_time ON comments (created_at);
 
 -- Fotos que mandó un administrador por DM (el archivo está en MEDIA_DIR/<token>.jpg).
 CREATE TABLE IF NOT EXISTS media (
@@ -136,6 +139,7 @@ CREATE TABLE IF NOT EXISTS events (
     created_at REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS events_kind ON events (kind, created_at);
+CREATE INDEX IF NOT EXISTS events_user ON events (user_id, kind, created_at);
 
 -- Página skandar.online/conectar: negocios que piden conectar su Instagram
 -- (para invitarlos como tester) y cuentas que ya lo conectaron con su token.
@@ -261,6 +265,9 @@ class Store:
             Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         self.db = await aiosqlite.connect(self.path)
         await self.db.execute("PRAGMA journal_mode=WAL")
+        # Si otra tarea está escribiendo, espera en vez de fallar con "database is locked".
+        await self.db.execute(f"PRAGMA busy_timeout={BUSY_MS}")
+        await self.db.execute("PRAGMA synchronous=NORMAL")  # con WAL no pierde datos y escribe mucho más rápido
         await self.db.executescript(SCHEMA)
         # Bases de antes del panel: la columna slug se agrega aparte.
         cur = await self.db.execute("PRAGMA table_info(conexiones)")
@@ -279,6 +286,27 @@ class Store:
     async def close(self) -> None:
         if self.db:
             await self.db.close()
+
+    # --- mantenimiento (una vez al día por cuenta) ---
+
+    async def purgar(self, dias: int, ahora: float | None = None) -> dict[str, int]:
+        """Borra lo de más de `dias` días: mensajes, eventos y comentarios (con 0 no borra nada). Los ids
+        de mensajes enviados (`sent`) solo sirven para reconocer el eco de Meta: duran una semana."""
+        ahora = ahora or time.time()
+        borrado: dict[str, int] = {}
+        cur = await self.db.execute("DELETE FROM sent WHERE sent_at < ?", (ahora - 7 * 86400,))
+        borrado["sent"] = cur.rowcount
+        if dias > 0:
+            limite = ahora - dias * 86400
+            for tabla in ("messages", "events", "comments"):
+                cur = await self.db.execute(f"DELETE FROM {tabla} WHERE created_at < ?", (limite,))
+                borrado[tabla] = cur.rowcount
+        await self.db.commit()
+        return borrado
+
+    async def compactar(self) -> None:
+        """Pasa lo pendiente del archivo -wal a la base y lo deja en cero, para que no crezca sin tope."""
+        await self.db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
 
     # --- cola de mensajes entrantes ---
 

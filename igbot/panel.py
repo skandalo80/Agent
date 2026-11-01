@@ -1801,7 +1801,8 @@ def menu_perfil(perfil: str, cuenta: Cuenta | None, foto: str = "", sub: str = "
             # Quién eres y la cuenta (conexión, Instagram y salir); tu empresa y tu marca están en Configuración.
             f'<div class="perfil-menu"><div class="quien">Conectado como @{usuario_}</div>'
             # Solo la cuenta principal (Skandar): los chats de clientes y visitantes con Skandi.
-            + (f'<a href="/panel/skandi"{ACTIVA if sub == "skandi" else ""}>Chats de Skandi</a><div class="sep"></div>'
+            + (f'<a href="/panel/skandi"{ACTIVA if sub == "skandi" else ""}>Chats de Skandi</a>'
+               f'<a href="/panel/salud"{ACTIVA if sub == "salud" else ""}>Salud del servicio</a><div class="sep"></div>'
                if cuenta is not None and not cuenta.slug else "")
             + f'<a href="/panel/conexion"{ACTIVA if sub == "conexion" else ""}>Conexión{luz}</a>'
             f'<a href="https://www.instagram.com/{usuario_}/" target="_blank" rel="noopener">Ver mi Instagram</a>'
@@ -2454,12 +2455,13 @@ async def responder(request: Request):
         return await panel_de(c, "No encontramos ese chat.", **(bandeja | {"chat": ""}))
     if not texto:
         return await panel_de(c, "Escribe tu respuesta antes de enviarla.", **bandeja)
-    if time.time() - await c.store.last_message_from(usuario_chat) >= conversaciones.VENTANA:
-        return await panel_de(c, "Ya pasaron 24 horas desde su último mensaje: Instagram no deja contestarle"
+    if time.time() - await c.store.last_message_from(usuario_chat) >= conversaciones.ventana_panel():
+        plazo = "7 días" if config.HUMAN_AGENT_TAG else "24 horas"
+        return await panel_de(c, f"Ya pasaron {plazo} desde su último mensaje: Instagram no deja contestarle"
                               " hasta que te vuelva a escribir.", **bandeja)
     try:
         with usar(c):
-            await c.instagram.send_text(usuario_chat, texto)
+            await c.instagram.send_text(usuario_chat, texto, humano=True)  # lo escribió una persona: etiqueta Human Agent
     except Exception:
         log.exception("No se pudo mandar la respuesta del panel a %s", usuario_chat)
         return await panel_de(c, "Instagram no aceptó el mensaje. Intenta de nuevo en un momento o contéstale"

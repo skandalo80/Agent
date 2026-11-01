@@ -76,6 +76,8 @@ Pruebas locales: `pip install pytest && python -m pytest -q`
 
 **Fotos y audios en los DMs.** Una foto se describe con Claude (Haiku) en una línea (qué se ve y el texto que traiga, por ejemplo el monto de una transferencia) y entra al chat como `[envió una foto: …]`; un audio se transcribe con OpenAI (`OPENAI_AUDIO_MODEL`) y entra como `[envió un audio que dice: «…»]`. Videos, stickers y publicaciones compartidas quedan como una marca corta. Las reglas base le dicen al asistente que son descripciones hechas por máquina (`igbot/adjuntos.py`).
 
+**Historias subidas a mano y etiqueta Human Agent.** Si alguien responde a una historia que el dueño subió desde Instagram (no la publicó la plataforma), se baja la imagen del link que manda el webhook (o la miniatura por la API si es video), Haiku la describe una sola vez y el asistente contesta sobre esa historia. Con `HUMAN_AGENT_TAG=1` (tras aprobar Meta el permiso Human Agent), las respuestas escritas desde el panel salen con la etiqueta y se pueden mandar hasta 7 días después del último mensaje del cliente; el asistente sigue limitado a 24 h.
+
 **Hilos de comentarios y español del país.** Si la misma persona sigue preguntando debajo de su propio comentario, se le atiende como a cualquier comentario y la respuesta pública va al comentario de arriba (Instagram no deja responder a una respuesta); los hilos entre terceros se dejan en paz. El asistente de DMs habla en el español del país del Perfil de empresa (voseo en Argentina, etc.), como ya hacían las campañas. Los resúmenes de conversación usan Haiku.
 
 **Cuando el asistente no puede contestar.** Si Claude falla varias veces seguidas o la cuenta llegó a su gasto del día, la persona recibe una sola vez al día "Recibimos tu mensaje. En un momento te contestamos por aquí." y el chat sale en Conversaciones, en Sin contestar, con el motivo. Cuando termina la pausa de un chat que atendió el dueño (o lo reactiva desde el panel), lo que el cliente escribió después del último mensaje nuestro vuelve a la cola y el asistente lo contesta, siempre dentro de las 24 h de Instagram (bucle `retomar` en `app.py`, cada minuto).
@@ -98,7 +100,9 @@ Un solo proceso (`igbot`, puerto 8001) atiende todas las cuentas sobre el mismo 
 CUENTAS=cafelunar,otra_cuenta
 ```
 
-Meta manda los avisos de todas las cuentas al mismo webhook (`console.skandar.online/webhook`). Cada aviso trae el id de su cuenta y el bot lo atiende con la configuración de esa cuenta: su base, su token, su prompt y sus límites (ver `igbot/cuenta.py`). Cada cuenta tiene su cola; `MAX_CONCURRENT` (4) es el tope de respuestas a la vez entre todas y `MAX_CONCURRENT_PER_ACCOUNT` (3) el de una sola cuenta. La renovación de tokens, las publicaciones programadas y el reporte semanal son un bucle por tarea que pasa por todas las cuentas.
+Meta manda los avisos de todas las cuentas al mismo webhook (`console.skandar.online/webhook`). Cada aviso trae el id de su cuenta y el bot lo atiende con la configuración de esa cuenta: su base, su token, su prompt y sus límites (ver `igbot/cuenta.py`). Cada cuenta tiene su cola; `MAX_CONCURRENT` (4) es el tope de respuestas a la vez entre todas y `MAX_CONCURRENT_PER_ACCOUNT` (3) el de una sola cuenta. La renovación de tokens, las publicaciones programadas y el reporte semanal son un bucle por tarea que pasa por todas las cuentas, `FONDO_A_LA_VEZ` (5) a la vez y con `FONDO_TOPE_SEG` (900) de tope por cuenta, para que una cuenta lenta o con Meta caído no retrase a las demás. Una vez al día cada base borra el historial de más de `RETENCION_DIAS` (365; 0 = nunca) y compacta su archivo WAL.
+
+**Salud del servicio.** La cuenta principal ve en `/panel/salud` (menú de la cuenta → Salud del servicio) la RAM del proceso y de los subprocesos de Claude, los bloqueos del bucle y las peticiones lentas de hoy, y por cuenta: conversaciones en curso y esperando, tiempos de respuesta de las últimas 24 h (mediana, p95, máximo) y gasto del día; además los trabajos de campaña en curso o fallidos y el último respaldo. Son los números que deciden cuándo crecer el servidor o separar web y trabajadores. Cada minuto el bot revisa esos números y avisa al administrador de la principal (DM a `ADMIN_IG_IDS` y correo al dueño), con una hora de silencio por tipo, cuando: queda menos de 15 % de RAM libre, hay más de 20 conversaciones esperando dos revisiones seguidas, arrancó 3 veces en una hora, o el último respaldo tiene 2 días o más.
 
 Para dar de alta un cliente que ya se conectó en skandar.online/conectar:
 ```bash
@@ -107,6 +111,7 @@ nano clientes/cafelunar/system.md       # el prompt del negocio
 nano .env                                # agrega cafelunar a CUENTAS
 sudo systemctl restart igbot
 sudo journalctl -u igbot -f              # dice "Cuenta de Instagram: @cafe.lunar"
+sudo journalctl -u igbot | grep '\[cafelunar\]'   # solo lo de esa cuenta: cada línea lleva [slug]
 ```
 En esa cuenta revisa también: Configuración → Mensajes → *Permitir acceso a los mensajes*.
 

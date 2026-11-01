@@ -68,17 +68,18 @@ class Instagram:
             await self.store.set("ig_token_refreshed_at", str(time.time()))
         return await self.store.get("ig_token") or cuenta().access_token
 
-    async def _send(self, recipient_id: str, message: dict) -> None:
-        await self._send_to({"id": recipient_id}, message)
+    async def _send(self, recipient_id: str, message: dict, humano: bool = False) -> None:
+        await self._send_to({"id": recipient_id}, message, humano=humano)
 
-    async def _send_to(self, recipient: dict, message: dict) -> None:
+    async def _send_to(self, recipient: dict, message: dict, humano: bool = False) -> None:
+        extra = {"messaging_type": "MESSAGE_TAG", "tag": "HUMAN_AGENT"} if humano and config.HUMAN_AGENT_TAG else {}
         if es_de_facebook(recipient.get("id", "")):  # escribió por Messenger
-            await self.pagina.enviar(recipient, message)
+            await self.pagina.enviar(recipient, message, **extra)
             return
         r = await self.http.post(
             api("me/messages"),
             headers={"Authorization": f"Bearer {await self.token()}"},
-            json={"recipient": recipient, "message": message},
+            json={"recipient": recipient, "message": message, **extra},
         )
         if r.is_error:
             log.error("Meta no aceptó el mensaje (%s): %s", r.status_code, r.text[:500])
@@ -87,9 +88,11 @@ class Instagram:
         if mid := r.json().get("message_id"):
             await self.store.add_sent(mid)
 
-    async def send_text(self, recipient_id: str, text: str) -> None:
+    async def send_text(self, recipient_id: str, text: str, humano: bool = False) -> None:
+        """`humano`: lo escribió una persona (desde el panel); con HUMAN_AGENT_TAG va con la etiqueta Human Agent,
+        que Meta acepta hasta 7 días después del último mensaje del cliente."""
         for chunk in split_text(text):
-            await self._send(recipient_id, {"text": chunk})
+            await self._send(recipient_id, {"text": chunk}, humano=humano)
         log.info("Respondido a %s", recipient_id)
 
     async def send_file(self, recipient_id: str, url: str) -> None:

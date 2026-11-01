@@ -16,6 +16,7 @@ from html import escape
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
+from . import config
 from .cuenta import Cuenta, usar
 from .store import MANUAL
 
@@ -26,6 +27,12 @@ MAX_MENSAJES = 400
 MAX_RESPUESTA = 1000
 # Instagram solo deja contestar dentro de las 24 h desde el último mensaje del cliente.
 VENTANA = 24 * 3600
+VENTANA_HUMANO = 7 * 24 * 3600  # con la etiqueta Human Agent (config.HUMAN_AGENT_TAG) una persona puede contestar 7 días
+
+
+def ventana_panel() -> float:
+    """Hasta cuándo puede contestar el dueño desde el panel, desde el último mensaje del cliente."""
+    return VENTANA_HUMANO if config.HUMAN_AGENT_TAG else VENTANA
 # Arriba, quién atiende: "Tú" (el chat está en pausa) o "Tu asistente"; debajo, sus pestañas.
 # Sin `ver` se abre "Tú" si algo espera tu respuesta; si no, "Tu asistente".
 FILTROS = {"nuevos": "Nuevos", "sin": "Sin contestar", "tuyas": "Todas", "curso": "En curso", "bot": "Todas"}
@@ -412,7 +419,7 @@ async def _hilo(c: Cuenta, u: str, ver: str, buscar: str, hoja: int, n: int, aho
     if not mensajes:
         burbujas.append('<p class="dia">Aún no hay mensajes guardados en este chat.</p>')
 
-    if ultimo_cliente and ahora - ultimo_cliente < VENTANA:
+    if ultimo_cliente and ahora - ultimo_cliente < ventana_panel():
         if preguntas and not en_pausa:
             # Está aclarando un dato que el asistente no tenía: por omisión el asistente sigue con el chat y la
             # respuesta se guarda como pregunta frecuente, para que la próxima vez ya la sepa.
@@ -437,7 +444,8 @@ async def _hilo(c: Cuenta, u: str, ver: str, buscar: str, hoja: int, n: int, aho
             f'<div class="pie"><span>{pie}</span>'
             '<button class="boton">Enviar</button></div></form>')
     else:
-        responder = ('<p class="responder cerrado">Instagram solo deja contestar dentro de las 24 horas desde el último'
+        plazo = "los 7 días" if config.HUMAN_AGENT_TAG else "las 24 horas"
+        responder = (f'<p class="responder cerrado">Instagram solo deja contestar dentro de {plazo} desde el último'
                      " mensaje del cliente. Cuando te vuelva a escribir, puedes contestarle desde aquí.</p>")
     return (f'<div class="hilo"><a class="volver enlace" href="{escape(enlace(ver, buscar, hoja))}">‹ Tus chats</a>'
             f'<div class="cab"><span class="avatar">{escape(nombre[1:2].upper() or "?")}</span>'
