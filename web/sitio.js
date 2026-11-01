@@ -22,6 +22,29 @@ document.querySelectorAll('.sugerencia[data-texto]').forEach(function (a) {
   });
 });
 
+// Menú en celular: un botón junto a "Entrar" despliega los enlaces que en escritorio van en la barra.
+(function () {
+  var enlaces = document.querySelector('header .nav-links');
+  var acciones = document.querySelector('header .nav-acciones');
+  if (!enlaces || !acciones) return;
+  var boton = document.createElement('button');
+  boton.className = 'menu-boton';
+  boton.type = 'button';
+  boton.setAttribute('aria-label', 'Abrir menú');
+  boton.setAttribute('aria-expanded', 'false');
+  boton.innerHTML = '<svg class="abrir-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>' +
+    '<svg class="cerrar-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+  var poner = function (abierto) {
+    document.body.classList.toggle('menu-abierto', abierto);
+    boton.setAttribute('aria-expanded', String(abierto));
+    boton.setAttribute('aria-label', abierto ? 'Cerrar menú' : 'Abrir menú');
+  };
+  boton.addEventListener('click', function () { poner(!document.body.classList.contains('menu-abierto')); });
+  enlaces.addEventListener('click', function (e) { if (e.target.closest('a')) poner(false); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') poner(false); });
+  acciones.insertBefore(boton, acciones.firstChild);
+})();
+
 // Página /conectar: avisos según cómo volvió del formulario.
 var params = new URLSearchParams(window.location.search);
 if (params.get('enviado')) document.getElementById('aviso-enviado').hidden = false;

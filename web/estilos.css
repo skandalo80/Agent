@@ -1,7 +1,7 @@
 /* Tamaños, rellenos y esquinas de la web: en ajustes.css. */
 @import url("ajustes.css?v=2026-10-28f");
 @import url("animaciones.css?v=2026-10-31a");
-@import url("escenas.css?v=2026-11-01c");
+@import url("escenas.css?v=2026-11-01d");
 :root {
   /* Grafito mate: fondo grafito, naranja para botones y números, lima solo en detalles chicos. */
   --grafito: #18191C;
@@ -53,6 +53,12 @@ nav { display: flex; align-items: center; gap: 26px; font-size: 14px; color: var
 nav a:hover { color: var(--tinta); }
 .nav-acciones { display: flex; align-items: center; gap: 16px; font-size: 14px; }
 .nav-acciones .entrar { font-weight: 600; color: var(--tinta); }
+/* Menú en celular: botón que despliega los enlaces de la navegación (lo pone sitio.js). */
+.menu-boton { display: none; width: 40px; height: 40px; border: 0; border-radius: 12px; background: transparent; color: var(--tinta); cursor: pointer; place-items: center; padding: 0; }
+.menu-boton:hover { background: rgba(255, 255, 255, .08); }
+.menu-boton svg { width: 24px; height: 24px; }
+.menu-boton .cerrar-ico, .menu-abierto .menu-boton .abrir-ico { display: none; }
+.menu-abierto .menu-boton .cerrar-ico { display: block; }
 
 /* Botones */
 .boton {
@@ -282,6 +288,14 @@ footer a:hover { color: var(--tinta); }
   section { padding: 62px 0; }
   header .contenedor { height: 64px; }
   .nav-links { display: none; }
+  .menu-boton { display: grid; }
+  .menu-abierto .nav-links {
+    display: flex; position: absolute; top: 64px; left: 0; right: 0; flex-direction: column; align-items: stretch; gap: 0;
+    padding: 6px 16px 10px; background: var(--grafito); border-bottom: 1px solid var(--linea); font-size: 16px;
+    box-shadow: 0 18px 30px rgba(0, 0, 0, .35);
+  }
+  .menu-abierto .nav-links a { padding: 13px 4px; border-bottom: 1px solid var(--linea); color: var(--tinta); font-weight: 600; }
+  .menu-abierto .nav-links a:last-child { border-bottom: 0; }
   .portada { padding: 56px 0 64px; }
   .portada-rejilla, .dividido { grid-template-columns: 1fr; gap: 36px; }
   h1 { letter-spacing: -1.6px; }
