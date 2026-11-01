@@ -5,8 +5,6 @@ import json
 import os
 import re
 
-os.environ.update(IG_VERIFY_TOKEN="vt", IG_APP_SECRET="secreto", IG_ACCESS_TOKEN="tok", DB_PATH=":memory:")
-
 from PIL import Image  # noqa: E402
 from test_campanas import BASE, LUNES, claude_de_campana, leer, listo  # noqa: E402
 from test_contenido import ORIGEN, cliente  # noqa: E402

@@ -2,8 +2,6 @@
 import asyncio
 import os
 
-os.environ.update(IG_VERIFY_TOKEN="vt", IG_APP_SECRET="secreto", IG_ACCESS_TOKEN="tok", DB_PATH=":memory:")
-
 from igbot import config, instagram as ig  # noqa: E402
 from igbot.store import Store  # noqa: E402
 

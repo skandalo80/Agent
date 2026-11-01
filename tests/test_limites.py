@@ -1,12 +1,6 @@
 """Topes contra abuso: largo de cada DM, respuestas por persona y gasto diario."""
 import asyncio
-import os
 import time
-
-os.environ.update(
-    IG_VERIFY_TOKEN="vt", IG_APP_SECRET="secreto", IG_ACCESS_TOKEN="tok",
-    DB_PATH=":memory:", DEBOUNCE_SECONDS="0.2",
-)
 
 from igbot.cuenta import cuenta  # noqa: E402
 import app as bot  # noqa: E402

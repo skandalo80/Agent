@@ -2,13 +2,7 @@
 import hashlib
 import hmac
 import json
-import os
 import time
-
-os.environ.update(
-    IG_VERIFY_TOKEN="vt", IG_APP_SECRET="secreto", IG_ACCESS_TOKEN="tok",
-    DB_PATH=":memory:", DEBOUNCE_SECONDS="0.2",
-)
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

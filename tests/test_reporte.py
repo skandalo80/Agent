@@ -1,10 +1,7 @@
 """Reporte semanal con datos de prueba (sin red ni Claude)."""
 import asyncio
-import os
 import time
 from datetime import datetime
-
-os.environ.update(IG_VERIFY_TOKEN="vt", IG_APP_SECRET="secreto", IG_ACCESS_TOKEN="tok", DB_PATH=":memory:")
 
 from igbot.cuenta import cuenta  # noqa: E402
 from igbot import reporte, tools  # noqa: E402

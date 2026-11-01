@@ -2,9 +2,6 @@
 import asyncio
 import time
 import dataclasses
-import os
-
-os.environ.update(IG_VERIFY_TOKEN="vt", IG_APP_SECRET="secreto", IG_ACCESS_TOKEN="tok", DB_PATH=":memory:")
 
 from igbot import limites  # noqa: E402
 from igbot.cuenta import Cuenta, cuenta, usar  # noqa: E402
