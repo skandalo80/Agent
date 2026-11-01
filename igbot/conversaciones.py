@@ -131,6 +131,23 @@ CSS = """
 @media(max-width:860px){.inbox{grid-template-columns:minmax(0,1fr)}.inbox .lista{border-right:0}.inbox.abierto .lista{display:none}.inbox:not(.abierto) .hilo{display:none}
 .volver{display:block;padding:.75rem 1.25rem 0;font-size:.9rem}.hilo .cab{flex-wrap:wrap;padding:.75rem 1.25rem}.hilo .cab .nom{flex-basis:calc(100% - 3.5rem)}
 .quien-contesta{flex-basis:100%;justify-content:center}.quien-contesta button{flex:1}.mensajes,.responder{padding-left:1.25rem;padding-right:1.25rem}.hilo .alerta{margin:.75rem 1.25rem 0}}
+/* Celular con un chat abierto: el chat ocupa toda la pantalla bajo la cabecera, como WhatsApp. Los avisos
+   de arriba y el botón de Skandi se esconden; el cuadro de respuesta queda fijo abajo y sube con el teclado. */
+@media(max-width:860px){
+body:has(.inbox.abierto) main .contenedor>:not(.inbox),body:has(.inbox.abierto) .sk-boton{display:none}
+.inbox.abierto{position:fixed;left:0;right:0;top:calc(3.25rem + 1px);bottom:0;z-index:20;display:flex;flex-direction:column;min-height:0;margin:0;border-radius:0}
+.inbox.abierto .hilo{flex:1;min-height:0}
+.inbox.abierto .volver{padding-top:.6rem}
+.inbox.abierto .cab{padding:.5rem 1.25rem .75rem;gap:.6rem .75rem}
+.inbox.abierto .cab .avatar{display:none}
+.inbox.abierto .cab .nom{flex:1 1 100%}
+.inbox.abierto .venta-chat{flex:none}
+.inbox.abierto .quien-contesta{flex:1 1 10rem}
+.inbox.abierto .mensajes{max-height:none;min-height:0}
+.inbox.abierto .responder{padding:.65rem 1.25rem calc(.65rem + env(safe-area-inset-bottom,0px))}
+.inbox.abierto .responder textarea{min-height:3rem}
+.inbox.abierto .responder .pie{margin-top:.45rem}.inbox.abierto .responder .pie span{font-size:.72rem;line-height:1.3}
+}
 """
 
 
