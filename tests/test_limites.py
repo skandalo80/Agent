@@ -74,11 +74,49 @@ def test_presupuesto_diario(monkeypatch):
     async def main():
         store = await new_store(monkeypatch)
         await dm(store, 0)
-        await limites.add_cost(0.6)
-        await limites.add_cost(0.5)
+        await limites.add_cost(0.6, limites.ATENCION)  # lo que gastó contestando
+        await limites.add_cost(0.5, limites.ATENCION)
         await dm(store, 1)
         assert sent == ["ok"] and len(asked) == 1
         assert await limites.first_budget_alert(store) is False  # ya se avisó al pasarlo
         await store.close()
 
     asyncio.run(main())
+
+
+def test_el_contenido_no_gasta_el_presupuesto_del_asistente(monkeypatch):
+    """Generar una campaña (rubro contenido) no debe dejar mudo al asistente: solo cuenta lo de atención."""
+    sent, asked = setup(monkeypatch)
+    monkeypatch.setattr(cuenta(), "daily_budget_usd", 1.0)
+
+    async def main():
+        store = await new_store(monkeypatch)
+        await limites.add_cost(5.0)  # sin rubro: contenido (una campaña con imágenes)
+        await limites.add_cost(0.3, limites.CONTENIDO)
+        assert await limites.spent_today(store) == 5.3
+        assert await limites.spent_today(store, limites.CONTENIDO) == 5.3
+        assert await limites.spent_today(store, limites.ATENCION) == 0
+        assert not await limites.over_budget(store)
+        await dm(store, 0)
+        assert sent == ["ok"]
+        # Lo que se gasta dentro de handle (contestar) cae en atención aunque nadie pase el rubro.
+        with limites.rubro(limites.ATENCION):
+            await limites.add_cost(1.0)
+        assert await limites.spent_today(store, limites.ATENCION) == 1.0
+        assert await limites.over_budget(store)
+        await dm(store, 1)
+        assert sent == ["ok"] and len(asked) == 1
+        await store.close()
+
+    asyncio.run(main())
+
+
+def test_el_rubro_del_contexto_se_restaura():
+    assert limites._rubro.get() == limites.CONTENIDO
+    with limites.rubro(limites.ATENCION):
+        assert limites._rubro.get() == limites.ATENCION
+    assert limits_default()
+
+
+def limits_default() -> bool:
+    return limites._rubro.get() == limites.CONTENIDO

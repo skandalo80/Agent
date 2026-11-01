@@ -4,10 +4,15 @@ aquí van los topes que no dependen de Claude:
 
 - Cada DM se corta a MAX_MESSAGE_CHARS antes de llegar a Claude.
 - Cada persona recibe como mucho MAX_REPLIES_PER_USER_PER_DAY respuestas al día.
-- La cuenta gasta como mucho DAILY_BUDGET_USD al día en Claude.
+- La cuenta gasta como mucho DAILY_BUDGET_USD al día en atender (DMs, comentarios, historias).
 
-Los días son de la zona horaria del negocio. Los administradores no tienen tope.
+El gasto se anota en dos rubros: `atencion` (lo que contesta a personas) y `contenido` (campañas,
+posts, imágenes, informes). El presupuesto diario solo cuenta el de atención, para que generar una
+campaña nunca deje mudo al asistente; el contenido ya tiene su tope de imágenes por mes. Lo que no
+diga en qué rubro va cae en contenido (así un olvido nunca calla al asistente). Los días son de la
+zona horaria del negocio. Los administradores no tienen tope.
 """
+import contextvars
 import logging
 
 from . import tools
@@ -31,8 +36,27 @@ def today_start() -> float:
     return tools.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
 
 
-def _cost_key() -> str:
-    return f"gasto:{tools.now():%Y-%m-%d}"
+ATENCION, CONTENIDO = "atencion", "contenido"
+_rubro: contextvars.ContextVar[str] = contextvars.ContextVar("rubro", default=CONTENIDO)
+
+
+class rubro:
+    """`with limites.rubro(limites.ATENCION):` todo gasto dentro cuenta en ese rubro (sigue a las tareas)."""
+
+    def __init__(self, nombre: str):
+        self.nombre = nombre
+
+    def __enter__(self):
+        self._token = _rubro.set(self.nombre)
+        return self
+
+    def __exit__(self, *exc):
+        _rubro.reset(self._token)
+
+
+def _cost_key(rubro: str = "") -> str:
+    dia = f"{tools.now():%Y-%m-%d}"
+    return f"gasto:{rubro}:{dia}" if rubro else f"gasto:{dia}"
 
 
 async def replies_today(db: Store, user_id: str) -> int:
@@ -51,21 +75,25 @@ TOPE_GENERACIONES = ("Ya pediste muchas propuestas en la última hora. Espera un
                      " generaste sigue aquí.")
 
 
-async def add_cost(usd: float) -> None:
-    """Suma al gasto del día de la cuenta actual (sin base, en pruebas sueltas, no se anota)."""
+async def add_cost(usd: float, rubro: str = "") -> None:
+    """Suma al gasto del día de la cuenta actual, al total y al rubro (el que se pasa o el del contexto).
+    Sin base (pruebas sueltas) no se anota."""
     store = cuenta().store
     if store is None or not usd:
         return
-    spent = float(await store.get(_cost_key()) or 0) + usd
-    await store.set(_cost_key(), f"{spent:.6f}")
+    for key in (_cost_key(), _cost_key(rubro or _rubro.get())):
+        spent = float(await store.get(key) or 0) + usd
+        await store.set(key, f"{spent:.6f}")
 
 
-async def spent_today(db: Store) -> float:
-    return float(await db.get(_cost_key()) or 0)
+async def spent_today(db: Store, rubro: str = "") -> float:
+    """Gasto del día: total, o solo el del rubro."""
+    return float(await db.get(_cost_key(rubro)) or 0)
 
 
 async def over_budget(db: Store) -> bool:
-    return cuenta().daily_budget_usd > 0 and await spent_today(db) >= cuenta().daily_budget_usd
+    """True si lo gastado hoy en atender ya llegó al presupuesto diario (el contenido no cuenta)."""
+    return cuenta().daily_budget_usd > 0 and await spent_today(db, ATENCION) >= cuenta().daily_budget_usd
 
 
 async def first_budget_alert(db: Store) -> bool:

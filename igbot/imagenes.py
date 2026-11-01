@@ -726,7 +726,7 @@ async def crear_pieza(store: Store, user_id: str, idea: str, plantilla: str, tex
     except Exception:
         await devolver(store, tipo)
         raise
-    await limites.add_cost(config.IMAGE_COST_USD)
+    await limites.add_cost(config.IMAGE_COST_USD, limites.CONTENIDO)
     hecha = await _guardar(store, user_id, final, None if plantilla == LIBRE else base,
                            f"{type(proveedor).__name__.lower()}:{getattr(proveedor, 'model', '')}")
     await store.add_event(user_id, "imagen", {"tipo": tipo, "media": hecha["media_id"], "plantilla": plantilla})

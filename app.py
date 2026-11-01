@@ -67,6 +67,11 @@ async def handle(user_id: str, rows: list[tuple[int, str]]) -> None:
     respuesta se descarta y se vuelve a generar con todos, para mandar una
     sola. No se descarta si ya agendó, canceló o mandó un correo.
     """
+    with limites.rubro(limites.ATENCION):
+        await _handle(user_id, rows)
+
+
+async def _handle(user_id: str, rows: list[tuple[int, str]]) -> None:
     store, instagram = cuenta().store, cuenta().instagram
     if (until := await store.paused_until(user_id)) > time.time():
         # La conversación la lleva una persona: se guarda pero no se contesta.
@@ -558,7 +563,8 @@ async def receive_entry(c: Cuenta, entry: dict) -> None:
         return
     for change in entry.get("changes", []):
         if change.get("field") == "mentions":  # te mencionaron en el post o en un comentario de otra cuenta
-            in_background(interacciones.mencion(c, change.get("value") or {}))
+            with limites.rubro(limites.ATENCION):
+                in_background(interacciones.mencion(c, change.get("value") or {}))
             continue
         if change.get("field") != "comments":
             continue
