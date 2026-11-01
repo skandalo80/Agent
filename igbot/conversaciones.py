@@ -357,6 +357,12 @@ async def _hilo(c: Cuenta, u: str, ver: str, buscar: str, hoja: int, n: int, aho
         alerta = (f'<div class="alerta"><b>Te lo pasó el asistente: {RAZONES.get(pidio.get("razon"), "pidió una persona")}.</b> '
                   + (f"Motivo: {escape(motivo[:200])}. " if motivo else "")
                   + f"Tu asistente no le contesta en las próximas {horas} h. {extender}</div>")
+    elif not en_pausa and (fallo := await c.store.ultimo_evento(u, "sin_respuesta")) and mensajes \
+            and mensajes[-1][0] == "user" and fallo[1] >= mensajes[-1][2] - 1:
+        porque = ("la cuenta llegó a su gasto máximo de hoy" if fallo[0].get("motivo") == "presupuesto"
+                  else "falló varias veces al generar la respuesta")
+        alerta = ('<div class="alerta"><b>El asistente no pudo contestar:</b> ' + porque + ". Se le avisó a la persona"
+                  " que se le contesta en un momento; contéstale tú aquí abajo o espera a que el asistente pueda.</div>")
     elif preguntas and not en_pausa:
         cuales = " ".join(f"«{escape(p[:200])}»" for p, _ in preguntas[-3:])
         alerta = (f'<div class="alerta"><b>Pregunta sin dato:</b> {cuales}. Tu asistente le dijo que lo consulta y'

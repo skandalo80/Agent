@@ -26,6 +26,28 @@ LIMIT_NOTICE = (
 )
 
 
+# Lo que recibe la persona cuando el asistente no pudo contestarle (Claude falló varias veces o la cuenta agotó
+# su presupuesto del día): una sola vez al día por persona, para que no se quede en silencio.
+SIN_RESPUESTA = "Recibimos tu mensaje. En un momento te contestamos por aquí."
+
+
+async def avisar_sin_respuesta(store: Store, user_id: str, motivo: str) -> bool:
+    """Le dice a la persona que se le contesta después (una vez al día) y deja el evento `sin_respuesta` para
+    que Conversaciones lo muestre. El mensaje no se guarda como respuesta del asistente: así el chat sigue
+    saliendo en Sin contestar hasta que alguien le conteste de verdad."""
+    await store.add_event(user_id, "sin_respuesta", {"motivo": motivo})
+    key = f"aviso_sin_respuesta:{user_id}:{tools.now():%Y-%m-%d}"
+    if await store.get(key):
+        return False
+    await store.set(key, "1")
+    try:
+        await cuenta().instagram.send_text(user_id, SIN_RESPUESTA)
+    except Exception:
+        log.exception("No se pudo avisar a %s que se le contesta después", user_id)
+        return False
+    return True
+
+
 def trim(text: str) -> str:
     if len(text) <= cuenta().max_message_chars:
         return text

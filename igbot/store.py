@@ -660,6 +660,24 @@ class Store:
             " AND mid IS NULL AND created_at >= ?", (since,))
         return (await cur.fetchone())[0]
 
+    async def pausas_vencidas(self, desde: float, hasta: float) -> list[str]:
+        """Chats cuya pausa terminó entre `desde` y `hasta` (para que el asistente retome lo que quedó sin contestar)."""
+        cur = await self.db.execute("SELECT user_id FROM paused WHERE until > ? AND until <= ?", (desde, hasta))
+        return [u for (u,) in await cur.fetchall()]
+
+    async def reabrir(self, user_id: str, ventana: float) -> int:
+        """Vuelve a poner en la cola los mensajes del cliente que quedaron sin respuesta (después del último
+        mensaje nuestro, del asistente o del dueño) y que aún están dentro de la ventana de Instagram.
+        Devuelve cuántos."""
+        cur = await self.db.execute(
+            "UPDATE messages SET status = 'pending' WHERE user_id = ? AND role = 'user' AND status != 'pending'"
+            " AND created_at >= ? AND id > COALESCE((SELECT MAX(id) FROM messages a WHERE a.user_id = messages.user_id"
+            " AND a.role = 'assistant'), 0)",
+            (user_id, time.time() - ventana),
+        )
+        await self.db.commit()
+        return cur.rowcount
+
     async def unpause(self, user_id: str) -> None:
         await self.db.execute("DELETE FROM paused WHERE user_id = ?", (user_id,))
         await self.db.commit()
@@ -795,6 +813,12 @@ class Store:
             (user_id, kind, json.dumps(detail, ensure_ascii=False), time.time()),
         )
         await self.db.commit()
+
+    async def ultimo_evento(self, user_id: str, kind: str) -> tuple[dict, float] | None:
+        cur = await self.db.execute("SELECT detail, created_at FROM events WHERE user_id = ? AND kind = ?"
+                                    " ORDER BY id DESC LIMIT 1", (user_id, kind))
+        row = await cur.fetchone()
+        return (json.loads(row[0] or "{}"), row[1]) if row else None
 
     async def events(self, kind: str, since: float, until: float) -> list[tuple[str, dict, float]]:
         cur = await self.db.execute(
