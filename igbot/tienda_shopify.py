@@ -162,9 +162,7 @@ DATOS_TIENDA = "{ shop { name myshopifyDomain primaryDomain { host } } }"
 
 
 @router.get("")
-async def ver(request: Request):
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def ver(request: Request, c: marco.Sesion):
     return await pagina(c, request.query_params.get("aviso", ""))
 
 
@@ -221,10 +219,7 @@ async def pagina(c: Cuenta, aviso: str = "", error: str = ""):
 
 
 @router.post("/conectar")
-async def conectar(request: Request):
-    marco.de_aqui(request)
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def conectar(request: Request, c: marco.Formulario):
     if not enabled():
         return RedirectResponse("/panel/shopify", status_code=303)
     f = await marco.form(request)
@@ -242,9 +237,7 @@ async def conectar(request: Request):
 
 
 @router.get("/callback")
-async def callback(request: Request):
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def callback(request: Request, c: marco.Sesion):
     params = list(request.query_params.multi_items())
     p = dict(params)
     tienda = p.get("shop", "").lower()
@@ -283,10 +276,7 @@ def _volver(aviso: str) -> RedirectResponse:
 
 
 @router.post("/desconectar")
-async def desconectar(request: Request):
-    marco.de_aqui(request)
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def desconectar(c: marco.Formulario):
     await guardar(c, {})
     return RedirectResponse("/panel/shopify?aviso=desconectada", status_code=303)
 

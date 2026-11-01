@@ -1091,9 +1091,7 @@ def _paso(valor) -> int:
 # --- rutas ---
 
 @router.get("")
-async def ver(request: Request):
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def ver(request: Request, c: marco.Sesion):
     q = request.query_params
     e = await de(c)
     paso = _paso(q.get("paso")) or (RESUMEN if lista(e) else 1)
@@ -1104,10 +1102,7 @@ async def ver(request: Request):
 
 
 @router.post("")
-async def guardar(request: Request):
-    marco.de_aqui(request)
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def guardar(request: Request, c: marco.Formulario):
     f = await request.form()
     paso = _paso(f.get("paso")) or 1
     accion = str(f.get("accion", ""))
@@ -1143,10 +1138,7 @@ async def guardar(request: Request):
 
 
 @router.post("/producto")
-async def guardar_producto(request: Request):
-    marco.de_aqui(request)
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def guardar_producto(request: Request, c: marco.Formulario):
     f = await request.form()
     accion = str(f.get("accion", "guardar"))
     prods = await productos(c)
@@ -1282,9 +1274,7 @@ def pagina_sugerencias(e: dict, datos: dict) -> str:
 
 
 @router.get("/sitio")
-async def ver_sitio(request: Request):
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def ver_sitio(c: marco.Sesion):
     datos = await sitio.sugerencias(c)
     if not datos:
         return RedirectResponse("/panel/empresa?paso=1", status_code=303)
@@ -1305,10 +1295,7 @@ async def ver_sitio(request: Request):
 
 
 @router.post("/sitio")
-async def usar_sitio(request: Request):
-    marco.de_aqui(request)
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def usar_sitio(request: Request, c: marco.Formulario):
     f = await request.form()
     datos = await sitio.sugerencias(c)
     if f.get("accion") != "usar" or not datos.get("campos"):
@@ -1345,10 +1332,7 @@ async def usar_sitio(request: Request):
 # --- importar de Shopify (shopify.py) ---
 
 @router.post("/shopify")
-async def leer_shopify(request: Request):
-    marco.de_aqui(request)
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def leer_shopify(c: marco.Formulario):
     url = (await de(c) or {}).get("sitio_web", "")
     if not url:
         return RedirectResponse("/panel/empresa?paso=1", status_code=303)
@@ -1375,9 +1359,7 @@ def fila_shopify(p: dict, ya: bool) -> str:
 
 
 @router.get("/shopify")
-async def ver_shopify(request: Request):
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def ver_shopify(c: marco.Sesion):
     datos = await shopify.lista(c)
     if not datos:
         return RedirectResponse("/panel/empresa?paso=3", status_code=303)
@@ -1427,10 +1409,7 @@ async def importar(c: Cuenta, elegidos: list[dict], moneda: str) -> None:
 
 
 @router.post("/shopify/importar")
-async def importar_shopify(request: Request):
-    marco.de_aqui(request)
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def importar_shopify(request: Request, c: marco.Formulario):
     f = await request.form()
     datos = await shopify.lista(c)
     elegidos = set(f.getlist("sid"))

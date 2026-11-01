@@ -76,11 +76,8 @@ def entrar(solo: str = ""):
 
 
 @router.post("/conectar")
-async def conectar_desde_panel(request: Request):
+async def conectar_desde_panel(c: marco.Formulario):
     """Desde Conexión, ya con sesión: conectar su página."""
-    marco.de_aqui(request)
-    if not marco.cuenta_de_sesion(request):
-        return RedirectResponse("/panel", status_code=303)
     return _dialogo() if enabled() else RedirectResponse("/panel/facebook", status_code=303)
 
 
@@ -384,9 +381,7 @@ AVISOS = {
 
 
 @router.get("")
-async def ver(request: Request):
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def ver(request: Request, c: marco.Sesion):
     return await pagina(c, request.query_params.get("aviso", ""))
 
 
@@ -425,19 +420,13 @@ async def pagina(c: Cuenta, aviso: str = ""):
 
 
 @router.post("/publicar")
-async def cambiar_publicar(request: Request):
-    marco.de_aqui(request)
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def cambiar_publicar(request: Request, c: marco.Formulario):
     await c.store.set("fb_publicar", "0" if (await marco.form(request)).get("publicar") == "0" else "1")
     return RedirectResponse("/panel/facebook", status_code=303)
 
 
 @router.post("/desconectar")
-async def desconectar(request: Request):
-    marco.de_aqui(request)
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def desconectar(c: marco.Formulario):
     if c.ig_via != "facebook":  # si su Instagram va por la página, quitarla lo apagaría todo
         await pagina_fb.quitar(c.store)
         c.fb_page_id = ""

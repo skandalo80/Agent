@@ -331,25 +331,20 @@ async def ver(request: Request):
 
 
 @router.get("/bienvenida")
-async def ver_bienvenida(request: Request):
-    c = marco.cuenta_de_sesion(request)
-    return await bienvenida(c) if c else marco.entrar(request)
+async def ver_bienvenida(c: marco.Sesion):
+    return await bienvenida(c)
 
 
 @router.post("/bienvenida")
-async def omitir_empresa(request: Request):
+async def omitir_empresa(request: Request, c: marco.Formulario):
     """"Omitir por ahora": pasa al paso 2; su Perfil de empresa lo llena después desde su cuenta."""
-    marco.de_aqui(request)
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
     if (await marco.form(request)).get("accion") == "omitir":
         await c.store.set("bienvenida_empresa", "omitida")
     return RedirectResponse("/panel/bienvenida", status_code=303)
 
 
 @router.get("/asistente")
-async def ver_asistente(request: Request):
-    c = marco.cuenta_de_sesion(request)
+async def ver_asistente(request: Request, c: marco.Sesion):
     q = request.query_params
     if q.get("vista") == "conexion":  # enlaces viejos
         return RedirectResponse("/panel/conexion", status_code=303)
@@ -357,15 +352,13 @@ async def ver_asistente(request: Request):
     hoja = int(q["p"]) if q.get("p", "").isdigit() else 1
     n = int(q["n"]) if q.get("n", "").isdigit() else 0
     return await panel_de(c, ver=q.get("ver", ""), vista=vista, abrir=q.get("abrir") == "1",
-                          buscar=q.get("q", ""), hoja=hoja, chat=q.get("chat", "")[:64], n=n) if c else marco.entrar(request)
+                          buscar=q.get("q", ""), hoja=hoja, chat=q.get("chat", "")[:64], n=n)
 
 
 @router.get("/conexion")
-async def ver_conexion(request: Request):
-    c = marco.cuenta_de_sesion(request)
+async def ver_conexion(request: Request, c: marco.Sesion):
     from .cobros import AVISOS  # al volver de conectar un cobro
-    return await panel_de(c, vista="conexion", aviso=AVISOS.get(request.query_params.get("aviso", ""), "")) \
-        if c else marco.entrar(request)
+    return await panel_de(c, vista="conexion", aviso=AVISOS.get(request.query_params.get("aviso", ""), ""))
 
 
 @router.get("/asistente/conexion")  # su dirección anterior
@@ -374,12 +367,9 @@ async def conexion_vieja():
 
 
 @router.post("/guardar")
-async def guardar(request: Request):
+async def guardar(request: Request, c: marco.Formulario):
     """El formulario de antes. Ahora todo se guarda por pasos (asistente.py); aquí solo queda que la
     principal vuelva a las instrucciones del servidor (prompts/system.md)."""
-    marco.de_aqui(request)
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
     if not c.slug and (await marco.form(request)).get("accion") == "restaurar":
         c.prompt_editado().unlink(missing_ok=True)
         log.info("@%s volvió a las instrucciones del servidor", await marco.usuario(c))
@@ -390,10 +380,7 @@ async def guardar(request: Request):
 
 
 @router.post("/estado")
-async def estado(request: Request):
-    marco.de_aqui(request)
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def estado(request: Request, c: marco.Formulario):
     f = await marco.form(request)
     encender = f.get("activo") == "1"
     if encender and c.en_revision:
@@ -413,12 +400,9 @@ def _bandeja_de(f: dict) -> dict:
 
 
 @router.post("/pausas")
-async def cambiar_pausa(request: Request):
+async def cambiar_pausa(request: Request, c: marco.Formulario):
     """El interruptor Asistente / Tú de un chat: lo toma (pausa al asistente), lo reactiva o le da más tiempo.
     También "Marcar como resuelta" de una pregunta sin dato."""
-    marco.de_aqui(request)
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
     f = await marco.form(request)
     usuario_chat, accion = f.get("usuario", ""), f.get("accion")
     bandeja = _bandeja_de(f)
@@ -453,13 +437,10 @@ async def cambiar_pausa(request: Request):
 
 
 @router.post("/responder")
-async def responder(request: Request):
+async def responder(request: Request, c: marco.Formulario):
     """Contestar un chat desde el panel: sale por Instagram como mensaje de la cuenta, queda en el
     historial como respuesta a mano (el bot la ve) y el asistente se pausa ahí, como cuando contestas
     desde Instagram. Su eco se ignora porque Instagram ya dio su id al enviarlo (store.add_sent)."""
-    marco.de_aqui(request)
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
     f = await marco.form(request)
     usuario_chat, texto = f.get("usuario", ""), f.get("texto", "").strip()[:conversaciones.MAX_RESPUESTA]
     bandeja = _bandeja_de(f) | {"chat": usuario_chat}
@@ -497,12 +478,9 @@ async def responder(request: Request):
 
 
 @router.post("/venta")
-async def marcar_venta(request: Request):
+async def marcar_venta(request: Request, c: marco.Formulario):
     """"Marcar venta" en un chat: la venta que se cerró fuera de Skandar (en persona, por transferencia) cuenta
     para el anuncio que trajo ese chat. "quitar" borra una de las marcadas a mano."""
-    marco.de_aqui(request)
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
     f = await marco.form(request)
     usuario_chat = f.get("usuario", "")
     bandeja = _bandeja_de(f) | {"chat": usuario_chat}
@@ -610,16 +588,12 @@ async def pagina_prueba(c: Cuenta, aviso: str = "") -> HTMLResponse:
 
 
 @router.get("/probar")
-async def ver_prueba(request: Request):
-    c = marco.cuenta_de_sesion(request)
-    return await pagina_prueba(c) if c else RedirectResponse("/panel", status_code=303)
+async def ver_prueba(c: marco.Sesion):
+    return await pagina_prueba(c)
 
 
 @router.post("/probar")
-async def probar(request: Request):
-    marco.de_aqui(request)
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def probar(request: Request, c: marco.Formulario):
     f = await marco.form(request)
     if f.get("accion") == "reiniciar":
         await c.store.set("prueba", "[]")

@@ -257,10 +257,7 @@ async def vigilar(cada: float = 60) -> None:
 
 
 @router.get("/salud")
-async def ver(request: Request):
-    c = marco.cuenta_de_sesion(request)
-    if not c:
-        return RedirectResponse("/panel", status_code=303)
+async def ver(request: Request, c: marco.Sesion):
     if c.slug:
         return await marco.no_encontrada(request)
     d = await datos()

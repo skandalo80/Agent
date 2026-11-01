@@ -354,10 +354,7 @@ def volver_a(request: Request, pedido: str) -> str:
 
 
 @router.post("/ayuda")
-async def preguntar(request: Request):
-    marco.de_aqui(request)
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def preguntar(request: Request, c: marco.Formulario):
     f = await marco.form(request)
     destino = volver_a(request, f.get("volver", "")) + "#skandi"
     k = clave(c)
@@ -575,10 +572,7 @@ def quien_es(x: dict) -> str:
 
 
 @router.get("/skandi")
-async def ver_chats(request: Request, ver: str = "todos", p: int = 1, chat: int = 0):
-    c = marco.cuenta_de_sesion(request)
-    if not c:
-        return RedirectResponse("/panel", status_code=303)
+async def ver_chats(request: Request, c: marco.Sesion, ver: str = "todos", p: int = 1, chat: int = 0):
     if c.slug or (pr := principal()) is None:
         return await marco.no_encontrada(request)
     ver = ver if ver in FILTROS else "todos"

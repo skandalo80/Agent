@@ -14,8 +14,7 @@ from datetime import date, datetime, timedelta
 from html import escape
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Request
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter
 
 from . import config, conversaciones, marco, metricas
 from .cuenta import Cuenta, usar
@@ -228,7 +227,5 @@ async def pagina(c: Cuenta):
 
 
 @router.get("")
-async def ver(request: Request):
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def ver(c: marco.Sesion):
     return await pagina(c)

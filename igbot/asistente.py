@@ -490,9 +490,7 @@ async def pagina(c: Cuenta, paso: str = "", aviso: str = "", nota: str = "", per
 
 
 @router.get("/asistente/configura")
-async def ver(request: Request):
-    if not (c := marco.cuenta_de_sesion(request)):
-        return marco.entrar(request)
+async def ver(request: Request, c: marco.Sesion):
     q = request.query_params
     return await pagina(c, q.get("paso", ""), aviso={"1": "Guardado.", "aplicado": "Cambios aplicados."}.get(q.get("ok", ""), ""))
 
@@ -505,11 +503,7 @@ def _texto(f: dict, campo: str, maximo: int) -> str:
 
 
 @router.post("/asistente/paso")
-async def guardar(request: Request):
-    marco.de_aqui(request)
-    c = marco.cuenta_de_sesion(request)
-    if not c:
-        return RedirectResponse("/panel", status_code=303)
+async def guardar(request: Request, c: marco.Formulario):
     f = await marco.form(request)
     paso = f.get("paso", "")
     if paso not in ORDEN:

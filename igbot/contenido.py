@@ -969,9 +969,7 @@ def preparar_foto(data: bytes) -> bytes:
 # --- rutas ---
 
 @router.get("")
-async def ver(request: Request):
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def ver(request: Request, c: marco.Sesion):
     if c.imagenes_mes <= 0:
         return sin_plan()
     q = request.query_params
@@ -987,10 +985,8 @@ async def ver(request: Request):
 
 
 @router.get("/descargar")
-async def descargar_calendario(request: Request):
+async def descargar_calendario(request: Request, c: marco.Sesion):
     """El periodo que se ve en Calendario (mes, semana o día) en PDF."""
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
     if c.imagenes_mes <= 0:
         return sin_plan()
     from . import calendario as cal
@@ -1006,11 +1002,8 @@ async def descargar_calendario(request: Request):
 
 
 @router.post("/mover")
-async def mover_en_calendario(request: Request):
+async def mover_en_calendario(request: Request, c: marco.Formulario):
     """Lo manda el arrastre del calendario (panel.js), como formulario: la CSP no deja usar fetch."""
-    marco.de_aqui(request)
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
     from . import calendario as cal
     f = await marco.form(request)
     error = await cal.mover_item(c, f.get("ref", ""), f.get("dia", ""), f.get("h", ""))
@@ -1032,9 +1025,7 @@ async def ver_nuevo():
 
 
 @router.get("/post/{post_id}")
-async def ver_post(request: Request, post_id: int):
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def ver_post(request: Request, c: marco.Sesion, post_id: int):
     if c.imagenes_mes <= 0:
         return sin_plan()
     tomar_desde(request.query_params.get("desde"))
@@ -1049,10 +1040,7 @@ async def ver_post(request: Request, post_id: int):
 
 
 @router.post("/post/{post_id}")
-async def editar(request: Request, post_id: int):
-    marco.de_aqui(request)
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def editar(request: Request, c: marco.Formulario, post_id: int):
     datos = await request.form()  # multipart: puede traer su foto ("Subir foto")
     subida = datos.get("foto")
     f = {k: v for k, v in datos.items() if isinstance(v, str)}
@@ -1161,9 +1149,7 @@ async def subir_foto(c: Cuenta, post_id: int, p: dict, data: bytes) -> None:
 
 
 @router.get("/insights/{media_id}")
-async def ver_insights(request: Request, media_id: str):
-    if not (c := marco.cuenta_de_sesion(request)):
-        return RedirectResponse("/panel", status_code=303)
+async def ver_insights(c: marco.Sesion, media_id: str):
     if not media_id.isdigit() or c.imagenes_mes <= 0:
         raise HTTPException(status_code=404)
     return await pagina_insights(c, media_id)
