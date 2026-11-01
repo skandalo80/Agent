@@ -404,7 +404,8 @@ def conversaciones_html(c: Cuenta, d: dict, publico: dict) -> str:
 # Los tipos de Configura tus interacciones (interacciones.CASOS), con nombre corto para la gráfica.
 TIPOS_COMENTARIO = {
     "elogio": "Elogio", "pregunta": "Pregunta", "compra": "Quiere comprar", "queja": "Queja o crítica",
-    "etiqueta": "Etiqueta a un amigo", "emojis": "Solo emojis", "otro": "Otro",
+    "etiqueta": "Etiqueta a un amigo", "emojis": "Solo emojis", "ataque": "Insulto o ataque",
+    "otro": "Otro",
 }
 MENCION = "mencion"  # interacciones.mencion las guarda en comments con este user_id
 MAX_POSTS_COMENTARIOS = 5

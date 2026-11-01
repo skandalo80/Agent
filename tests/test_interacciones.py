@@ -243,3 +243,19 @@ def test_mencion_en_un_post_se_agradece_ahi(monkeypatch):
 
     assert con_cuenta({"menciones": {"post": {"pub": {"on": False}}}}, apagada, monkeypatch) == []
     assert con_cuenta({}, apagada, monkeypatch, imagenes=0) == []
+
+
+def test_a_la_misma_persona_un_dm_cada_7_dias(monkeypatch):
+    def escribe(texto):
+        return {"tipo": "pregunta", "publica": "¡Gracias por preguntar!", "dm": "Hola, te cuento."}
+
+    ig, _, _ = run([comment("c1", "cuánto cuesta?", media="m2"), comment("c2", "y hacen envíos?", media="m2"),
+                    comment("c3", "cuánto cuesta?", media="m2", author="beto")], tabla(), escribe, monkeypatch)
+    assert ig.dms == [("c1", "Hola, te cuento."), ("c3", "Hola, te cuento.")]
+    assert len(ig.public) == 3  # en público sí se contesta cada vez
+
+
+def test_los_insultos_vienen_apagados(monkeypatch):
+    ig, resultados, _ = run([comment("c1", "son unos payasos", media="m2")], tabla(),
+                            lambda t: {"tipo": "ataque", "publica": "x", "dm": "y"}, monkeypatch)
+    assert ig.public == [] and ig.dms == [] and ("tipo: ataque", 0, 0) in resultados

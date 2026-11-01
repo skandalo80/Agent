@@ -1,9 +1,10 @@
 """Configura tus interacciones: qué contesta el asistente fuera de los DMs normales, paso a paso.
 
 1 Comentarios: una tabla con una fila por tipo de comentario (solo emojis, elogio, pregunta, quiere comprar,
-  etiqueta a un amigo, queja, otro) y dos columnas, "en comentarios" y "por DM", cada una con interruptor y
+  etiqueta a un amigo, queja, insulto, otro) y dos columnas, "en comentarios" y "por DM", cada una con interruptor y
   La IA contesta / Predeterminada. En comentarios la predeterminada es una lista que se turna (Instagram puede
-  tomar como spam la misma frase repetida); por DM es un solo mensaje. Abajo, ocultar spam.
+  tomar como spam la misma frase repetida); por DM es un solo mensaje, y a la misma persona como mucho uno cada
+  DIAS_ENTRE_DMS días, para no insistirle. Los insultos vienen apagados. Abajo, ocultar spam.
 2 Menciones: cuando te mencionan en su historia (llega como DM: se contesta por DM) o en su post o comentario
   (se contesta en su post con POST /{ig_id}/mentions; ahí no se puede mandar DM ni comentar fotos donde te etiquetan).
 3 Respuestas a tus historias: una reacción con emoji o un mensaje sobre tu historia (llegan como DM).
@@ -52,6 +53,9 @@ CASOS = [
      {"pub": (True, "ia"), "dm": (False, "ia")}),
     ("queja", "Una queja o crítica", "“Nunca llegó mi pedido”", "una queja, un reclamo o una crítica al negocio",
      {"pub": (True, "ia"), "dm": (False, "ia")}),
+    ("ataque", "Un insulto o ataque", "Burlas, groserías, “son unos rateros”",
+     "un insulto, una burla o una agresión sin un reclamo concreto (un reclamo por un pedido o el servicio es queja)",
+     {"pub": (False, "ia"), "dm": (False, "ia")}),
     ("otro", "Otro comentario", "Lo que no entra arriba", "cualquier otra cosa", {"pub": (False, "ia"), "dm": (False, "ia")}),
 ]
 TIPOS = [k for k, *_ in CASOS]
@@ -75,6 +79,7 @@ MODOS = {"ia": "La IA contesta", "fijo": "Predeterminada"}
 MAX_RESPUESTA = 300  # cada respuesta predeterminada en público
 MAX_LISTA = 8  # respuestas predeterminadas por tipo
 MAX_DM = 1000
+DIAS_ENTRE_DMS = 7  # a la misma persona, como mucho un DM por sus comentarios en estos días
 MAX_CLAVES = 30  # palabras clave generales
 TOPES = [50, 100, 300, 1000]  # respuestas al día (comentarios y menciones)
 EJEMPLOS_LISTA = {"emojis": "Ej. ¡Gracias! 💛", "elogio": "Ej. ¡Qué bueno que te gustó!",
@@ -94,7 +99,8 @@ PASOS = [("comentarios", "Comentarios", "¿Qué contestar a cada comentario?"),
 ORDEN = [k for k, *_ in PASOS]
 AYUDAS = {
     "comentarios": "Elige qué comentarios contesta tu asistente, en público y por DM. La IA contesta con el tono de"
-                   " tu asistente y se adapta a cada comentario.",
+                   f" tu asistente y se adapta a cada comentario. Por DM, como mucho uno cada {DIAS_ENTRE_DMS} días a la"
+                   " misma persona.",
     "menciones": "Cuando otra cuenta te menciona. En historias se contesta por DM; en un post o comentario, ahí mismo"
                  " (Instagram no deja mandarle DM ni comentar fotos donde solo te etiquetan).",
     "historias": "Llegan como DM. La IA contesta es tu asistente de siempre, con todo lo que sabe de tu negocio.",
@@ -246,6 +252,9 @@ async def atender(c: Cuenta, comment_id: str, author: str, text: str, store, ins
     if not disponible(c) or "comentarios" not in datos or parent or not activo(datos):
         return False
     todas = reglas(datos)
+    if await store.dms_por_comentario(author, time.time() - DIAS_ENTRE_DMS * 86400):
+        for r in todas.values():  # ya le llegó un DM por otro comentario hace poco: solo se contesta en público
+            r["dm"]["on"] = False
     tipo = tipo_sin_claude(text)
     if tipo and not (todas[tipo]["pub"]["on"] or todas[tipo]["dm"]["on"]):
         await store.comment_result(comment_id, f"tipo: {tipo}", False, False)

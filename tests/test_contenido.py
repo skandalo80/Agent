@@ -1050,7 +1050,7 @@ def test_interacciones_paso_a_paso(cliente, monkeypatch):
     client, c, *_ = cliente
     monkeypatch.setattr(c, "imagenes_mes", 5)
     r = client.get("/panel/interacciones").text  # sin nada guardado: empieza por Comentarios
-    assert "¿Qué contestar a cada comentario?" in r and r.count('<details class="it-fila">') == 7
+    assert "¿Qué contestar a cada comentario?" in r and r.count('<details class="it-fila">') == 8
     assert 'class="lat-item on" href="/panel/interacciones"' in r  # en Configuración
     assert r.index('title="Tu marca"') < r.index('title="Tus interacciones"') < r.index('title="Ayuda"')
     r = client.post("/panel/interacciones", headers=ORIGEN, follow_redirects=False, data={

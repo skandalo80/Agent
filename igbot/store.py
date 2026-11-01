@@ -368,6 +368,12 @@ class Store:
         cur = await self.db.execute("SELECT COUNT(*) FROM comments WHERE created_at >= ?", (since,))
         return (await cur.fetchone())[0]
 
+    async def dms_por_comentario(self, user_id: str, since: float) -> int:
+        """Los DMs que se le mandaron a `user_id` por sus comentarios desde `since`."""
+        cur = await self.db.execute(
+            "SELECT COUNT(*) FROM comments WHERE user_id = ? AND dm_sent = 1 AND created_at >= ?", (user_id, since))
+        return (await cur.fetchone())[0]
+
     async def comment_result(self, comment_id: str, matched: str, dm_sent: bool, replied: bool) -> None:
         await self.db.execute(
             "UPDATE comments SET matched = ?, dm_sent = ?, replied = ? WHERE comment_id = ?",
