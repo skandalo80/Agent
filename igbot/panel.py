@@ -2547,7 +2547,7 @@ async def prueba_fin(c: Cuenta, ancla: bool = True) -> str:
     return (
         (ANCLA if ancla else "")
         + '<form method="post" action="/panel/probar#ultimo" class="escribir">'
-        f'<input type="text" name="mensaje" maxlength="{MAX_MENSAJE_PRUEBA}" placeholder="Escribe un mensaje" required autofocus>'
+        f'<input type="text" name="mensaje" maxlength="{MAX_MENSAJE_PRUEBA}" placeholder="Escribe un mensaje" required data-foco>'
         '<button class="boton" name="accion" value="enviar">Enviar</button></form></div>'
         f'<p class="ayuda" style="margin-top:.75rem">Te quedan {max(MAX_PRUEBAS_DIA - usadas, 0)} mensajes de prueba hoy.</p>'
         '<div class="acciones">'
