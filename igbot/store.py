@@ -1157,6 +1157,31 @@ class Store:
             fila(ad).update(ventas=n, monto=float(monto or 0), moneda=moneda or "")
         return out
 
+    async def embudo(self, desde: float, hasta: float) -> dict:
+        """Hasta dónde llegaron las conversaciones del periodo (personas, no avisos): pidieron cotización
+        (lo anotó el asistente o cotizó un pedido), agendaron cita (y no la cancelaron), pasaron a tu equipo,
+        y las ventas (pagos con link, pedidos de la tienda y las marcadas a mano) con su monto."""
+        ventana = "created_at >= ? AND created_at < ?"
+
+        async def uno(sql, *args):
+            cur = await self.db.execute(sql, (*args,))
+            return await cur.fetchone()
+
+        cotizaciones = (await uno(f"SELECT COUNT(DISTINCT user_id) FROM events WHERE kind IN ('interes', 'cotizacion')"
+                                  f" AND {ventana}", desde, hasta))[0]
+        citas = (await uno(
+            "SELECT COUNT(*) FROM events e LEFT JOIN meetings m ON m.event_id = json_extract(e.detail, '$.id')"
+            " WHERE e.kind = 'cita' AND COALESCE(m.status, 'active') = 'active'"
+            " AND e.created_at >= ? AND e.created_at < ?", desde, hasta))[0]
+        equipo = (await uno(f"SELECT COUNT(DISTINCT user_id) FROM events WHERE kind = 'humano' AND {ventana}",
+                            desde, hasta))[0]
+        n, monto, moneda = await uno(f"SELECT COUNT(*), COALESCE(SUM(monto), 0), MAX(moneda) FROM ventas WHERE {ventana}",
+                                     desde, hasta)
+        compradores = (await uno(f"SELECT COUNT(DISTINCT user_id) FROM ventas WHERE user_id != '' AND {ventana}",
+                                 desde, hasta))[0]
+        return {"cotizaciones": cotizaciones, "citas": citas, "equipo": equipo, "ventas": n,
+                "compradores": compradores, "monto": float(monto or 0), "moneda": moneda or ""}
+
     async def codigo_chat(self, user_id: str) -> str:
         """El código de este chat para los enlaces a la tienda (se crea la primera vez)."""
         cur = await self.db.execute("SELECT codigo FROM codigos_chat WHERE user_id = ?", (user_id,))

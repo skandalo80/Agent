@@ -163,11 +163,17 @@ class Instagram:
             await self.store.set(f"media_de:{link}", media_id)
         return link
 
-    async def media_insights(self, media_id: str) -> dict[str, int]:
-        """Alcance, vistas, likes, comentarios, guardados y compartidos de un post propio.
-        Necesita el permiso instagram_business_manage_insights."""
-        data = await self._graph("GET", f"{media_id}/insights",
-                                 metric="reach,views,likes,comments,saved,shares,total_interactions")
+    # Qué métricas da Instagram según el formato (pedir una que no aplica tira toda la llamada): los posts
+    # dan además visitas al perfil y seguidores que dejó; los reels no; las historias dan respuestas.
+    METRICAS_POST = "reach,views,likes,comments,saved,shares,total_interactions,profile_visits,follows"
+    METRICAS_REEL = "reach,views,likes,comments,saved,shares,total_interactions"
+    METRICAS_HISTORIA = "reach,views,replies,shares,profile_visits,follows"
+
+    async def media_insights(self, media_id: str, tipo: str = "post") -> dict[str, int]:
+        """Alcance, vistas, likes, comentarios, guardados, compartidos (y visitas al perfil y seguidores en posts
+        e historias; respuestas en historias) de una publicación propia. Necesita instagram_business_manage_insights."""
+        metricas = {"historia": self.METRICAS_HISTORIA, "reel": self.METRICAS_REEL}.get(tipo, self.METRICAS_POST)
+        data = await self._graph("GET", f"{media_id}/insights", metric=metricas)
         return {m["name"]: (m.get("values") or [{}])[0].get("value", 0) for m in data.get("data", [])}
 
     async def numeros_cuenta(self) -> dict[str, int]:
@@ -186,7 +192,7 @@ class Instagram:
                                  fields="id,caption,media_type,media_url,thumbnail_url,permalink,timestamp")
         return data.get("data", [])
 
-    MEDIA_FIELDS = "id,caption,media_type,media_url,thumbnail_url,permalink,timestamp"
+    MEDIA_FIELDS = "id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp"
 
     async def media_page(self, limit: int, after: str = "", fields: str = MEDIA_FIELDS) -> tuple[list[dict], str]:
         """Una página de las publicaciones de la cuenta, de la más nueva a la más vieja, y el
