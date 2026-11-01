@@ -98,12 +98,18 @@ async def paginas_del_codigo(code: str) -> list[dict]:
             "client_id": config.FB_APP_ID, "client_secret": config.APP_SECRET,
             "redirect_uri": redirect_uri(), "code": code})
         _check(r)
+        token = r.json()["access_token"]
+        # Con la configuración de "System-user access token" (la que deja elegir portafolio y cuenta de
+        # Instagram, como Manychat) el token ya es de larga duración y no se cambia: si falla, se usa tal cual.
         r = await http.get(f"{base}/oauth/access_token", params={
             "grant_type": "fb_exchange_token", "client_id": config.FB_APP_ID,
-            "client_secret": config.APP_SECRET, "fb_exchange_token": r.json()["access_token"]})
-        _check(r)
+            "client_secret": config.APP_SECRET, "fb_exchange_token": token})
+        if r.is_error:
+            log.info("Token de Facebook sin cambiar a 60 días (%s): se usa el que llegó", r.status_code)
+        else:
+            token = r.json().get("access_token", token)
         global _ultimo_token
-        _ultimo_token = r.json()["access_token"]
+        _ultimo_token = token
         r = await http.get(f"{base}/me/accounts", params={
             "access_token": _ultimo_token, "limit": 100,
             "fields": "id,name,access_token,instagram_business_account{id,username,followers_count,media_count}"})
@@ -125,11 +131,13 @@ async def diagnostico_sin_paginas() -> None:
         "portafolios": ("/me/businesses", {"fields": "id,name,owned_instagram_accounts{id,username},"
                                                      "instagram_business_accounts{id,username}"}),
         "me_instagram": ("/me", {"fields": "id,name,accounts{id,name}"}),
+        "debug_token": ("/debug_token", {"input_token": _ultimo_token}),
     }
     async with httpx.AsyncClient(timeout=15) as http:
         for nombre, (ruta, params) in consultas.items():
             try:
-                r = await http.get(base + ruta, params={**params, "access_token": _ultimo_token})
+                quien = f"{config.FB_APP_ID}|{config.APP_SECRET}" if nombre == "debug_token" else _ultimo_token
+                r = await http.get(base + ruta, params={**params, "access_token": quien})
                 log.warning("META SIN PAGINA %s %s: %s", nombre, r.status_code, r.text[:1500])
             except httpx.HTTPError as e:
                 log.warning("META SIN PAGINA %s: %s", nombre, e)
