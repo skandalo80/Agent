@@ -149,16 +149,26 @@ async def diagnostico_sin_paginas() -> None:
                     negocio = str(r.json().get("client_business_id") or "")
             except (httpx.HTTPError, ValueError) as e:
                 log.warning("META SIN PAGINA %s: %s", nombre, e)
-        for borde in ("owned_instagram_accounts", "instagram_accounts", "instagram_business_accounts",
-                      "client_instagram_assets"):
-            if not negocio:
-                break
+        try:
+            uid = str((await http.get(base + "/me", params={"fields": "id", "access_token": _ultimo_token})).json().get("id") or "")
+        except (httpx.HTTPError, ValueError):
+            uid = ""
+        rutas = [f"/{uid}/assigned_pages", f"/{uid}/assigned_business_asset_groups",
+                 f"/{uid}/assigned_instagram_accounts", "/me/instagram_business_accounts",
+                 f"/{negocio}?fields=id,name", f"/{negocio}/owned_instagram_assets",
+                 f"/{negocio}/client_instagram_assets?fields=id,username,instagram_account",
+                 f"/{negocio}/owned_pages", f"/{negocio}/client_pages",
+                 f"/{negocio}/system_user_access_tokens?fetch_only=true"] if uid and negocio else []
+        for ruta in rutas:
+            ruta, _, q = ruta.partition("?")
+            params = dict(x.split("=", 1) for x in q.split("&") if x)
             try:
-                r = await http.get(f"{base}/{negocio}/{borde}",
-                                   params={"fields": "id,username", "access_token": _ultimo_token})
-                log.warning("META SIN PAGINA negocio_%s %s: %s", borde, r.status_code, r.text[:1500])
+                r = await http.get(base + ruta, params={**params, "access_token": _ultimo_token,
+                                                        **({"system_user_id": uid} if "system_user_access" in ruta else {})})
+                texto = r.text if "system_user_access" not in ruta else ("con datos" if '"access_token"' in r.text else r.text)
+                log.warning("META SIN PAGINA %s %s: %s", ruta, r.status_code, texto[:1500])
             except httpx.HTTPError as e:
-                log.warning("META SIN PAGINA negocio_%s: %s", borde, e)
+                log.warning("META SIN PAGINA %s: %s", ruta, e)
 
 
 def _ig(p: dict) -> dict:
