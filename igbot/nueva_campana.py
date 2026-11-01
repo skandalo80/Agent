@@ -10,7 +10,8 @@ Claude tres ideas de campaña (brief.conceptos); en el paso Brief elige una, la 
 campaña con campanas.armar a partir de ese brief.
 
 Por dentro, lo que eligió se traduce a lo que ya usa campanas.proponer: los temas salen del objetivo y del
-mensaje, los formatos y horarios tal cual (o todos, con "Que la IA decida"), y el resto viaja a Claude como
+mensaje, los formatos tal cual (o todos, con "Que la IA decida") y los horarios tal cual (o todos, a la hora en que
+está conectado su público, con "Cuando está tu público"), y el resto viaja a Claude como
 texto (objetivo, mensaje, producto, visual, estilo), entre etiquetas y escapado: lo escribió el cliente.
 
 Las opciones de Objetivo y Mensaje salen del Perfil de empresa (empresa.opciones_campana, que se escriben al
@@ -196,7 +197,8 @@ VARIEDAD = {
                      "#4a2312"),
 }
 ARMADO = {"plantilla": "Con tu plantilla", "libre": "Diseño libre"}
-HORARIOS = {**{k: f"{v[0]} · {v[1]}" for k, v in campanas.HORARIOS.items()}, "ia": "Que la IA decida"}
+HORARIOS = {**{k: f"{v[0]} · {v[1]}" for k, v in campanas.HORARIOS.items()}, "ia": "Cuando está tu público"}
+MAX_PREGUNTAN = 3  # preguntas de sus clientes que se enseñan en el paso Mensaje
 DIAS = ("Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom")
 MAX_POSTS = 30
 MAX_HISTORIAS = 30
@@ -298,8 +300,10 @@ async def a_campana(c: Cuenta, b: dict) -> dict:
     if "ia" in b["formatos"] or not formatos:
         formatos = [k for k in campanas.FORMATOS if k not in fuera]
     horarios = [k for k in b["horarios"] if k in campanas.HORARIOS]
-    if "ia" in b["horarios"] or not horarios:
+    horas = {}
+    if "ia" in b["horarios"] or not horarios:  # a la hora en que más seguidores suyos están conectados, si se sabe
         horarios = list(campanas.HORARIOS)
+        horas = await campanas.horas_de(c)
     prod = next((p for p in await productos(c) if p["id"] == b["producto"]), None)
     producto = texto_producto(b, prod)
     # Qué se ve solo cuenta si el dueño lo eligió: con el paso oculto, lo decide el plan con los datos de su perfil.
@@ -314,9 +318,9 @@ async def a_campana(c: Cuenta, b: dict) -> dict:
             "inicio": inicio.isoformat(), "semanas": b["semanas"], "publicar": "lun-sab",
             "dias_semana": sorted(b["dias"]), "n_posts": b["n_posts"], "n_historias": b.get("n_historias", 0),
             "tema": b["texto"],
-            "modo": "explorar", "mezcla": b["mezcla"], "temas": temas, "enfoques": bool(enfoques),
-            "formatos": formatos, "horarios": horarios,
-            "clientes": False,  # Ideas sugeridas (lo que preguntan, repetir lo que funcionó) está fuera por ahora
+            "modo": "repetir" if b.get("funciona") else "explorar", "mezcla": b["mezcla"], "temas": temas,
+            "enfoques": bool(enfoques), "formatos": formatos, "horarios": horarios, "horas": horas,
+            "clientes": bool(b.get("preguntan")),  # responde lo que más le preguntan (paso Mensaje)
             "objetivo": f"{obj['titulo']}: {obj.get('descripcion', '')}".strip(": "),
             "mensaje": "; ".join(f"{m['titulo']}: {m.get('descripcion', '')}" for m in msgs),
             "producto": producto, "producto_id": prod["id"] if prod else "", "visual": visual, "estilo": estilo,
@@ -446,9 +450,11 @@ def del_form(f, paso: int, b: dict, objetivos: list[dict], mensajes: list[dict],
             b["objetivo"] = g("objetivo")
             b["mensajes"] = []  # los mensajes dependen del objetivo: se eligen de nuevo
             b["hechos"] = [h for h in b.get("hechos", []) if h != 2]
+        b["funciona"] = g("funciona") == "1"
         return "" if b["objetivo"] else "Elige qué quieres lograr."
     if paso == 2:
         b["mensajes"] = _lista(f, "mensajes", {m["k"] for m in mensajes})[:MAX_MENSAJES]
+        b["preguntan"] = g("preguntan") == "1"
         b["con_producto"], b["con_texto"] = g("con_producto") == "1", g("con_texto") == "1"
         b["producto"] = g("producto") if b["con_producto"] and g("producto") in {p["id"] for p in prods} else ""
         error = promo_del_form(g, b)
@@ -641,17 +647,29 @@ def paso_oferta(b: dict, prods: list[dict]) -> str:
             + pie(b, OFERTA))
 
 
-def paso_1(b: dict, objetivos: list[dict]) -> str:
+def paso_1(b: dict, objetivos: list[dict], funciono: str = "") -> str:
     ops = "".join(op("objetivo", o["k"], o["titulo"], o.get("descripcion", ""), marcada=o["k"] == b["objetivo"],
                      sugerido=bool(o.get("sugerido"))) for o in objetivos)  # sin miniatura: cada opción es de su negocio
+    repetir = ""
+    if funciono:  # ya hay resultados suficientes: puede apoyarse en lo que mejor le funcionó
+        lineas = "".join(f"<li>{escape(x.lstrip('- '))}</li>" for x in funciono.splitlines() if x.strip())
+        repetir = ('<div class="wiz-bloque">' + abre("funciona", "Repetir lo que funcionó", b.get("funciona"))
+                   + '<p class="ayuda">Lo que mejor te ha funcionado en tus campañas. La mayoría de los posts lo'
+                   f' repite y unos pocos prueban algo nuevo.</p><ul class="wiz-lista">{lineas}</ul></div></div>')
     return (cab(b, 1, "¿Qué quieres lograr con esta campaña?")
-            + f'<div class="wiz-ops">{ops}</div>'
+            + f'<div class="wiz-ops">{ops}</div>' + repetir
             + pie(b, 1))
 
 
-def paso_2(b: dict, mensajes: list[dict], prods: list[dict], objetivos: list[dict]) -> str:
+def paso_2(b: dict, mensajes: list[dict], prods: list[dict], objetivos: list[dict], preguntan: list[str] = ()) -> str:
     ops = "".join(op("mensajes", m["k"], m["titulo"], m.get("descripcion", ""), "checkbox", m["k"] in b["mensajes"],
                      sugerido=bool(m.get("sugerido"))) for m in mensajes)
+    responder = ""
+    if preguntan:  # lo que más le preguntaron sus clientes esta semana (Contenido sugerido)
+        responder = ('<div class="wiz-bloque">' + abre("preguntan", "Responder lo que más te preguntan", b.get("preguntan"))
+                     + '<p class="ayuda">Algunos posts contestan las dudas que más te llegan por mensaje y en'
+                     ' comentarios.</p><ul class="wiz-lista">'
+                     + "".join(f"<li>{escape(t)}</li>" for t in preguntan) + "</ul></div></div>")
     opciones_prod = '<option value="">Ninguno en especial</option>' + "".join(
         f'<option value="{escape(p["id"])}"{" selected" if p["id"] == b["producto"] else ""}>{escape(p["nombre"])}'
         + (f" · {escape(precio_de(p))}" if precio_de(p) else "") + "</option>" for p in prods)
@@ -673,7 +691,7 @@ def paso_2(b: dict, mensajes: list[dict], prods: list[dict], objetivos: list[dic
             + '<p class="ayuda">Un dato, una fecha o una idea que no debe faltar.</p>'
             f'<textarea name="texto" rows="2" maxlength="{MAX_TEXTO}" aria-label="Tu idea" placeholder="Ej. Temporada'
             f' de otoño: queremos más visitas entre semana.">{escape(b["texto"])}</textarea></div></div>' + producto
-            + pie(b, 2))
+            + responder + pie(b, 2))
 
 
 def paso_3(b: dict, objetivos: list[dict]) -> str:
@@ -804,7 +822,9 @@ async def resumen(c: Cuenta, b: dict, objetivos: list[dict], mensajes: list[dict
          OFERTA, False), ("Estilo", VARIEDAD[b["variedad"]][0], 6, False), ("Fechas", fechas, 7, True),
     ] if de_producto(b) else [
         ("Tipo de campaña", TIPOS["contenido"][0], TIPO, True),
-        ("Objetivo", obj, 1, False), ("Mensaje", msgs + (f" · «{b['texto']}»" if b["texto"] else ""), 2, False),
+        ("Objetivo", obj + (" · Repetir lo que funcionó" if b.get("funciona") else ""), 1, False),
+        ("Mensaje", msgs + (f" · «{b['texto']}»" if b["texto"] else "")
+         + (" · Responde lo que más te preguntan" if b.get("preguntan") else ""), 2, False),
         ("Producto", producto, 2, True), ("Enfoque del contenido", enfoques, 3, False),
         ("Formatos", " · ".join(FORMATOS[k][0] for k in b["formatos"] if k in FORMATOS)
          + (f" ({', '.join(TEXTO[k][0].lower() for k in textos(b))})" if "titular" in b["formatos"] else ""), 4, False),
@@ -941,6 +961,25 @@ def bloqueo(hay_empresa: bool, hay_marca: bool) -> str:
             + "</div></div>")
 
 
+async def funciono_de(c: Cuenta) -> str:
+    """Lo que mejor le funcionó, si ya tiene resultados suficientes para repetirlo (campanas.CON_RESULTADOS); "" si no."""
+    with usar(c):
+        try:
+            anteriores = await campanas.informe.todas(c, await campanas.todas_las(c))
+            if await campanas.con_resultados(c, anteriores) < campanas.CON_RESULTADOS:
+                return ""
+            return campanas.lo_que_funciono(await campanas.informe.ganadores(c, anteriores))
+        except Exception:
+            campanas.log.exception("No se pudieron leer los resultados de %s", c.slug)
+            return ""
+
+
+async def preguntan_de(c: Cuenta) -> list[str]:
+    """Lo que más le preguntaron sus clientes (Contenido sugerido de hoy, si ya se calculó), para el paso Mensaje."""
+    datos = await campanas.ya_sugerido(c)
+    return [str(t.get("tema", "")).strip() for t in datos.get("temas", []) if str(t.get("tema", "")).strip()][:MAX_PREGUNTAN]
+
+
 async def pagina(c: Cuenta, paso: int, aviso: str = "", b: dict | None = None):
     hay_empresa, hay_marca = await lista_para_empezar(c)
     b = b or await leer(c)
@@ -964,9 +1003,9 @@ async def pagina(c: Cuenta, paso: int, aviso: str = "", b: dict | None = None):
         elif paso == OFERTA:
             contenido = paso_oferta(b, prods)
         elif paso == 1:
-            contenido = paso_1(b, objetivos)
+            contenido = paso_1(b, objetivos, await funciono_de(c))
         elif paso == 2:
-            contenido = paso_2(b, mensajes, prods, objetivos)
+            contenido = paso_2(b, mensajes, prods, objetivos, await preguntan_de(c))
         elif paso == 3:
             contenido = paso_3(b, objetivos)
         elif paso == 4:

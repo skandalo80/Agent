@@ -74,8 +74,8 @@ async def _lo_que_funciono(c: Cuenta) -> str:
         return ""
     if not g.get("posts"):
         return ""
-    return "\n".join(f"- Mejor {dim}: {nombre}" for dim in ("tema", "formato", "franja")
-                     for nombre, *_ in g.get(dim, [])[:1])
+    return campanas.lo_que_funciono(g) or "\n".join(f"- Mejor {dim}: {nombre}" for dim in ("tema", "formato", "franja")
+                                                     for nombre, *_ in g.get(dim, [])[:1])
 
 
 async def generar(c: Cuenta) -> bool:

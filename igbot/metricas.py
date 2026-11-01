@@ -35,6 +35,8 @@ DIAS_ATRAS = 7
 CLAVE_INTENTO = "metricas_intento"
 CLAVE_PUBLICO = "metricas_publico"
 CLAVE_HORA = "metricas_hora"  # cuándo fue el último guardado (para "actualizado hoy a las 6:00")
+CLAVE_HORAS = "metricas_horas"  # a qué horas están conectados sus seguidores (semanal; las campañas eligen la hora)
+TOP_HORAS = 3
 
 # nombre en Instagram -> nombre guardado
 METRICAS = {
@@ -98,6 +100,28 @@ async def publico(c: Cuenta) -> dict:
     return salida
 
 
+async def horas_activas(c: Cuenta) -> dict[str, float]:
+    """{hora local "0".."23": seguidores conectados en promedio} de los últimos días, según Instagram
+    (online_followers viene por hora UTC); {} si no los da."""
+    try:
+        datos = await c.instagram.insights_cuenta("online_followers", period="lifetime")
+    except RuntimeError:
+        return {}
+    suma: dict[int, float] = {}
+    dias = 0
+    for valor in (datos[0].get("values") if datos else None) or []:
+        if not isinstance(valor.get("value"), dict):
+            continue
+        dias += 1
+        for h, n in valor["value"].items():
+            if str(h).isdigit():
+                suma[int(h)] = suma.get(int(h), 0) + float(n or 0)
+    if not dias:
+        return {}
+    corrimiento = int((datetime.now(ZoneInfo(c.timezone)).utcoffset() or timedelta()).total_seconds() // 3600)
+    return {str((h + corrimiento) % 24): round(n / dias, 1) for h, n in sorted(suma.items())}
+
+
 async def guardar(c: Cuenta, hoy: date) -> None:
     store = c.store
     await store.guardar_metricas(hoy.isoformat(), {
@@ -117,6 +141,7 @@ async def guardar(c: Cuenta, hoy: date) -> None:
     anterior = json.loads(await store.get(CLAVE_PUBLICO) or "{}")
     if anterior.get("semana") != semana:
         await store.set(CLAVE_PUBLICO, json.dumps({"semana": semana, **await publico(c)}))
+        await store.set(CLAVE_HORAS, json.dumps({"semana": semana, "horas": await horas_activas(c)}))
 
 
 async def tick(c: Cuenta) -> None:
@@ -172,6 +197,7 @@ async def numeros(c: Cuenta, rango_dias: int, fin: date | None = None) -> dict:
         "interacciones": {k: suma(k) for k in ("likes", "comentarios", "compartidos", "guardados")},
         "alcance_dia": [d.get("alcance") for d in serie],
         "publico": json.loads(await c.store.get(CLAVE_PUBLICO) or "{}"),
+        "horas": json.loads(await c.store.get(CLAVE_HORAS) or "{}").get("horas") or {},
     }
 
 
@@ -278,6 +304,28 @@ def edades(d: dict[str, int]) -> str:
                   descripcion="Seguidores por edad")
 
 
+def mejores_horas(horas: dict[str, float], n: int = TOP_HORAS) -> list[int]:
+    """Las n horas (0-23) con más seguidores conectados, de mayor a menor."""
+    return [int(h) for h, _ in sorted(horas.items(), key=lambda x: (-float(x[1]), int(x[0])))[:n] if float(horas[h])]
+
+
+def horas_html(horas: dict[str, float]) -> str:
+    """La tarjeta de a qué horas está conectado su público: barras por hora y las mejores en palabras."""
+    from .resultados import barras
+    valores = [round(float(horas.get(str(h), 0))) for h in range(24)]
+    mejores = mejores_horas(horas)
+    if not mejores:
+        return ""
+    lista = ", ".join(f"{h:02d}:00" for h in mejores[:-1]) + (f" y {mejores[-1]:02d}:00" if len(mejores) > 1
+                                                                 else f"{mejores[0]:02d}:00")
+    return tarjeta("Cuándo está tu público", barras(
+        valores, [f"{h:02d}" if h % 6 == 0 else "" for h in range(24)],
+        [f"{h:02d}:00: {cifra(v)} seguidores conectados" for h, v in enumerate(valores)],
+        ["mejor" if h in mejores else "" for h in range(24)], descripcion="Seguidores conectados por hora")
+        + f'<p class="ayuda chica">Más seguidores conectados a las {lista}. Las campañas con horario'
+        ' "Cuando está tu público" publican a esas horas.</p>', clase="t6")
+
+
 def ciudades(p: dict, titulo: str = "Ciudades") -> str:
     """Las ciudades de los seguidores (Instagram las da con 100 o más), en Instagram y en Conversaciones."""
     if not p.get("ciudad"):
@@ -329,4 +377,4 @@ def seccion(d: dict) -> str:
     else:
         publico = tarjeta("Tu público", '<p class="ayuda">Instagram muestra edades, género y ciudades de tus '
                                         'seguidores cuando la cuenta tiene 100 o más.</p>', clase="ancho")
-    return f'<div class="met">{grande}{nuevos}{alcance}{vistas}{interacciones}{publico}</div>'
+    return f'<div class="met">{grande}{nuevos}{alcance}{vistas}{interacciones}{publico}{horas_html(d.get("horas") or {})}</div>'

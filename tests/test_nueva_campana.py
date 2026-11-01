@@ -1474,3 +1474,105 @@ def test_lo_ya_publicado_lleva_el_gancho_de_cada_post():
     titulos, _ = informe.ya_hecho(camps)
     assert titulos[0] == "El tueste — ¿Sabes qué pasa a los 200 grados?" and titulos[1] == "Sin texto"
     assert titulos[2].startswith("Largo — xxx") and len(titulos) == 3
+
+
+def test_repetir_lo_que_funciono_responder_lo_que_preguntan_y_la_hora_de_tu_publico(cliente, monkeypatch):
+    """Paso Objetivo: con resultados suficientes aparece "Repetir lo que funcionó" con lo que ganó; paso Mensaje:
+    "Responder lo que más te preguntan" con las dudas de la semana; horario "Cuando está tu público": la hora de cada
+    franja en que más seguidores están conectados. Todo llega al brief, al plan y a los posts."""
+    from igbot import informe, metricas, tools
+    client, c, *_ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 4)
+    llamadas = []
+    import app as bot
+    monkeypatch.setattr(bot.agent, "run_claude", claude_de_campana(llamadas))
+    listo(client, c)
+    gano = {"posts": 14, "tema": [("dato", 6.8, 5), ("producto", 3.1, 5)], "formato": [("foto", 6.2, 7), ("titular", 4.0, 7)],
+            "franja": [("noche", 6.0, 9), ("manana", 2.0, 5)]}
+
+    async def con_resultados(c_, camps):
+        return 14
+
+    async def ganadores(c_, camps):
+        return gano
+
+    monkeypatch.setattr(campanas, "con_resultados", con_resultados)
+    monkeypatch.setattr(informe, "ganadores", ganadores)
+    client.portal.call(c.store.set, f"ideas:{tools.now():%Y-%m-%d}", json.dumps({
+        "temas": [{"tema": "Horario de fin de semana", "personas": 9, "objetivo": "", "ejemplo": "", "idea": ""},
+                  {"tema": "Leche vegetal", "personas": 5, "objetivo": "", "ejemplo": "", "idea": ""}],
+        "elogios": [], "mensajes": 30}))
+    client.portal.call(c.store.set, metricas.CLAVE_HORAS, json.dumps({"semana": "x", "horas": {
+        "8": 3, "10": 9, "11": 4, "13": 6, "15": 8, "19": 10, "21": 20}}))
+
+    r = client.get(f"{URL}?paso=1").text
+    assert "Repetir lo que funcionó" in r and "Tema: Dato curioso (6.8% de interacción" in r and "Horario: Noche" in r
+    paso(client, 1, objetivo="interaccion", funciona="1")
+    r = client.get(f"{URL}?paso=2").text
+    assert "Responder lo que más te preguntan" in r and "<li>Horario de fin de semana</li>" in r and "Leche vegetal" in r
+    paso(client, 2, mensajes=["producto"], preguntan="1")
+    paso(client, 3, enfoques=["consejos", "historias"])
+    paso(client, 4, formatos=["texto", "titular"], textos_img=["minimo", "titular"])
+    paso(client, 5, visual=["productos"])
+    paso(client, 6, variedad="coherencia")
+    paso(client, 7, nombre="Otoño", inicio=LUNES.isoformat(), semanas="1", n_posts="6", dias=["0", "2", "4"],
+         horarios=["ia"])
+    r = client.get(f"{URL}?paso=8").text
+    assert "Repetir lo que funcionó" in r and "Responde lo que más te preguntan" in r and "Cuando está tu público" in r
+    generar(client)
+    brief_prompt = next(p for p, s in llamadas if "estratega de contenido" in s)
+    assert "<lo_que_funciono>\n- Tema: Dato curioso" in brief_prompt and "<lo_que_preguntan>" in brief_prompt
+    posts_prompt, posts_sistema = next((p, s) for p, s in llamadas if "Escribes los posts" in s)
+    assert "<lo_que_funciono>" in posts_prompt and "| rol: repite" in posts_prompt and "| rol: prueba" in posts_prompt
+    assert "Leche vegetal" in posts_prompt and 'rol "repite"' in posts_sistema
+    camp = leer(client, c)
+    assert camp["modo"] == "repetir" and camp["clientes"] is True and camp["funciono"].startswith("- Tema: Dato curioso")
+    assert camp["horas"] == {"manana": "10:00", "mediodia": "15:00", "noche": "21:00"}
+    assert {p["hora"] for p in camp["posts"]} <= {"10:00", "15:00", "21:00"} and "21:00" in {p["hora"] for p in camp["posts"]}
+    assert {p["rol"] for p in camp["posts"]} == {"repite", "prueba"}
+    assert any(p["responde"] for p in camp["posts"])
+
+
+def test_lo_que_edita_o_descarta_se_recuerda_para_la_siguiente_campana(cliente, monkeypatch):
+    """Cambiar el texto de un post, pedir otra idea o descartarlo se anota por tema y formato; aprobarlo tal cual
+    también. A partir de 2 veces, la siguiente campaña lo lee en <lo_que_no_le_gusto> / <lo_que_aprueba_tal_cual>."""
+    client, c, *_ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 10)
+    llamadas = []
+    import app as bot
+    monkeypatch.setattr(bot.agent, "run_claude", claude_de_campana(llamadas))
+    listo(client, c)
+    llenar(client)
+    generar(client)
+    camp = leer(client, c)
+    u = campanas.url_de(camp)
+    assert client.portal.call(campanas.lo_que_no_le_gusto, c) == ""
+    textos = [p for p in camp["posts"] if p["formato"] == "texto"]
+    a, b = textos[0], textos[1]
+    # Cambiar el caption cuenta una vez por post, aunque lo edite varias veces.
+    for caption in ("Mi texto", "Mi texto, otra vez"):
+        client.post(u, headers=ORIGEN, data={"accion": "guardar", "k": str(a["k"]), "caption": caption})
+    client.post(u, headers=ORIGEN, data={"accion": "guardar", "k": str(a["k"]), "caption": "Mi texto, otra vez"})
+    m = client.portal.call(campanas.memoria, c)
+    assert m["edito"] == {f"tema:{a['tipo']}": 1, "formato:texto": 1}
+    # Otra idea es un rechazo de lo propuesto.
+    client.post(u, headers=ORIGEN, data={"accion": "otra", "k": str(b["k"])})
+    m = client.portal.call(campanas.memoria, c)
+    assert m["rechazo"]["formato:texto"] == 1
+    tag = client.portal.call(campanas.lo_que_no_le_gusto, c)
+    assert "<lo_que_no_le_gusto>\n- el formato Solo texto: lo cambió o descartó 2 veces" in tag
+    # Aprobar sin tocar el texto cuenta a favor; el que editó, no.
+    client.post(u, headers=ORIGEN, data={"accion": "generar_todas"})
+    camp = leer(client, c)
+    client.post(u, headers=ORIGEN, data={"accion": "aprobar_todas", "confirmado": "1"})
+    m = client.portal.call(campanas.memoria, c)
+    assert m["aprobo"].get("formato:texto") == 2 and sum(m["aprobo"].values()) == 10  # 5 posts × tema y formato (a, editado, no)
+    # Descartar el post desde Calendario también cuenta.
+    client.portal.call(c.store.set_post, b["post_id"] or campanas.buscar_post(camp, b["k"])["post_id"], "cancelada")
+    client.get(u)
+    assert client.portal.call(campanas.memoria, c)["rechazo"]["formato:texto"] == 2
+    # La siguiente campaña lo lleva en el prompt del brief y en el de los posts.
+    llamadas.clear()
+    llenar(client)
+    generar(client)
+    assert all("<lo_que_no_le_gusto>" in p for p, s in llamadas if "estratega" in s or "Escribes los posts" in s)

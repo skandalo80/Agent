@@ -41,7 +41,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from PIL import Image
 
-from . import brief, config, empresa, imagenes, informe, openai_texto, panel, semana, tools
+from . import brief, config, empresa, imagenes, informe, metricas, openai_texto, panel, semana, tools
 from .admin import PANEL
 from .contenido import (DESDE, ESTADOS, ESTILO_REFERENCIA, HASHTAGS_FIJO, IMAGEN, MAX_CAPTION, archivo, contexto_marca,
                         cuando, estilo_foto, limitar_hashtags, regla_hashtags,
@@ -145,6 +145,9 @@ MEZCLAS = {  # clave: (cómo se le dice, % de lo que ganó, % del segundo lugar,
 }
 MEZCLA_INICIAL = "equilibrado"
 CLIENTES_CADA = 4  # como máximo 1 de cada 4 posts responde a lo que preguntan sus clientes
+FRANJAS = {"manana": range(6, 12), "mediodia": range(12, 17), "noche": range(17, 24)}  # horas de cada horario
+MEMORIA = "campana_memoria"  # lo que el dueño editó, descartó o aprobó tal cual, por tema y formato
+MIN_MEMORIA = 2  # veces que pasó algo con un tema o formato para que cuente
 MAX_YA_HECHO = 60  # títulos anteriores que ve Claude para no repetir asuntos
 DIAS = ("Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom")
 MESES = ("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic")
@@ -179,6 +182,8 @@ Reglas:
 - Si hay <lo_que_preguntan> (lo que más le preguntaron sus clientes por mensaje y en comentarios), como máximo {tope} posts responden a esas dudas, sobre todo de Enseña algo, Dato curioso, Producto en acción o Pregunta a tu comunidad. En esos, "responde" es el tema que contestan (tal cual viene); en los demás, "".
 - Si hay <ya_publicado> (títulos de sus campañas anteriores), ningún post repite el asunto de esos títulos: aunque el tema y el formato sean los mismos, cada post dice algo nuevo.
 - Si hay <lo_que_dicen> (cosas buenas que dijeron sus clientes), úsalo en "Lo que dicen tus clientes", parafraseado y sin nombres. No inventes otras.
+- Si hay <lo_que_funciono> (lo que mejor le ha funcionado en sus campañas), los posts que repiten eso lo llevan con la misma fuerza (mismo tipo de gancho y de cierre), y los que prueban algo nuevo lo hacen a fondo, sin diluirlo.
+- Si hay <lo_que_no_le_gusto> (temas y formatos que el dueño cambió o descartó en campañas anteriores), esos posts van distintos a lo de siempre: más concretos, con otro ángulo. Si hay <lo_que_aprueba_tal_cual>, ese estilo le gusta: conserva su forma.
 - Si la línea dice "medio: historia", es una historia de Instagram: vertical a pantalla completa (9:16), dura 24 horas y no lleva texto publicado. "titulo" se lee en dos segundos (máximo 6 palabras), "subtitulo" es una línea corta o "", "caption" es "" y "palabra" y "dm" van "". La imagen es vertical, con el sujeto al centro y aire arriba y abajo. Si no dice medio, es un post del feed.
 {reglas}
 
@@ -199,6 +204,8 @@ Reglas:
 - Si la línea trae "escena", la imagen usa ese encuadre y esa luz; el lugar y la utilería los eliges tú, distintos en cada post. Respeta <variedad_visual>; <marca_visual> es el ambiente (luz, color, sensación), no objetos que deban salir siempre.
 - "se ve" manda en la imagen: Tus productos = el producto real como protagonista; Personas y momentos = gente y gestos reales; Tu espacio = el lugar; Procesos = cómo se hace o se entrega; Ilustraciones y gráficos = una ilustración o un gráfico limpio, no una foto. En "Solo texto" no hay imagen: "se ve" guía de qué trata la frase.
 - Si hay <lo_que_preguntan>, como máximo {tope} posts responden a esas dudas; en esos, "responde" es el tema que contestan (tal cual viene); en los demás, "". Si hay <lo_que_dicen>, úsalo en "Lo que dicen tus clientes", parafraseado y sin nombres.
+- Si hay <lo_que_funciono> (lo que mejor le ha funcionado en sus campañas), las líneas con rol "repite" lo llevan con la misma fuerza (mismo tipo de gancho y de cierre) y las de rol "prueba" hacen algo distinto a fondo, sin diluirlo.
+- Si hay <lo_que_no_le_gusto> (temas y formatos que el dueño cambió o descartó en campañas anteriores), esos posts van distintos a lo de siempre: más concretos, con otro ángulo. Si hay <lo_que_aprueba_tal_cual>, ese estilo le gusta: conserva su forma.
 - Usa solo datos de <empresa>, del brief o de la campaña. No inventes precios, promociones, horarios, cifras ni testimonios.
 - "Dato curioso" es la excepción: su ficha no trae pilar ni dato porque el post no habla de la empresa. Cuenta un hecho real del giro o la industria de la empresa (historia, ciencia, costumbres, un mito o realidad), de conocimiento general y que puedas asegurar; si dudas de algo, elige otro dato. Sin cifras exactas, estudios, fuentes, personas ni lugares concretos que no puedas asegurar. La empresa no es el tema ni se presenta su producto: solo aparece en la llamada a la acción del final. El hecho va en "verificar" para que el dueño lo confirme.
 - Español de México, tuteando, con el carácter de la marca.
@@ -542,14 +549,79 @@ async def de_la_marca(c: Cuenta) -> str:
     return f"<marca_visual>\n{visual_marca(await marca_de(c))}\n</marca_visual>\n\n"
 
 
-def otra_hora(plan: list[tuple]) -> list[tuple]:
-    """Las horas de cada línea del plan (HH:MM). Si un día lleva dos posts a la misma hora, el segundo va en
-    otro horario."""
+def lo_que_funciono(gano: dict) -> str:
+    """Lo que mejor le ha funcionado (informe.ganadores), en palabras, para el dueño y para el prompt: el tema, el
+    formato y el horario con mejor interacción entre los que ya se probaron MIN_PROBADO veces."""
+    nombres = {"tema": ("Tema", lambda k: tema_de(k)[0]), "formato": ("Formato", lambda k: FORMATOS.get(k, (k,))[0]),
+               "franja": ("Horario", lambda k: HORARIOS.get(k, (k,))[0])}
+    lineas = []
+    for dim, (titulo, nombre) in nombres.items():
+        if mejores := [(k, tasa) for k, tasa, veces in gano.get(dim, []) if veces >= MIN_PROBADO]:
+            k, tasa = mejores[0]
+            lineas.append(f"- {titulo}: {nombre(k)} ({tasa}% de interacción en promedio)")
+    return "\n".join(lineas)
+
+
+def funciono_tag(camp: dict) -> str:
+    return f"<lo_que_funciono>\n{camp['funciono']}\n</lo_que_funciono>\n\n" if camp.get("funciono") else ""
+
+
+async def horas_de(c: Cuenta) -> dict[str, str]:
+    """La hora de cada horario (mañana, mediodía, noche) en que más seguidores suyos están conectados, según
+    Instagram (metricas.CLAVE_HORAS); solo los horarios con datos."""
+    horas = json.loads(await c.store.get(metricas.CLAVE_HORAS) or "{}").get("horas") or {}
+    salida = {}
+    for k, rango_ in FRANJAS.items():
+        if con := [(float(horas.get(str(h), 0)), h) for h in rango_ if horas.get(str(h))]:
+            salida[k] = f"{max(con)[1]:02d}:00"
+    return salida
+
+
+async def memoria(c: Cuenta) -> dict:
+    return json.loads(await c.store.get(MEMORIA) or "{}")
+
+
+async def recordar(c: Cuenta, p: dict, que: str) -> None:
+    """Anota lo que hizo el dueño con un post (editó su texto, pidió otra idea o lo descartó, o lo aprobó tal cual),
+    por su tema y su formato: la siguiente campaña lo tiene en cuenta (lo_que_no_le_gusto)."""
+    m = await memoria(c)
+    for clave in (f"tema:{p.get('tipo', '')}", f"formato:{formato_de(p)}"):
+        m.setdefault(que, {})[clave] = m.get(que, {}).get(clave, 0) + 1
+    await c.store.set(MEMORIA, json.dumps(m))
+
+
+def nombre_de_clave(clave: str) -> str:
+    dim, _, k = clave.partition(":")
+    return f"{'el tema' if dim == 'tema' else 'el formato'} {tema_de(k)[0] if dim == 'tema' else FORMATOS.get(k, (k,))[0]}"
+
+
+async def lo_que_no_le_gusto(c: Cuenta) -> str:
+    """Para el prompt: los temas y formatos que el dueño cambió o descartó más de lo que aprobó tal cual (y al
+    revés, lo que aprueba sin tocar), cuando ya pasó MIN_MEMORIA veces."""
+    m = await memoria(c)
+    claves = {k for d in m.values() for k in d}
+    no, si = [], []
+    for clave in sorted(claves):
+        malo = m.get("edito", {}).get(clave, 0) + m.get("rechazo", {}).get(clave, 0)
+        bueno = m.get("aprobo", {}).get(clave, 0)
+        if malo >= MIN_MEMORIA and malo > bueno:
+            no.append(f"- {nombre_de_clave(clave)}: lo cambió o descartó {malo} veces")
+        elif bueno >= MIN_MEMORIA and bueno > malo:
+            si.append(f"- {nombre_de_clave(clave)}: lo aprobó tal cual {bueno} veces")
+    return ((f"<lo_que_no_le_gusto>\n" + "\n".join(no) + "\n</lo_que_no_le_gusto>\n\n" if no else "")
+            + (f"<lo_que_aprueba_tal_cual>\n" + "\n".join(si) + "\n</lo_que_aprueba_tal_cual>\n\n" if si else ""))
+
+
+def otra_hora(plan: list[tuple], horas: dict | None = None) -> list[tuple]:
+    """Las horas de cada línea del plan (HH:MM): la de cada horario o, si la campaña trae `horas` (cuándo está
+    conectado su público, horas_de), esa. Si un día lleva dos posts a la misma hora, el segundo va en otro
+    horario."""
+    de = {k: (horas or {}).get(k) or v[1] for k, v in HORARIOS.items()}
     salida, vistos = [], set()
     for dia, t, f, h, rol in plan:
-        hora = HORARIOS[h][1]
+        hora = de[h]
         if (dia, hora) in vistos:
-            hora = next((v[1] for v in HORARIOS.values() if (dia, v[1]) not in vistos), hora)
+            hora = next((v for v in de.values() if (dia, v) not in vistos), hora)
         vistos.add((dia, hora))
         salida.append((dia, t, f, hora, rol))
     return salida
@@ -596,7 +668,7 @@ def plan_de(camp: dict, libres: list[str], gano: dict | None = None, fotos: int 
     ves = [k for k, _ in camp.get("ves") or []]
     pares = brief.cruzar(len(plan), ves, camp.get("formatos") or [FORMATO_VIEJO], semilla) if ves else []
     fichas = []
-    for i, (d, t, f, h, rol) in enumerate(otra_hora(plan)):
+    for i, (d, t, f, h, rol) in enumerate(otra_hora(plan, camp.get("horas"))):
         if pares and not (camp.get("modo") == "repetir" and gano):  # al repetir, el formato es el que ganó
             f = pares[i][1]
         fichas.append({"dia": d, "tipo": t, "formato": f, "hora": h, "rol": rol,
@@ -688,6 +760,8 @@ async def proponer(c: Cuenta, camp: dict, anteriores: list[dict] | None = None, 
             fichas += plan_de(camp, libres, gano if medio == "post" else None, fotos, medio)
     if not fichas:
         return camp
+    if gano and camp.get("modo") == "repetir":
+        camp["funciono"] = lo_que_funciono(gano)
     fichas.sort(key=lambda f: f["dia"])  # posts e historias en orden: el brief avanza por semanas
     libres = [f["dia"] for f in fichas]
     titulos, respondidas = informe.ya_hecho(anteriores or [])
@@ -705,6 +779,7 @@ async def proponer(c: Cuenta, camp: dict, anteriores: list[dict] | None = None, 
                   f"<tema>{escape(camp['tema']) or 'Sin tema: un poco de todo del negocio.'}</tema>\n"
                   + parametros(camp) + "\n"
                   + (await de_tus_clientes(c, respondidas) if camp.get("clientes") else "")
+                  + funciono_tag(camp) + await lo_que_no_le_gusto(c)
                   + (f"<ya_publicado>\n{ya}\n</ya_publicado>\n\n" if ya else "")
                   + ("<regla>sí</regla>\n\n" if camp.get("regla") else "")
                   + f"<posts>\n{lineas}\n</posts>")
@@ -744,7 +819,7 @@ async def escribir_desde_brief(c: Cuenta, camp: dict, fichas: list[dict], ya: st
             f"<campaña>{escape(camp['nombre'])}</campaña>\n"
             + (f"<tema>{escape(camp['tema'])}</tema>\n" if camp.get("tema") else "")
             + parametros(camp) + "\n" + brief.variedad_tag(camp) + brief.referencias_tag(camp)
-            + clientes
+            + clientes + funciono_tag(camp) + await lo_que_no_le_gusto(c)
             + (f"<ya_publicado>\n{ya}\n</ya_publicado>\n\n" if ya else "")
             + ("<regla>sí</regla>\n\n" if camp.get("regla") else ""))
     await planear(base + opciones_visuales(camp, await marca_de(c)), camp, fichas,
@@ -798,6 +873,7 @@ async def escribir_desde_brief(c: Cuenta, camp: dict, fichas: list[dict], ya: st
 def linea_ficha(camp: dict, f: dict) -> str:
     return (f"{f['dia']} ({fecha_larga(f['dia'])}, {semana_de(camp, f['dia'])}) | tema: {TEMAS[f['tipo']][0]}"
             f" | formato: {FORMATOS[f['formato']][0]}" + (f" | se ve: {escape(ve_de(camp, f['ve']))}" if f["ve"] else "")
+            + (f" | rol: {f['rol']}" if f.get("rol") else "")
             + (f" | pilar: {escape(f['pilar'])}" if f["pilar"] else "") + (f" | dato: {f['dato']}" if f["dato"] else "")
             + (f" | escena: {f['escena']}" if f.get("escena") else "") + (" | medio: historia" if es_historia(f) else ""))
 
@@ -951,6 +1027,7 @@ async def estado_post(c: Cuenta, p: dict) -> dict | None:
     post = await c.store.post(p["post_id"])
     if not post or post["status"] == "cancelada":
         p["post_id"] = None  # lo descartaron: vuelve a ser propuesta
+        await recordar(c, p, "rechazo")
         return None
     return post
 
@@ -2615,6 +2692,8 @@ async def accion(request: Request, cid: str):
                 post = await estado_post(c, p)
                 if post and post["status"] == "borrador" and post["publish_at"] > time.time() + 60:
                     await c.store.set_post(post["id"], "programada", only_if="borrador")
+                    if not p.get("editado"):
+                        await recordar(c, p, "aprobo")
                     n += 1
         return await pagina_campana(c, camp, f"Listo: {n} post{'s' if n != 1 else ''} programado{'s' if n != 1 else ''}."
                                     if n else "No había posts con imagen por aprobar (o su día ya pasó).")
@@ -2634,6 +2713,9 @@ async def accion(request: Request, cid: str):
     for campo, maximo in (("titulo", MAX_TITULO), ("subtitulo", 120), ("caption", MAX_CAPTION), ("idea", MAX_IDEA)):
         # Con imagen ya hecha solo cambian el texto y la idea (la que usa "Otra imagen").
         if campo in f and (f[campo].strip() or campo == "subtitulo") and not (post and campo not in ("caption", "idea")):
+            if campo in ("titulo", "caption") and f[campo].strip()[:maximo] != p.get(campo) and not p.get("editado"):
+                p["editado"] = True  # cambió el texto: se anota para la siguiente campaña (lo_que_no_le_gusto)
+                await recordar(c, p, "edito")
             p[campo] = f[campo].strip()[:maximo]
     # El prompt que editó a mano es el que va al generador (mientras no cambie la idea otra vez).
     # Si en él cambió un texto entre comillas («Venta» por «Cita»), ese texto cambia también en la imagen.
@@ -2695,6 +2777,7 @@ async def accion(request: Request, cid: str):
         async def otra():
             with usar(c):
                 await usar_ia(c)
+                await recordar(c, p, "rechazo")
                 await otra_idea(c, camp, p)
                 if camp.get("brief"):
                     await prompts_de(c, camp, [p])
@@ -2736,6 +2819,8 @@ async def accion(request: Request, cid: str):
             if post["publish_at"] <= time.time() + 60:
                 return await pagina_campana(c, camp, "Su día ya pasó: elige otro día u hora y guarda.", sel=k)
             await c.store.set_post(post["id"], "programada", only_if="borrador")
+            if not p.get("editado"):
+                await recordar(c, p, "aprobo")
             return await pagina_campana(c, camp, f"Listo: sale el {cuando(post['publish_at'])}.", sel=k)
 
     return await pagina_campana(c, camp, aviso or "Guardado.", sel=k)
