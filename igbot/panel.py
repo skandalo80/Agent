@@ -1530,6 +1530,19 @@ main{padding-bottom:4.5rem}
 .cal-filtros .cal-campos select{flex:1 1 100%;max-width:none;min-width:0}
 }
 @media(min-width:561px){.cal-campos{display:contents}}
+/* Lote 3. Márgenes seguros del iPhone (muesca y barra de inicio) cuando la consola abre como app desde el
+   inicio del celular: la cabecera baja lo de la muesca y lo fijo abajo respeta la barra. Y las tarjetas de
+   personalidad en celular muestran su ejemplo solo en la elegida: la lista pasa de siete pantallas a dos. */
+@media(max-width:900px){
+header.movil{padding-top:env(safe-area-inset-top,0px);padding-left:calc(1.25rem + env(safe-area-inset-left,0px));padding-right:calc(1.25rem + env(safe-area-inset-right,0px));height:auto;min-height:3.25rem}
+.inbox.abierto{top:calc(3.25rem + 1px + env(safe-area-inset-top,0px))}
+.lateral{top:calc(.75rem + env(safe-area-inset-top,0px))}
+main{padding-bottom:calc(4.5rem + env(safe-area-inset-bottom,0px))}
+}
+@media(max-width:560px){
+.as-tarjetas .as-pers:not(:has(input:checked)) :is(.as-lbl,.as-dlg){display:none}
+.as-tarjetas .as-pers:not(:has(input:checked)) .as-uso{margin-bottom:0}
+}
 """
 
 
@@ -1548,11 +1561,16 @@ VERSION_JS = hashlib.sha256((STATIC / "panel.js").read_bytes()).hexdigest()[:10]
 VERSION_MENU = hashlib.sha256((STATIC / "menu.js").read_bytes()).hexdigest()[:10]
 PRINCIPIO = (
     '<!doctype html><html lang="es"><head><meta charset="utf-8">'
-    '<meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">'
+    '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">'
     '<meta name="robots" content="noindex"><meta name="referrer" content="same-origin">'
     '<meta name="theme-color" content="#2B2C30">'
     '<link rel="icon" href="/favicon.ico" sizes="any"><link rel="icon" type="image/png" href="/favicon-32.png" sizes="32x32">'
     '<link rel="apple-touch-icon" href="/apple-touch-icon.png">'
+    # Agregar a inicio: abre como app (manifest para Android y Chrome; las metas, para iPhone).
+    '<link rel="manifest" href="/manifest.webmanifest">'
+    '<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">'
+    '<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">'
+    '<meta name="apple-mobile-web-app-title" content="Skandar">'
     '<title>Tu asistente · Skandar</title>'
     f"<style>{ESTILO}{conversaciones.CSS}{skandi.CSS}{FUENTES_CSS}{COMUN}</style>"
     # Solo JavaScript propio (CSP script-src 'self'): la vista previa al momento en Contenido.
