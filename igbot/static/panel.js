@@ -435,7 +435,7 @@ if (skandi) {
     recordar(false);
     skandi.classList.add("abierta");
     mensajes.scrollTop = mensajes.scrollHeight;
-    form.mensaje.focus({ preventScroll: true });
+    if (!TACTIL) form.mensaje.focus({ preventScroll: true });  // en celular, el teclado sale al tocar la caja
   };
   // También los botones del historial (abrir un chat, empezar otro) regresan a esta página.
   skandi.querySelectorAll('input[name="volver"]').forEach((v) => { v.value = location.pathname + location.search; });

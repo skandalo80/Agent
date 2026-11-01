@@ -14,4 +14,5 @@ form.addEventListener("submit", () => {
   mensajes.scrollTop = mensajes.scrollHeight;
   setTimeout(() => { form.mensaje.readOnly = true; form.querySelector("button").disabled = true; }, 0);
 });
-if (location.hash === "#fin") form.mensaje.focus({ preventScroll: true });
+// Al volver con la respuesta, el cursor regresa a la caja solo donde hay ratón: en celular abriría el teclado.
+if (location.hash === "#fin" && !window.matchMedia("(hover: none)").matches) form.mensaje.focus({ preventScroll: true });
