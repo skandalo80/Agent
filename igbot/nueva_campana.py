@@ -26,7 +26,7 @@ from html import escape
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
-from . import brief, campanas, empresa, limites, marco, tienda_shopify, tools
+from . import brief, campanas, empresa, fechas, limites, marco, tienda_shopify, tools
 from .contenido import TOKEN_FOTO, archivo, guardar_fotos, marca_de, modo_de, sin_plan, url_imagen
 from .cuenta import Cuenta, usar
 
@@ -317,7 +317,7 @@ async def a_campana(c: Cuenta, b: dict) -> dict:
     estilo = (f"{titular}Variedad visual: {VARIEDAD[b['variedad']][0]}"
               f" ({VARIEDAD[b['variedad']][1]})")
     inicio = date.fromisoformat(b["inicio"])
-    return {"nombre": b["nombre"].strip() or f"{obj['titulo']} · {campanas.fecha_larga(b['inicio'])}"[:campanas.MAX_NOMBRE],
+    return {"nombre": b["nombre"].strip() or f"{obj['titulo']} · {fechas.larga(b['inicio'])}"[:campanas.MAX_NOMBRE],
             "inicio": inicio.isoformat(), "semanas": b["semanas"], "publicar": "lun-sab",
             "dias_semana": sorted(b["dias"]), "n_posts": b["n_posts"], "n_historias": b.get("n_historias", 0),
             "tema": b["texto"],
@@ -376,7 +376,7 @@ def texto_producto(b: dict, prod: dict | None) -> str:
     if b["accion"] == "promo" and (promo := promo_texto(b)):
         producto += f", {promo}"
         if b["desde"] and b["hasta"]:
-            producto += f" del {campanas.fecha_larga(b['desde'])} al {campanas.fecha_larga(b['hasta'])}"
+            producto += f" del {fechas.larga(b['desde'])} al {fechas.larga(b['hasta'])}"
         if b["condicion"]:
             producto += f" ({b['condicion']})"
     return producto + "."
@@ -808,8 +808,8 @@ async def resumen(c: Cuenta, b: dict, objetivos: list[dict], mensajes: list[dict
     if prod:
         producto = f"{prod['nombre']} · {ACCIONES[b['accion']]}"
         if b["accion"] == "promo" and (promo := promo_texto(b)):
-            producto += f" {promo}" + (f" del {campanas.fecha_larga(b['desde'])} al"
-                                                   f" {campanas.fecha_larga(b['hasta'])}" if b["desde"] and b["hasta"] else "")
+            producto += f" {promo}" + (f" del {fechas.larga(b['desde'])} al"
+                                                   f" {fechas.larga(b['hasta'])}" if b["desde"] and b["hasta"] else "")
     enfoques = " · ".join(ENFOQUES[k][0] for k in b.get("enfoques", []) if k in ENFOQUES) or "Según tu objetivo"
     ini = date.fromisoformat(b["inicio"])
     fin = ini + timedelta(days=7 * b["semanas"] - 1)
@@ -823,11 +823,11 @@ async def resumen(c: Cuenta, b: dict, objetivos: list[dict], mensajes: list[dict
     if de_producto(b):
         cantidad, imagenes_ = campanas.cuantos(b["versiones"], "post"), b["versiones"]
         nombre = nombre or nombre_producto(b, prods)
-    fechas = (f"{escape(nombre) or 'Sin nombre'} · {cantidad} · {campanas.de_a(ini, fin)} · {dias} · {horas}")
+    fechas_txt = (f"{escape(nombre) or 'Sin nombre'} · {cantidad} · {campanas.de_a(ini, fin)} · {dias} · {horas}")
     bloques = [
         ("Tipo de campaña", TIPOS["producto"][0], TIPO, False), ("Producto", producto, PRODUCTO, True),
         ("Versiones del anuncio", f"{b['versiones']} versiones" + (f" · «{b['texto']}»" if b["texto"] else ""),
-         OFERTA, False), ("Estilo", VARIEDAD[b["variedad"]][0], 6, False), ("Fechas", fechas, 7, True),
+         OFERTA, False), ("Estilo", VARIEDAD[b["variedad"]][0], 6, False), ("Fechas", fechas_txt, 7, True),
     ] if de_producto(b) else [
         ("Tipo de campaña", TIPOS["contenido"][0], TIPO, True),
         ("Objetivo", obj + (" · Repetir lo que funcionó" if b.get("funciona") else ""), 1, False),
@@ -837,11 +837,11 @@ async def resumen(c: Cuenta, b: dict, objetivos: list[dict], mensajes: list[dict
         ("Formatos", " · ".join(FORMATOS[k][0] for k in b["formatos"] if k in FORMATOS)
          + (f" ({', '.join(TEXTO[k][0].lower() for k in textos(b))})" if "titular" in b["formatos"] else ""), 4, False),
         ("Estilo y variedad", VARIEDAD[b["variedad"]][0], 6, False),
-        ("Cantidad y fechas", fechas, 7, True)]
+        ("Cantidad y fechas_txt", fechas_txt, 7, True)]
     tarjetas = "".join(
         f'<div class="wiz-res{" ancho" if ancho else ""}">'
         + marco.cab_tarjeta(t, boton=f'<button class="editar" name="ir" value="{n}">Editar</button>')
-        + f'<p>{v if t in ("Cantidad y fechas", "Fechas") else escape(v)}</p></div>' for t, v, n, ancho in bloques)
+        + f'<p>{v if t in ("Cantidad y fechas_txt", "Fechas") else escape(v)}</p></div>' for t, v, n, ancho in bloques)
     with usar(c):
         quedan = await campanas.ia_restantes(c)
     editar = bool(b.get("cid"))

@@ -27,3 +27,27 @@ def test_el_tag_para_el_prompt():
     assert "- vie 27 nov: Black Friday (después de la campaña: se puede anticipar)" in tag
     assert fechas.tag("XX", date(2026, 3, 10), date(2026, 3, 20)) == ""
     assert fechas.enesimo(11, 0, -1)(2026) == date(2026, 11, 30) and fechas.black_friday(2026) == date(2026, 11, 27)
+
+
+def test_zona_y_formatos_de_la_cuenta():
+    """La zona de la cuenta y la única forma de escribir fechas (campañas, informes, panel)."""
+    import time
+    from datetime import date, datetime
+    from types import SimpleNamespace
+
+    from igbot import fechas
+
+    c = SimpleNamespace(timezone="America/Mexico_City")
+    assert str(fechas.zona(c)) == "America/Mexico_City"
+    medianoche = fechas.inicio_del_dia(c, date(2026, 11, 3))
+    assert fechas.en_zona(c, medianoche) == datetime(2026, 11, 3, 0, 0, tzinfo=fechas.zona(c))
+    assert fechas.en_zona(c, medianoche + 3600 * 10).hour == 10
+    assert fechas.hoy(c) == fechas.ahora(c).date()
+    assert fechas.corta("2026-11-03") == "Mar 3" and fechas.larga(date(2026, 11, 3)) == "Mar 3 nov"
+    assert fechas.con_anio(date(2026, 11, 3)) == "3 nov 2026"
+    ahora = time.time()
+    assert fechas.hace(ahora - 10) == "hace un momento"
+    assert fechas.hace(ahora - 5 * 60) == "hace 5 min"
+    assert fechas.hace(ahora - 3 * 3600) == "hace 3 h"
+    assert fechas.hace(ahora - 30 * 3600) == "ayer"
+    assert fechas.hace(ahora - 4 * 86400) == "hace 4 días"

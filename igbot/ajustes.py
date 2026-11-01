@@ -17,7 +17,7 @@ from html import escape
 
 from fastapi import APIRouter, Request
 
-from . import config, marco
+from . import config, fechas, marco
 from .cuenta import Cuenta, usar
 
 log = logging.getLogger(__name__)
@@ -156,7 +156,7 @@ async def conexion(c: Cuenta) -> tuple[str, str]:
     ultimo = await c.store.last_client_message()
     if ultimo:
         fila("ok" if ahora - ultimo < 7 * 86400 else "aviso", "Recibiendo mensajes",
-             f"El último llegó {marco.hace(ultimo)}")
+             f"El último llegó {fechas.hace(ultimo)}")
     else:
         fila("aviso", "Recibiendo mensajes", "Aún no llega ninguno: escríbele a tu cuenta desde otro Instagram para probar.")
     with usar(c):

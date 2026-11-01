@@ -45,7 +45,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from PIL import Image, ImageOps
 
-from . import config, imagenes, informe, marco, panel, posicionamiento, tools
+from . import config, fechas, imagenes, informe, marco, panel, posicionamiento, tools
 from .admin import PANEL, parse_when
 from .comentarios import Rule, shortcode
 from .estilos import (ESTILO_INICIAL, ESTILOS, LOGO_INICIAL, LOGO_PRESENCIA, MAX_ESTILOS, USO_COLOR, VIEJOS_ESTILOS,
@@ -906,7 +906,7 @@ async def editor(c: Cuenta, post_id: int, aviso: str = "", confirmar: bool = Fal
             + ('<button class="oculto" name="accion" value="guardar" tabindex="-1" aria-hidden="true">Guardar</button>'
                if editable else "")
             + f'<div class="top"><div><div class="etqs-cam">{etiquetas}</div><h2 id="d-nombre">{titulo}</h2>'
-            + (f"<p>{campanas.fecha_larga(fecha.date().isoformat())} · {fecha:%H:%M}</p>" if fecha else "")
+            + (f"<p>{fechas.larga(fecha.date().isoformat())} · {fecha:%H:%M}</p>" if fecha else "")
             + f'</div><div class="cierre">{ir_a_campana(campanas.url_de(camp)) if camp else ""}'
             f'<a class="x" href="{cerrar_a("/panel/contenido")}" aria-label="Cerrar">×</a></div></div>'
             + (f'<div class="aviso" style="margin:1rem 1.6rem 0">{escape(aviso)}</div>' if aviso else "")

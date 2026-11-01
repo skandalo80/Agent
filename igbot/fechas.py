@@ -1,16 +1,93 @@
-"""Calendario comercial por país: las fechas que mueven ventas (Día de las Madres, Buen Fin, Navidad…) que caen
+"""Fechas: la zona de cada cuenta, cómo se escriben y el calendario comercial por país.
+
+La zona. Todo lo que el cliente ve como "hoy", "ayer" o "a las 10:00" va en la zona de su cuenta (c.timezone):
+zona(c), ahora(c), hoy(c), en_zona(c, ts) para un timestamp y inicio_del_dia(c, dia) para el timestamp de sus 0:00.
+Dentro de usar(c), tools.tz() y tools.now() son lo mismo para la cuenta en curso.
+
+Cómo se escriben: corta("2026-11-03") = "Lun 3", larga(...) = "Lun 3 nov", con_anio(date) = "3 nov 2026" y
+hace(ts) = "hace 5 min" / "ayer". Una sola forma para campañas, calendario, informes y el panel.
+
+Calendario comercial por país: las fechas que mueven ventas (Día de las Madres, Buen Fin, Navidad…) que caen
 en una campaña o justo después, para que el brief y los posts las aprovechen sin que el modelo adivine qué cae
 cuándo. Son datos, no instrucciones: el modelo decide si le quedan al negocio y al objetivo.
-
 del_periodo(pais, inicio, fin) devuelve [(fecha, nombre)] ordenadas; tag(...) las deja listas para el prompt como
 <fechas_del_periodo>. El país es el del Perfil de empresa (empresa.pais_de); "XX" (Otro) solo lleva las fechas
 comunes a todos.
 """
-from datetime import date, timedelta
+import time
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
+
+from . import config
+from .cuenta import Cuenta
 
 DESPUES = 10  # días después de la campaña que también se avisan: un post puede anticipar la fecha
 DIAS = ("lun", "mar", "mié", "jue", "vie", "sáb", "dom")
+DIAS_MAYUSCULA = ("Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom")
 MESES = ("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic")
+
+
+# --- la zona de la cuenta ---
+
+def zona(c: Cuenta) -> ZoneInfo:
+    return ZoneInfo(c.timezone)
+
+
+def ahora(c: Cuenta) -> datetime:
+    return datetime.now(zona(c))
+
+
+def hoy(c: Cuenta) -> date:
+    return ahora(c).date()
+
+
+def en_zona(c: Cuenta, ts: float) -> datetime:
+    """Un timestamp como fecha y hora de la cuenta."""
+    return datetime.fromtimestamp(ts, zona(c))
+
+
+def inicio_del_dia(c: Cuenta, dia: date) -> float:
+    """El timestamp de las 0:00 de ese día en la zona de la cuenta."""
+    return datetime(dia.year, dia.month, dia.day, tzinfo=zona(c)).timestamp()
+
+
+# --- cómo se escriben ---
+
+def _dia(d: date | str) -> date:
+    return date.fromisoformat(d) if isinstance(d, str) else d
+
+
+def corta(d: date | str) -> str:
+    """"Lun 3" (acepta AAAA-MM-DD)."""
+    d = _dia(d)
+    return f"{DIAS_MAYUSCULA[d.weekday()]} {d.day}"
+
+
+def larga(d: date | str) -> str:
+    """"Lun 3 nov" (acepta AAAA-MM-DD)."""
+    d = _dia(d)
+    return f"{DIAS_MAYUSCULA[d.weekday()]} {d.day} {MESES[d.month - 1]}"
+
+
+def con_anio(d: date | str) -> str:
+    """"3 nov 2026", para los PDF."""
+    d = _dia(d)
+    return f"{d.day} {MESES[d.month - 1]} {d.year}"
+
+
+def hace(t: float) -> str:
+    """"hace un momento", "hace 5 min", "hace 3 h", "ayer", "hace 4 días"."""
+    s = time.time() - t
+    if s < config.MINUTO:
+        return "hace un momento"
+    if s < config.HORA:
+        return f"hace {int(s // config.MINUTO)} min"
+    if s < config.DIA:
+        return f"hace {int(s // config.HORA)} h"
+    return "ayer" if s < 2 * config.DIA else f"hace {int(s // config.DIA)} días"
+
+
+# --- calendario comercial ---
 
 
 def fijo(mes: int, dia: int):

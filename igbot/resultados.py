@@ -24,12 +24,11 @@ import time
 from collections import Counter
 from datetime import date, datetime, timedelta
 from html import escape
-from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter
 from fastapi.responses import HTMLResponse, Response
 
-from . import anuncios_meta, config, marco, metricas
+from . import anuncios_meta, config, fechas, marco, metricas
 from .comentarios import SPAM
 from .cuenta import Cuenta
 
@@ -130,7 +129,7 @@ async def conversaciones(filas, c: Cuenta, inicio: datetime, dias: int) -> dict:
 
 async def calcular(c: Cuenta, rango: str, fin: date | None = None) -> dict:
     """Los `rango` días que terminan en `fin` (hoy si no viene), contando ese día."""
-    zona = ZoneInfo(c.timezone)
+    zona = fechas.zona(c)
     dias = int(rango)
     ahora = datetime.now(zona)
     fin = min(fin or ahora.date(), ahora.date())
@@ -335,7 +334,7 @@ def numero_post(etiqueta: str, valor) -> str:
 def tarjeta_post(c: Cuenta, x: dict, mejor: bool = False, promedio: float | None = None) -> str:
     from . import informe
     p, d = x["post"], x["datos"] or {}
-    cuando = datetime.fromtimestamp(p["publish_at"] or p["created_at"], ZoneInfo(c.timezone))
+    cuando = fechas.en_zona(c, p["publish_at"] or p["created_at"])
     foto = (f'<img src="{escape(x["imagen"])}" alt="" loading="lazy" referrerpolicy="no-referrer">'
             if x["imagen"] else '<div class="sin-foto">Sin imagen</div>')
     if p["permalink"].startswith("https://"):
@@ -483,7 +482,7 @@ async def barra(c: Cuenta, rango: str, fin: date, hoy: date, vista: str, cada: s
                         for k in opciones) + "</div>")
     guardado = await c.store.get(metricas.CLAVE_HORA)
     if guardado:
-        cuando = datetime.fromtimestamp(float(guardado), ZoneInfo(c.timezone))
+        cuando = fechas.en_zona(c, float(guardado))
         dia = "hoy" if cuando.date() == hoy else "ayer" if cuando.date() == hoy - timedelta(days=1) else f"el {cuando:%d/%m}"
         instagram = f"Instagram: actualizado {dia} a las {cuando:%H:%M}"
     else:
@@ -608,7 +607,7 @@ def tipo_de(matched: str) -> str:
 
 
 async def numeros_comentarios(c: Cuenta, rango: str, fin: date) -> dict:
-    zona = ZoneInfo(c.timezone)
+    zona = fechas.zona(c)
     dias = int(rango)
     inicio = datetime(fin.year, fin.month, fin.day, tzinfo=zona) - timedelta(days=dias - 1)
     filas = await c.store.comments_between(inicio.timestamp(), (inicio + timedelta(days=dias)).timestamp())
@@ -697,7 +696,7 @@ async def posts_comentados(c: Cuenta, d: dict) -> str:
         fecha = ""
         if x.get("fecha"):
             try:
-                cuando = datetime.fromisoformat(x["fecha"].replace("+0000", "+00:00")).astimezone(ZoneInfo(c.timezone))
+                cuando = datetime.fromisoformat(x["fecha"].replace("+0000", "+00:00")).astimezone(fechas.zona(c))
                 fecha = f'<p class="pp-fecha">{"Reel" if x.get("tipo") == "REELS" else "Post"} · {cuando:%d/%m}</p>'
             except ValueError:
                 pass
@@ -763,9 +762,8 @@ def _veces(n: int, monto: float = 0, moneda: str = "") -> str:
 async def anuncios_html(c: Cuenta, ini: date, fin: date) -> str:
     """Por anuncio: lo de Meta (gasto, clics y lo que mide su Pixel) junto a lo de sus chats (chats y hasta dónde
     llegaron). Solo salen las columnas con datos: una tienda ve compras y ventas; un spa, cotizaciones y citas."""
-    zona = ZoneInfo(c.timezone)
-    desde = datetime(ini.year, ini.month, ini.day, tzinfo=zona).timestamp()
-    hasta = datetime(fin.year, fin.month, fin.day, tzinfo=zona).timestamp() + config.DIA
+    desde = fechas.inicio_del_dia(c, ini)
+    hasta = fechas.inicio_del_dia(c, fin) + config.DIA
     nuestros = await c.store.por_anuncio(desde, hasta)
     datos = await anuncios_meta.conexion(c)
     meta = await anuncios_meta.por_anuncio(c, ini, fin)
@@ -847,7 +845,7 @@ async def anuncios_html(c: Cuenta, ini: date, fin: date) -> str:
 
 async def picos_de(c: Cuenta, d: dict) -> dict[date, str]:
     """{día: texto del post que salió ese día}, para explicar el pico de vistas."""
-    zona = ZoneInfo(c.timezone)
+    zona = fechas.zona(c)
     salida: dict[date, str] = {}
     for p in sorted(d.get("publicadas", []), key=lambda p: p["publish_at"] or p["created_at"]):
         salida.setdefault(datetime.fromtimestamp(p["publish_at"] or p["created_at"], zona).date(),
@@ -857,7 +855,7 @@ async def picos_de(c: Cuenta, d: dict) -> dict[date, str]:
 
 async def pagina(c: Cuenta, rango: str, fin: date | None = None, vista: str = "instagram",
                  formato: str = "", cada: str = "") -> HTMLResponse:
-    hoy = datetime.now(ZoneInfo(c.timezone)).date()
+    hoy = fechas.hoy(c)
     fin = min(fin or hoy, hoy)
     cada = metricas.leer_cada(cada, int(rango))
     if vista == "anuncios":
@@ -896,7 +894,7 @@ def leer_rango(dias: str, desde: str, fin: date | None, hoy: date) -> tuple[str,
 @router.get("")
 async def ver(c: marco.Sesion, dias: str = "7", fin: str = "", ver: str = "instagram", desde: str = "",
               formato: str = "", cada: str = ""):
-    hoy = datetime.now(ZoneInfo(c.timezone)).date()
+    hoy = fechas.hoy(c)
     rango, fin_ = leer_rango(dias, desde, leer_fin(fin), hoy)
     return await pagina(c, rango, fin_, ver if ver in vistas_de(c) else "instagram",
                         formato if formato in metricas.NOMBRES_FORMATO else "", cada)
@@ -941,7 +939,7 @@ def csv_cuenta(m: dict, d: dict) -> bytes:
 
 async def filas_posts(c: Cuenta, d: dict) -> list[list]:
     """Una fila por publicación del periodo: cuándo salió, qué decía y sus números."""
-    zona = ZoneInfo(c.timezone)
+    zona = fechas.zona(c)
     filas = []
     for x in await posts_con_numeros(c, d.get("publicadas", []), d.get("inicio"), d.get("dias", 0)):
         p, n = x["post"], x["datos"] or {}
@@ -965,7 +963,7 @@ async def descargar(c: marco.Sesion, dias: str = "7", fin: str = "", ver: str = 
     día por día (`que=cuenta`) o una fila por publicación (`que=posts`, solo Instagram)."""
     from . import informe
     ver = ver if ver in VISTAS_PDF else "instagram"
-    hoy = datetime.now(ZoneInfo(c.timezone)).date()
+    hoy = fechas.hoy(c)
     rango, fin_ = leer_rango(dias, desde, leer_fin(fin), hoy)
     ini = fin_ - timedelta(days=int(rango) - 1)
     que = "posts" if que == "posts" and ver == "instagram" else "cuenta"

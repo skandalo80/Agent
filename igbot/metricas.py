@@ -30,9 +30,8 @@ import json
 import logging
 from datetime import date, datetime, timedelta
 from html import escape
-from zoneinfo import ZoneInfo
 
-from . import config, informe, tools
+from . import config, fechas, informe, tools
 from .cuenta import Cuenta, usar
 
 log = logging.getLogger("igbot.metricas")
@@ -93,7 +92,7 @@ def desglose(m: dict) -> dict[str, int]:
 
 async def insights_del_dia(c: Cuenta, dia: date) -> dict:
     """Los números de un día completo (de 0:00 a 0:00 en la zona de la cuenta)."""
-    desde = int(datetime(dia.year, dia.month, dia.day, tzinfo=ZoneInfo(c.timezone)).timestamp())
+    desde = int(fechas.inicio_del_dia(c, dia))
     rango = {"period": "day", "metric_type": "total_value", "since": desde, "until": desde + config.DIA}
     try:
         datos = await c.instagram.insights_cuenta(",".join(METRICAS), **rango)
@@ -170,7 +169,7 @@ async def horas_activas(c: Cuenta) -> dict[str, float]:
                 suma[int(h)] = suma.get(int(h), 0) + float(n or 0)
     if not dias:
         return {}
-    corrimiento = int((datetime.now(ZoneInfo(c.timezone)).utcoffset() or timedelta()).total_seconds() // config.HORA)
+    corrimiento = int((datetime.now(fechas.zona(c)).utcoffset() or timedelta()).total_seconds() // config.HORA)
     return {str((h + corrimiento) % 24): round(n / dias, 1) for h, n in sorted(suma.items())}
 
 
@@ -228,8 +227,7 @@ async def guardar_temas(c: Cuenta, hoy: date) -> None:
     """Lo que más preguntan por chat en los últimos 7 y 30 días, para Resultados > Conversaciones. Una llamada
     barata por periodo con mensajes; si Claude falla, se queda lo anterior."""
     from . import reporte
-    zona = ZoneInfo(c.timezone)
-    hasta = datetime(hoy.year, hoy.month, hoy.day, tzinfo=zona).timestamp()
+    hasta = fechas.inicio_del_dia(c, hoy)
     temas = json.loads(await c.store.get(CLAVE_TEMAS) or "{}")
     for dias in TEMAS_DIAS:
         try:
@@ -379,25 +377,25 @@ async def numeros(c: Cuenta, rango_dias: int, fin: date | None = None, cada: str
     guardado hasta `fin`. Con `cada` semana o mes, las series van en bloques completos (ver `bloques`) y el
     periodo anterior se corre semanas o meses enteros para que coincidan los días de la semana; los números
     del periodo (totales y comparaciones) siempre cuentan todos los días del rango."""
-    hoy = datetime.now(ZoneInfo(c.timezone)).date()
+    hoy = fechas.hoy(c)
     fin = min(fin or hoy, hoy)
     ultimo = min(fin, hoy - timedelta(days=1))
     atras = salto(rango_dias, cada)
     desde = fin - timedelta(days=rango_dias + max(atras, 30) + 1)
     dias = await c.store.metricas(desde.isoformat())
     dias = {k: v for k, v in dias.items() if k <= fin.isoformat()}
-    fechas = [ultimo - timedelta(days=i) for i in range(rango_dias - 1, -1, -1)]  # días completos
-    serie = [dias.get(f.isoformat(), {}) for f in fechas]
-    antes = [dias.get((f - timedelta(days=atras)).isoformat(), {}) for f in fechas]  # el periodo anterior
+    dias_ = [ultimo - timedelta(days=i) for i in range(rango_dias - 1, -1, -1)]  # días completos
+    serie = [dias.get(f.isoformat(), {}) for f in dias_]
+    antes = [dias.get((f - timedelta(days=atras)).isoformat(), {}) for f in dias_]  # el periodo anterior
     con_seguidores = [d for d in dias if "seguidores" in dias[d]]
     actual = seguidores_en(dias, fin)
     inicio_periodo = fin - timedelta(days=rango_dias)  # el día antes de que empiece el periodo
     bloque = CADA[cada][1]
     if bloque > 1:
-        fechas_g, serie_g = bloques(fechas, serie, bloque)
-        _, antes_g = bloques(fechas, antes, bloque)
+        fechas_g, serie_g = bloques(dias_, serie, bloque)
+        _, antes_g = bloques(dias_, antes, bloque)
     else:
-        fechas_g, serie_g, antes_g = fechas, serie, antes
+        fechas_g, serie_g, antes_g = dias_, serie, antes
     suma = lambda k, s=serie: sum(d.get(k, 0) for d in s)  # noqa: E731
     promedio = lambda k, s: (lambda xs: sum(xs) / len(xs) if xs else None)([d[k] for d in s if d.get(k) is not None])  # noqa: E731
     inter = {k: suma(k) for k in ACCIONES}
@@ -406,7 +404,7 @@ async def numeros(c: Cuenta, rango_dias: int, fin: date | None = None, cada: str
     relleno = await c.store.get(CLAVE_RELLENO)
     return {
         "fechas": fechas_g, "serie": serie_g, "antes": antes_g, "hay": bool(dias),
-        "cada": cada, "bloque": bloque, "dias_fechas": fechas, "dias_serie": serie,
+        "cada": cada, "bloque": bloque, "dias_fechas": dias_, "dias_serie": serie,
         "seguidores": actual,
         "semana": cambio(actual, seguidores_en(dias, fin - timedelta(days=7))),
         "mes": cambio(actual, seguidores_en(dias, fin - timedelta(days=30))),

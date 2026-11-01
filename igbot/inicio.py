@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter
 
-from . import config, conversaciones, marco, metricas
+from . import config, conversaciones, fechas, marco, metricas
 from .cuenta import Cuenta, usar
 
 router = APIRouter(prefix="/panel/inicio")
@@ -115,7 +115,7 @@ async def te_esperan(c: Cuenta, ahora: float) -> str:
     pasados = {f[0] for _, f in filas if f[6]}
     razones = ({u: d for u, d, _ in await c.store.events("humano", humano_desde, ahora + 1) if u in pasados}
                if pasados else {})
-    zona = ZoneInfo(c.timezone)
+    zona = fechas.zona(c)
     hoy_ = datetime.fromtimestamp(ahora, zona)
     lista = []
     for (filtro, (u, t, rol, texto, _, est, paso)), nombre in zip(filas, nombres):
@@ -146,7 +146,7 @@ async def proximas(c: Cuenta, ahora: float) -> str:
         return (f'<section class="met-c ini-posts">{cab}<p class="ayuda">No tienes publicaciones programadas.</p>'
                 '<div class="acciones"><a class="boton secundario" href="/panel/contenido/campanas/nueva">'
                 "Crear campaña</a></div></section>")
-    zona = ZoneInfo(c.timezone)
+    zona = fechas.zona(c)
     hoy_ = datetime.fromtimestamp(ahora, zona).date()
     filas = []
     for p in posts:
@@ -204,9 +204,9 @@ async def saludo(c: Cuenta) -> str:
 
 async def pagina(c: Cuenta):
     ahora = time.time()
-    zona = ZoneInfo(c.timezone)
+    zona = fechas.zona(c)
     hoy_ = datetime.fromtimestamp(ahora, zona)
-    inicio_dia = datetime(hoy_.year, hoy_.month, hoy_.day, tzinfo=zona).timestamp()
+    inicio_dia = fechas.inicio_del_dia(c, hoy_)
     from .limites import LIMIT_NOTICE
     pendientes = await c.store.pendientes_tuyos(ahora, ahora - c.human_pause_hours * config.HORA - 60,
                                                 ahora - conversaciones.SIN_RESPUESTA, LIMIT_NOTICE)
