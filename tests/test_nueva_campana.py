@@ -392,12 +392,14 @@ def test_los_mensajes_dependen_del_objetivo(cliente, monkeypatch):
     monkeypatch.setattr(c, "imagenes_mes", 4)
     listo(client, c)
 
-    def objetivo(k, titulo, mensajes):
-        return {"k": k, "titulo": titulo, "descripcion": "d",
-                "mensajes": [{"k": m, "titulo": f"Comunicar {m}", "descripcion": "x", "ejemplo": "e"} for m in mensajes]}
+    def objetivo(k, titulo, mensajes, tipo=""):
+        return {"k": k, "titulo": titulo, "descripcion": "d", **({"tipo": tipo} if tipo else {}),
+                "mensajes": [{"k": m, "titulo": f"Comunicar {m}", "descripcion": "x", "ejemplo": f"Ejemplo de {m}",
+                              **({"tipo": "humano"} if m == "precio" else {})} for m in mensajes]}
     opciones = {"version": empresa.VERSION_OPCIONES, "huella": "h",
                 "objetivos": [objetivo("vender-latte", "Vender el latte", ["precio", "receta"]),
-                              objetivo("mas-visitas", "Más visitas al local", ["ambiente", "horario"])],
+                              objetivo("mas-visitas", "Más visitas al local", ["ambiente", "horario"]),
+                              objetivo("que-platiquen", "Que la gente platique con nosotros", ["ambiente"], "interaccion")],
                 "mensajes": [{"k": "general", "titulo": "Comunicar general", "descripcion": "x"}]}
     client.portal.call(c.store.set, "campana_opciones", json.dumps(opciones))
     programadas = []
@@ -406,8 +408,20 @@ def test_los_mensajes_dependen_del_objetivo(cliente, monkeypatch):
     paso(client, 1, objetivo="vender-latte")
     r = client.get(f"{URL}?paso=2")
     assert "Comunicar precio" in r.text and "Comunicar ambiente" not in r.text
+    assert "<em>«Ejemplo de precio»</em>" in r.text  # cómo sonaría un post con ese mensaje
     paso(client, 2, mensajes=["precio"])
-    assert client.portal.call(nueva_campana.leer, c)["mensajes"] == ["precio"]
+    b = client.portal.call(nueva_campana.leer, c)
+    assert b["mensajes"] == ["precio"]
+    # El tipo que dijo la IA manda sobre las palabras del título: "humano" aporta su tema y el ejemplo va al prompt.
+    camp = client.portal.call(nueva_campana.a_campana, c, b)
+    assert camp["temas"][0] == "detras" and "(por ejemplo: «Ejemplo de precio»)" in camp["mensaje"]
+    assert camp["regla"] is False and nueva_campana.base_de(opciones["objetivos"][0], nueva_campana.OBJETIVOS,
+                                                            nueva_campana.PALABRAS_OBJETIVO) == "vender"
+    # Un objetivo sin palabras conocidas en el título, pero con tipo "interaccion": lleva la regla.
+    assert nueva_campana.base_de(opciones["objetivos"][2], nueva_campana.OBJETIVOS, nueva_campana.PALABRAS_OBJETIVO) == "interaccion"
+    paso(client, 1, objetivo="que-platiquen")
+    paso(client, 2, mensajes=["ambiente"])
+    assert client.portal.call(nueva_campana.a_campana, c, client.portal.call(nueva_campana.leer, c))["regla"] is True
 
     # Otro objetivo: sus mensajes, y el paso 2 se vuelve a elegir.
     paso(client, 1, objetivo="mas-visitas")

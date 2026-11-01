@@ -22,8 +22,10 @@ PASO_1 = {"paso": "1", "nombre": "Café Lunar", "giro": "Restaurante o cafeterí
           "atiende": ["local", "nada"], "accion": "ir_3"}
 
 OPCIONES = {"objetivos": [{"k": f"Obj {i}", "titulo": f"Objetivo {i}", "descripcion": "x",
+                           "tipo": ["vender", "Interaccion", "inventado"][i % 3],
                            "mensajes": [{"k": f"m{i}-{j}", "titulo": f"Mensaje {i}.{j}", "descripcion": "y",
-                                         "ejemplo": "z"} for j in range(5)]} for i in range(7)]}
+                                         "tipo": "producto" if j == 0 else "", "ejemplo": "z"} for j in range(5)]}
+                          for i in range(7)]}
 
 
 def test_pasos_guardan_y_el_asistente_usa_el_perfil(cliente):
@@ -195,10 +197,11 @@ def test_opciones_de_campana_al_terminar(cliente, monkeypatch):
     assert r.headers["location"] == "/panel/empresa?paso=6&aviso=listo" and len(programadas) == 2
     assert client.portal.call(empresa.de, c)["terminado"] is True
 
-    respuestas = []
+    respuestas, sistemas = [], []
 
     async def fake_claude(prompt, system, mcp=None, allowed=(), max_turns=5, model=None):
         respuestas.append(prompt)
+        sistemas.append(system)
         return "Claro:\n" + json.dumps(OPCIONES)
 
     monkeypatch.setattr(bot.agent, "run_claude", fake_claude)
@@ -209,12 +212,20 @@ def test_opciones_de_campana_al_terminar(cliente, monkeypatch):
     # Cada objetivo con sus propios mensajes (hasta 4), y todos juntos arriba para lo de antes.
     assert op["version"] == empresa.VERSION_OPCIONES and len(op["objetivos"][1]["mensajes"]) == 4
     assert op["objetivos"][1]["mensajes"][0] == {"k": "m1-0", "titulo": "Mensaje 1.0", "descripcion": "y",
-                                                 "ejemplo": "z"}
+                                                 "tipo": "producto", "ejemplo": "z"}
+    assert "tipo" not in op["objetivos"][1]["mensajes"][1]  # sin tipo: se adivina por sus palabras, como antes
+    # El tipo de cada objetivo (en minúsculas y solo si es uno de los conocidos) y el español del país.
+    assert [o.get("tipo") for o in op["objetivos"][:3]] == ["vender", "interaccion", None]
+    assert '"tipo" es a qué clase de objetivo pertenece' in sistemas[-1] and "Español de México, tuteando" in sistemas[-1]
     assert [m["k"] for m in empresa.mensajes_de(op, "obj-2")] == ["m2-0", "m2-1", "m2-2", "m2-3"]
     assert len(op["mensajes"]) == 6
     assert "<empresa>" in respuestas[0] and "Café Lunar" in respuestas[0]
     client.portal.call(empresa.generar_opciones, c)  # sin cambios en el perfil no se vuelve a pedir
     assert len(respuestas) == 1
+    # Con país Argentina, las opciones se piden con voseo.
+    client.post("/panel/empresa", headers=ORIGEN, data={**PASO_1, "pais": "AR"})
+    client.portal.call(empresa.generar_opciones, c)
+    assert len(respuestas) == 2 and "Español de Argentina, con voseo" in sistemas[-1]
     r = client.get("/panel/empresa?paso=6&aviso=listo")
     assert "tus campañas usan tu perfil" in r.text
     assert "Tus campañas, a la medida" not in r.text and "Objetivo 0" not in r.text  # se ven al crear la campaña
