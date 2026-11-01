@@ -175,11 +175,14 @@ RECORTE_HISTORIA = ("It is a full-screen Instagram story and will be cropped to 
 ESPACIO_HISTORIA = "Leave the lower third calm and uncluttered for a short headline."
 
 
-def prompt_final(idea: str, plantilla: str, historia: bool = False) -> str:
+def prompt_final(idea: str, plantilla: str, historia: bool = False, titular: bool = True) -> str:
+    """Una imagen sin texto para rotular con la plantilla. Sin `titular` (Foto sola, Bento: la pieza no lleva
+    ninguno) no se pide espacio libre: la escena llena la imagen."""
     if historia:
-        return (f"{idea.strip()}\n\nVertical full-screen Instagram story image. {RECORTE_HISTORIA} {ESPACIO_HISTORIA} "
+        return (f"{idea.strip()}\n\nVertical full-screen Instagram story image. {RECORTE_HISTORIA}"
+                f"{' ' + ESPACIO_HISTORIA if titular else ''} "
                 "Do not include any text, letters, numbers, logos or watermarks.")
-    return (f"{idea.strip()}\n\nVertical Instagram image. {RECORTE} {ESPACIO[plantilla]} "
+    return (f"{idea.strip()}\n\nVertical Instagram image. {RECORTE}{' ' + ESPACIO[plantilla] if titular else ''} "
             "Do not include any text, letters, numbers, logos or watermarks.")
 
 
@@ -566,13 +569,46 @@ def _historia_completa(data: bytes) -> bytes:
     return out.getvalue()
 
 
+UNIFORME = 10  # desviación máxima del color en un borde para considerarlo liso (y poder extenderlo)
+
+
+def _borde_liso(img: Image.Image, caja: tuple[int, int, int, int]) -> tuple | None:
+    """El color medio de esa franja si es casi uniforme (un fondo liso), o None."""
+    franja = img.crop(caja)
+    if max(ImageStat.Stat(franja).stddev) > UNIFORME:
+        return None
+    return tuple(int(v) for v in franja.resize((1, 1), Image.Resampling.BOX).getpixel((0, 0)))
+
+
+def _post_completo(data: bytes) -> bytes:
+    """Un diseño con texto en 4:5 sin recortar arriba ni abajo (OpenAI lo entrega en 2:3): a lo alto completo y, si
+    sus bordes izquierdo y derecho son lisos, franjas de ese color a los lados. Si el fondo no es liso (una foto), se
+    recorta como siempre: unas franjas visibles se verían peor que perder un poco de borde."""
+    img = ImageOps.exif_transpose(Image.open(io.BytesIO(data))).convert("RGB")
+    ancho = round(img.size[0] * ALTO / img.size[1])
+    if ancho >= ANCHO:  # ya es tan ancha como un post: se recortan los lados, nada arriba ni abajo
+        return _jpg(data)
+    img = img.resize((ancho, ALTO), Image.Resampling.LANCZOS)
+    izq, der = _borde_liso(img, (0, 0, 2, ALTO)), _borde_liso(img, (ancho - 2, 0, ancho, ALTO))
+    if izq is None or der is None:
+        return _jpg(data)
+    x = (ANCHO - ancho) // 2
+    lienzo = Image.new("RGB", (ANCHO, ALTO), izq)
+    lienzo.paste(Image.new("RGB", (ANCHO - x - ancho, ALTO), der), (x + ancho, 0))
+    lienzo.paste(img, (x, 0))
+    out = io.BytesIO()
+    lienzo.save(out, "JPEG", quality=92)
+    return out.getvalue()
+
+
 async def crear_pieza(store: Store, user_id: str, idea: str, plantilla: str, texto: Texto,
                       fotos: list[bytes] = (), permitir_extra: bool = False, marca: Marca | None = None,
                       historia: bool = False, infografia: bool = False, puntos: list[str] = (),
-                      anuncio: bool = False, con_producto: bool = False) -> dict:
+                      anuncio: bool = False, con_producto: bool = False, titular: bool = True) -> dict:
     """Genera la imagen, la rotula y la deja en la tabla media (lista para publicar). Con `historia`, en 9:16.
     Con `infografia` (y plantilla LIBRE), la IA diseña la pieza con su texto y sus `puntos` dentro; con `anuncio`,
-    un anuncio limpio con su titular, y si `con_producto`, las fotos del producto real se respetan al máximo."""
+    un anuncio limpio con su titular, y si `con_producto`, las fotos del producto real se respetan al máximo.
+    Sin `titular` (una pieza que no lleva texto ni lo llevará) no se pide espacio libre para él."""
     if plantilla not in PLANTILLAS and plantilla != LIBRE:
         raise ErrorImagen(f"Plantilla desconocida: {plantilla}")
     tipo = await reservar(store, permitir_extra)
@@ -582,13 +618,20 @@ async def crear_pieza(store: Store, user_id: str, idea: str, plantilla: str, tex
             prompt = (prompt_anuncio(idea, texto, marca, historia, con_producto) if plantilla == LIBRE and anuncio
                       else prompt_infografia(idea, texto, marca, historia, puntos) if plantilla == LIBRE and infografia
                       else prompt_libre(idea, texto, marca, historia) if plantilla == LIBRE
-                      else prompt_final(idea, plantilla, historia))
+                      else prompt_final(idea, plantilla, historia, titular))
             fiel = {"fiel": True} if anuncio and con_producto and fotos else {}
             crudo = await proveedor.generar(prompt, list(fotos), **fiel)
         async with _turno:
-            # Una historia con el texto en el diseño se ve completa (recortar los lados cortaba sus textos).
-            base = await asyncio.to_thread(_historia_completa, crudo) if historia and plantilla == LIBRE and (
-                infografia or anuncio) else await asyncio.to_thread(_jpg, crudo, historia)
+            # Un diseño con el texto dentro se ve completo: en una historia, con franjas arriba y abajo (recortar
+            # los lados cortaba sus textos); en un post, con franjas a los lados si su fondo es liso (recortar a 4:5
+            # perdía el 8 % de arriba y de abajo, donde a veces caía un titular).
+            con_texto = plantilla == LIBRE and (infografia or anuncio or bool(texto.titulo))
+            if historia and con_texto:
+                base = await asyncio.to_thread(_historia_completa, crudo)
+            elif con_texto:
+                base = await asyncio.to_thread(_post_completo, crudo)
+            else:
+                base = await asyncio.to_thread(_jpg, crudo, historia)
             # En diseño libre el texto ya viene en el diseño, y una foto sin título va tal cual: no se rotula.
             final = (base if plantilla == LIBRE or not texto.titulo
                      else await asyncio.to_thread(rotular, base, plantilla, texto, marca))

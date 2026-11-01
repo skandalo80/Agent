@@ -235,3 +235,31 @@ def test_historia_con_texto_no_se_corta_de_los_lados():
     y = imagenes.ALTO_HISTORIA // 2
     assert out.getpixel((2, y))[0] > 150 and out.getpixel((imagenes.ANCHO - 3, y))[0] > 150
     assert max(abs(a - b) for a, b in zip(out.getpixel((10, 5)), (20, 20, 24))) < 8
+
+
+def test_sin_titular_no_se_pide_espacio_para_el():
+    """Foto sola y Bento no llevan texto: el prompt no reserva un tercio vacío para un titular que no existe."""
+    con = imagenes.prompt_final("Una taza", "editorial")
+    sin = imagenes.prompt_final("Una taza", "editorial", titular=False)
+    assert "lower third" in con and "lower third" not in sin and "Do not include any text" in sin
+    assert "short headline" not in imagenes.prompt_final("Una taza", "editorial", historia=True, titular=False)
+
+
+def test_post_con_texto_no_se_corta_arriba_ni_abajo():
+    """Un diseño 2:3 con fondo liso queda a lo alto completo en 4:5, con franjas de su color a los lados; una foto
+    (bordes no lisos) se recorta como siempre."""
+    from PIL import Image
+    img = Image.new("RGB", (1024, 1536), (245, 240, 232))
+    img.paste((200, 0, 0), (0, 0, 1024, 40))  # un titular pegado al borde de arriba: no debe perderse
+    buf = io.BytesIO()
+    img.save(buf, "PNG")
+    out = Image.open(io.BytesIO(imagenes._post_completo(buf.getvalue())))
+    assert out.size == (imagenes.ANCHO, imagenes.ALTO)
+    assert out.getpixel((imagenes.ANCHO // 2, 5))[0] > 150  # el rojo de arriba sigue ahí
+    assert max(abs(a - b) for a, b in zip(out.getpixel((10, 700)), (245, 240, 232))) < 8  # franja del color del fondo
+    ruido = Image.effect_noise((1024, 1536), 80).convert("RGB")
+    buf = io.BytesIO()
+    ruido.save(buf, "PNG")
+    out = Image.open(io.BytesIO(imagenes._post_completo(buf.getvalue())))
+    assert out.size == (imagenes.ANCHO, imagenes.ALTO)
+    # un fondo con textura: recorte normal, sin franjas (no hay color que extender)
