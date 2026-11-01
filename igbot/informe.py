@@ -133,38 +133,108 @@ async def ids_de_instagram(c: Cuenta, posts: list[dict]) -> dict[int, str]:
     return ids
 
 
-async def pedir_numeros(c: Cuenta, media_id: str) -> dict | None:
-    """Le pregunta a Instagram los Insights de un post y los guarda (None si no los dio, p. ej. falta el permiso)."""
+HISTORIA_VIVE = 86400  # Instagram da los números de una historia solo sus primeras 24 h
+HISTORIA_LEER = 20 * 3600  # se leen pasadas estas horas (ya juntó casi todo) y antes de que venza
+
+
+async def pedir_numeros(c: Cuenta, media_id: str, tipo: str = "post") -> dict | None:
+    """Le pregunta a Instagram los Insights de una publicación y los guarda (None si no los dio, p. ej. falta el
+    permiso, y así se avisa). Una historia es la excepción: si ya se tenían y esta vez falla (venció), se quedan."""
     try:
-        datos = await c.instagram.media_insights(media_id)
+        datos = await c.instagram.media_insights(media_id) if tipo == "post" else \
+            await c.instagram.media_insights(media_id, tipo)
     except Exception as e:
         log.warning("Sin insights de %s para %s: %s", media_id, c.slug, e)
         datos = None
+    if datos is None and tipo == "historia" and (previo := await c.store.insights_post(media_id)) and previo[0] is not None:
+        return previo[0]
     await c.store.guardar_insights_post(media_id, datos, time.time())
     return datos
 
 
-async def numeros(c: Cuenta, media_id: str, publicado: float | None = None) -> dict | None:
-    """Los Insights de un post, de la base. Solo se le pregunta a Instagram si nunca se pidieron, o si tienen más
-    de CACHE_SEG y el post es reciente (`publicado` hace menos de MADURO, o no se sabe) o no se tenían; los demás
-    los refresca metricas.py una vez al día."""
+async def numeros(c: Cuenta, media_id: str, publicado: float | None = None, tipo: str = "post") -> dict | None:
+    """Los Insights de una publicación, de la base. Solo se le pregunta a Instagram si nunca se pidieron, o si
+    tienen más de CACHE_SEG y el post es reciente (`publicado` hace menos de MADURO, o no se sabe) o no se tenían;
+    los demás los refresca metricas.py una vez al día. Una historia ya vencida no se vuelve a pedir."""
     guardado = await c.store.insights_post(media_id)
     if guardado:
         datos, leido = guardado
         reciente = publicado is None or time.time() - publicado < MADURO
+        if tipo == "historia" and publicado and time.time() - publicado > HISTORIA_VIVE:
+            reciente = False
         if leido > time.time() - CACHE_SEG or (datos is not None and not reciente):
             return datos
-    return await pedir_numeros(c, media_id)
+    return await pedir_numeros(c, media_id, tipo)
+
+
+def tipo_de_media(m: dict) -> str:
+    """"reel" o "post" según lo que dice Instagram de una publicación suya."""
+    return "reel" if (m.get("media_product_type") or "").upper() in ("REELS", "REEL") else "post"
+
+
+async def medios_de_instagram(c: Cuenta, desde: float, hasta: float, del_panel: set[str]) -> list[dict]:
+    """Lo publicado directo en Instagram (no desde Skandar) entre `desde` y `hasta`, como posts del panel:
+    sin id propio, con `externo`, su foto de Instagram y su id de Instagram. Lee las páginas de Calendario
+    (cada una guardada DE_INSTAGRAM_TTL) hasta pasar `desde`."""
+    from . import calendario, contenido
+    salida = []
+    try:
+        for hoja in range(1, calendario.PAGINAS_INSTAGRAM + 1):
+            posts, ts = await contenido.hoja_instagram(c, hoja), hasta
+            for m in posts:
+                try:
+                    ts = datetime.strptime(m["timestamp"], "%Y-%m-%dT%H:%M:%S%z").timestamp()
+                except (KeyError, ValueError):
+                    continue
+                if not desde <= ts < hasta or shortcode(m.get("permalink", "")) in del_panel or not m.get("id"):
+                    continue
+                salida.append({"id": None, "user_id": "", "media_ids": [], "caption": m.get("caption") or "",
+                               "publish_at": ts, "created_at": ts, "status": "publicada",
+                               "permalink": m.get("permalink", ""), "error": "", "tipo": tipo_de_media(m),
+                               "ig_id": m["id"], "externo": True,
+                               "imagen": m.get("thumbnail_url") or m.get("media_url") or ""})
+            if len(posts) < contenido.POR_HOJA or ts < desde:
+                break
+    except Exception as e:  # sin Instagram, salen solo los del panel
+        log.warning("No se pudieron leer los posts de Instagram de %s: %s", c.slug, e)
+    return salida
+
+
+async def publicados_entre(c: Cuenta, desde: float, hasta: float, del_panel: list[dict]) -> list[dict]:
+    """Los posts del panel más lo subido a mano a Instagram en el periodo (sin repetir los del panel)."""
+    codigos = {shortcode(p["permalink"]) for p in del_panel if p.get("permalink")}
+    return list(del_panel) + await medios_de_instagram(c, desde, hasta, codigos)
 
 
 async def refrescar_numeros(c: Cuenta) -> int:
-    """Las estadísticas de los posts publicados en los últimos DIAS_REFRESCO días (lo llama metricas.py cada día).
-    Devuelve cuántos se pidieron."""
-    posts = await c.store.posts(("publicada",), desde=time.time() - DIAS_REFRESCO * 86400)
+    """Las estadísticas de lo publicado en los últimos DIAS_REFRESCO días, del panel y a mano en Instagram
+    (lo llama metricas.py cada día). Las historias no: se leen aparte antes de que venzan. Devuelve cuántos pidió."""
+    desde = time.time() - DIAS_REFRESCO * 86400
+    posts = [p for p in await c.store.posts(("publicada",), desde=desde) if p.get("tipo") != "historia"]
     ids = await ids_de_instagram(c, posts)
     for media_id in ids.values():
         await pedir_numeros(c, media_id)
-    return len(ids)
+    externos = await medios_de_instagram(c, desde, time.time(), {shortcode(p["permalink"]) for p in posts})
+    for m in externos:
+        await pedir_numeros(c, m["ig_id"], m["tipo"])
+    return len(ids) + len(externos)
+
+
+async def leer_historias(c: Cuenta) -> int:
+    """Las historias publicadas desde Skandar hace entre HISTORIA_LEER y HISTORIA_VIVE que aún no se leyeron en
+    esa ventana: se piden sus números una vez, antes de que Instagram deje de darlos. Lo llama metricas.tick."""
+    ahora = time.time()
+    leidas = 0
+    for post in await c.store.posts(("publicada",), desde=ahora - HISTORIA_VIVE):
+        salio = post["publish_at"] or post["created_at"]
+        if post.get("tipo") != "historia" or not post.get("ig_id") or not HISTORIA_LEER <= ahora - salio < HISTORIA_VIVE:
+            continue
+        guardado = await c.store.insights_post(post["ig_id"])
+        if guardado and guardado[1] >= salio + HISTORIA_LEER:
+            continue
+        await pedir_numeros(c, post["ig_id"], "historia")
+        leidas += 1
+    return leidas
 
 
 async def filas(c: Cuenta, camps: list[dict]) -> list[dict]:

@@ -331,7 +331,7 @@ def test_rango_personalizado_y_descargas(cliente, monkeypatch):
     # Por publicación: CSV y PDF con los posts del periodo y sus números.
     numeros = {"m1": {"reach": 200, "views": 400, "likes": 10, "comments": 2, "saved": 4, "shares": 4}}
 
-    async def insights(c, media_id, publicado=None):
+    async def insights(c, media_id, publicado=None, tipo="post"):
         return numeros.get(media_id)
     monkeypatch.setattr(informe, "numeros", insights)
     monkeypatch.setattr(c, "imagenes_mes", 4)
@@ -347,9 +347,9 @@ def test_rango_personalizado_y_descargas(cliente, monkeypatch):
     r = client.get("/panel/resultados/descargar?dias=7&que=posts&archivo=csv")
     lineas = r.content.decode("utf-8-sig").splitlines()
     assert "resultados-publicaciones-" in r.headers["content-disposition"]
-    assert lineas[0] == "fecha,hora,tipo,texto,enlace,alcance,vistas,likes,comentarios,guardados,compartidos,interaccion_pct"
-    assert len(lineas) == 3 and lineas[1].endswith(",post,Pan de muerto más texto,https://www.instagram.com/p/1/,200,400,10,2,4,4,10.0")
-    assert lineas[2].endswith(",post,Sin números,https://www.instagram.com/p/2/,,,,,,,")
+    assert lineas[0] == "fecha,hora,tipo,texto,enlace,alcance,vistas,likes,comentarios,guardados,compartidos,interaccion_pct,visitas_perfil,seguidores_nuevos,respuestas,origen"
+    assert len(lineas) == 3 and lineas[1].endswith(",post,Pan de muerto más texto,https://www.instagram.com/p/1/,200,400,10,2,4,4,10.0,,,,skandar")
+    assert lineas[2].endswith(",post,Sin números,https://www.instagram.com/p/2/,,,,,,,,,,,skandar")
     r = client.get("/panel/resultados/descargar?dias=7&que=posts")
     assert r.content.startswith(b"%PDF") and "resultados-publicaciones-" in r.headers["content-disposition"]
     assert r.headers["content-disposition"].endswith('.pdf"')
@@ -410,3 +410,81 @@ def test_conversaciones_lo_que_dejaron_y_temas(cliente, monkeypatch):
     assert "Últimos 30 días" in html and "(los últimos 30 días)" in html
     r = client.get("/panel/resultados/descargar?dias=7&ver=conversaciones")
     assert r.content.startswith(b"%PDF")
+
+
+def test_publicaciones_desde_instagram_formatos_e_historias(cliente, monkeypatch):
+    """Tus publicaciones suma lo subido a mano a Instagram (reels incluidos) sin repetir los del panel, compara
+    por formato, y las historias publicadas desde Skandar se leen a las 20 h, una vez, antes de que venzan."""
+    from igbot import contenido, informe
+    client, c = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 4)
+    ahora = time.time()
+    hace = lambda h: datetime.fromtimestamp(ahora - h * 3600, ZoneInfo("UTC")).strftime("%Y-%m-%dT%H:%M:%S+0000")  # noqa: E731
+    de_instagram = [
+        {"id": "ig1", "caption": "Reel subido desde la app", "media_type": "VIDEO", "media_product_type": "REELS",
+         "media_url": "https://cdn/r.mp4", "thumbnail_url": "https://cdn/r.jpg", "permalink": "https://www.instagram.com/reel/R1/", "timestamp": hace(5)},
+        {"id": "ig2", "caption": "Foto desde la app", "media_type": "IMAGE", "media_product_type": "FEED",
+         "media_url": "https://cdn/f.jpg", "permalink": "https://www.instagram.com/p/F1/", "timestamp": hace(30)},
+        {"id": "m1", "caption": "El del panel", "media_type": "IMAGE", "media_product_type": "FEED",
+         "media_url": "https://cdn/p.jpg", "permalink": "https://www.instagram.com/p/PANEL/", "timestamp": hace(2)},
+        {"id": "viejo", "caption": "De hace mucho", "media_type": "IMAGE", "media_product_type": "FEED",
+         "media_url": "https://cdn/v.jpg", "permalink": "https://www.instagram.com/p/V/", "timestamp": hace(24 * 40)},
+    ]
+    contenido._de_instagram.clear()
+
+    async def hoja(c, hoja):
+        return de_instagram if hoja == 1 else []
+    monkeypatch.setattr(contenido, "hoja_instagram", hoja)
+    pedidos = []
+
+    async def media_insights(media_id, tipo="post"):
+        pedidos.append((media_id, tipo))
+        if tipo == "historia":
+            return {"reach": 80, "views": 90, "replies": 3, "shares": 1, "profile_visits": 2, "follows": 1}
+        if tipo == "reel":
+            return {"reach": 500, "views": 2000, "likes": 40, "comments": 5, "saved": 5, "shares": 10}
+        return {"reach": 200, "views": 300, "likes": 10, "comments": 2, "saved": 4, "shares": 4, "profile_visits": 7, "follows": 3}
+    monkeypatch.setattr(c.instagram, "media_insights", media_insights, raising=False)
+
+    async def publicar():
+        post = await c.store.add_post("panel", [], "El del panel", ahora - 7200)
+        await c.store.set_post(post, "publicada", permalink="https://www.instagram.com/p/PANEL/", ig_id="m1")
+        await c.store.set("media_de:https://www.instagram.com/p/PANEL/", "m1")
+        hist = await c.store.add_post("panel", [], "Historia de hoy", ahora - 21 * 3600, tipo="historia")
+        await c.store.set_post(hist, "publicada", permalink="", ig_id="h1")
+        nueva = await c.store.add_post("panel", [], "Historia recién", ahora - 3600, tipo="historia")
+        await c.store.set_post(nueva, "publicada", permalink="", ig_id="h2")
+    client.portal.call(publicar)
+    # Historias: la de hace 21 h se lee ahora (una vez); la de hace 1 h todavía no; luego ya no se vuelve a pedir.
+    assert client.portal.call(informe.leer_historias, c) == 1 and pedidos == [("h1", "historia")]
+    assert client.portal.call(informe.leer_historias, c) == 0
+    assert client.portal.call(informe.numeros, c, "h1", ahora - 21 * 3600, "historia")["replies"] == 3
+    pedidos.clear()
+    monkeypatch.setattr(resultados, "_cache", {})
+    html = client.get("/panel/resultados").text
+    assert "5 publicadas" in html and "2 desde Instagram" in html  # el del panel no se repite; el viejo queda fuera
+    assert "Reel · desde Instagram" in html and "Post · desde Instagram" in html and "El del panel" in html
+    # La historia viva se pide; la ya leída (h1) sale de memoria.
+    assert sorted(pedidos) == [("h2", "historia"), ("ig1", "reel"), ("ig2", "post"), ("m1", "post")]
+    assert "visitas al perfil" in html and ">7</b><span>visitas al perfil" in html and ">3</b><span>seguidores" in html
+    assert 'class="res-formatos"' in html and "<td>Reel<small> · 1</small></td><td>2,000</td>" in html
+    assert "<td>Post<small> · 2</small></td><td>300</td><td>200</td><td>20</td><td><b>10%</b></td>" in html
+    assert "<td>Historia<small> · 2</small></td><td>90</td><td>80</td><td>4</td>" in html
+    # CSV por publicación: el origen y los nuevos números.
+    r = client.get("/panel/resultados/descargar?dias=7&que=posts&archivo=csv")
+    lineas = r.content.decode("utf-8-sig").splitlines()
+    assert any(x.endswith(",reel,Reel subido desde la app,https://www.instagram.com/reel/R1/,500,2000,40,5,5,10,12.0,,,,instagram") for x in lineas)
+    assert any(",post,El del panel,https://www.instagram.com/p/PANEL/,200,300,10,2,4,4,10.0,7,3,,skandar" in x for x in lineas)
+    # Vencida: aunque Instagram ya no la dé, se quedan sus números.
+    monkeypatch.setattr(informe, "CACHE_SEG", 0)
+
+    async def vencida(media_id, tipo="post"):
+        raise RuntimeError("(#10) Not enough viewers")
+    monkeypatch.setattr(c.instagram, "media_insights", vencida, raising=False)
+    assert client.portal.call(informe.numeros, c, "h1", ahora - 30 * 3600, "historia")["replies"] == 3
+    assert client.portal.call(informe.pedir_numeros, c, "h1", "historia")["replies"] == 3
+    # El refresco diario también pide los subidos a mano (y no las historias).
+    monkeypatch.setattr(c.instagram, "media_insights", media_insights, raising=False)
+    pedidos.clear()
+    assert client.portal.call(informe.refrescar_numeros, c) == 3 and ("h1", "historia") not in pedidos
+    assert ("ig1", "reel") in pedidos and ("ig2", "post") in pedidos

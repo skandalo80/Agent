@@ -219,7 +219,7 @@ def test_publicaciones_con_numeros(cliente, monkeypatch):  # noqa: F811
     numeros = {"m1": {"reach": 200, "views": 400, "likes": 10, "comments": 2, "saved": 4, "shares": 4},
                "m2": {"reach": 100, "views": 150, "likes": 3, "comments": 0, "saved": 1, "shares": 0}}
 
-    async def insights(c, media_id, publicado=None):
+    async def insights(c, media_id, publicado=None, tipo="post"):
         return numeros.get(media_id)
 
     monkeypatch.setattr(informe, "numeros", insights)

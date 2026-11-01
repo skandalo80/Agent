@@ -254,6 +254,11 @@ async def tick(c: Cuenta) -> None:
         if await c.store.get(CLAVE_INTENTO):  # ya hubo un primer guardado: el historial va después
             if n := await rellenar(c, hoy):
                 log.info("Historial: %d días más para %s", n, c.slug or "la principal")
+        try:
+            if n := await informe.leer_historias(c):
+                log.info("Números de %d historias guardados para %s", n, c.slug or "la principal")
+        except Exception:
+            log.exception("No se pudieron leer las historias de %s", c.slug or "la principal")
 
 
 # --- números para Resultados ---

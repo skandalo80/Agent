@@ -241,30 +241,74 @@ def kpi(etiqueta: str, valor, nota: str = "") -> str:
 MAX_POSTS = 24  # los más recientes del periodo con sus Insights (Instagram los guarda 1 h en informe)
 
 
-async def posts_con_numeros(c: Cuenta, publicadas: list[dict]) -> list[dict]:
-    """Los posts publicados del periodo con su foto y sus Insights, del de mejor interacción al peor
-    (los que aún no tienen números, al final)."""
+async def posts_con_numeros(c: Cuenta, publicadas: list[dict], inicio: datetime | None = None,
+                            dias: int = 0) -> list[dict]:
+    """Lo publicado en el periodo con su foto y sus Insights, de mejor interacción a peor (sin números, al final):
+    los posts del panel y, con `inicio` y `dias`, también lo subido a mano a Instagram."""
     import asyncio
 
     from . import contenido, informe
-    posts = sorted(publicadas, key=lambda p: -(p["publish_at"] or p["created_at"]))[:MAX_POSTS]
-    ids = await informe.ids_de_instagram(c, posts)
+    todos = list(publicadas)
+    if inicio is not None and dias:
+        todos = await informe.publicados_entre(c, inicio.timestamp(), (inicio + timedelta(days=dias)).timestamp(),
+                                              publicadas)
+    posts = sorted(todos, key=lambda p: -(p["publish_at"] or p["created_at"]))[:MAX_POSTS]
+    ids = await informe.ids_de_instagram(c, [p for p in posts if p.get("id") is not None])
+    for p in posts:
+        if p.get("ig_id") and p.get("id") is not None:
+            ids.setdefault(p["id"], p["ig_id"])
     turno = asyncio.Semaphore(4)
 
     async def leer(post):
-        if post["id"] not in ids:
+        media_id = post["ig_id"] if post.get("externo") else ids.get(post["id"])
+        if not media_id:
             return None
         async with turno:
-            return await informe.numeros(c, ids[post["id"]], post["publish_at"])
+            return await informe.numeros(c, media_id, post["publish_at"], post.get("tipo") or "post")
 
     datos = await asyncio.gather(*(leer(p) for p in posts))
     salida = []
     for post, d in zip(posts, datos):
-        media = await c.store.media(post["media_ids"][0]) if post["media_ids"] else None
-        salida.append({"post": post, "datos": d, "tasa": informe.tasa(d),
-                       "imagen": contenido.url_imagen(c, media[0]) if media else ""})
+        if post.get("externo"):
+            imagen = post.get("imagen", "")
+        else:
+            media = await c.store.media(post["media_ids"][0]) if post["media_ids"] else None
+            imagen = contenido.url_imagen(c, media[0]) if media else ""
+        salida.append({"post": post, "datos": d, "tasa": informe.tasa(d), "imagen": imagen})
     salida.sort(key=lambda x: (x["tasa"] is None, -(x["tasa"] or 0)))
     return salida
+
+
+TIPOS_POST = {"post": "Post", "reel": "Reel", "historia": "Historia"}
+PLURAL_TIPO = {"post": "posts", "reel": "reels", "historia": "historias"}
+
+
+def por_formato_html(posts: list[dict]) -> str:
+    """Posts, reels e historias del periodo comparados: cuántos, vistas y alcance promedio y su interacción.
+    Solo cuando hay más de un formato con números."""
+    from . import informe
+    grupos: dict[str, list[dict]] = {}
+    for x in posts:
+        if x["datos"]:
+            grupos.setdefault(x["post"].get("tipo") or "post", []).append(x)
+    if len(grupos) < 2:
+        return ""
+    filas = []
+    for tipo in ("post", "reel", "historia"):
+        if not (xs := grupos.get(tipo)):
+            continue
+        n = len(xs)
+        vistas = sum(x["datos"].get("views", 0) for x in xs) / n
+        alcance = sum(x["datos"].get("reach", 0) for x in xs) / n
+        con = [x["tasa"] for x in xs if x["tasa"] is not None]
+        inter = sum(x["datos"].get("replies", 0) + x["datos"].get("shares", 0) if tipo == "historia" else informe.interacciones(x["datos"]) for x in xs) / n
+        tasa = f"{sum(con) / len(con):.1f}%".replace(".0%", "%") if con else "—"
+        filas.append(f"<tr><td>{TIPOS_POST[tipo]}<small> · {n}</small></td><td>{metricas.cifra(vistas)}</td>"
+                     f"<td>{metricas.cifra(alcance)}</td><td>{metricas.cifra(inter)}</td><td><b>{tasa}</b></td></tr>")
+    return ('<div class="res-formatos"><span class="num">Por formato</span>'
+            '<table><tr><th>Formato</th><th>Vistas</th><th>Alcance</th><th>Interacciones</th><th>Interacción</th></tr>'
+            + "".join(filas) + "</table><p class=\"ayuda chica\">Promedios por publicación del periodo. En historias, "
+            "las interacciones son respuestas y compartidos.</p></div>")
 
 
 def numero_post(etiqueta: str, valor) -> str:
@@ -280,36 +324,44 @@ def tarjeta_post(c: Cuenta, x: dict, mejor: bool = False, promedio: float | None
         foto = f'<a href="{escape(p["permalink"])}" rel="noopener" title="Ver en Instagram">{foto}</a>'
     tasa = (f'<b class="tasa">{x["tasa"]:.1f}%</b><small>interacción</small>'.replace(".0%", "%")
             if x["tasa"] is not None else '<small>Instagram aún no da sus números</small>')
-    tipo = "Historia" if p.get("tipo") == "historia" else "Post"
+    tipo = TIPOS_POST.get(p.get("tipo") or "post", "Post") + (" · desde Instagram" if p.get("externo") else "")
     if mejor and promedio and x["tasa"]:
         tasa += f'<small class="pp-vs">{x["tasa"] / promedio:.1f}× tu promedio</small>'.replace(".0×", "×")
+    if p.get("tipo") == "historia":
+        nums = (numero_post("alcance", d.get("reach")) + numero_post("vistas", d.get("views"))
+                + numero_post("respuestas", d.get("replies")) + numero_post("compartidos", d.get("shares")))
+    else:
+        nums = (numero_post("alcance", d.get("reach")) + numero_post("vistas", d.get("views"))
+                + numero_post("likes", d.get("likes")) + numero_post("comentarios", d.get("comments"))
+                + numero_post("guardados", d.get("saved")) + numero_post("compartidos", d.get("shares")))
+    if d.get("profile_visits") is not None or d.get("follows") is not None:
+        nums += numero_post("visitas al perfil", d.get("profile_visits")) + numero_post("seguidores", d.get("follows"))
     return (
         f'<article class="pp{" mejor" if mejor else ""}"><div class="pp-foto">{foto}'
         + ('<span class="pp-sello">Tu mejor post</span>' if mejor else "") + '</div>'
         f'<div class="pp-cuerpo"><p class="pp-fecha">{tipo} · {cuando:%d/%m} a las {cuando:%H:%M}</p>'
         f'<p class="pp-texto">{escape(p["caption"][:140] or "Publicación")}</p>'
-        f'<div class="pp-tasa">{tasa}</div><div class="pp-nums">'
-        + numero_post("alcance", d.get("reach")) + numero_post("vistas", d.get("views"))
-        + numero_post("likes", d.get("likes")) + numero_post("comentarios", d.get("comments"))
-        + numero_post("guardados", d.get("saved")) + numero_post("compartidos", d.get("shares"))
-        + "</div></div></article>"
+        f'<div class="pp-tasa">{tasa}</div><div class="pp-nums">{nums}</div></div></article>'
     )
 
 
 async def seccion_publicaciones(c: Cuenta, d: dict) -> str:
-    """Tus publicaciones del periodo: la mejor arriba, en grande, y las demás en tarjetas con sus números."""
-    cabeza = (f'<div class="met-cab"><span>Tus publicaciones</span><b>{plural(len(d["publicadas"]), "publicada")}'
-              f' <small>· {plural(d["programadas"], "programada")}</small></b></div>')
-    if not d["publicadas"]:
+    """Tus publicaciones del periodo (del panel y subidas a mano a Instagram): la mejor arriba, en grande, las
+    demás en tarjetas con sus números, y la comparación por formato."""
+    posts = await posts_con_numeros(c, d["publicadas"], d["inicio"], d["dias"])
+    externos = sum(1 for x in posts if x["post"].get("externo"))
+    cabeza = (f'<div class="met-cab"><span>Tus publicaciones</span><b>{plural(len(posts), "publicada")}'
+              f' <small>· {plural(d["programadas"], "programada")}'
+              + (f" · {externos} desde Instagram" if externos else "") + '</small></b></div>')
+    if not posts:
         return (f'<section class="met-c ancho res-posts">{cabeza}<p class="ayuda">No hubo publicaciones en este periodo.</p>'
                 '<div class="acciones"><a class="boton secundario" href="/panel/contenido">Ir a Calendario</a></div></section>')
-    posts = await posts_con_numeros(c, d["publicadas"])
     con = [x for x in posts if x["tasa"] is not None]
     promedio = sum(x["tasa"] for x in con) / len(con) if con else None
     nota = (f'<p class="ayuda chica">Interacción promedio: {promedio:.1f}% (likes, comentarios, guardados y'
             ' compartidos entre el alcance). Ordenados de mejor a peor.</p>' if con else "")
     primero, resto = (posts[0], posts[1:]) if con else (None, posts)
-    return (f'<section class="met-c ancho res-posts">{cabeza}{nota}'
+    return (f'<section class="met-c ancho res-posts">{cabeza}{nota}{por_formato_html(posts)}'
             + (tarjeta_post(c, primero, mejor=True, promedio=promedio) if primero else "")
             + (f'<div class="pp-grid">{"".join(tarjeta_post(c, x) for x in resto)}</div>' if resto else "")
             + "</section>")
@@ -843,19 +895,19 @@ async def filas_posts(c: Cuenta, d: dict) -> list[list]:
     """Una fila por publicación del periodo: cuándo salió, qué decía y sus números."""
     zona = ZoneInfo(c.timezone)
     filas = []
-    for x in await posts_con_numeros(c, d.get("publicadas", [])):
+    for x in await posts_con_numeros(c, d.get("publicadas", []), d.get("inicio"), d.get("dias", 0)):
         p, n = x["post"], x["datos"] or {}
         cuando = datetime.fromtimestamp(p["publish_at"] or p["created_at"], zona)
-        filas.append([cuando.strftime("%Y-%m-%d"), cuando.strftime("%H:%M"),
-                      "historia" if p.get("tipo") == "historia" else "post",
+        filas.append([cuando.strftime("%Y-%m-%d"), cuando.strftime("%H:%M"), p.get("tipo") or "post",
                       (p["caption"] or "").replace("\n", " ")[:140], p["permalink"] if p["permalink"].startswith("https://") else "",
                       n.get("reach"), n.get("views"), n.get("likes"), n.get("comments"), n.get("saved"), n.get("shares"),
-                      x["tasa"]])
+                      x["tasa"], n.get("profile_visits"), n.get("follows"), n.get("replies"),
+                      "instagram" if p.get("externo") else "skandar"])
     return filas
 
 
 COLUMNAS_POSTS = ["fecha", "hora", "tipo", "texto", "enlace", "alcance", "vistas", "likes", "comentarios", "guardados",
-                  "compartidos", "interaccion_pct"]
+                  "compartidos", "interaccion_pct", "visitas_perfil", "seguidores_nuevos", "respuestas", "origen"]
 
 
 @router.get("/descargar")
