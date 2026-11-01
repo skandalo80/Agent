@@ -663,6 +663,36 @@ class ReporteResultados(Cotizacion):
         self.ln(8)
 
 
+async def posts_pdf(c: Cuenta, titulo: str, filas: list[list], cuenta: str) -> bytes:
+    """Una tabla con cada publicación del periodo y sus números (las filas de resultados.filas_posts)."""
+    from . import contenido
+
+    marca = await contenido.marca_de(c)
+
+    def armar() -> bytes:
+        doc = ReporteResultados(f"@{cuenta.lstrip('@')}", titulo, fecha(tools.now().date()), marca.get("acento", ""))
+        doc.alias_nb_pages()
+        poner_logo(doc, c, marca)
+        doc.titulo("Resultados · Publicaciones", titulo)
+        if not filas:
+            doc.seccion("Publicaciones", ["No hubo publicaciones en este periodo."])
+            return doc.bytes()
+        con = [f[11] for f in filas if f[11] is not None]
+        doc.datos([("Publicaciones", cifra(len(filas))),
+                   ("Interacción promedio", f"{sum(con) / len(con):.1f}%" if con else "-"),
+                   ("Alcance total", cifra(sum(f[5] or 0 for f in filas))),
+                   ("Vistas totales", cifra(sum(f[6] or 0 for f in filas)))])
+        doc.por_dia([(f"{f[0][8:10]}/{f[0][5:7]} · {f[3][:38]}" if f[3] else f"{f[0][8:10]}/{f[0][5:7]}",
+                      cifra(f[5]) if f[5] is not None else "-", cifra(f[6]) if f[6] is not None else "-",
+                      cifra(f[7]) if f[7] is not None else "-", cifra(f[8]) if f[8] is not None else "-",
+                      cifra(f[9]) if f[9] is not None else "-", cifra(f[10]) if f[10] is not None else "-",
+                      f"{f[11]:.1f}%" if f[11] is not None else "-") for f in filas],
+                    ("Publicación", "Alcance", "Vistas", "Likes", "Coment.", "Guard.", "Compart.", "Interacción"))
+        return doc.bytes()
+
+    return await asyncio.to_thread(armar)
+
+
 async def resultados_pdf(c: Cuenta, titulo: str, d: dict, m: dict, cuenta: str, vista: str = "instagram") -> bytes:
     """Lo que se ve en Resultados para un periodo: en Instagram, sus números, día por día y el público; en
     Conversaciones, los mensajes, los comentarios y las ciudades. `d` sale de resultados.numeros_de y `m` de
@@ -705,17 +735,31 @@ def _resultados_pdf(c: Cuenta, titulo: str, d: dict, m: dict, cuenta: str, vista
     doc.titulo("Resultados · Instagram", titulo)
     inter = m["interacciones"]
     alcance = [v for v in m["alcance_dia"] if v is not None]
+    seg = m.get("vistas_seg") or {}
+    otros = seg.get("otros", 0) + seg.get("sin_dato", 0)
     doc.datos([("Seguidores", cifra(m["seguidores"]) if m["seguidores"] is not None else "-"),
-               ("vs. semana pasada", signo(m["semana"])), ("vs. mes pasado", signo(m["mes"])),
+               ("En el periodo", signo(m.get("periodo"))), ("vs. mes pasado", signo(m["mes"])),
                ("Nuevos", cifra(m["nuevos"])), ("Dejaron de seguir", cifra(m["perdidos"]))])
     doc.datos([("Alcance al día", cifra(round(sum(alcance) / len(alcance))) if alcance else "-"),
-               ("Vistas", cifra(m["vistas"])), ("Interacciones", cifra(sum(inter.values()))),
-               ("Likes", cifra(inter["likes"])), ("Clics al enlace", cifra(m["clics"]))])
+               ("Vistas", cifra(m["vistas"]) + (f" ({otros / (seg.get('seguidores', 0) + otros):.0%} de no seguidores)"
+                                                if seg.get("seguidores", 0) + otros else "")),
+               ("Interacciones", cifra(sum(inter.values()))),
+               ("Likes", cifra(inter["likes"])), ("Clics a tu perfil", cifra(m["clics"]))])
+    doc.datos([("Vistas vs. periodo anterior", signo(m.get("vistas_cambio"))),
+               ("Alcance vs. anterior", signo(m.get("alcance_cambio"))),
+               ("Interacciones vs. anterior", signo(m.get("interacciones_cambio"))),
+               ("Clics vs. anterior", signo(m.get("clics_cambio"))), ("", "")])
+    tipos = m.get("vistas_tipo") or {}
+    if tipos:
+        from .metricas import NOMBRES_FORMATO
+        doc.seccion("Vistas por formato", [", ".join(f"{NOMBRES_FORMATO.get(k, k)} {cifra(v)}"
+                                                      for k, v in sorted(tipos.items(), key=lambda x: -x[1]))])
     dias = [(f, x) for f, x in zip(m["fechas"], m["serie"]) if x]
     if dias:
         doc.por_dia([(fecha(f), cifra(x.get("seguidores")) if "seguidores" in x else "-",
-                      f"+{x['nuevos']}" if "nuevos" in x else "-", cifra(x.get("alcance")), cifra(x.get("vistas")))
-                     for f, x in dias], ("Día", "Seguidores", "Nuevos", "Alcance", "Vistas"))
+                      f"+{x['nuevos']}" if "nuevos" in x else "-", cifra(x.get("alcance")), cifra(x.get("vistas")),
+                      cifra(x.get("interacciones")) if "interacciones" in x else "-")
+                     for f, x in dias], ("Día", "Seguidores", "Nuevos", "Alcance", "Vistas", "Interacciones"))
     if p.get("edad") or p.get("genero") or p.get("ciudad"):
         doc.seccion("Tu público", [x for x in (
             f"Edad: {top(p['edad'])}" if p.get("edad") else "",

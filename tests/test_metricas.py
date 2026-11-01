@@ -37,10 +37,19 @@ class InstagramConInsights:
             return [{"name": metric, "period": "lifetime", "values": [
                 {"value": {"2": 10, "3": 30, "14": 4}, "end_time": "2026-10-27T07:00:00+0000"},
                 {"value": {"2": 20, "3": 10, "14": 6}, "end_time": "2026-10-28T07:00:00+0000"}]}]
-        if "," in metric and self.chica:
+        if "," in metric and self.chica and "breakdown" not in params:
             raise RuntimeError("Instagram respondió 400: profile_links_taps no disponible")
         if metric == "profile_links_taps" and self.chica:
             raise RuntimeError("no")
+        if breakdown := params.get("breakdown"):  # los desgloses, con los nombres de Instagram
+            if breakdown == "follower_type" and self.chica:
+                raise RuntimeError("Instagram respondió 400: breakdown no disponible")
+            valores = {"media_product_type": [("POST", 4), ("CAROUSEL_CONTAINER", 2), ("REEL", 3), ("STORY", 1)],
+                       "follower_type": [("FOLLOWER", 6), ("NON_FOLLOWER", 4)],
+                       "follow_type": [("FOLLOWER", 7), ("NON_FOLLOWER", 3)],
+                       "contact_button_type": [("TEXT", 5), ("CALL", 2)]}[breakdown]
+            return [{"name": m, "total_value": {"breakdowns": [{"results": [
+                {"dimension_values": [d], "value": v} for d, v in valores]}]}} for m in metric.split(",")]
         return [{"name": m, "total_value": {"value": 10}} for m in metric.split(",")]
 
     async def close(self):
@@ -60,12 +69,17 @@ def test_tick_guarda_una_vez_al_dia_y_rellena_la_semana(cliente, monkeypatch):  
     assert ig.llamadas == []  # antes de las 6 no hace nada
     ahora["t"] = ahora["t"].replace(hour=7)
     client.portal.call(metricas.tick, c)
-    # 1 de la cuenta + 7 días × (insights + seguidores ganados) + 3 del público + 1 de a qué horas está conectado.
-    assert ig.llamadas.count("me") == 1 and ig.llamadas.count("follows_and_unfollows") == 7
+    # 1 de la cuenta + 7 días × (insights + seguidores ganados + 4 desgloses) + 3 del público + 1 de a qué horas
+    # está conectado, y luego el primer lote del historial: LOTE_RELLENO días más hacia atrás.
+    por_dia = 6
+    assert ig.llamadas.count("me") == 1 and ig.llamadas.count("follows_and_unfollows") == 7 + metricas.LOTE_RELLENO
     assert ig.llamadas.count("follower_demographics") == 3 and ig.llamadas.count("online_followers") == 1
-    assert len(ig.llamadas) == 19
+    assert len(ig.llamadas) == 1 + 7 * por_dia + 4 + metricas.LOTE_RELLENO * por_dia
+    assert client.portal.call(c.store.get, metricas.CLAVE_RELLENO) == "2026-10-16"  # el siguiente lote sigue aquí
+    ig.llamadas.clear()
     client.portal.call(metricas.tick, c)
-    assert len(ig.llamadas) == 19  # una vez al día
+    assert len(ig.llamadas) == metricas.LOTE_RELLENO * por_dia  # el día ya se guardó: solo sigue el historial
+    ig.llamadas.clear()
     # Las horas se guardan en la zona de la cuenta, promediadas por día (UTC-6 en octubre para América/Mexico_City).
     horas = json.loads(client.portal.call(c.store.get, metricas.CLAVE_HORAS))["horas"]
     corrimiento = int(datetime.now(zona).utcoffset().total_seconds() // 3600)
@@ -74,14 +88,38 @@ def test_tick_guarda_una_vez_al_dia_y_rellena_la_semana(cliente, monkeypatch):  
     dias = client.portal.call(c.store.metricas, "2026-10-01")
     assert dias["2026-10-28"] == {"seguidores": 120, "siguiendo": 80, "publicaciones": 30}
     assert dias["2026-10-27"]["alcance"] == 10 and dias["2026-10-27"]["nuevos"] == 3
-    assert dias["2026-10-27"]["perdidos"] == 1 and "2026-10-20" not in dias and "2026-10-21" in dias
+    assert dias["2026-10-27"]["perdidos"] == 1 and dias["2026-10-27"]["v"] == metricas.VERSION_DIA
+    # Los desgloses, con nuestros nombres: carruseles y posts juntos, seguidores / otros, botones tal cual.
+    assert dias["2026-10-27"]["vistas_tipo"] == {"posts": 6, "reels": 3, "historias": 1}
+    assert dias["2026-10-27"]["vistas_seg"] == {"seguidores": 6, "otros": 4}
+    assert dias["2026-10-27"]["alcance_seg"] == {"seguidores": 7, "otros": 3}
+    assert dias["2026-10-27"]["clics_tipo"] == {"TEXT": 5, "CALL": 2}
+    assert "2026-10-10" not in dias and "2026-10-11" in dias  # dos lotes del historial: hasta 17 días atrás
 
-    # Al día siguiente: solo los dos últimos días (Instagram aún los ajusta) y sin público (es semanal).
-    ig.llamadas.clear()
+    # Al día siguiente: solo los dos últimos días (Instagram aún los ajusta), sin público (es semanal), y sigue el historial.
     ahora["t"] += timedelta(days=1)
     client.portal.call(metricas.tick, c)
-    assert ig.llamadas.count("follows_and_unfollows") == 2 and "follower_demographics" not in ig.llamadas
-    assert len(ig.llamadas) == 5
+    assert ig.llamadas.count("follows_and_unfollows") == 2 + metricas.LOTE_RELLENO and "follower_demographics" not in ig.llamadas
+    assert len(ig.llamadas) == 1 + (2 + metricas.LOTE_RELLENO) * por_dia
+
+
+def test_historial_termina_a_los_90_dias(cliente, monkeypatch):  # noqa: F811
+    client, c = cliente
+    ig = InstagramConInsights()
+    monkeypatch.setattr(c, "instagram", ig)
+    monkeypatch.setattr(metricas, "LOTE_RELLENO", 40)
+    hoy = date(2026, 10, 28)
+    # Sin primer guardado no se rellena nada; con él, va hacia atrás por lotes hasta DIAS_HISTORIAL y marca "listo".
+    client.portal.call(c.store.set, metricas.CLAVE_INTENTO, hoy.isoformat())
+    assert client.portal.call(metricas.rellenar, c, hoy) == 40
+    assert client.portal.call(c.store.get, metricas.CLAVE_RELLENO) == (hoy - timedelta(days=40)).isoformat()
+    assert client.portal.call(metricas.rellenar, c, hoy) == 40
+    assert client.portal.call(metricas.rellenar, c, hoy) == 10 and client.portal.call(c.store.get, metricas.CLAVE_RELLENO) == "listo"
+    assert client.portal.call(metricas.rellenar, c, hoy) == 0
+    dias = client.portal.call(c.store.metricas, "2026-01-01")
+    assert len(dias) == 90 and min(dias) == (hoy - timedelta(days=90)).isoformat()
+    # Un día guardado antes sin desgloses (versión vieja) se vuelve a pedir; uno completo, no.
+    assert not metricas.completo({"alcance": 5}) and metricas.completo({"alcance": 5, "v": metricas.VERSION_DIA})
 
 
 def test_cuenta_chica_se_salta_lo_que_no_hay(cliente, monkeypatch):  # noqa: F811
@@ -90,6 +128,7 @@ def test_cuenta_chica_se_salta_lo_que_no_hay(cliente, monkeypatch):  # noqa: F81
     monkeypatch.setattr(c, "instagram", ig)
     valores = client.portal.call(metricas.insights_del_dia, c, date(2026, 10, 27))
     assert valores["alcance"] == 10 and "clics" not in valores and "nuevos" not in valores
+    assert "vistas_seg" not in valores and valores["alcance_seg"] == {"seguidores": 7, "otros": 3}
     assert client.portal.call(metricas.publico, c) == {}
     assert client.portal.call(metricas.horas_activas, c) == {}
 
@@ -107,7 +146,11 @@ def test_resultados_muestra_tarjetas(cliente, monkeypatch):  # noqa: F811
         for i in range(1, 8):
             await c.store.guardar_metricas((hoy - timedelta(days=i)).isoformat(), {
                 "alcance": 40 + i, "vistas": 100, "nuevos": 2, "perdidos": 1,
-                "likes": 5, "comentarios": 2, "compartidos": 1, "guardados": 1, "clics": 1})
+                "likes": 5, "comentarios": 2, "compartidos": 1, "guardados": 1, "clics": 1,
+                "vistas_seg": {"seguidores": 60, "otros": 40}, "vistas_tipo": {"posts": 70, "reels": 30},
+                "alcance_seg": {"seguidores": 30, "otros": 10 + i}, "clics_tipo": {"TEXT": 1}})
+        for i in range(8, 15):  # el periodo anterior, con la mitad de vistas
+            await c.store.guardar_metricas((hoy - timedelta(days=i)).isoformat(), {"alcance": 20, "vistas": 50, "nuevos": 1})
         await c.store.set(metricas.CLAVE_PUBLICO, json.dumps({
             "semana": "x", "edad": {"18-24": 40, "25-34": 60}, "genero": {"F": 70, "M": 30},
             "ciudad": {"Guadalajara, Jalisco": 50}}))
@@ -116,12 +159,21 @@ def test_resultados_muestra_tarjetas(cliente, monkeypatch):  # noqa: F811
     client.portal.call(llenar)
     monkeypatch.setattr("igbot.resultados._cache", {})
     html = client.get("/panel/resultados").text
-    assert ">121<" in html and "+10%" in html and "+21%" in html  # semana y mes
-    assert "+14" in html and "7 dejaron de seguirte · neto +7" in html
-    assert ">700<" in html and ">63<" in html  # vistas e interacciones (9 × 7)
-    assert "7 clics al enlace" in html and "Mujeres" in html and "Guadalajara<b>50" in html
+    assert ">121<" in html and "+10%</span> desde que empezó el periodo" in html  # seguidores vs. el inicio del periodo
+    assert "+14" in html and "7 dejaron de seguirte · neto +7" in html and "+100%</span> vs. periodo anterior" in html
+    assert ">700 <small>· 40% de personas que no te siguen</small>" in html and ">63<" in html  # vistas e interacciones (9 × 7)
+    assert "WhatsApp o SMS" in html and "Mujeres" in html and "Guadalajara<b>50" in html
     assert "Cuándo está tu público" in html and "a las 20:00, 21:00 y 09:00" in html and 'class="b mejor"' in html
     assert "<span><b>60</b></span>" in html and "<title>" not in html.split("<main")[1]
+    # Vistas apiladas con el periodo anterior punteado, las pastillas de formato y Tu público plegado con su resumen.
+    assert 'class="seg"' in html and 'class="otros"' in html and 'class="antes"' in html
+    assert 'formato=posts">Posts</a>' in html and 'formato=reels">Reels</a>' in html and "Historias</a>" not in html
+    assert '<details class="met-c ancho met-pleg">' in html and "mujeres de 25-34 años en Guadalajara" in html
+    assert 'tabindex="0"' in html  # los valores salen también al tocar
+    # Filtrado por formato: solo reels, sin desglose por seguidores.
+    html = client.get("/panel/resultados?formato=reels").text
+    assert 'class="on" href="/panel/resultados?formato=reels"' in html or 'formato=reels" class=on' in html
+    assert ">210 </b>" in html and 'class="otros"' not in html
 
 
 def test_curva_no_se_sale():

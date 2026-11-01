@@ -1298,7 +1298,7 @@ input[type=text],input[type=search],textarea,select,.inbox input[type=search],.e
 /* Resultados: la barra del periodo (misma que Calendario) y los datos de abajo. */
 .res-barra{padding:1.25rem 1.5rem}.res-barra .cal-filtros{margin:1rem 0 0;color:var(--gris);font-size:.85rem;gap:.5rem 1.5rem}
 .res-info .punto{display:inline-block;width:.5rem;height:.5rem;border-radius:50%;background:var(--neon);margin-right:.45rem;vertical-align:.1rem}
-.res-info .cal-bajar{margin-left:auto}
+.res-info .cal-bajar{margin-left:auto}.res-info .res-bajar .cal-bajar{margin-left:0}
 .cal-nav .off{display:grid;place-items:center;min-width:2.1rem;height:2.1rem;border-radius:.7rem;background:#18191C;color:#64646B;font-weight:600}
 .res-kpis{margin-bottom:1rem}
 .ads-tabla{overflow-x:auto}.ads-tabla table{width:100%;min-width:40rem;border-collapse:collapse;font-size:.88rem}
@@ -1370,6 +1370,28 @@ h1,h2,h3{text-wrap:balance}
 .met-graf.barras .mh.abajo span,.met-graf.barras .mh.izq.abajo span{left:50%;right:auto;transform:translate(1rem,-.3rem)}
 .met-graf.barras .mh.der.abajo span{transform:translate(calc(-100% - 1rem),-.3rem)}
 .mh:hover::before,.mh:hover i,.mh:hover span{opacity:1}
+.mh{outline:none}.mh:focus::before,.mh:focus i,.mh:focus span{opacity:1}
+/* Resultados (lote 1): Vistas apiladas (seguidores en naranja, los demás en naranja claro) con el periodo anterior
+   punteado en gris; las pastillas de formato; Tu público plegado con sus tarjetas adentro; el rango personalizado
+   y el menú de descargas, los dos plegados sin JS. */
+.met-linea .seg{fill:var(--acento)}.met-linea .otros{fill:var(--acento-claro);opacity:.55}
+.met-linea .antes{fill:none;stroke:var(--gris);stroke-width:1.5;stroke-dasharray:4 4;stroke-linejoin:round}
+.leyenda i.seg{background:var(--acento)}.leyenda i.otros{background:var(--acento-claro);opacity:.55}.leyenda i.antes{background:var(--gris)}
+.met-formatos{display:inline-flex;align-self:flex-start;margin:0 0 .75rem}
+.met-pleg{padding:0}.met-pleg summary{list-style:none;cursor:pointer;padding:1.25rem 1.4rem}.met-pleg summary::-webkit-details-marker{display:none}
+.met-pleg summary .met-cab{margin:0}.met-pleg[open] summary{padding-bottom:0}
+.met-dentro{padding:1rem 1.4rem 1.4rem;margin:0}.met-dentro .met-c{background:#1F2024}
+.met-aviso{margin:-.5rem 0 1.25rem}
+.res-pers{position:relative}.res-pers summary{list-style:none;cursor:pointer;padding:.35rem .8rem;border-radius:.65rem;color:#A8A8AE;font-size:.85rem;font-weight:600;white-space:nowrap}
+.res-pers summary::-webkit-details-marker{display:none}.res-pers.on summary{background:var(--acento);color:var(--tinta)}
+.res-pers-f{position:absolute;right:0;top:calc(100% + .6rem);z-index:5;display:flex;gap:.6rem;align-items:end;padding:.9rem 1rem;border-radius:1rem;background:#1E1C26;border:1px solid var(--linea-oscura);box-shadow:0 12px 28px rgba(0,0,0,.45)}
+.res-pers-f{display:grid;grid-template-columns:auto auto auto;gap:.3rem .6rem;align-items:center}.res-pers-f label{color:#A8A8AE;font-size:.78rem;grid-row:1}.res-pers-f input{grid-row:2}.res-pers-f .boton{grid-row:2}.res-pers-f input{color-scheme:dark;font:inherit;font-size:.9rem;padding:.4rem .6rem;border-radius:.6rem;border:1px solid var(--linea-oscura);background:#18191C;color:var(--negro);min-width:0;width:100%}
+.res-bajar{position:relative;margin-left:auto}.res-bajar summary{list-style:none;cursor:pointer}.res-bajar summary::-webkit-details-marker{display:none}
+.res-bajar>div{position:absolute;right:0;top:calc(100% + .5rem);z-index:5;display:grid;min-width:13rem;padding:.4rem;border-radius:.9rem;background:#1E1C26;border:1px solid var(--linea-oscura);box-shadow:0 12px 28px rgba(0,0,0,.45)}
+.res-bajar>div a{padding:.55rem .8rem;border-radius:.6rem;color:var(--negro);text-decoration:none;font-size:.88rem;white-space:nowrap}.res-bajar>div a:hover{background:#2E3035}
+.res-barra{position:relative}
+@media(max-width:700px){.res-pers{position:static}.res-pers-f{left:1rem;right:1rem;grid-template-columns:1fr 1fr auto}.res-bajar{margin-left:0}.res-bajar>div{right:auto;left:0}
+.met-formatos{display:flex;align-self:stretch;max-width:100%;overflow-x:auto;scrollbar-width:none}.met-formatos a{flex:0 0 auto}}
 .met-graf.barras .mh::before{display:none}
 /* Inicio (igbot/inicio.py): saludo, Te falta, los números de hoy, chats que te esperan, próximas publicaciones y
    tu plan. Tamaños en ajustes.css (--ini-*). */
@@ -1518,7 +1540,7 @@ body:has(>.lateral) :is(.compacta+main,.compacta.delgada~main,.compacta.delgada~
 }
 /* Celular (lote 1). Campos de 16 px: con menos, Safari en iPhone hace zoom al tocarlos. Las barras de pasos
    caben en el ancho: el paso actual con su nombre (recortado si hace falta) y los demás solo con su número.
-   Las pestañas de Resultados se reparten el ancho. El botón de Skandi, más chico y escondido mientras se
+   Las pestañas de Resultados se deslizan de lado. El botón de Skandi, más chico y escondido mientras se
    escribe; y aire abajo de cada página para que no tape lo último. */
 @media(max-width:560px){
 :is(input:not([type=checkbox],[type=radio],[type=range],[type=file],[type=hidden]),select,textarea){font-size:16px!important}
@@ -1529,7 +1551,7 @@ body:has(>.lateral) :is(.compacta+main,.compacta.delgada~main,.compacta.delgada~
 .riel .paso.on .n,.as-paso.on .as-n{display:none}
 .riel .paso:not(.on)>span:last-child,.as-paso:not(.on)>span:last-child{display:none}
 .riel .paso.on b,.as-paso.on b,.wiz-pasos :is(a,.wiz-paso).actual span{display:block;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.88rem}
-.res-vista{overflow:hidden}.res-vista a{flex:1 1 0;min-width:0;padding:.45rem .3rem;font-size:.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.res-vista{overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}.res-vista a{flex:0 0 auto;padding:.45rem .7rem;font-size:.8rem;white-space:nowrap}
 .sk-boton{width:3rem;height:3rem;right:calc(.9rem + env(safe-area-inset-right,0px));bottom:calc(.9rem + env(safe-area-inset-bottom,0px))}
 .sk-boton svg{width:1.4rem;height:1.4rem}
 body:has(:is(input,textarea):focus:not(.skandi *)) .sk-boton{display:none}

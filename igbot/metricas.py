@@ -5,15 +5,22 @@ Cada día, desde las HORA, el bucle de fondo de app.py (tick) guarda por cuenta:
   de hoy: si no se guarda, el historial se pierde).
 - Los insights de los días anteriores (alcance, vistas, cuentas que interactuaron,
   likes, comentarios, compartidos, guardados, clics al enlace y seguidores ganados y
-  perdidos). Se piden los que falten de los últimos DIAS_ATRAS y se vuelven a pedir los
-  dos últimos, que Instagram todavía ajusta.
+  perdidos), con sus desgloses: vistas y alcance de seguidores y de quien no te sigue y por
+  formato (posts, reels, historias, anuncios), y los clics por botón (WhatsApp, llamar...).
+  Se piden los que falten de los últimos DIAS_ATRAS y se vuelven a pedir los dos últimos, que
+  Instagram todavía ajusta.
+- El historial: al conectar una cuenta solo existe el día de hoy. Cada vuelta del bucle (10 min)
+  se rellenan LOTE_RELLENO días hacia atrás hasta completar DIAS_HISTORIAL (Instagram da hasta
+  30 días por consulta y guarda dos años), así una cuenta nueva ve sus 90 días en unas horas sin
+  pasarse del límite de llamadas.
 - Una vez por semana, el público: edades, género y ciudades (Instagram solo lo da a
   cuentas con 100 seguidores o más).
 - Las estadísticas de cada post publicado en los últimos 30 días (informe.refrescar_numeros), para que
   Campañas, Pasadas y Resultados las lean de la base sin preguntarle a Instagram.
 
-Son unas 5 llamadas al día por cuenta (15 la primera vez) más una por post de esos 30 días, y una
-fila al día en metricas_dia. Las métricas que Instagram no da (cuenta chica, permiso que falta) se
+Son unas 6 llamadas por día guardado (los desgloses van en llamadas aparte, porque Instagram no deja
+mezclar métricas con desgloses distintos) más una por post de esos 30 días, y una fila al día en
+metricas_dia. Las métricas que Instagram no da (cuenta chica, permiso que falta) se
 saltan sin romper las demás.
 
 La sección de Resultados son tarjetas con números, líneas y donas en SVG hechas aquí
@@ -32,7 +39,11 @@ log = logging.getLogger("igbot.metricas")
 
 HORA = 6
 DIAS_ATRAS = 7
+DIAS_HISTORIAL = 90  # cuánto se rellena hacia atrás al conectar una cuenta
+LOTE_RELLENO = 5  # días que se rellenan por vuelta del bucle (unas 30 llamadas)
+VERSION_DIA = 2  # qué se pidió de cada día; sube cuando se agregan métricas y los días viejos se vuelven a pedir
 CLAVE_INTENTO = "metricas_intento"
+CLAVE_RELLENO = "metricas_relleno"  # hasta qué día (hacia atrás) ya se revisó el historial; "listo" al terminar
 CLAVE_PUBLICO = "metricas_publico"
 CLAVE_HORA = "metricas_hora"  # cuándo fue el último guardado (para "actualizado hoy a las 6:00")
 CLAVE_HORAS = "metricas_horas"  # a qué horas están conectados sus seguidores (semanal; las campañas eligen la hora)
@@ -45,6 +56,20 @@ METRICAS = {
     "profile_links_taps": "clics",
 }
 PERFIL = {"followers_count": "seguidores", "follows_count": "siguiendo", "media_count": "publicaciones"}
+# Desgloses que se piden aparte: (métricas, breakdown) -> clave guardada por métrica. Instagram no deja mezclar
+# en una llamada métricas con desgloses distintos, y con un desglose que no existe falla toda la llamada.
+DESGLOSES = [
+    ("reach,views", "media_product_type", {"reach": "alcance_tipo", "views": "vistas_tipo"}),
+    ("views", "follower_type", {"views": "vistas_seg"}),
+    ("reach", "follow_type", {"reach": "alcance_seg"}),
+    ("profile_links_taps", "contact_button_type", {"profile_links_taps": "clics_tipo"}),
+]
+# Formatos de Instagram -> cómo se agrupan en Resultados (los carruseles son posts).
+FORMATOS = {"POST": "posts", "CAROUSEL_CONTAINER": "posts", "FEED": "posts", "REEL": "reels", "REELS": "reels",
+            "STORY": "historias", "AD": "anuncios"}
+NOMBRES_FORMATO = {"posts": "Posts", "reels": "Reels", "historias": "Historias", "anuncios": "Anuncios"}
+BOTONES = {"TEXT": "WhatsApp o SMS", "CALL": "Llamadas", "DIRECTION": "Cómo llegar", "EMAIL": "Correo",
+           "BOOK_NOW": "Reservar", "INSTANT_EXPERIENCE": "Otro", "UNDEFINED": "Otro"}
 EDADES = ["13-17", "18-24", "25-34", "35-44", "45-54", "55-64", "65+"]
 GENEROS = {"F": "Mujeres", "M": "Hombres", "U": "Sin dato"}
 
@@ -83,7 +108,29 @@ async def insights_del_dia(c: Cuenta, dia: date) -> dict:
             valores.update(nuevos=d.get("FOLLOWER", 0), perdidos=d.get("NON_FOLLOWER", 0))
     except RuntimeError:  # menos de 100 seguidores
         pass
+    for metricas_, breakdown, claves in DESGLOSES:
+        try:
+            datos = await c.instagram.insights_cuenta(metricas_, breakdown=breakdown, **rango)
+        except RuntimeError:  # ese desglose no existe para esta cuenta (o aún no en la API)
+            continue
+        for m in datos:
+            if (clave := claves.get(m.get("name", ""))) and (d := desglose(m)):
+                valores[clave] = agrupar(d, breakdown)
+    valores["v"] = VERSION_DIA
     return valores
+
+
+def agrupar(d: dict[str, int], breakdown: str) -> dict[str, int]:
+    """Un desglose de Instagram con nuestros nombres: formatos juntos (posts, reels, historias, anuncios),
+    seguidores / otros, o el tipo de botón tal cual."""
+    salida: dict[str, int] = {}
+    for k, v in d.items():
+        if breakdown == "media_product_type":
+            k = FORMATOS.get(k, "otros")
+        elif breakdown in ("follower_type", "follow_type"):
+            k = "seguidores" if k == "FOLLOWER" else "otros" if k == "NON_FOLLOWER" else "sin_dato"
+        salida[k] = salida.get(k, 0) + v
+    return salida
 
 
 async def publico(c: Cuenta) -> dict:
@@ -129,7 +176,7 @@ async def guardar(c: Cuenta, hoy: date) -> None:
     guardados = await store.metricas((hoy - timedelta(days=DIAS_ATRAS)).isoformat())
     for atras in range(DIAS_ATRAS, 0, -1):
         dia = hoy - timedelta(days=atras)
-        if atras <= 2 or "alcance" not in guardados.get(dia.isoformat(), {}):
+        if atras <= 2 or not completo(guardados.get(dia.isoformat(), {})):
             if valores := await insights_del_dia(c, dia):
                 await store.guardar_metricas(dia.isoformat(), valores)
     try:
@@ -144,19 +191,49 @@ async def guardar(c: Cuenta, hoy: date) -> None:
         await store.set(CLAVE_HORAS, json.dumps({"semana": semana, "horas": await horas_activas(c)}))
 
 
+def completo(datos: dict) -> bool:
+    """Si ese día ya se pidió con todo lo que hoy se guarda (métricas y desgloses)."""
+    return "alcance" in datos and datos.get("v", 1) >= VERSION_DIA
+
+
+async def rellenar(c: Cuenta, hoy: date) -> int:
+    """El historial hacia atrás, LOTE_RELLENO días por vuelta: desde el día anterior al último revisado hasta
+    DIAS_HISTORIAL días atrás. Devuelve cuántos días pidió. Los días que Instagram da vacíos se marcan
+    revisados para no pedirlos otra vez."""
+    store = c.store
+    marca = await store.get(CLAVE_RELLENO)
+    if marca == "listo":
+        return 0
+    tope = hoy - timedelta(days=DIAS_HISTORIAL)
+    dia = (date.fromisoformat(marca) if marca else hoy) - timedelta(days=1)
+    guardados = await store.metricas(tope.isoformat())
+    pedidos = 0
+    while dia >= tope and pedidos < LOTE_RELLENO:
+        if not completo(guardados.get(dia.isoformat(), {})):
+            valores = await insights_del_dia(c, dia)
+            await store.guardar_metricas(dia.isoformat(), {**valores, "v": VERSION_DIA})
+            pedidos += 1
+        dia -= timedelta(days=1)
+    await store.set(CLAVE_RELLENO, "listo" if dia < tope else (dia + timedelta(days=1)).isoformat())
+    return pedidos
+
+
 async def tick(c: Cuenta) -> None:
-    """Lo llama el bucle de fondo de app.py cada pocos minutos: una vez al día, desde las HORA."""
+    """Lo llama el bucle de fondo de app.py cada pocos minutos: el guardado del día una vez, desde las HORA,
+    y mientras falte historial, un lote de días hacia atrás en cada vuelta."""
     if not c.access_token:
         return
     with usar(c):
         ahora = tools.now()
         hoy = ahora.date()
-        if ahora.hour < HORA or await c.store.get(CLAVE_INTENTO) == hoy.isoformat():
-            return
-        await c.store.set(CLAVE_INTENTO, hoy.isoformat())  # antes de llamar: un intento al día
-        await guardar(c, hoy)
-        await c.store.set(CLAVE_HORA, str(ahora.timestamp()))
-        log.info("Métricas del %s guardadas para %s", hoy, c.slug or "la principal")
+        if ahora.hour >= HORA and await c.store.get(CLAVE_INTENTO) != hoy.isoformat():
+            await c.store.set(CLAVE_INTENTO, hoy.isoformat())  # antes de llamar: un intento al día
+            await guardar(c, hoy)
+            await c.store.set(CLAVE_HORA, str(ahora.timestamp()))
+            log.info("Métricas del %s guardadas para %s", hoy, c.slug or "la principal")
+        if await c.store.get(CLAVE_INTENTO):  # ya hubo un primer guardado: el historial va después
+            if n := await rellenar(c, hoy):
+                log.info("Historial: %d días más para %s", n, c.slug or "la principal")
 
 
 # --- números para Resultados ---
@@ -173,31 +250,62 @@ def seguidores_en(dias: dict[str, dict], dia: date) -> int | None:
     return dias[max(previos)]["seguidores"] if previos else None
 
 
+def suma_tipos(serie: list[dict], clave: str) -> dict[str, int]:
+    """{formato o botón: total del periodo} de un desglose guardado por día."""
+    total: dict[str, int] = {}
+    for d in serie:
+        for k, v in (d.get(clave) or {}).items():
+            total[k] = total.get(k, 0) + v
+    return total
+
+
+def por_formato(d: dict, clave: str, formato: str) -> int | None:
+    """El valor de un día para un formato ("posts", "reels"...), o None si ese día no tiene desglose."""
+    tipos = d.get(clave)
+    return None if tipos is None else tipos.get(formato, 0)
+
+
 async def numeros(c: Cuenta, rango_dias: int, fin: date | None = None) -> dict:
-    """Los `rango_dias` que terminan en `fin` (hoy si no viene). Hoy no tiene insights aún: las líneas
-    llegan hasta ayer; los seguidores son los del último día guardado hasta `fin`."""
+    """Los `rango_dias` que terminan en `fin` (hoy si no viene), y el periodo anterior del mismo largo para
+    comparar. Hoy no tiene insights aún: las líneas llegan hasta ayer; los seguidores son los del último día
+    guardado hasta `fin`."""
     hoy = datetime.now(ZoneInfo(c.timezone)).date()
     fin = min(fin or hoy, hoy)
     ultimo = min(fin, hoy - timedelta(days=1))
-    dias = await c.store.metricas((fin - timedelta(days=max(rango_dias, 30) + 1)).isoformat())
+    desde = fin - timedelta(days=2 * max(rango_dias, 30) + 1)
+    dias = await c.store.metricas(desde.isoformat())
     dias = {k: v for k, v in dias.items() if k <= fin.isoformat()}
     fechas = [ultimo - timedelta(days=i) for i in range(rango_dias - 1, -1, -1)]  # días completos
     serie = [dias.get(f.isoformat(), {}) for f in fechas]
+    antes = [dias.get((f - timedelta(days=rango_dias)).isoformat(), {}) for f in fechas]  # el periodo anterior
     con_seguidores = [d for d in dias if "seguidores" in dias[d]]
     actual = seguidores_en(dias, fin)
-    suma = lambda k: sum(d.get(k, 0) for d in serie)  # noqa: E731
+    inicio_periodo = fin - timedelta(days=rango_dias)  # el día antes de que empiece el periodo
+    suma = lambda k, s=serie: sum(d.get(k, 0) for d in s)  # noqa: E731
+    promedio = lambda k, s: (lambda xs: sum(xs) / len(xs) if xs else None)([d[k] for d in s if d.get(k) is not None])  # noqa: E731
+    inter = {k: suma(k) for k in ("likes", "comentarios", "compartidos", "guardados")}
+    inter_antes = sum(suma(k, antes) for k in inter)
+    relleno = await c.store.get(CLAVE_RELLENO)
     return {
-        "fechas": fechas, "serie": serie, "hay": bool(dias),
+        "fechas": fechas, "serie": serie, "antes": antes, "hay": bool(dias),
         "seguidores": actual,
         "semana": cambio(actual, seguidores_en(dias, fin - timedelta(days=7))),
         "mes": cambio(actual, seguidores_en(dias, fin - timedelta(days=30))),
+        "periodo": cambio(actual, seguidores_en(dias, inicio_periodo)),  # vs. cuando empezó el periodo
         "desde": min(con_seguidores) if con_seguidores else None,
         "nuevos": suma("nuevos"), "perdidos": suma("perdidos"),
-        "vistas": suma("vistas"), "clics": suma("clics"),
-        "interacciones": {k: suma(k) for k in ("likes", "comentarios", "compartidos", "guardados")},
+        "nuevos_cambio": cambio(suma("nuevos"), suma("nuevos", antes)),
+        "vistas": suma("vistas"), "vistas_cambio": cambio(suma("vistas"), suma("vistas", antes)),
+        "clics": suma("clics"), "clics_cambio": cambio(suma("clics"), suma("clics", antes)),
+        "interacciones": inter, "interacciones_cambio": cambio(sum(inter.values()), inter_antes),
         "alcance_dia": [d.get("alcance") for d in serie],
+        "alcance_promedio": promedio("alcance", serie),
+        "alcance_cambio": cambio(promedio("alcance", serie), promedio("alcance", antes)),
+        "vistas_seg": suma_tipos(serie, "vistas_seg"), "alcance_seg": suma_tipos(serie, "alcance_seg"),
+        "vistas_tipo": suma_tipos(serie, "vistas_tipo"), "clics_tipo": suma_tipos(serie, "clics_tipo"),
         "publico": json.loads(await c.store.get(CLAVE_PUBLICO) or "{}"),
         "horas": json.loads(await c.store.get(CLAVE_HORAS) or "{}").get("horas") or {},
+        "rellenando": bool(relleno) and relleno != "listo",
     }
 
 
@@ -240,37 +348,82 @@ def puntos_hover(columnas: list[tuple[float | None, str, str]], punto: bool = Tr
             partes.append('<div class="mh"></div>')
             continue
         lado = (" izq" if i < n * .2 else " der" if i >= n * .8 else "") + (" abajo" if y < 35 else "")
-        partes.append(f'<div class="mh{lado}" style="--y:{y:.1f}%">' + ('<i></i>' if punto else "")
+        partes.append(f'<div class="mh{lado}" style="--y:{y:.1f}%" tabindex="0">' + ('<i></i>' if punto else "")
                       + f'<span>{valor}' + (f"<small>{cuando}</small>" if cuando else "") + '</span></div>')
     return f'<div class="met-hover">{"".join(partes)}</div>'
 
 
-def linea(valores: list[int | None], fechas: list[date], nombre: str) -> str:
-    """Línea por día con su relleno; los días sin dato se saltan. Al pasar el cursor sale el valor."""
+def eje_fechas(fechas: list[date]) -> str:
+    cada = 1 if len(fechas) <= 7 else 7 if len(fechas) <= 30 else 15
+    return "".join(f"<span>{f:%d/%m}</span>" if (len(fechas) - 1 - i) % cada == 0 else "<span></span>"
+                   for i, f in enumerate(fechas))
+
+
+def linea(valores: list[int | None], fechas: list[date], nombre: str, antes: list[int | None] | None = None) -> str:
+    """Línea por día con su relleno, desde 0; los días sin dato se saltan. Con `antes`, el periodo anterior en
+    gris punteado. Al pasar el cursor (o tocar) sale el valor y, si lo hay, el del periodo anterior."""
     ancho, alto = 10 * len(valores), 100
     hay = [v for v in valores if v is not None]
     if not hay:
         return '<p class="ayuda met-vacio">Aún sin datos de estos días.</p>'
-    bajo, tope = min(hay), max(hay)
-    if tope == bajo:
-        bajo, tope = bajo - 1, tope + 1
-    y = lambda v: 8 + (tope - v) / (tope - bajo) * 84  # noqa: E731
+    antes = antes or [None] * len(valores)
+    tope = max(hay + [v for v in antes if v is not None]) or 1
+    y = lambda v: 8 + (tope - v) / tope * 84  # noqa: E731
     puntos = [(i * 10 + 5, y(v)) for i, v in enumerate(valores) if v is not None]
     camino = suave(puntos)
     relleno = f"{camino}L{puntos[-1][0]:.1f},{alto}L{puntos[0][0]:.1f},{alto}Z"
     guias = "".join(f'<line class="guia" x1="0" x2="{ancho}" y1="{g}" y2="{g}" vector-effect="non-scaling-stroke"/>'
                     for g in (8, 50, 92))
+    previos = [(i * 10 + 5, y(v)) for i, v in enumerate(antes) if v is not None]
+    gris = (f'<path class="antes" d="{suave(previos)}" vector-effect="non-scaling-stroke"/>' if previos else "")
     zonas = puntos_hover([(None, "", "") if v is None else
-                          (y(v), f"<b>{cifra(v)}</b>", "")
-                          for f, v in zip(fechas, valores)])
-    cada = 1 if len(fechas) <= 7 else 7 if len(fechas) <= 30 else 15
-    eje = "".join(f"<span>{f:%d/%m}</span>" if (len(fechas) - 1 - i) % cada == 0 else "<span></span>"
-                  for i, f in enumerate(fechas))
-    return (f'<div class="met-graf"><div class="met-escala"><span>{cifra(tope)}</span><span>{cifra(bajo)}</span></div>'
+                          (y(v), f"<b>{cifra(v)}</b>", f"antes {cifra(a)}" if a is not None else "")
+                          for v, a in zip(valores, antes)])
+    return (f'<div class="met-graf"><div class="met-escala"><span>{cifra(tope)}</span><span>0</span></div>'
             f'<svg class="met-linea" viewBox="0 0 {ancho} {alto}" preserveAspectRatio="none" role="img"'
-            f' aria-label="{escape(nombre)} por día">{guias}<path class="area" d="{relleno}"/>'
+            f' aria-label="{escape(nombre)} por día">{guias}<path class="area" d="{relleno}"/>{gris}'
             f'<path class="trazo" d="{camino}" vector-effect="non-scaling-stroke"/></svg>{zonas}</div>'
-            f'<div class="ejex met-eje">{eje}</div>')
+            f'<div class="ejex met-eje">{eje_fechas(fechas)}</div>')
+
+
+def apiladas(partes: list[tuple[int | None, int | None]], fechas: list[date], antes: list[int | None],
+             nombre: str) -> str:
+    """Barras por día apiladas (seguidores abajo, otros arriba) desde 0, con el periodo anterior en gris
+    punteado. Cada parte es (seguidores, otros); sin desglose va (total, None)."""
+    n = len(partes)
+    ancho, alto = 10 * n, 100
+    totales = [None if (a is None and b is None) else (a or 0) + (b or 0) for a, b in partes]
+    hay = [v for v in totales if v is not None]
+    if not hay:
+        return '<p class="ayuda met-vacio">Aún sin datos de estos días.</p>'
+    tope = max(hay + [v for v in antes if v is not None]) or 1
+    y = lambda v: 8 + (tope - v) / tope * 84  # noqa: E731
+    barras = []
+    for i, ((seg, otros), total) in enumerate(zip(partes, totales)):
+        if total is None:
+            continue
+        x = i * 10 + 2
+        if otros is None:  # sin desglose: una barra
+            barras.append(f'<rect class="seg" x="{x}" y="{y(total):.1f}" width="6" height="{alto - y(total):.1f}"/>')
+            continue
+        base = alto - y(seg or 0)
+        barras.append(f'<rect class="seg" x="{x}" y="{alto - base:.1f}" width="6" height="{base:.1f}"/>')
+        if otros:
+            barras.append(f'<rect class="otros" x="{x}" y="{y(total):.1f}" width="6" height="{alto - y(total) - base:.1f}"/>')
+    previos = [(i * 10 + 5, y(v)) for i, v in enumerate(antes) if v is not None]
+    gris = f'<path class="antes" d="{suave(previos)}" vector-effect="non-scaling-stroke"/>' if previos else ""
+    guias = "".join(f'<line class="guia" x1="0" x2="{ancho}" y1="{g}" y2="{g}" vector-effect="non-scaling-stroke"/>'
+                    for g in (8, 50, 92))
+    zonas = puntos_hover([
+        (None, "", "") if t is None else
+        (y(t), f"<b>{cifra(t)}</b>", " · ".join(x for x in (
+            f"{cifra(seg or 0)} seguidores" if otros is not None else "",
+            f"antes {cifra(a)}" if a is not None else "") if x))
+        for (seg, otros), t, a in zip(partes, totales, antes)], punto=False)
+    return (f'<div class="met-graf apiladas"><div class="met-escala"><span>{cifra(tope)}</span><span>0</span></div>'
+            f'<svg class="met-linea" viewBox="0 0 {ancho} {alto}" preserveAspectRatio="none" role="img"'
+            f' aria-label="{escape(nombre)} por día">{guias}{"".join(barras)}{gris}</svg>{zonas}</div>'
+            f'<div class="ejex met-eje">{eje_fechas(fechas)}</div>')
 
 
 def dona(partes: list[tuple[str, int]], centro: str, debajo: str) -> str:
@@ -309,7 +462,7 @@ def mejores_horas(horas: dict[str, float], n: int = TOP_HORAS) -> list[int]:
     return [int(h) for h, _ in sorted(horas.items(), key=lambda x: (-float(x[1]), int(x[0])))[:n] if float(horas[h])]
 
 
-def horas_html(horas: dict[str, float]) -> str:
+def horas_html(horas: dict[str, float], clase: str = "t6") -> str:
     """La tarjeta de a qué horas está conectado su público: barras por hora y las mejores en palabras."""
     from .resultados import barras
     valores = [round(float(horas.get(str(h), 0))) for h in range(24)]
@@ -323,7 +476,7 @@ def horas_html(horas: dict[str, float]) -> str:
         [f"{h:02d}:00: {cifra(v)} seguidores conectados" for h, v in enumerate(valores)],
         ["mejor" if h in mejores else "" for h in range(24)], descripcion="Seguidores conectados por hora")
         + f'<p class="ayuda chica">Más seguidores conectados a las {lista}. Las campañas con horario'
-        ' "Cuando está tu público" publican a esas horas.</p>', clase="t6")
+        ' "Cuando está tu público" publican a esas horas.</p>', clase=clase)
 
 
 def ciudades(p: dict, titulo: str = "Ciudades") -> str:
@@ -338,43 +491,126 @@ def ciudades(p: dict, titulo: str = "Ciudades") -> str:
     return tarjeta(titulo, cuerpo, clase="t3")
 
 
-def seccion(d: dict) -> str:
-    """Las tarjetas de Instagram en Resultados."""
+def comparado(n: float | None, con: str = "vs. periodo anterior") -> str:
+    return f"{pct(n)} {con}" if n is not None else "sin periodo anterior"
+
+
+def kpi(etiqueta: str, valor: str, nota: str) -> str:
+    return f'<div class="kpi"><span>{etiqueta}</span><b>{valor}</b><small>{nota}</small></div>'
+
+
+def botones_html(clics: dict[str, int], total: int) -> str:
+    """Clics a los botones del perfil por tipo (WhatsApp, llamar, cómo llegar...), como barras cortas."""
+    if not clics:
+        return f'<p class="ayuda">{cifra(total)} clics al enlace de tu perfil en el periodo.</p>' if total else \
+            '<p class="ayuda">Aquí verás cuántas personas tocaron tus botones de contacto: WhatsApp, llamar o cómo llegar.</p>'
+    juntos: dict[str, int] = {}
+    for k, v in clics.items():
+        nombre = BOTONES.get(k, "Otro")
+        juntos[nombre] = juntos.get(nombre, 0) + v
+    tope = max(juntos.values()) or 1
+    filas = "".join(
+        f'<li><span class="rt-nombre">{escape(nombre)}</span>'
+        f'<span class="rt-barra"><i style="width:{max(n / tope * 100, 2):.0f}%"></i></span><b>{cifra(n)}</b></li>'
+        for nombre, n in sorted(juntos.items(), key=lambda x: -x[1]))
+    return f'<ul class="res-tipos">{filas}</ul>'
+
+
+def seccion(d: dict, formato: str = "", enlace_formato=None, picos: dict[date, str] | None = None) -> str:
+    """Las tarjetas de Instagram en Resultados: la fila de números contra el periodo anterior, Vistas en
+    grande (apiladas por seguidores y filtradas por formato), Alcance y Seguidores nuevos, Interacciones y
+    Clics a tu perfil, y Tu público plegado. `picos` da el post que salió cada día, para explicar el pico."""
     if not d["hay"]:
         return ('<div class="met"><section class="met-c ancho"><div class="met-cab"><span>Instagram</span></div>'
                 '<p class="ayuda">Empezamos a guardar tus números de Instagram. Mañana verás tus seguidores, '
-                'alcance y vistas aquí, y cada día se irá formando tu historial.</p></section></div>')
-    fechas, serie = d["fechas"], d["serie"]
-    variacion = (f'<div class="met-cambios"><span>{pct(d["semana"]) or "—"} vs. semana pasada</span>'
-                 f'<span>{pct(d["mes"]) or "—"} vs. mes pasado</span></div>')
-    desde = (f'<p class="ayuda chica">Guardando desde el {date.fromisoformat(d["desde"]):%d/%m/%Y}.</p>'
-             if d["desde"] and (d["semana"] is None or d["mes"] is None) else "")
-    grande = tarjeta("Seguidores", f'<div class="met-grande">{"—" if d["seguidores"] is None else cifra(d["seguidores"])}</div>{variacion}{desde}',
-                     clase="t4")
-    neto = d["nuevos"] - d["perdidos"]
-    nuevos = tarjeta("Seguidores nuevos", linea([x.get("nuevos") for x in serie], fechas, "nuevos")
-                     + f'<p class="ayuda chica">{cifra(d["perdidos"])} dejaron de seguirte · neto {"+" if neto > 0 else ""}{cifra(neto)}</p>',
-                     f'+{cifra(d["nuevos"])}', "t4")
-    hay_alcance = [v for v in d["alcance_dia"] if v is not None]
-    alcance = tarjeta("Alcance", linea(d["alcance_dia"], fechas, "cuentas alcanzadas"),
-                      f'{cifra(sum(hay_alcance) / len(hay_alcance))} <small>al día</small>' if hay_alcance else "", "t4")
-    vistas = tarjeta("Vistas", linea([x.get("vistas") for x in serie], fechas, "vistas"), cifra(d["vistas"]), "t6")
+                'alcance y vistas aquí, y en unas horas tu historial de los últimos 90 días.</p></section></div>')
+    fechas, serie, antes = d["fechas"], d["serie"], d["antes"]
     inter = d["interacciones"]
     total_inter = sum(inter.values())
+    alcance_prom = d["alcance_promedio"]
+    numeros_ = '<div class="hoy kpis res-kpis">' + "".join((
+        kpi("Seguidores", "—" if d["seguidores"] is None else cifra(d["seguidores"]),
+            comparado(d["periodo"], "desde que empezó el periodo")),
+        kpi("Vistas", cifra(d["vistas"]), comparado(d["vistas_cambio"])),
+        kpi("Alcance al día", cifra(alcance_prom) if alcance_prom is not None else "—", comparado(d["alcance_cambio"])),
+        kpi("Interacciones", cifra(total_inter), comparado(d["interacciones_cambio"])),
+        kpi("Clics a tu perfil", cifra(d["clics"]), comparado(d["clics_cambio"])),
+    )) + "</div>"
+    # Vistas: por formato si se pidió, apiladas seguidores / otros cuando hay desglose.
+    if formato:
+        partes = [(por_formato(x, "vistas_tipo", formato), None) for x in serie]
+        de_antes = [por_formato(x, "vistas_tipo", formato) for x in antes]
+        total_vistas = d["vistas_tipo"].get(formato, 0)
+    else:
+        partes = [((x["vistas_seg"].get("seguidores", 0), x["vistas_seg"].get("otros", 0) + x["vistas_seg"].get("sin_dato", 0))
+                   if x.get("vistas_seg") else (x.get("vistas"), None)) for x in serie]
+        de_antes = [x.get("vistas") for x in antes]
+        total_vistas = d["vistas"]
+    formatos = [k for k in NOMBRES_FORMATO if d["vistas_tipo"].get(k)]
+    pastillas = ""
+    if formatos and enlace_formato:
+        pastillas = ('<div class="cal-sw modo met-formatos">'
+                     + f'<a href="{enlace_formato("")}"{" class=on" if not formato else ""}>Todo</a>'
+                     + "".join(f'<a href="{enlace_formato(k)}"{" class=on" if k == formato else ""}>{NOMBRES_FORMATO[k]}</a>'
+                               for k in formatos) + "</div>")
+    seg = d["vistas_seg"]
+    otros = seg.get("otros", 0) + seg.get("sin_dato", 0)
+    nota_seg = (f'<small>· {otros / (seg.get("seguidores", 0) + otros):.0%} de personas que no te siguen</small>'
+                if not formato and seg.get("seguidores", 0) + otros else "")
+    totales = [None if (a is None and b is None) else (a or 0) + (b or 0) for a, b in partes]
+    pico = ""
+    if any(t for t in totales if t):
+        i = max(range(len(totales)), key=lambda i: totales[i] or 0)
+        from .resultados import DIAS
+        pico = f"Pico el {DIAS[fechas[i].weekday()]} {fechas[i]:%d/%m}: {cifra(totales[i])} vistas"
+        if picos and fechas[i] in picos:
+            pico += f', el día que salió "{escape(picos[fechas[i]][:60])}"'
+        pico = f'<p class="ayuda chica">{pico}.</p>'
+    leyenda = ('<div class="leyenda"><span><i class="seg"></i>Seguidores</span><span><i class="otros"></i>No te siguen</span>'
+               '<span><i class="antes"></i>Periodo anterior</span></div>'
+               if not formato and any(b is not None for _, b in partes) else
+               '<div class="leyenda"><span><i class="seg"></i>Vistas</span><span><i class="antes"></i>Periodo anterior</span></div>')
+    vistas = tarjeta("Vistas", pastillas + apiladas(partes, fechas, de_antes, "vistas") + leyenda + pico,
+                     f"{cifra(total_vistas)} {nota_seg}", "ancho")
+    alc_seg = d["alcance_seg"]
+    alc_otros = alc_seg.get("otros", 0) + alc_seg.get("sin_dato", 0)
+    nota_alc = (f' <small>al día · {alc_otros / (alc_seg.get("seguidores", 0) + alc_otros):.0%} no te siguen</small>'
+                if alc_seg.get("seguidores", 0) + alc_otros else " <small>al día</small>")
+    alcance = tarjeta("Alcance", linea(d["alcance_dia"], fechas, "cuentas alcanzadas", [x.get("alcance") for x in antes]),
+                      (cifra(alcance_prom) + nota_alc) if alcance_prom is not None else "", "t6")
+    neto = d["nuevos"] - d["perdidos"]
+    nuevos = tarjeta("Seguidores nuevos", linea([x.get("nuevos") for x in serie], fechas, "nuevos", [x.get("nuevos") for x in antes])
+                     + f'<p class="ayuda chica">{cifra(d["perdidos"])} dejaron de seguirte · neto {"+" if neto > 0 else ""}{cifra(neto)}'
+                     + (f' · {comparado(d["nuevos_cambio"])}' if d["nuevos_cambio"] is not None else "") + "</p>",
+                     f'+{cifra(d["nuevos"])}', "t6")
     interacciones = tarjeta("Interacciones", dona(
         [("Likes", inter["likes"]), ("Comentarios", inter["comentarios"]),
          ("Compartidos", inter["compartidos"]), ("Guardados", inter["guardados"])],
-        cifra(total_inter), "interacciones")
-        + (f'<p class="ayuda chica">{cifra(d["clics"])} clics al enlace de tu perfil.</p>' if d["clics"] else ""),
-        clase="t6")
+        cifra(total_inter), "interacciones"), clase="t6")
+    botones = tarjeta("Clics a tu perfil", botones_html(d["clics_tipo"], d["clics"]), cifra(d["clics"]), "t6")
     p = d["publico"]
+    resumen = []
+    if p.get("genero"):
+        g = max(p["genero"].items(), key=lambda x: x[1])[0]
+        resumen.append(GENEROS.get(g, g).lower())
+    if p.get("edad"):
+        resumen.append(f'de {max(p["edad"].items(), key=lambda x: x[1])[0]} años')
+    if p.get("ciudad"):
+        resumen.append(f'en {max(p["ciudad"].items(), key=lambda x: x[1])[0].split(",")[0]}')
     if p.get("edad") or p.get("genero"):
         genero = p.get("genero", {})
-        publico = (tarjeta("Edad", edades(p["edad"]) if p.get("edad") else "", cifra(sum(p.get("edad", {}).values())), "t6")
-                   + tarjeta("Género", dona([(GENEROS.get(k, k), genero.get(k, 0)) for k in GENEROS if genero.get(k)],
-                                            cifra(sum(genero.values())), "seguidores"), clase="t3")
-                   + ciudades(p))
+        dentro = (tarjeta("Edad", edades(p["edad"]) if p.get("edad") else "", cifra(sum(p.get("edad", {}).values())), "t4")
+                  + tarjeta("Género", dona([(GENEROS.get(k, k), genero.get(k, 0)) for k in GENEROS if genero.get(k)],
+                                           cifra(sum(genero.values())), "seguidores"), clase="t4")
+                  + ciudades(p).replace('class="met-c t3"', 'class="met-c t4"'))
     else:
-        publico = tarjeta("Tu público", '<p class="ayuda">Instagram muestra edades, género y ciudades de tus '
-                                        'seguidores cuando la cuenta tiene 100 o más.</p>', clase="ancho")
-    return f'<div class="met">{grande}{nuevos}{alcance}{vistas}{interacciones}{publico}{horas_html(d.get("horas") or {})}</div>'
+        dentro = ('<section class="met-c ancho"><p class="ayuda">Instagram muestra edades, género y ciudades de tus '
+                  'seguidores cuando la cuenta tiene 100 o más.</p></section>')
+    dentro += horas_html(d.get("horas") or {}, "ancho")
+    publico = (f'<details class="met-c ancho met-pleg"><summary><div class="met-cab"><span>Tu público</span>'
+               f'<b>{cifra(sum(p.get("genero", {}).values())) if p.get("genero") else ""}'
+               f' <small>{"· " + " ".join(resumen) if resumen else "edad, género, ciudades y horarios"} ›</small></b></div></summary>'
+               f'<div class="met met-dentro">{dentro}</div></details>')
+    aviso = ('<p class="ayuda chica met-aviso">Estamos completando tu historial de los últimos 90 días; '
+             'en unas horas verás todos los días.</p>' if d.get("rellenando") else "")
+    return numeros_ + f'<div class="met">{vistas}{alcance}{nuevos}{interacciones}{botones}{publico}</div>' + aviso

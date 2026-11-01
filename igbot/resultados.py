@@ -36,6 +36,8 @@ from .cuenta import Cuenta
 router = APIRouter(prefix="/panel/resultados")
 
 RANGOS = {"7": "7 días", "30": "30 días", "90": "90 días"}
+MAX_DIAS = 366  # el rango personalizado (?desde=AAAA-MM-DD&fin=AAAA-MM-DD) llega hasta un año
+VISTAS_PDF = ("instagram", "conversaciones")
 CACHE_SEGUNDOS = 600
 _cache: dict[tuple, tuple[float, dict]] = {}
 
@@ -329,9 +331,40 @@ def vistas_de(c: Cuenta) -> dict[str, str]:
     return {k: v for k, v in VISTAS.items() if k != "comentarios" or c.imagenes_mes > 0}
 
 
-def enlace(rango: str, fin: date, hoy: date, vista: str = "instagram", base: str = "/panel/resultados") -> str:
+def enlace(rango: str, fin: date, hoy: date, vista: str = "instagram", base: str = "/panel/resultados",
+           formato: str = "", **extra) -> str:
     return (f"{base}?dias={rango}" + (f"&fin={fin.isoformat()}" if fin < hoy else "")
-            + (f"&ver={vista}" if vista != "instagram" else ""))
+            + (f"&ver={vista}" if vista != "instagram" else "") + (f"&formato={formato}" if formato else "")
+            + "".join(f"&{k}={v}" for k, v in extra.items() if v))
+
+
+def personalizado(rango: str, fin: date, hoy: date, vista: str) -> str:
+    """La pastilla "Personalizado" a la izquierda de 7 días: un formulario plegado (sin JS) con desde y hasta.
+    Con un rango que no es 7, 30 ni 90 queda marcada y dice las fechas."""
+    dias = int(rango)
+    ini = fin - timedelta(days=dias - 1)
+    activo = rango not in RANGOS
+    nombre = f"{ini:%d/%m} – {fin:%d/%m}" if activo else "Personalizado"
+    return (
+        f'<details class="res-pers{" on" if activo else ""}"><summary>{nombre}</summary>'
+        '<form method="get" action="/panel/resultados" class="res-pers-f">'
+        f'<label for="res-desde">Desde</label><input id="res-desde" type="date" name="desde" value="{ini.isoformat()}" max="{hoy.isoformat()}" required>'
+        f'<label for="res-fin">Hasta</label><input id="res-fin" type="date" name="fin" value="{fin.isoformat()}" max="{hoy.isoformat()}" required>'
+        + (f'<input type="hidden" name="ver" value="{vista}">' if vista != "instagram" else "")
+        + '<button class="boton chico" type="submit">Ver</button></form></details>'
+    )
+
+
+def descargas(rango: str, fin: date, hoy: date, vista: str) -> str:
+    """El menú de Descargar (plegado, sin JS): PDF y CSV de la cuenta y, en Instagram, por post."""
+    base = "/panel/resultados/descargar"
+    opciones = [("PDF del periodo", enlace(rango, fin, hoy, vista, base)),
+                ("CSV día por día", enlace(rango, fin, hoy, vista, base, archivo="csv"))]
+    if vista == "instagram":
+        opciones += [("PDF por publicación", enlace(rango, fin, hoy, vista, base, que="posts")),
+                     ("CSV por publicación", enlace(rango, fin, hoy, vista, base, que="posts", archivo="csv"))]
+    return ('<details class="res-bajar"><summary class="boton secundario chico cal-bajar">↓ Descargar</summary><div>'
+            + "".join(f'<a href="{href}">{nombre}</a>' for nombre, href in opciones) + "</div></details>")
 
 
 async def barra(c: Cuenta, rango: str, fin: date, hoy: date, vista: str) -> str:
@@ -344,8 +377,9 @@ async def barra(c: Cuenta, rango: str, fin: date, hoy: date, vista: str) -> str:
                  if fin < hoy else '<span class="off" aria-hidden="true">›</span>')
     vistas = "".join(f'<a href="{enlace(rango, fin, hoy, k)}"{panel.ACTIVA if k == vista else ""}>{nombre}</a>'
                      for k, nombre in vistas_de(c).items())
-    rangos = "".join(f'<a href="{enlace(k, fin, hoy, vista)}"{panel.ACTIVA if k == rango else ""}>{nombre}</a>'
-                     for k, nombre in RANGOS.items())
+    rangos = personalizado(rango, fin, hoy, vista) + "".join(
+        f'<a href="{enlace(k, fin, hoy, vista)}"{panel.ACTIVA if k == rango else ""}>{nombre}</a>'
+        for k, nombre in RANGOS.items())
     guardado = await c.store.get(metricas.CLAVE_HORA)
     if guardado:
         cuando = datetime.fromtimestamp(float(guardado), ZoneInfo(c.timezone))
@@ -361,16 +395,14 @@ async def barra(c: Cuenta, rango: str, fin: date, hoy: date, vista: str) -> str:
         f'<div class="cal-sw modo">{rangos}</div></div>'
         f'<div class="cal-filtros res-info"><div class="cal-sw res-vista">{vistas}</div>'
         + (f'<span><i class="punto"></i>{instagram}</span>'
-           '<span class="res-comp">Seguidores vs. 7 y 30 días antes</span>'
+           '<span class="res-comp">Comparado con el periodo anterior del mismo largo</span>'
            if vista == "instagram" else
            '<span><i class="punto"></i>Anuncios: números de Meta y de tus chats, cada 10 minutos</span>'
            if vista == "anuncios" else
            '<span><i class="punto"></i>Comentarios: se actualizan cada 10 minutos</span>'
            if vista == "comentarios" else
            '<span><i class="punto"></i>Mensajes: se actualizan cada 10 minutos</span>')
-        + ("" if vista in ("anuncios", "comentarios") else  # el PDF tiene Instagram y Conversaciones
-           f'<a class="boton secundario chico cal-bajar" href="{enlace(rango, fin, hoy, vista, "/panel/resultados/descargar")}"'
-           ' title="Este periodo, en PDF">↓ Descargar</a>') + "</div></div>"
+        + ("" if vista not in VISTAS_PDF else descargas(rango, fin, hoy, vista)) + "</div></div>"
     )
 
 
@@ -657,7 +689,18 @@ async def anuncios_html(c: Cuenta, ini: date, fin: date) -> str:
     return aviso + kpis + tabla
 
 
-async def pagina(c: Cuenta, rango: str, fin: date | None = None, vista: str = "instagram") -> HTMLResponse:
+async def picos_de(c: Cuenta, d: dict) -> dict[date, str]:
+    """{día: texto del post que salió ese día}, para explicar el pico de vistas."""
+    zona = ZoneInfo(c.timezone)
+    salida: dict[date, str] = {}
+    for p in sorted(d.get("publicadas", []), key=lambda p: p["publish_at"] or p["created_at"]):
+        salida.setdefault(datetime.fromtimestamp(p["publish_at"] or p["created_at"], zona).date(),
+                          (p["caption"] or "").split("\n")[0] or "una publicación")
+    return salida
+
+
+async def pagina(c: Cuenta, rango: str, fin: date | None = None, vista: str = "instagram",
+                 formato: str = "") -> HTMLResponse:
     hoy = datetime.now(ZoneInfo(c.timezone)).date()
     fin = min(fin or hoy, hoy)
     if vista == "anuncios":
@@ -668,9 +711,11 @@ async def pagina(c: Cuenta, rango: str, fin: date | None = None, vista: str = "i
         publico = json.loads(await c.store.get(metricas.CLAVE_PUBLICO) or "{}")
         cuerpo = conversaciones_html(c, await numeros_de(c, rango, fin), publico)
     else:
-        cuerpo = metricas.seccion(await metricas.numeros(c, int(rango), fin))
+        d = await numeros_de(c, rango, fin) if c.imagenes_mes > 0 else {}
+        cuerpo = metricas.seccion(await metricas.numeros(c, int(rango), fin), formato,
+                                  lambda f: enlace(rango, fin, hoy, vista, formato=f), await picos_de(c, d))
         if c.imagenes_mes > 0:
-            cuerpo += f'<div class="met">{await seccion_publicaciones(c, await numeros_de(c, rango, fin))}</div>'
+            cuerpo += f'<div class="met">{await seccion_publicaciones(c, d)}</div>'
     return panel.pagina(
         await panel.menu_de(c, "resultados")
         + f'<main><div class="contenedor res">{await barra(c, rango, fin, hoy, vista)}{cuerpo}</div></main>'
@@ -684,27 +729,104 @@ def leer_fin(texto: str) -> date | None:
         return None
 
 
+def leer_rango(dias: str, desde: str, fin: date | None, hoy: date) -> tuple[str, date]:
+    """(días, último día): 7, 30 o 90 con ?dias=, o lo que haya entre ?desde= y ?fin= (hasta MAX_DIAS)."""
+    fin = min(fin or hoy, hoy)
+    if (ini := leer_fin(desde)) and ini <= fin:
+        return str(min((fin - ini).days + 1, MAX_DIAS)), fin
+    return (dias if dias in RANGOS else "7"), fin
+
+
 @router.get("")
-async def ver(request: Request, dias: str = "7", fin: str = "", ver: str = "instagram"):
+async def ver(request: Request, dias: str = "7", fin: str = "", ver: str = "instagram", desde: str = "",
+              formato: str = ""):
     if not (c := panel.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
-    return await pagina(c, dias if dias in RANGOS else "7", leer_fin(fin), ver if ver in vistas_de(c) else "instagram")
+    hoy = datetime.now(ZoneInfo(c.timezone)).date()
+    rango, fin_ = leer_rango(dias, desde, leer_fin(fin), hoy)
+    return await pagina(c, rango, fin_, ver if ver in vistas_de(c) else "instagram",
+                        formato if formato in metricas.NOMBRES_FORMATO else "")
+
+
+# --- descargas: PDF y CSV, del periodo (día por día) o por publicación ---
+
+def csv_de(filas: list[list], columnas: list[str]) -> bytes:
+    """CSV con BOM para que Excel lo abra con acentos; los números sin separador de miles."""
+    import csv
+    import io
+    salida = io.StringIO()
+    w = csv.writer(salida)
+    w.writerow(columnas)
+    for fila in filas:
+        w.writerow(["" if v is None else v for v in fila])
+    return ("\ufeff" + salida.getvalue()).encode("utf-8")
+
+
+def csv_cuenta(m: dict, d: dict) -> bytes:
+    """Un renglón por día del periodo con todo lo que guardamos de Instagram y los mensajes de ese día."""
+    columnas = ["dia", "seguidores", "seguidores_nuevos", "dejaron_de_seguir", "alcance", "alcance_seguidores",
+                "alcance_no_seguidores", "vistas", "vistas_seguidores", "vistas_no_seguidores", "vistas_posts",
+                "vistas_reels", "vistas_historias", "vistas_anuncios", "interacciones", "likes", "comentarios",
+                "compartidos", "guardados", "clics_perfil", "mensajes_recibidos"]
+    por_dia = {(d["inicio"] + timedelta(days=i)).date(): n for i, n in enumerate(d["por_dia"])}
+    filas = []
+    for f, x in zip(m["fechas"], m["serie"]):
+        seg_v, seg_a, tipos = x.get("vistas_seg") or {}, x.get("alcance_seg") or {}, x.get("vistas_tipo") or {}
+        otros = lambda g: (g.get("otros", 0) + g.get("sin_dato", 0)) if g else None  # noqa: E731
+        filas.append([f.isoformat(), x.get("seguidores"), x.get("nuevos"), x.get("perdidos"), x.get("alcance"),
+                      seg_a.get("seguidores") if seg_a else None, otros(seg_a), x.get("vistas"),
+                      seg_v.get("seguidores") if seg_v else None, otros(seg_v),
+                      tipos.get("posts") if tipos else None, tipos.get("reels") if tipos else None,
+                      tipos.get("historias") if tipos else None, tipos.get("anuncios") if tipos else None,
+                      x.get("interacciones"), x.get("likes"), x.get("comentarios"), x.get("compartidos"),
+                      x.get("guardados"), x.get("clics"), por_dia.get(f)])
+    return csv_de(filas, columnas)
+
+
+async def filas_posts(c: Cuenta, d: dict) -> list[list]:
+    """Una fila por publicación del periodo: cuándo salió, qué decía y sus números."""
+    zona = ZoneInfo(c.timezone)
+    filas = []
+    for x in await posts_con_numeros(c, d.get("publicadas", [])):
+        p, n = x["post"], x["datos"] or {}
+        cuando = datetime.fromtimestamp(p["publish_at"] or p["created_at"], zona)
+        filas.append([cuando.strftime("%Y-%m-%d"), cuando.strftime("%H:%M"),
+                      "historia" if p.get("tipo") == "historia" else "post",
+                      (p["caption"] or "").replace("\n", " ")[:140], p["permalink"] if p["permalink"].startswith("https://") else "",
+                      n.get("reach"), n.get("views"), n.get("likes"), n.get("comments"), n.get("saved"), n.get("shares"),
+                      x["tasa"]])
+    return filas
+
+
+COLUMNAS_POSTS = ["fecha", "hora", "tipo", "texto", "enlace", "alcance", "vistas", "likes", "comentarios", "guardados",
+                  "compartidos", "interaccion_pct"]
 
 
 @router.get("/descargar")
-async def descargar(request: Request, dias: str = "7", fin: str = "", ver: str = "instagram"):
-    """Lo que se ve en Resultados (Instagram o Conversaciones, en su periodo), en PDF."""
+async def descargar(request: Request, dias: str = "7", fin: str = "", ver: str = "instagram", desde: str = "",
+                    archivo: str = "pdf", que: str = "cuenta"):
+    """Lo que se ve en Resultados (Instagram o Conversaciones, en su periodo): en PDF o CSV, del periodo
+    día por día (`que=cuenta`) o una fila por publicación (`que=posts`, solo Instagram)."""
     if not (c := panel.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     from . import informe
-    ver = ver if ver in ("instagram", "conversaciones") else "instagram"
-    rango = dias if dias in RANGOS else "7"
+    ver = ver if ver in VISTAS_PDF else "instagram"
     hoy = datetime.now(ZoneInfo(c.timezone)).date()
-    fin_ = min(leer_fin(fin) or hoy, hoy)
+    rango, fin_ = leer_rango(dias, desde, leer_fin(fin), hoy)
     ini = fin_ - timedelta(days=int(rango) - 1)
+    que = "posts" if que == "posts" and ver == "instagram" else "cuenta"
+    archivo = "csv" if archivo == "csv" else "pdf"
     d = await numeros_de(c, rango, fin_)
     m = await metricas.numeros(c, int(rango), fin_)
-    pdf = await informe.resultados_pdf(c, titulo_periodo(ini, fin_), d, m, await panel.usuario(c),
-                                       ver if ver in VISTAS else "instagram")
-    return Response(pdf, media_type="application/pdf", headers={
-        "Content-Disposition": f'attachment; filename="resultados-{ver if ver in VISTAS else 'instagram'}-{ini.isoformat()}-al-{fin_.isoformat()}.pdf"'})
+    nombre = f"resultados-{ver if que == 'cuenta' else 'publicaciones'}-{ini.isoformat()}-al-{fin_.isoformat()}.{archivo}"
+    if archivo == "csv":
+        cuerpo = await filas_posts(c, d) if que == "posts" else None
+        datos = csv_de(cuerpo, COLUMNAS_POSTS) if que == "posts" else csv_cuenta(m, d)
+        tipo = "text/csv; charset=utf-8"
+    elif que == "posts":
+        datos = await informe.posts_pdf(c, titulo_periodo(ini, fin_), await filas_posts(c, d), await panel.usuario(c))
+        tipo = "application/pdf"
+    else:
+        datos = await informe.resultados_pdf(c, titulo_periodo(ini, fin_), d, m, await panel.usuario(c), ver)
+        tipo = "application/pdf"
+    return Response(datos, media_type=tipo, headers={"Content-Disposition": f'attachment; filename="{nombre}"'})
