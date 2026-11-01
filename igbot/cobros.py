@@ -26,7 +26,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
 
-from . import config, panel
+from . import config, marco
 from .cuenta import Cuenta, usar
 
 log = logging.getLogger("igbot.cobros")
@@ -107,8 +107,8 @@ def _volver(aviso: str) -> RedirectResponse:
 
 @router.post("/{prov}/conectar")
 async def conectar(request: Request, prov: str):
-    panel.de_aqui(request)
-    if not (c := panel.cuenta_de_sesion(request)):
+    marco.de_aqui(request)
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     if not enabled(prov):
         return RedirectResponse("/panel/conexion", status_code=303)
@@ -141,7 +141,7 @@ async def _token_mercadopago(datos: dict) -> dict:
 
 @router.get("/{prov}/callback")
 async def callback(request: Request, prov: str):
-    if not (c := panel.cuenta_de_sesion(request)):
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     q = request.query_params
     if not q.get("code"):
@@ -166,14 +166,14 @@ async def callback(request: Request, prov: str):
         log.exception("No se pudo conectar %s", prov)
         return _volver("fallo")
     await guardar(c, prov, {**con, "fecha": int(time.time())})
-    log.info("@%s conectó su %s", await panel.usuario(c), NOMBRES[prov])
+    log.info("@%s conectó su %s", await marco.usuario(c), NOMBRES[prov])
     return _volver("conectado")
 
 
 @router.post("/{prov}/desconectar")
 async def desconectar(request: Request, prov: str):
-    panel.de_aqui(request)
-    if not (c := panel.cuenta_de_sesion(request)):
+    marco.de_aqui(request)
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     if prov in NOMBRES:
         await guardar(c, prov, {})
@@ -422,6 +422,6 @@ async def aviso_stripe(request: Request):
 
 @publico.get("/gracias")
 async def gracias():
-    return panel.pagina(
+    return marco.pagina(
         '<main><div class="contenedor"><div class="tarjeta"><h2>Gracias por tu pago</h2>'
         '<p class="ayuda">Tu pago quedó registrado. Puedes volver a tu chat de Instagram.</p></div></div></main>')

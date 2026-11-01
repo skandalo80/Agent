@@ -25,6 +25,7 @@ import httpx
 from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageOps, ImageStat
 
 from . import config, limites, tools
+from .estilos import FUENTES
 from .cuenta import cuenta
 from .store import Store
 
@@ -281,11 +282,7 @@ def prompt_anuncio(idea: str, texto: "Texto", marca: "Marca | None" = None, hist
     )
 
 
-# Tipografías de títulos que puede elegir el cliente (archivos en fonts/, todas OFL).
-# Nombre que ve el cliente -> archivo en fonts/ (Google Fonts, licencia OFL; 400, 600 y 700 cada una).
-FUENTES = {"Inter": "Inter", "Montserrat": "Montserrat", "Poppins": "Poppins", "Raleway": "Raleway",
-           "Nunito": "Nunito", "DM Sans": "DMSans", "Work Sans": "WorkSans", "Space Grotesk": "SpaceGrotesk", "Oswald": "Oswald",
-           "Playfair Display": "PlayfairDisplay", "Lora": "Lora", "Cormorant Garamond": "CormorantGaramond"}
+# Tipografías de títulos que puede elegir el cliente: estilos.FUENTES (archivos en fonts/, todas OFL).
 SERIF = {"Playfair Display", "Lora", "Cormorant Garamond"}
 PESOS = {400: "Regular", 600: "SemiBold", 700: "Bold"}
 HEX = re.compile(r"^#[0-9A-Fa-f]{6}$")

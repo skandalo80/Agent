@@ -49,7 +49,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from starlette.routing import Match
 from zoneinfo import ZoneInfo
 
-from . import config
+from . import config, marco
 from .cuenta import Cuenta, usar
 
 log = logging.getLogger("igbot.skandi")
@@ -259,8 +259,7 @@ async def cargar() -> None:
 
 async def guardar(c: Cuenta, actual: dict | None, mensajes: list, soporte: bool) -> None:
     """En la base (de la cuenta principal) y en la memoria; queda como su chat abierto."""
-    from . import panel
-    k, usuario = clave(c), await panel.usuario(c)
+    k, usuario = clave(c), await marco.usuario(c)
     chat_id = await principal().store.guardar_skandi(actual["id"] if actual else None, "panel", k, usuario,
                                                      mensajes[-MAX_GUARDADOS:], soporte)
     chat = await principal().store.chat_skandi(chat_id)
@@ -278,10 +277,9 @@ async def preguntas_hoy(c: Cuenta, que: str = "skandi") -> tuple[str, int]:
 
 
 async def datos_cuenta(c: Cuenta) -> str:
-    from . import panel
     estado = ("en revisión" if c.en_revision else
-              "encendido" if await panel.activo(c) else "en pausa")
-    return (f"Usuario de Instagram: @{escape(await panel.usuario(c))}\n"
+              "encendido" if await marco.activo(c) else "en pausa")
+    return (f"Usuario de Instagram: @{escape(await marco.usuario(c))}\n"
             f"Plan: {plan(c)}\nSu asistente está: {estado}")
 
 
@@ -326,12 +324,11 @@ async def correo_a_soporte(asunto: str, texto: str) -> bool:
 
 async def avisar_soporte(c: Cuenta, charla: list[list[str]]) -> None:
     """Correo a soporte con la cuenta y la conversación (pocos al día por cuenta)."""
-    from . import panel
     k, enviados = await preguntas_hoy(c, "skandi_correos")
     if enviados >= MAX_CORREOS_DIA:
         log.info("Skandi: %s ya mandó %d correos a soporte hoy", clave(c), enviados)
         return
-    usuario = await panel.usuario(c)
+    usuario = await marco.usuario(c)
     texto = (f"@{usuario} pidió ayuda en el panel y Skandi lo pasa a soporte.\n\n"
              f"Cuenta: @{usuario} ({clave(c)}, id {c.ig_account_id})\nPlan: {plan(c)}\n"
              + (f"Correo de la cuenta: {c.owner_email}\n" if c.owner_email and c.owner_email != config.MAIL_FROM else "")
@@ -358,11 +355,10 @@ def volver_a(request: Request, pedido: str) -> str:
 
 @router.post("/ayuda")
 async def preguntar(request: Request):
-    from . import panel
-    panel.de_aqui(request)
-    if not (c := panel.cuenta_de_sesion(request)):
+    marco.de_aqui(request)
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
-    f = await panel.form(request)
+    f = await marco.form(request)
     destino = volver_a(request, f.get("volver", "")) + "#skandi"
     k = clave(c)
     if f.get("accion") == "nueva":
@@ -460,7 +456,6 @@ def visitante(request: Request) -> tuple[str, dict]:
 
 
 def pagina_web(v: dict, aviso: str = "") -> HTMLResponse:
-    from . import panel
     mensajes = mensaje_web("assistant", SALUDO_WEB) + "".join(mensaje_web(r, t) for r, t in v["charla"])
     if aviso:
         mensajes += f'<div class="aviso">{escape(aviso)}</div>'
@@ -470,7 +465,7 @@ def pagina_web(v: dict, aviso: str = "") -> HTMLResponse:
         '<title>Skandi · Skandar</title>'
         '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap">'
         f'<style>{ESTILO_WEB}</style>'
-        f'<script src="/ayuda/ayuda.js?v={panel.VERSION_JS}" defer></script></head><body>'
+        f'<script src="/ayuda/ayuda.js?v={marco.VERSION_JS}" defer></script></head><body>'
         f'<div class="mensajes" id="mensajes">{mensajes}<span id="fin"></span></div>'
         '<form method="post" action="/ayuda#fin">'
         f'<input type="text" name="mensaje" maxlength="{MAX_MENSAJE}" placeholder="Escribe tu pregunta"'
@@ -500,8 +495,7 @@ async def ver_web(request: Request, nueva: str = ""):
 @web_router.get("/ayuda.js")
 def script_web():
     from fastapi.responses import FileResponse
-    from . import panel
-    return FileResponse(panel.STATIC / "ayuda.js", media_type="text/javascript",
+    return FileResponse(marco.STATIC / "ayuda.js", media_type="text/javascript",
                         headers={"Cache-Control": "public, max-age=3600"})
 
 
@@ -515,11 +509,10 @@ def de_la_web(request: Request) -> None:
 
 @web_router.post("")
 async def preguntar_web(request: Request):
-    from . import panel
     de_la_web(request)
     token, v = visitante(request)
     volver = con_cookie(RedirectResponse("/ayuda#fin", status_code=303), token)
-    texto = " ".join((await panel.form(request)).get("mensaje", "").split())[:MAX_MENSAJE]
+    texto = " ".join((await marco.form(request)).get("mensaje", "").split())[:MAX_MENSAJE]
     if not texto or (p := principal()) is None:
         return volver
     k, total = await preguntas_hoy(p, "skandi_web")
@@ -583,12 +576,11 @@ def quien_es(x: dict) -> str:
 
 @router.get("/skandi")
 async def ver_chats(request: Request, ver: str = "todos", p: int = 1, chat: int = 0):
-    from . import panel
-    c = panel.cuenta_de_sesion(request)
+    c = marco.cuenta_de_sesion(request)
     if not c:
         return RedirectResponse("/panel", status_code=303)
     if c.slug or (pr := principal()) is None:
-        return await panel.no_encontrada(request)
+        return await marco.no_encontrada(request)
     ver = ver if ver in FILTROS else "todos"
     origen = ver if ver in ("panel", "web") else ""
     p = max(p, 1)
@@ -599,7 +591,7 @@ async def ver_chats(request: Request, ver: str = "todos", p: int = 1, chat: int 
     def enlace(ver_: str = ver, pagina: int = p, chat_: int = 0) -> str:
         return f"/panel/skandi?ver={ver_}" + (f"&p={pagina}" if pagina > 1 else "") + (f"&chat={chat_}" if chat_ else "")
 
-    filtros = "".join(f'<a href="{enlace(k, 1)}"{panel.ACTIVA if k == ver else ""}>{n}</a>'
+    filtros = "".join(f'<a href="{enlace(k, 1)}"{marco.ACTIVA if k == ver else ""}>{n}</a>'
                       for k, n in FILTROS.items())
     filas = "".join(
         f'<a class="skc-fila{" on" if x["id"] == chat else ""}" href="{escape(enlace(chat_=x["id"]))}">'
@@ -613,11 +605,11 @@ async def ver_chats(request: Request, ver: str = "todos", p: int = 1, chat: int 
         + (' <span class="skc-marca">Soporte</span>' if abierto_["soporte"] else "") + '</h2>'
         '<div class="sk-mensajes">' + "".join(mensaje(r, t) for r, t in abierto_["mensajes"]) + "</div></div>"
         if abierto_ else '<div class="skc-chat"><p class="vacio">Elige una conversación para verla.</p></div>')
-    return panel.pagina(
+    return marco.pagina(
         f"<style>{CSS_CHATS}</style>"
-        + await panel.menu_de(c, "cuenta", sub="skandi")
+        + await marco.menu_de(c, "cuenta", sub="skandi")
         + '<main><div class="contenedor">'
         f'<nav class="skc-filtros" aria-label="Filtros">{filtros}</nav>'
         f'<div class="skc"><div class="skc-lista">{filas}'
-        + panel.paginas(p, paginas, lambda n: enlace(pagina=n)) + f"</div>{detalle}</div>"
+        + marco.paginas(p, paginas, lambda n: enlace(pagina=n)) + f"</div>{detalle}</div>"
         "</div></main>")

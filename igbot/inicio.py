@@ -17,7 +17,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
-from . import config, conversaciones, metricas, panel
+from . import config, conversaciones, marco, metricas
 from .cuenta import Cuenta, usar
 
 router = APIRouter(prefix="/panel/inicio")
@@ -60,7 +60,7 @@ def te_falta(pasos: list[tuple[str, str, bool]]) -> str:
         f'<span class="ini-txt"><b>{escape(nombre)}</b><small>{PASOS.get(href, ("", ""))[0]}</small></span>'
         f'<span class="ini-ir">{PASOS.get(href, ("", "Ir"))[1]}</span></a>' for i, nombre, href in faltan)
     return ('<section class="met-c ancho ini-falta">'
-            + panel.cab_tarjeta("Te falta", boton=f'<span class="ini-gris">{listos} de {len(pasos)} listos</span>')
+            + marco.cab_tarjeta("Te falta", boton=f'<span class="ini-gris">{listos} de {len(pasos)} listos</span>')
             + f'<div class="ini-pasos">{cajas}</div>'
             f'<span class="ini-barra"><span style="width:{pct}%"></span></span></section>')
 
@@ -107,7 +107,7 @@ async def te_esperan(c: Cuenta, ahora: float) -> str:
             LIMIT_NOTICE, filtro, "", CHATS, 0)
         filas += [(filtro, f) for f in pagina]
     filas = filas[:CHATS]
-    cab = panel.cab_tarjeta("Te esperan", "/panel/asistente", "Ver todas")
+    cab = marco.cab_tarjeta("Te esperan", "/panel/asistente", "Ver todas")
     if not filas:
         return (f'<section class="met-c ini-chats">{cab}<p class="ayuda">Nadie te espera. Tu asistente está'
                 " atendiendo todas tus conversaciones.</p></section>")
@@ -141,7 +141,7 @@ async def te_esperan(c: Cuenta, ahora: float) -> str:
 
 async def proximas(c: Cuenta, ahora: float) -> str:
     from . import contenido
-    cab = panel.cab_tarjeta("Próximas publicaciones", "/panel/contenido", "Calendario")
+    cab = marco.cab_tarjeta("Próximas publicaciones", "/panel/contenido", "Calendario")
     posts = (await c.store.posts(("programada",), desde=ahora))[:PUBLICACIONES]
     if not posts:
         return (f'<section class="met-c ini-posts">{cab}<p class="ayuda">No tienes publicaciones programadas.</p>'
@@ -191,14 +191,14 @@ async def tu_plan(c: Cuenta, hoy_: date, zona: ZoneInfo) -> str:
         return ""
     plan = "Community Manager" if c.imagenes_mes > 0 else "Asistente virtual"
     renueva = f'<span class="ini-gris">Se renueva el 1 de {conversaciones.MESES_LARGOS[siguiente.month - 1]}</span>'
-    return ('<div class="met"><section class="met-c ancho">' + panel.cab_tarjeta(f"Tu plan · {plan}", boton=renueva)
+    return ('<div class="met"><section class="met-c ancho">' + marco.cab_tarjeta(f"Tu plan · {plan}", boton=renueva)
             + f'<div class="ini-usos">{"".join(usos)}</div></section></div>')
 
 
 async def saludo(c: Cuenta) -> str:
     """"Hola, " y el nombre de su empresa o, si no lo ha puesto, su @usuario."""
     empresa = json.loads(await c.store.get("empresa") or "{}")
-    usuario = await panel.usuario(c)
+    usuario = await marco.usuario(c)
     nombre = (empresa.get("nombre") or "").strip() or (f"@{usuario}" if usuario else "")
     return f"Hola, {escape(nombre)}" if nombre else "Hola"
 
@@ -221,14 +221,14 @@ async def pagina(c: Cuenta):
         abajo = f'<div class="met ini-dos">{abajo}{await proximas(c, ahora)}</div>'
     else:
         abajo = f'<div class="met">{abajo.replace("met-c ini-chats", "met-c ancho ini-chats", 1)}</div>'
-    cuerpo = (cabeza + te_falta(await panel.pasos_iniciales(c)) + await hoy(c, inicio_dia, pendientes)
+    cuerpo = (cabeza + te_falta(await marco.pasos_iniciales(c)) + await hoy(c, inicio_dia, pendientes)
               + abajo + await tu_plan(c, hoy_.date(), zona))
-    return panel.pagina(await panel.menu_de(c, "inicio")
+    return marco.pagina(await marco.menu_de(c, "inicio")
                         + f'<main><div class="contenedor ini">{cuerpo}</div></main>')
 
 
 @router.get("")
 async def ver(request: Request):
-    if not (c := panel.cuenta_de_sesion(request)):
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     return await pagina(c)

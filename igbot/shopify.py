@@ -3,7 +3,7 @@
 Casi todas las tiendas Shopify publican su catálogo en /products.json sin pedir permisos, así que el
 cliente no conecta nada: escribe su sitio en el paso 1, pulsa "Traer mis productos de Shopify", elige
 cuáles quiere y se agregan a su catálogo (kv "productos") con nombre, precio, opciones, enlace y hasta
-dos fotos. Todo corre en segundo plano (panel.trabajo_largo) y con los mismos cuidados de sitio.py.
+dos fotos. Todo corre en segundo plano (marco.trabajo_largo) y con los mismos cuidados de sitio.py.
 """
 import json
 import logging

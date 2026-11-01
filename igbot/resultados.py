@@ -17,7 +17,7 @@ o 30 días:
 Solo lee lo que ya está en la base de la cuenta: no llama a Instagram ni a
 Claude. Los números se guardan CACHE_SEGUNDOS en memoria para que recargar la
 página no repita las consultas. Las gráficas son SVG hechas aquí (el CSP del
-bot no deja JavaScript; sus estilos están en panel.ESTILO); el detalle de cada barra sale al pasar el cursor.
+bot no deja JavaScript; sus estilos están en marco.ESTILO); el detalle de cada barra sale al pasar el cursor.
 """
 import json
 import time
@@ -29,7 +29,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
-from . import anuncios_meta, config, metricas, panel
+from . import anuncios_meta, config, marco, metricas
 from .comentarios import SPAM
 from .cuenta import Cuenta
 
@@ -471,15 +471,15 @@ async def barra(c: Cuenta, rango: str, fin: date, hoy: date, vista: str, cada: s
     antes = enlace(rango, fin - timedelta(days=dias), hoy, vista, cada=cada)
     siguiente = (f'<a href="{enlace(rango, min(fin + timedelta(days=dias), hoy), hoy, vista, cada=cada)}" aria-label="Siguiente">›</a>'
                  if fin < hoy else '<span class="off" aria-hidden="true">›</span>')
-    vistas = "".join(f'<a href="{enlace(rango, fin, hoy, k, cada=cada)}"{panel.ACTIVA if k == vista else ""}>{nombre}</a>'
+    vistas = "".join(f'<a href="{enlace(rango, fin, hoy, k, cada=cada)}"{marco.ACTIVA if k == vista else ""}>{nombre}</a>'
                      for k, nombre in vistas_de(c).items())
     rangos = personalizado(rango, fin, hoy, vista, cada) + "".join(
-        f'<a href="{enlace(k, fin, hoy, vista, cada=cada)}"{panel.ACTIVA if k == rango else ""}>{nombre}</a>'
+        f'<a href="{enlace(k, fin, hoy, vista, cada=cada)}"{marco.ACTIVA if k == rango else ""}>{nombre}</a>'
         for k, nombre in RANGOS.items())
     opciones = metricas.opciones_cada(dias)
     granularidad = ("" if len(opciones) < 2 or vista not in VISTAS_PDF else
                     '<div class="cal-sw modo res-cada">' + "".join(
-                        f'<a href="{enlace(rango, fin, hoy, vista, cada=k)}"{panel.ACTIVA if k == cada else ""}>{metricas.CADA[k][0]}</a>'
+                        f'<a href="{enlace(rango, fin, hoy, vista, cada=k)}"{marco.ACTIVA if k == cada else ""}>{metricas.CADA[k][0]}</a>'
                         for k in opciones) + "</div>")
     guardado = await c.store.get(metricas.CLAVE_HORA)
     if guardado:
@@ -872,8 +872,8 @@ async def pagina(c: Cuenta, rango: str, fin: date | None = None, vista: str = "i
                                   lambda f: enlace(rango, fin, hoy, vista, formato=f, cada=cada), await picos_de(c, d))
         if c.imagenes_mes > 0:
             cuerpo += f'<div class="met">{await seccion_publicaciones(c, d)}</div>'
-    return panel.pagina(
-        await panel.menu_de(c, "resultados")
+    return marco.pagina(
+        await marco.menu_de(c, "resultados")
         + f'<main><div class="contenedor res">{await barra(c, rango, fin, hoy, vista, cada)}{cuerpo}</div></main>'
     )
 
@@ -896,7 +896,7 @@ def leer_rango(dias: str, desde: str, fin: date | None, hoy: date) -> tuple[str,
 @router.get("")
 async def ver(request: Request, dias: str = "7", fin: str = "", ver: str = "instagram", desde: str = "",
               formato: str = "", cada: str = ""):
-    if not (c := panel.cuenta_de_sesion(request)):
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     hoy = datetime.now(ZoneInfo(c.timezone)).date()
     rango, fin_ = leer_rango(dias, desde, leer_fin(fin), hoy)
@@ -965,7 +965,7 @@ async def descargar(request: Request, dias: str = "7", fin: str = "", ver: str =
                     archivo: str = "pdf", que: str = "cuenta", cada: str = ""):
     """Lo que se ve en Resultados (Instagram o Conversaciones, en su periodo): en PDF o CSV, del periodo
     día por día (`que=cuenta`) o una fila por publicación (`que=posts`, solo Instagram)."""
-    if not (c := panel.cuenta_de_sesion(request)):
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     from . import informe
     ver = ver if ver in VISTAS_PDF else "instagram"
@@ -983,9 +983,9 @@ async def descargar(request: Request, dias: str = "7", fin: str = "", ver: str =
         datos = csv_de(cuerpo, COLUMNAS_POSTS) if que == "posts" else csv_cuenta(m, d)
         tipo = "text/csv; charset=utf-8"
     elif que == "posts":
-        datos = await informe.posts_pdf(c, titulo_periodo(ini, fin_), await filas_posts(c, d), await panel.usuario(c))
+        datos = await informe.posts_pdf(c, titulo_periodo(ini, fin_), await filas_posts(c, d), await marco.usuario(c))
         tipo = "application/pdf"
     else:
-        datos = await informe.resultados_pdf(c, titulo_periodo(ini, fin_), d, m, await panel.usuario(c), ver, cada)
+        datos = await informe.resultados_pdf(c, titulo_periodo(ini, fin_), d, m, await marco.usuario(c), ver, cada)
         tipo = "application/pdf"
     return Response(datos, media_type=tipo, headers={"Content-Disposition": f'attachment; filename="{nombre}"'})

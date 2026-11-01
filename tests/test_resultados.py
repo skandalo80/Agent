@@ -11,7 +11,8 @@ import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 import app as bot  # noqa: E402
-from igbot import panel, resultados  # noqa: E402
+from igbot import marco  # noqa: E402
+from igbot import resultados  # noqa: E402
 from igbot.cuenta import cuenta  # noqa: E402
 from test_conectar import setup  # noqa: E402
 from test_cuenta import FakeInstagram  # noqa: E402
@@ -142,7 +143,7 @@ def test_inicio_del_panel(cliente, monkeypatch):
     async def empresa_lista(c):
         return lista["empresa"]
 
-    monkeypatch.setattr(panel, "empresa_lista", empresa_lista)
+    monkeypatch.setattr(marco, "empresa_lista", empresa_lista)
     # Recién conectada: primero su Perfil de empresa; mientras no lo llene ni lo omita, ahí se queda.
     for _ in range(2):
         r = client.get("/panel", follow_redirects=True)

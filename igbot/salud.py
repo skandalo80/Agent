@@ -17,7 +17,7 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from . import config, lentitud, limites
+from . import config, lentitud, limites, marco
 from .cuenta import Cuenta
 
 log = logging.getLogger("igbot.salud")
@@ -258,12 +258,11 @@ async def vigilar(cada: float = 60) -> None:
 
 @router.get("/salud")
 async def ver(request: Request):
-    from . import panel
-    c = panel.cuenta_de_sesion(request)
+    c = marco.cuenta_de_sesion(request)
     if not c:
         return RedirectResponse("/panel", status_code=303)
     if c.slug:
-        return await panel.no_encontrada(request)
+        return await marco.no_encontrada(request)
     d = await datos()
-    return panel.pagina(await panel.menu_de(c, "cuenta", sub="salud") + '<main><div class="contenedor">' + html(d)
+    return marco.pagina(await marco.menu_de(c, "cuenta", sub="salud") + '<main><div class="contenedor">' + html(d)
                         + "</div></main>")

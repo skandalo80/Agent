@@ -45,7 +45,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from PIL import Image, ImageOps
 
-from . import config, imagenes, informe, panel, posicionamiento, tools
+from . import config, imagenes, informe, marco, panel, posicionamiento, tools
 from .admin import PANEL, parse_when
 from .comentarios import Rule, shortcode
 from .estilos import (ESTILO_INICIAL, ESTILOS, LOGO_INICIAL, LOGO_PRESENCIA, MAX_ESTILOS, USO_COLOR, VIEJOS_ESTILOS,
@@ -549,7 +549,7 @@ async def generar(c: Cuenta, objetivo: str = "", tema: str = "", fotos: list[str
             referencias = [archivo(c, t).read_bytes() for t in marca.get("fotos", [])[:3] if archivo(c, t).is_file()]
             if referencias:
                 idea += f"\n{ESTILO_REFERENCIA}"
-        hecha = await imagenes.crear_pieza(c.store, PANEL, idea, p["plantilla"], texto_imagen(p, await panel.usuario(c)),
+        hecha = await imagenes.crear_pieza(c.store, PANEL, idea, p["plantilla"], texto_imagen(p, await marco.usuario(c)),
                                            referencias, permitir_extra=extra, marca=kit(marca, c),
                                            historia=p.get("medio") == "historia")
         if post_id is None:
@@ -557,17 +557,17 @@ async def generar(c: Cuenta, objetivo: str = "", tema: str = "", fotos: list[str
         else:
             await c.store.update_post(post_id, media_ids=[hecha["media_id"]])
         await guardar_pieza(c.store, post_id, p)
-        log.info("@%s: post %s con imagen %s (%s)", await panel.usuario(c), post_id, hecha["media_id"], hecha["tipo"])
+        log.info("@%s: post %s con imagen %s (%s)", await marco.usuario(c), post_id, hecha["media_id"], hecha["tipo"])
     return post_id
 
 
 async def generando(c: Cuenta, trabajo, volver: str, mensaje: str) -> HTMLResponse:
-    """En segundo plano (panel.trabajo_largo): sigue aunque cierre la página y, al terminar, lleva al editor.
+    """En segundo plano (marco.trabajo_largo): sigue aunque cierre la página y, al terminar, lleva al editor.
     Un doble clic o recargar no lo repite."""
     async def correr():
         yield f"/panel/contenido/post/{await trabajo()}"
 
-    return await panel.trabajo_largo(c, f"{mensaje} {volver}", mensaje, "Tarda alrededor de medio minuto.", volver,
+    return await marco.trabajo_largo(c, f"{mensaje} {volver}", mensaje, "Tarda alrededor de medio minuto.", volver,
                                      correr, boton="Ver tu post")
 
 
@@ -628,19 +628,19 @@ def campo_desde() -> str:
 async def pagina(c: Cuenta, actual: str, cuerpo: str, aviso: str = "", oscuro: bool = False) -> HTMLResponse:
     """Las secciones de Contenido van en el menú lateral. Calendario (y el editor del post y sus insights) no lleva
     los botones de crear campaña: esos son de Campañas."""
-    return panel.pagina(
-        await panel.menu_de(c, "contenido", sub=actual)
-        + panel.encabezado(f"Contenido · {NOMBRE_SECCION.get(actual, 'Calendario')}")
+    return marco.pagina(
+        await marco.menu_de(c, "contenido", sub=actual)
+        + marco.encabezado(f"Contenido · {NOMBRE_SECCION.get(actual, 'Calendario')}")
         + ('<main class="oscuro-pag">' if oscuro else "<main>") + '<div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
-        + await panel.pendiente(c, actual)
+        + await marco.pendiente(c, actual)
         + cuerpo + "</div></main>"
     )
 
 
 def sin_plan() -> HTMLResponse:
-    return panel.pagina(
-        panel.cabecera(salir=True)
+    return marco.pagina(
+        marco.cabecera(salir=True)
         + '<section class="oscuro entrar"><div class="contenedor centro">'
         '<h1>Tus posts, listos para aprobar<span class="punto">.</span></h1>'
         '<p class="bajada">Tu plan actual es el Asistente virtual, que contesta tus mensajes. El contenido'
@@ -970,7 +970,7 @@ def preparar_foto(data: bytes) -> bytes:
 
 @router.get("")
 async def ver(request: Request):
-    if not (c := panel.cuenta_de_sesion(request)):
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     if c.imagenes_mes <= 0:
         return sin_plan()
@@ -989,7 +989,7 @@ async def ver(request: Request):
 @router.get("/descargar")
 async def descargar_calendario(request: Request):
     """El periodo que se ve en Calendario (mes, semana o día) en PDF."""
-    if not (c := panel.cuenta_de_sesion(request)):
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     if c.imagenes_mes <= 0:
         return sin_plan()
@@ -1008,11 +1008,11 @@ async def descargar_calendario(request: Request):
 @router.post("/mover")
 async def mover_en_calendario(request: Request):
     """Lo manda el arrastre del calendario (panel.js), como formulario: la CSP no deja usar fetch."""
-    panel.de_aqui(request)
-    if not (c := panel.cuenta_de_sesion(request)):
+    marco.de_aqui(request)
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     from . import calendario as cal
-    f = await panel.form(request)
+    f = await marco.form(request)
     error = await cal.mover_item(c, f.get("ref", ""), f.get("dia", ""), f.get("h", ""))
     if not error and f.get("suave") == "1":  # panel.js ya movió la tarjeta: 204 deja la página como está
         return Response(status_code=204)
@@ -1033,7 +1033,7 @@ async def ver_nuevo():
 
 @router.get("/post/{post_id}")
 async def ver_post(request: Request, post_id: int):
-    if not (c := panel.cuenta_de_sesion(request)):
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     if c.imagenes_mes <= 0:
         return sin_plan()
@@ -1050,8 +1050,8 @@ async def ver_post(request: Request, post_id: int):
 
 @router.post("/post/{post_id}")
 async def editar(request: Request, post_id: int):
-    panel.de_aqui(request)
-    if not (c := panel.cuenta_de_sesion(request)):
+    marco.de_aqui(request)
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     datos = await request.form()  # multipart: puede traer su foto ("Subir foto")
     subida = datos.get("foto")
@@ -1153,7 +1153,7 @@ async def subir_foto(c: Cuenta, post_id: int, p: dict, data: bytes) -> None:
     with usar(c):
         try:
             hecha = await imagenes.crear_subida(c.store, PANEL, data, p.get("plantilla", imagenes.LIBRE),
-                                                texto_imagen(p, await panel.usuario(c)), kit(await marca_post(c, p)),
+                                                texto_imagen(p, await marco.usuario(c)), kit(await marca_post(c, p)),
                                                 historia=p.get("medio") == "historia")
         except (OSError, ValueError, Image.UnidentifiedImageError):
             raise imagenes.ErrorImagen("No pudimos leer esa imagen. Sube una foto JPG o PNG.")
@@ -1162,7 +1162,7 @@ async def subir_foto(c: Cuenta, post_id: int, p: dict, data: bytes) -> None:
 
 @router.get("/insights/{media_id}")
 async def ver_insights(request: Request, media_id: str):
-    if not (c := panel.cuenta_de_sesion(request)):
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     if not media_id.isdigit() or c.imagenes_mes <= 0:
         raise HTTPException(status_code=404)

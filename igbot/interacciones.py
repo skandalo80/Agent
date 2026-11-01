@@ -31,7 +31,8 @@ from html import escape
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from . import config, panel
+from . import asistente, config, marco
+from .contenido import reglas as de_posts
 from .cuenta import Cuenta
 
 log = logging.getLogger("igbot.interacciones")
@@ -205,8 +206,7 @@ EN_MENCION = ("\nOJO: este comentario o post es de OTRA cuenta, que menciona a @
 
 
 async def tono(c: Cuenta) -> str:
-    from . import asistente  # asistente importa panel
-    perfil = await panel.perfil(c)
+    perfil = await marco.perfil(c)
     e = asistente.estilo(perfil)
     lineas = ["TONO (el del asistente del negocio)", asistente.PERSONALIDADES[e["personalidad"]][4],
               f"- {asistente.TRATOS[e['trato']][1]}", f"- {asistente.EMOJIS[e['emojis']][1]}"]
@@ -254,7 +254,7 @@ async def atender(c: Cuenta, comment_id: str, author: str, text: str, store, ins
     ia = {}
     if not tipo or any(todas[tipo][x]["on"] and todas[tipo][x]["modo"] == "ia" for x in ("pub", "dm")):
         va_dm = any(r["dm"]["on"] for r in todas.values()) if not tipo else todas[tipo]["dm"]["on"]
-        ia = await (escribe or claude_escribe)(c, text, await panel.usuario(c), va_dm)
+        ia = await (escribe or claude_escribe)(c, text, await marco.usuario(c), va_dm)
         if not tipo:
             tipo = ia.get("tipo") if ia.get("tipo") in TIPOS else "otro"
     regla = todas[tipo]
@@ -302,7 +302,7 @@ async def mencion(c: Cuenta, value: dict, escribe=None) -> None:
         except Exception:
             log.exception("No se pudo leer la mención %s", clave)
     respuesta = texto_de(regla, str((await (escribe or claude_escribe)(
-        c, texto, await panel.usuario(c), False, mencion=True)).get("publica") or "") if texto else "")
+        c, texto, await marco.usuario(c), False, mencion=True)).get("publica") or "") if texto else "")
     if not respuesta:
         return
     try:
@@ -439,7 +439,6 @@ def _fila_clave(x: dict | None = None) -> str:
 
 
 async def paso_claves(c: Cuenta, datos: dict) -> str:
-    from .contenido import reglas as de_posts  # contenido importa el panel
     generales = "".join(_fila_clave(x) for x in claves(datos)) or _fila_clave()
     caja = ('<div class="as-caja it-tabla"><h3 class="as-pases-t">Palabras clave generales</h3>'
             f'<p class="ayuda">{AYUDAS["claves"]}</p>'
@@ -468,7 +467,7 @@ async def paso_resumen(c: Cuenta, datos: dict) -> str:
 
     def caja(paso: str, titulo: str, lineas: list[str]) -> str:
         lis = "".join(f"<li>{escape(x)}</li>" for x in lineas if x)
-        return f'<div class="as-caja as-res">{panel.cab_tarjeta(titulo, _href(paso))}<ul>{lis}</ul></div>'
+        return f'<div class="as-caja as-res">{marco.cab_tarjeta(titulo, _href(paso))}<ul>{lis}</ul></div>'
 
     comentarios = (resumen("comentarios") if "comentarios" in datos else ["Aún no la guardas: los comentarios siguen"
                                                                           " solo con palabras clave"])
@@ -481,7 +480,7 @@ async def paso_resumen(c: Cuenta, datos: dict) -> str:
             + caja("comentarios", "Comentarios", comentarios)
             + caja("menciones", "Menciones", resumen("menciones"))
             + caja("historias", "Respuestas a tus historias", resumen("historias"))
-            + caja("claves", "Palabras clave", [panel.plural_(n, "palabra clave general", "palabras clave generales")
+            + caja("claves", "Palabras clave", [marco.plural_(n, "palabra clave general", "palabras clave generales")
                                                 if n else "Sin palabras clave generales"])
             + "</div>"
             '<div class="as-caja"><fieldset class="it-tope"><legend>Máximo de respuestas al día</legend>'
@@ -505,7 +504,7 @@ def _barra(actual: str, hechos: set[str]) -> str:
             + f'<a class="as-paso{" on" if actual == "resumen" else ""}" href="{_href("resumen")}"'
             + (' aria-current="step"' if actual == "resumen" else "")
             + '><span class="as-n">★</span><span><b>Resumen</b></span></a>'
-            + panel.avance(listos * 100 // len(ORDEN))
+            + marco.avance(listos * 100 // len(ORDEN))
             + f'<small class="as-nota">{listos} de {len(ORDEN)} listos. Puedes volver a cualquier paso cuando'
             " quieras.</small></nav>")
 
@@ -518,7 +517,7 @@ def _pie(paso: str) -> str:
     i = ORDEN.index(paso)
     atras = f'<a class="boton secundario" href="{_href(ORDEN[i - 1])}">← Anterior</a>' if i else ""
     nombre = PASOS[i + 1][1].lower() if i + 1 < len(ORDEN) else "resumen"
-    return panel.pie_config(atras, f'<button class="boton" name="accion" value="siguiente">Siguiente: {nombre} →</button>')
+    return marco.pie_config(atras, f'<button class="boton" name="accion" value="siguiente">Siguiente: {nombre} →</button>')
 
 
 async def pagina(c: Cuenta, paso: str = "", aviso: str = "") -> HTMLResponse:
@@ -539,9 +538,9 @@ async def pagina(c: Cuenta, paso: str = "", aviso: str = "") -> HTMLResponse:
     cuerpo = (f'<form method="post" action="{BASE}"><button class="oculto" name="accion" value="siguiente" tabindex="-1"'
               f' aria-hidden="true">Siguiente</button><input type="hidden" name="paso" value="{paso}">'
               f'<p class="as-num">{num}</p>{cuerpo}{_pie(paso)}</form>')
-    return panel.pagina(
+    return marco.pagina(
         f"<style>{asistente.ESTILO}{ESTILO}</style>"
-        + await panel.menu_de(c, "contenido", sub="interacciones")
+        + await marco.menu_de(c, "contenido", sub="interacciones")
         + '<main class="as-main"><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
         + f'<div class="asis">{_barra(paso, hechos)}<div class="as-cont">{cuerpo}</div></div></div></main>')
@@ -549,8 +548,8 @@ async def pagina(c: Cuenta, paso: str = "", aviso: str = "") -> HTMLResponse:
 
 @router.get("/interacciones")
 async def ver(request: Request):
-    if not (c := panel.cuenta_de_sesion(request)):
-        return panel.entrar()
+    if not (c := marco.cuenta_de_sesion(request)):
+        return marco.entrar()
     if not disponible(c):
         return RedirectResponse("/panel", status_code=303)
     q = request.query_params
@@ -579,8 +578,8 @@ def _de_tabla(f, seccion: str) -> dict:
 
 @router.post("/interacciones")
 async def guardar(request: Request):
-    panel.de_aqui(request)
-    c = panel.cuenta_de_sesion(request)
+    marco.de_aqui(request)
+    c = marco.cuenta_de_sesion(request)
     if not c or not disponible(c):
         return RedirectResponse("/panel", status_code=303)
     f = await request.form()
@@ -604,7 +603,7 @@ async def guardar(request: Request):
     if paso in ORDEN:
         datos["pasos"] = sorted(set(datos.get("pasos") or []) | {paso})
     await c.store.set("interacciones", json.dumps(datos, ensure_ascii=False))
-    log.info("@%s guardó %s de sus interacciones", await panel.usuario(c), paso)
+    log.info("@%s guardó %s de sus interacciones", await marco.usuario(c), paso)
     if f.get("accion") == "aplicar" or paso == "resumen":
         return RedirectResponse(f"{_href(paso)}&ok=aplicado", status_code=303)
     siguiente = ORDEN[ORDEN.index(paso) + 1] if paso != ORDEN[-1] else "resumen"

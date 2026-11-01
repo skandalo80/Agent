@@ -22,7 +22,7 @@ import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from . import config, conectar, panel, pagina_fb
+from . import conectar, config, marco, pagina_fb
 from .cuenta import Cuenta, usar
 from .pagina_fb import FB_GRAPH
 
@@ -78,8 +78,8 @@ def entrar(solo: str = ""):
 @router.post("/conectar")
 async def conectar_desde_panel(request: Request):
     """Desde Conexión, ya con sesión: conectar su página."""
-    panel.de_aqui(request)
-    if not panel.cuenta_de_sesion(request):
+    marco.de_aqui(request)
+    if not marco.cuenta_de_sesion(request):
         return RedirectResponse("/panel", status_code=303)
     return _dialogo() if enabled() else RedirectResponse("/panel/facebook", status_code=303)
 
@@ -213,8 +213,8 @@ def _volver(aviso: str) -> RedirectResponse:
 
 
 def _sin_sesion(titulo: str, texto: str) -> HTMLResponse:
-    return panel.pagina(
-        panel.cabecera() + '<section class="oscuro entrar"><div class="contenedor centro">'
+    return marco.pagina(
+        marco.cabecera() + '<section class="oscuro entrar"><div class="contenedor centro">'
         f'<h1>{escape(titulo)}<span class="punto">.</span></h1><p class="bajada">{texto}</p>'
         '<div class="acciones"><a class="boton" href="/conectar/instagram">Entrar con Instagram</a>'
         '<a class="boton secundario" href="/panel/facebook/entrar">Probar de nuevo con Facebook</a></div>'
@@ -224,7 +224,7 @@ def _sin_sesion(titulo: str, texto: str) -> HTMLResponse:
 @router.get("/callback")
 async def callback(request: Request):
     p = request.query_params
-    sesion = panel.sesion(request) or ""
+    sesion = marco.sesion(request) or ""
     if p.get("error") or not p.get("code"):
         log.info("Login de Facebook cancelado: %s", p.get("error_reason") or p.get("error"))
         return _volver("cancelada") if sesion else RedirectResponse("/panel", status_code=303)
@@ -272,18 +272,18 @@ def elegir_pagina(paginas: list[dict], codigo: str):
         f'<div class="datos"><b>{escape(x.get("name", ""))}</b>'
         f'<span>{"Instagram enlazado: @" + escape(_ig(x)["username"]) if _ig(x).get("username") else "Sin Instagram enlazado"}</span>'
         '</div><button class="boton secundario chico">Elegir</button></form>' for x in paginas)
-    return panel.pagina(
-        panel.cabecera() + '<main><div class="contenedor"><div class="tarjeta"><h2>¿Qué página conectamos?</h2>'
+    return marco.pagina(
+        marco.cabecera() + '<main><div class="contenedor"><div class="tarjeta"><h2>¿Qué página conectamos?</h2>'
         '<p class="ayuda">Tu asistente va a contestar los mensajes y comentarios de esa página, y tus campañas'
         " se van a publicar también ahí.</p>" + filas + "</div></div></main>")
 
 
 @router.post("/elegir")
 async def elegir(request: Request):
-    panel.de_aqui(request)
+    marco.de_aqui(request)
     codigo = request.cookies.get(ELEGIR_COOKIE, "")
     t, sesion, paginas = _por_elegir.pop(codigo, (0, "", []))
-    pagina_id = (await panel.form(request)).get("pagina", "")
+    pagina_id = (await marco.form(request)).get("pagina", "")
     elegida = next((x for x in paginas if x["id"] == pagina_id), None)
     if not elegida or time.time() - t > TTL:
         return RedirectResponse("/panel", status_code=303)
@@ -297,16 +297,16 @@ async def adjuntar(c: Cuenta, p: dict) -> None:
     await pagina_fb.guardar(c.store, p["id"], p.get("name", ""), p["access_token"])
     if c.ig_via == "facebook":  # su Instagram va con el token de la página: el nuevo reemplaza al anterior
         await c.store.set("ig_token", p["access_token"])
-    if panel.conectar_pagina:
+    if marco.conectar_pagina:
         with usar(c):
-            await panel.conectar_pagina(c)
-    log.info("@%s conectó su página de Facebook %s (%s)", await panel.usuario(c), p.get("name"), p["id"])
+            await marco.conectar_pagina(c)
+    log.info("@%s conectó su página de Facebook %s (%s)", await marco.usuario(c), p.get("name"), p["id"])
 
 
 async def terminar(p: dict, sesion: str):
     ig = _ig(p)
     if sesion:  # ya tiene cuenta: solo se suma la página
-        if not (c := panel.buscar(sesion)):
+        if not (c := marco.buscar(sesion)):
             return RedirectResponse("/panel", status_code=303)
         if c.ig_via == "facebook" and ig.get("id") != c.ig_account_id:
             return _volver("otra_pagina")  # su Instagram depende de su página: tiene que ser la enlazada
@@ -318,12 +318,12 @@ async def terminar(p: dict, sesion: str):
             " de Instagram profesional enlazada. Enlázala desde la configuración de tu página o entra con tu"
             " Instagram; después puedes conectar tu página desde tu panel.")
     ig_id, usuario = str(ig["id"]), ig.get("username", "")
-    if not (c := panel.buscar(ig_id)):
+    if not (c := marco.buscar(ig_id)):
         nueva = await conectar.store.save_conexion(ig_id, usuario, p["access_token"], time.time() + 3650 * config.DIA)
         grande = (int(ig.get("followers_count") or 0) > config.CUENTA_GRANDE_SEGUIDORES
                   or int(ig.get("media_count") or 0) > config.CUENTA_GRANDE_POSTS)
         try:
-            c = await panel.alta(ig_id, usuario, p["access_token"], grande, via="facebook") if panel.alta else None
+            c = await marco.alta(ig_id, usuario, p["access_token"], grande, via="facebook") if marco.alta else None
         except Exception:
             log.exception("No se pudo dar de alta a @%s desde Facebook", usuario)
             c = None
@@ -336,7 +336,7 @@ async def terminar(p: dict, sesion: str):
                 " que lo encienda desde su panel." + (" Es una cuenta grande: quedó en revisión." if grande else ""))
     await adjuntar(c, p)
     r = RedirectResponse(f"{config.PUBLIC_URL}/panel", status_code=303)
-    panel.iniciar_sesion(r, ig_id)
+    marco.iniciar_sesion(r, ig_id)
     from . import acceso
     acceso.ultimo(r, "facebook")
     return r
@@ -347,13 +347,13 @@ async def terminar_sin_pagina(ig: dict, sesion: str):
     ig_id, usuario, token = str(ig["id"]), ig.get("username", ""), ig["token"]
     if sesion and sesion != ig_id:
         return _volver("otro_instagram")
-    c = panel.buscar(ig_id)
+    c = marco.buscar(ig_id)
     if not c or c.ig_via == "sistema":  # nueva, o ya conectada así: el token nuevo reemplaza al anterior
         nueva = await conectar.store.save_conexion(ig_id, usuario, token, time.time() + 3650 * config.DIA)
         grande = (int(ig.get("followers_count") or 0) > config.CUENTA_GRANDE_SEGUIDORES
                   or int(ig.get("media_count") or 0) > config.CUENTA_GRANDE_POSTS)
         try:
-            c = await panel.alta(ig_id, usuario, token, grande, via="sistema") if panel.alta else None
+            c = await marco.alta(ig_id, usuario, token, grande, via="sistema") if marco.alta else None
         except Exception:
             log.exception("No se pudo dar de alta a @%s con Meta sin página", usuario)
             c = None
@@ -366,7 +366,7 @@ async def terminar_sin_pagina(ig: dict, sesion: str):
                 " que lo encienda desde su panel." + (" Es una cuenta grande: quedó en revisión." if grande else ""))
     log.info("@%s entró con Meta sin página (%s)", usuario, ig_id)
     r = RedirectResponse(f"{config.PUBLIC_URL}/panel", status_code=303)
-    panel.iniciar_sesion(r, ig_id)
+    marco.iniciar_sesion(r, ig_id)
     from . import acceso
     acceso.ultimo(r, "facebook")
     return r
@@ -385,7 +385,7 @@ AVISOS = {
 
 @router.get("")
 async def ver(request: Request):
-    if not (c := panel.cuenta_de_sesion(request)):
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     return await pagina(c, request.query_params.get("aviso", ""))
 
@@ -419,24 +419,24 @@ async def pagina(c: Cuenta, aviso: str = ""):
                   '<p class="ayuda">Te llevamos a Facebook para que elijas tu página y des el permiso; al aceptar'
                   " vuelves aquí.</p></form></div>")
     aviso_html = f'<div class="aviso">{escape(AVISOS[aviso])}</div>' if aviso in AVISOS else ""
-    return panel.pagina(
-        await panel.menu_de(c, "cuenta", sub="conexion")
-        + f'<main class="contenido">{panel.encabezado("Tu página de Facebook")}{aviso_html}{cuerpo}</main>')
+    return marco.pagina(
+        await marco.menu_de(c, "cuenta", sub="conexion")
+        + f'<main class="contenido">{marco.encabezado("Tu página de Facebook")}{aviso_html}{cuerpo}</main>')
 
 
 @router.post("/publicar")
 async def cambiar_publicar(request: Request):
-    panel.de_aqui(request)
-    if not (c := panel.cuenta_de_sesion(request)):
+    marco.de_aqui(request)
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
-    await c.store.set("fb_publicar", "0" if (await panel.form(request)).get("publicar") == "0" else "1")
+    await c.store.set("fb_publicar", "0" if (await marco.form(request)).get("publicar") == "0" else "1")
     return RedirectResponse("/panel/facebook", status_code=303)
 
 
 @router.post("/desconectar")
 async def desconectar(request: Request):
-    panel.de_aqui(request)
-    if not (c := panel.cuenta_de_sesion(request)):
+    marco.de_aqui(request)
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     if c.ig_via != "facebook":  # si su Instagram va por la página, quitarla lo apagaría todo
         await pagina_fb.quitar(c.store)

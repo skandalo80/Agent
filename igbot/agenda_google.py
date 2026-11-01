@@ -34,7 +34,7 @@ import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
-from . import config, panel
+from . import config, marco
 from .cuenta import Cuenta
 from .google import Google
 
@@ -199,7 +199,7 @@ AVISOS = {
 
 @router.get("")
 async def ver(request: Request):
-    if not (c := panel.cuenta_de_sesion(request)):
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     return await pagina(c, request.query_params.get("aviso", ""))
 
@@ -247,15 +247,15 @@ async def pagina(c: Cuenta, aviso: str = ""):
                   '<p class="ayuda">Te llevamos a Google para que elijas la cuenta de tu negocio y des el permiso;'
                   " al aceptar vuelves aquí.</p></form></div>")
     aviso_html = f'<div class="aviso">{escape(AVISOS[aviso])}</div>' if aviso in AVISOS else ""
-    return panel.pagina(
-        await panel.menu_de(c, "cuenta", sub="conexion")
-        + f'<main class="contenido">{panel.encabezado("Tu calendario")}{aviso_html}{cuerpo}</main>')
+    return marco.pagina(
+        await marco.menu_de(c, "cuenta", sub="conexion")
+        + f'<main class="contenido">{marco.encabezado("Tu calendario")}{aviso_html}{cuerpo}</main>')
 
 
 @router.post("/conectar")
 async def conectar(request: Request):
-    panel.de_aqui(request)
-    if not (c := panel.cuenta_de_sesion(request)):
+    marco.de_aqui(request)
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     if not enabled():
         return RedirectResponse("/panel/google", status_code=303)
@@ -275,7 +275,7 @@ async def callback(request: Request):
     from . import acceso
     if acceso.es_de_entrar(request.query_params.get("state", "")):  # entrar con Google, no conectar el calendario
         return await acceso.vuelta_google(request)
-    if not (c := panel.cuenta_de_sesion(request)):
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     p = dict(request.query_params)
     if not p.get("code"):
@@ -298,7 +298,7 @@ async def callback(request: Request):
     await guardar(c, {"email": correo_de(datos.get("id_token", "")), "refresh_token": datos["refresh_token"],
                       "permisos": " ".join(sorted(permisos)), "fecha": int(time.time()),
                       "tipo": antes.get("tipo", "presencial"), "minutos": antes.get("minutos") or 30})
-    log.info("@%s conectó su Google Calendar", await panel.usuario(c))
+    log.info("@%s conectó su Google Calendar", await marco.usuario(c))
     return _volver("conectado")
 
 
@@ -310,10 +310,10 @@ def _volver(aviso: str) -> RedirectResponse:
 
 @router.post("/guardar")
 async def guardar_opciones(request: Request):
-    panel.de_aqui(request)
-    if not (c := panel.cuenta_de_sesion(request)):
+    marco.de_aqui(request)
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
-    f = await panel.form(request)
+    f = await marco.form(request)
     con = await conexion(c)
     if con:
         minutos = int(f["minutos"]) if f.get("minutos", "").isdigit() and int(f["minutos"]) in MINUTOS else 30
@@ -324,8 +324,8 @@ async def guardar_opciones(request: Request):
 
 @router.post("/desconectar")
 async def desconectar(request: Request):
-    panel.de_aqui(request)
-    if not (c := panel.cuenta_de_sesion(request)):
+    marco.de_aqui(request)
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     if token := (await conexion(c)).get("refresh_token"):
         await revocar(token)

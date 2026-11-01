@@ -35,7 +35,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
 
-from . import config, panel, sitio
+from . import config, empresa, marco, sitio
 from .cuenta import Cuenta, usar
 
 log = logging.getLogger("igbot.tienda_shopify")
@@ -163,7 +163,7 @@ DATOS_TIENDA = "{ shop { name myshopifyDomain primaryDomain { host } } }"
 
 @router.get("")
 async def ver(request: Request):
-    if not (c := panel.cuenta_de_sesion(request)):
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     return await pagina(c, request.query_params.get("aviso", ""))
 
@@ -178,7 +178,6 @@ AVISOS = {
 
 async def pagina(c: Cuenta, aviso: str = "", error: str = ""):
     con = await conexion(c)
-    from . import empresa  # empresa importa contenido, que importa el panel
     sitio_web = (await empresa.de(c)).get("sitio_web", "")
     if not enabled():
         cuerpo = ('<div class="tarjeta"><h2>Conecta tu Shopify</h2><p class="ayuda">Muy pronto vas a poder conectar tu'
@@ -216,19 +215,19 @@ async def pagina(c: Cuenta, aviso: str = "", error: str = ""):
                   '<p class="ayuda">Te llevamos a tu Shopify para que des el permiso; al aceptar vuelves aquí.</p>'
                   "</form></div>")
     aviso_html = f'<div class="aviso">{escape(AVISOS[aviso])}</div>' if aviso in AVISOS else ""
-    return panel.pagina(
-        await panel.menu_de(c, "cuenta", sub="conexion")
-        + f'<main class="contenido">{panel.encabezado("Tu tienda")}{aviso_html}{cuerpo}</main>')
+    return marco.pagina(
+        await marco.menu_de(c, "cuenta", sub="conexion")
+        + f'<main class="contenido">{marco.encabezado("Tu tienda")}{aviso_html}{cuerpo}</main>')
 
 
 @router.post("/conectar")
 async def conectar(request: Request):
-    panel.de_aqui(request)
-    if not (c := panel.cuenta_de_sesion(request)):
+    marco.de_aqui(request)
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     if not enabled():
         return RedirectResponse("/panel/shopify", status_code=303)
-    f = await panel.form(request)
+    f = await marco.form(request)
     try:
         tienda = await tienda_de(f.get("tienda", "")[:200])
     except sitio.ErrorSitio as e:
@@ -244,7 +243,7 @@ async def conectar(request: Request):
 
 @router.get("/callback")
 async def callback(request: Request):
-    if not (c := panel.cuenta_de_sesion(request)):
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     params = list(request.query_params.multi_items())
     p = dict(params)
@@ -273,7 +272,7 @@ async def callback(request: Request):
         dominios.add(host.lower())
     con.update(nombre=str(shop.get("name", ""))[:80], dominios=sorted(d.removeprefix("www.") for d in dominios if d))
     await guardar(c, con)
-    log.info("@%s conectó su tienda Shopify %s", await panel.usuario(c), tienda)
+    log.info("@%s conectó su tienda Shopify %s", await marco.usuario(c), tienda)
     return _volver("conectada")
 
 
@@ -285,8 +284,8 @@ def _volver(aviso: str) -> RedirectResponse:
 
 @router.post("/desconectar")
 async def desconectar(request: Request):
-    panel.de_aqui(request)
-    if not (c := panel.cuenta_de_sesion(request)):
+    marco.de_aqui(request)
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     await guardar(c, {})
     return RedirectResponse("/panel/shopify?aviso=desconectada", status_code=303)

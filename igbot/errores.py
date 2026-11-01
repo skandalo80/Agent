@@ -12,7 +12,7 @@ import traceback
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
-from . import config, panel, skandi
+from . import config, marco, skandi
 
 log = logging.getLogger("igbot.errores")
 
@@ -40,7 +40,7 @@ async def avisar(request: Request, exc: Exception) -> None:
     clave = (request.url.path, type(exc).__name__)
     if not toca_avisar(clave):
         return
-    quien = panel.sesion(request) or "sin sesión"
+    quien = marco.sesion(request) or "sin sesión"
     pila = "".join(traceback.format_exception(exc)[-6:])
     texto = (f"Error inesperado en {request.method} {request.url.path}\n"
              f"Cuenta (id de Instagram): {quien}\n\n{type(exc).__name__}: {exc}\n\n{pila}\n"
@@ -57,7 +57,7 @@ async def inesperado(request: Request, exc: Exception):
         log.exception("No se pudo avisar del error")
     if request.url.path.startswith(("/panel", "/conectar")):
         try:
-            return await panel.error_inesperado(request)
+            return await marco.error_inesperado(request)
         except Exception:
             log.exception("No se pudo armar la página de error")
     return JSONResponse({"detail": "Error interno"}, status_code=500)

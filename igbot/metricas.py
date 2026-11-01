@@ -24,7 +24,7 @@ metricas_dia. Las métricas que Instagram no da (cuenta chica, permiso que falta
 saltan sin romper las demás.
 
 La sección de Resultados son tarjetas con números, líneas y donas en SVG hechas aquí
-(el CSP del panel no deja JavaScript); sus estilos están en panel.ESTILO (.met).
+(el CSP del panel no deja JavaScript); sus estilos están en marco.ESTILO (.met).
 """
 import json
 import logging

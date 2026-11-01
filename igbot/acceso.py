@@ -32,7 +32,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from urllib.parse import urlencode
 
-from . import config, panel
+from . import conectar, config, marco
 from .cuenta import Cuenta
 
 log = logging.getLogger("igbot.acceso")
@@ -129,12 +129,12 @@ async def guardar_correo(c: Cuenta, correo: str) -> None:
     datos["owner_email"] = correo
     await c.store.set("ajustes", json.dumps(datos, ensure_ascii=False))
     ajustes.aplicar(c, datos)
-    log.info("@%s quedó con el correo con el que se registró", await panel.usuario(c))
+    log.info("@%s quedó con el correo con el que se registró", await marco.usuario(c))
 
 
 def entrar_a(c: Cuenta, metodo: str) -> RedirectResponse:
     r = RedirectResponse("/panel", status_code=303)
-    panel.iniciar_sesion(r, c.ig_account_id)
+    marco.iniciar_sesion(r, c.ig_account_id)
     ultimo(r, metodo)
     return r
 
@@ -173,8 +173,8 @@ def _puede_enviar(correo: str) -> bool:
 
 
 def pagina(titulo: str, bajada: str, cuerpo: str = "") -> HTMLResponse:
-    return panel.pagina(
-        panel.cabecera()
+    return marco.pagina(
+        marco.cabecera()
         + '<section class="oscuro entrar"><div class="contenedor centro">'
         f'<h1>{titulo}<span class="punto">.</span></h1>'
         f'<p class="bajada">{bajada}</p>{cuerpo}'
@@ -188,12 +188,11 @@ def ver():
 
 @router.post("")
 async def pedir(request: Request):
-    panel.de_aqui(request)
+    marco.de_aqui(request)
     correo = str((await request.form()).get("correo", "")).strip().lower()
     if not CORREO.match(correo):
-        return panel.entrar(request, "Revisa el correo: parece que le falta algo.")
+        return marco.entrar(request, "Revisa el correo: parece que le falta algo.")
     c = cuenta_de_correo(correo)
-    from . import conectar  # conectar usa panel; aquí ya está cargado
     if conectar.google and _puede_enviar(correo):
         dato = f"i:{c.ig_account_id}" if c else f"c:{correo}"
         enlace = f"{config.PUBLIC_URL}/panel/correo/entrar?t={nuevo_enlace(dato)}"
@@ -239,11 +238,11 @@ def confirmar(t: str = ""):
 
 @router.post("/entrar")
 async def entrar(request: Request):
-    panel.de_aqui(request)
+    marco.de_aqui(request)
     t = str((await request.form()).get("t", ""))
     dato = de_enlace(t) or ""
     tipo, _, valor = dato.partition(":")
-    if tipo == "i" and (c := panel.buscar(valor)):
+    if tipo == "i" and (c := marco.buscar(valor)):
         if not await usar_enlace(t):
             return vencido()
         return entrar_a(c, "correo")
@@ -318,14 +317,14 @@ async def vuelta_google(request: Request):
             or not 0 <= time.time() - int(partes[1]) < 600
             or not hmac.compare_digest(partes[3], _firma(".".join(partes[:3])))):
         log.warning("Vuelta de Google para entrar con state inválido")
-        return panel.entrar(request, "No pudimos entrar con Google. Intenta de nuevo.")
+        return marco.entrar(request, "No pudimos entrar con Google. Intenta de nuevo.")
     try:
         correo = g.correo_de((await g.cambiar_codigo(p["code"])).get("id_token", "")).strip().lower()
     except Exception:
         log.exception("No se pudo entrar con Google")
         correo = ""
     if not CORREO.match(correo):
-        return panel.entrar(request, "No pudimos entrar con Google. Intenta de nuevo.")
+        return marco.entrar(request, "No pudimos entrar con Google. Intenta de nuevo.")
     r = entrar_a(c, "google") if (c := cuenta_de_correo(correo)) else a_enlazar(correo)
     ultimo(r, "google")
     r.delete_cookie(GOOGLE_COOKIE, path="/panel/google")
@@ -397,7 +396,7 @@ async def vuelta_apple(request: Request):
             or not partes[1].isdigit() or not 0 <= time.time() - int(partes[1]) < 600
             or not hmac.compare_digest(partes[3], _firma(".".join(partes[:3])))):
         log.warning("Vuelta de Apple con state inválido")
-        return panel.entrar(request, "No pudimos entrar con Apple. Intenta de nuevo.")
+        return marco.entrar(request, "No pudimos entrar con Apple. Intenta de nuevo.")
     import httpx
     try:
         async with httpx.AsyncClient(timeout=15) as http:
@@ -412,7 +411,7 @@ async def vuelta_apple(request: Request):
         log.exception("No se pudo entrar con Apple")
         correo = ""
     if not CORREO.match(correo):
-        return panel.entrar(request, "No pudimos entrar con Apple. Intenta de nuevo.")
+        return marco.entrar(request, "No pudimos entrar con Apple. Intenta de nuevo.")
     resp = entrar_a(c, "apple") if (c := cuenta_de_correo(correo)) else a_enlazar(correo)
     ultimo(resp, "apple")
     resp.delete_cookie(APPLE_COOKIE, path="/panel/correo/apple", secure=True, httponly=True, samesite="none")

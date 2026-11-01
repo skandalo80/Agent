@@ -26,7 +26,7 @@ from html import escape
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
-from . import imagenes, panel
+from . import imagenes, marco
 from .contenido import (N_HASHTAGS, archivo, estilos_de, guardar_fotos, hashtags_de, leer_hashtags, marca_de, n_hashtags_de,
                         png_logo, preparar_logo, sin_plan, url_imagen, usos_color)
 from .cuenta import Cuenta
@@ -149,7 +149,7 @@ def marca_orden(n: int) -> str:
 def imagen_tarjeta(clave: str, fondo: str) -> str:
     """La imagen de la tarjeta (igbot/static/tarjetas/marca/) o, mientras no exista, su color de respaldo."""
     for ext in ("webp", "png", "jpg"):
-        if (panel.STATIC / "tarjetas" / "marca" / f"{clave}.{ext}").is_file():
+        if (marco.STATIC / "tarjetas" / "marca" / f"{clave}.{ext}").is_file():
             return f'<span class="wiz-img" style="--fondo:{fondo} url(/panel/static/tarjetas/marca/{clave}.{ext})"></span>'
     return f'<span class="wiz-img" style="--fondo:{fondo}"></span>'
 
@@ -157,7 +157,7 @@ def imagen_tarjeta(clave: str, fondo: str) -> str:
 def foto_o(clave: str, respaldo: str) -> str:
     """La imagen de la tarjeta si ya existe; si no, el dibujo de respaldo (la muestra con tus colores o tu logo)."""
     return imagen_tarjeta(clave, "#2a2a2d") if any(
-        (panel.STATIC / "tarjetas" / "marca" / f"{clave}.{ext}").is_file() for ext in ("webp", "png", "jpg")) else respaldo
+        (marco.STATIC / "tarjetas" / "marca" / f"{clave}.{ext}").is_file() for ext in ("webp", "png", "jpg")) else respaldo
 
 
 def etiquetas(lista_: tuple[str, ...]) -> str:
@@ -176,7 +176,7 @@ def menu_pasos(actual: str, hechos_: set[str]) -> str:
               "<span>Resumen</span></a>")
     avance = len(hechos_ & set(CLAVES)) * 100 // len(CLAVES)
     return ('<details class="wiz-pasos" open><summary><span class="hamb"><i></i><i></i><i></i></span>Tu marca</summary>'
-            f'<nav>{items}</nav>{panel.avance(avance)}<div class="mrc-tip"><b>Tú eliges, la IA diseña</b>Entra a cualquier paso cuando'
+            f'<nav>{items}</nav>{marco.avance(avance)}<div class="mrc-tip"><b>Tú eliges, la IA diseña</b>Entra a cualquier paso cuando'
             " quieras. Lo que eliges aquí se aplica a todas tus campañas.</div></details>")
 
 
@@ -188,7 +188,7 @@ def cabeza(i: int) -> str:
 def pie(i: int) -> str:
     anterior = f'<a class="boton secundario" href="{BASE}?paso={i - 1}">← Anterior</a>' if i > 1 else ""
     nombre = PASOS[i][1].lower() if i < len(PASOS) else "resumen"
-    return panel.pie_config(anterior, f'<button class="boton mrc-sigue" name="accion" value="guardar">'
+    return marco.pie_config(anterior, f'<button class="boton mrc-sigue" name="accion" value="guardar">'
                                       f"Siguiente: {nombre} →</button>", "Puedes cambiarlo cuando quieras.")
 
 
@@ -350,7 +350,7 @@ def resumen(c: Cuenta, marca: dict) -> str:
         boton = "Editar" if k in hechos_ else "Completar"
         pendiente = "" if k in hechos_ else '<p class="ayuda">Aún no lo completas.</p>'
         return (f'<div class="wiz-res mrc-res{" ancho" if ancho else ""}">'
-                f'{panel.cab_tarjeta(titulo, f"{BASE}?paso={i}", boton)}<p>{desc}</p>{pendiente or cuerpo}</div>')
+                f'{marco.cab_tarjeta(titulo, f"{BASE}?paso={i}", boton)}<p>{desc}</p>{pendiente or cuerpo}</div>')
 
     estilos = "".join(
         f'<div class="mrc-fila"><span class="num">{n}</span>{imagen_tarjeta(k, TARJETA_ESTILO[k][2])}'
@@ -403,12 +403,12 @@ async def pagina_marca(c: Cuenta, paso: str, marca: dict | None = None, aviso: s
                      + cabeza(i) + hacer()
                      + pie(i) + "</form>")
     # El aviso de lo que falta va dentro del paso, para que los pasos queden a la altura de las demás páginas.
-    falta = await panel.pendiente(c, "marca")
+    falta = await marco.pendiente(c, "marca")
     cuerpo = f'<div class="wiz mrc">{menu_pasos(actual, hechos_)}<div class="wiz-main">{falta}{contenido}</div></div>'
     # Tu marca es de la cuenta (Configuración, abajo en el menú), no una sección de Contenido.
-    return panel.pagina(
-        await panel.menu_de(c, "cuenta", sub="marca")
-        + panel.encabezado("Tu cuenta · Tu marca")
+    return marco.pagina(
+        await marco.menu_de(c, "cuenta", sub="marca")
+        + marco.encabezado("Tu cuenta · Tu marca")
         + '<main class="oscuro-pag"><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
         + cuerpo + "</div></main>")
@@ -453,7 +453,7 @@ def guardar_paso(f, antes: dict, paso: str) -> tuple[dict, str]:
 
 @router.get("/marca")
 async def ver_marca(request: Request):
-    if not (c := panel.cuenta_de_sesion(request)):
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     if c.imagenes_mes <= 0:
         return sin_plan()
@@ -467,8 +467,8 @@ async def ver_marca(request: Request):
 
 @router.post("/marca")
 async def guardar_marca(request: Request):
-    panel.de_aqui(request)
-    if not (c := panel.cuenta_de_sesion(request)):
+    marco.de_aqui(request)
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     if c.imagenes_mes <= 0:
         return sin_plan()
@@ -512,7 +512,7 @@ async def guardar_marca(request: Request):
             aviso = "No se pudo leer el logo (usa JPG o PNG de hasta 10 MB)."
 
     await c.store.set("marca", json.dumps(datos, ensure_ascii=False))
-    log.info("@%s guardó Tu marca: %s", await panel.usuario(c), paso)
+    log.info("@%s guardó Tu marca: %s", await marco.usuario(c), paso)
     if accion == "aplicar" and not aviso:
         aviso = "Cambios aplicados."
     if accion != "guardar" or aviso:  # Aplicar, o subió o quitó el logo: se queda en el paso para verlo
