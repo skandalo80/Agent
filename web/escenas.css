@@ -47,7 +47,7 @@
 .tel-nombre small { display: flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 500; color: var(--tenue); }
 .tel-nombre small::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--neon); }
 .tel-hora { font-size: 11px; font-weight: 600; color: var(--tenue); font-variant-numeric: tabular-nums; }
-.tel-cuerpo { padding: 14px 2px 4px; display: flex; flex-direction: column; gap: 9px; font-size: 11.5px; }
+.tel-cuerpo { padding: 12px 2px 4px; display: flex; flex-direction: column; gap: 8px; font-size: 11.5px; }
 .tel-sistema { align-self: center; text-align: center; font-size: 10px; color: var(--tenue); padding: 0 8px; margin-bottom: 2px; }
 .tel-sistema b { color: var(--texto); font-weight: 700; }
 .bur { padding: 9px 12px; border-radius: 15px; line-height: 1.45; max-width: 86%; box-shadow: 0 2px 5px #00000022; }
@@ -63,6 +63,7 @@
   background: var(--naranja); color: var(--grafito); font-size: 11px; font-weight: 800; letter-spacing: .2px;
   box-shadow: 0 3px 0 var(--naranja-sombra);
 }
+.meta { align-self: center; display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; background: var(--grafito); border: 1px solid var(--linea); color: var(--texto); font-size: 10px; font-weight: 700; }
 .flota {
   position: absolute; z-index: 3; right: 0; bottom: 18px; width: 190px; padding: 12px 14px; display: grid; gap: 2px;
   background: var(--tarjeta-alta); color: var(--tinta); border: 1px solid #3A3C42; border-radius: 16px;
@@ -78,7 +79,7 @@
 .visual-hook { min-height: 0; display: grid; justify-items: center; padding: 6px 0 24px; }
 .visual-hook .tel { translate: -22px 0; }
 .visual-hook .flota { right: 0; bottom: 14px; }
-.con-flota .tel { padding-bottom: 72px; }
+.con-flota .tel { padding-bottom: 92px; }
 
 /* Un día con Skandar */
 .casos { padding-bottom: 60px; }
@@ -160,7 +161,7 @@
   .visual-hook { padding: 0 0 26px; }
   .visual-hook .tel, .caso-visual .tel { translate: 0 0; width: min(var(--esc-ancho), calc(100% - 40px)); justify-self: start; }
   .visual-hook .flota, .caso-visual .flota.cita { right: 0; bottom: 10px; width: 176px; }
-  .con-flota .tel { padding-bottom: 96px; }
+  .con-flota .tel { padding-bottom: 112px; }
   .casos-intro { margin-bottom: 36px; }
   .caso { grid-template-columns: 1fr; gap: 28px; padding: 32px 0; }
   .caso.invertido .caso-texto { order: 0; }

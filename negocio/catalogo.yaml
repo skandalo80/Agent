@@ -49,9 +49,10 @@ paquetes:
       - Sabe a qué historia o anuncio le responden y agradece cuando te mencionan en una historia
       - Te pasa la conversación cuando el cliente pide una persona, y se calla cuando tú contestas
       - Contesta también Facebook Messenger y los comentarios de tu página, si la conectas
+      - Cotiza con tus precios y anota quién pidió precio y de qué
       - Agenda citas en tu Google Calendar, si lo conectas
-      - Cobra con links de pago de Mercado Pago o Stripe, si los conectas
-      - Marca los chats que llegan de tus anuncios y la venta que dejó cada uno (pagos por link o Shopify)
+      - Marca los chats que llegan de tus anuncios, con la cotización, la cita o la venta que dejó cada uno (Shopify o anticipos por el chat), y se lo avisa a Meta
+      - Si conectas Mercado Pago o Stripe, cobra anticipos por el chat
       - Panel con Inicio (lo de hoy), tus conversaciones y tus resultados
   community:
     nombre: Community Manager

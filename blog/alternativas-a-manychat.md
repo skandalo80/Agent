@@ -33,7 +33,7 @@ Convienen para organizar tu contenido, pero no contestan mensajes y no te dicen 
 
 **Skandar** contesta los mensajes de Instagram con la información de tu negocio, sin flujos: precios, horarios, disponibilidad y preguntas frecuentes, en español y con tu tono. Cuando alguien pide a una persona, se pausa y te avisa.
 
-También marca los chats que llegan de tus anuncios, para que sepas cuál te trajo clientes. Su plan Community Manager además mantiene tu perfil activo con campañas, imágenes y textos de tu marca, y los publica. Funciona con Instagram y Facebook Messenger, agenda citas en tu Google Calendar y cobra con links de Mercado Pago o Stripe; por ahora no atiende WhatsApp. Cuesta US$49 al mes más IVA el Asistente virtual y US$79 al mes más IVA el Community Manager.
+También marca los chats que llegan de tus anuncios, para que sepas cuál te trajo clientes. Su plan Community Manager además mantiene tu perfil activo con campañas, imágenes y textos de tu marca, y los publica. Funciona con Instagram y Facebook Messenger, cotiza, agenda citas en tu Google Calendar y le avisa a Meta qué anuncio trajo cada cliente; por ahora no atiende WhatsApp. Cuesta US$49 al mes más IVA el Asistente virtual y US$79 al mes más IVA el Community Manager.
 
 Conviene si tu negocio vive en Instagram y quieres que tus mensajes, tu contenido y tus anuncios trabajen juntos. Lee la [comparación con ManyChat](/blog/skandar-vs-manychat) para ver las diferencias a detalle.
 

@@ -29,5 +29,5 @@ idea_nota: Nace de las dudas de tallas que te llegan por DM.
 ## faq
 - ¿El asistente sabe qué tengo en existencia? | Sabe lo que tú le cargas en el panel: productos, precios, tallas y colores. Cuando algo se agota, lo actualizas y deja de ofrecerlo.
 - ¿Puede apartar prendas? | Puede tomar los datos del cliente y la prenda, y pasarte la conversación para que confirmes el apartado y el pago.
-- ¿Puede cobrar por el chat? | Sí. Si conectas Mercado Pago o Stripe, manda un link de pago con el precio del producto y el pago aparece en ese chat, con el anuncio que trajo al cliente.
+- ¿Puede cerrar la venta por el chat? | Sí. Si tienes tienda en línea, manda el link del producto y, si es Shopify, la compra aparece en ese chat con el anuncio que trajo al cliente. Si conectas Mercado Pago o Stripe, también puede cobrar un apartado por el chat.
 - ¿Puede contestar comentarios en mis publicaciones? | Sí. En los posts con palabra clave, quien comenta recibe la información por DM y el asistente sigue la conversación.
