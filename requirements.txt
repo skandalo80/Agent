@@ -9,7 +9,7 @@ anthropic==1.13.0
 google-auth==2.62.0
 requests==2.34.2
 fpdf2==2.8.9
-PyYAML==6.0.2
+PyYAML==6.0.3
 Pillow==13.0.0
 python-multipart==0.0.32
 PyJWT[crypto]==2.15.0
