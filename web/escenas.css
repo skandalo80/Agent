@@ -74,12 +74,28 @@
 .flota small { color: var(--tenue); font-size: 11px; }
 .flota-meta { display: flex; align-items: center; gap: 5px; margin-top: 4px; color: var(--texto); }
 
-/* Portada */
-.portada-hook .portada-rejilla { grid-template-columns: 1.05fr .95fr; }
+/* Portada: el celular completo debe caber en la primera pantalla. En escritorio la escena se reduce según la
+   altura de la ventana ("zoom" sí cambia el tamaño que ocupa, "scale" no), y el texto queda centrado a su altura. */
+.portada-hook { padding: 48px 0 56px; }
+.portada-hook .portada-rejilla { grid-template-columns: 1.05fr .95fr; align-items: center; }
+.visual-hook { zoom: .92; }
+@media (min-width: 801px) and (max-height: 960px) { .visual-hook { zoom: .84; } }
+@media (min-width: 801px) and (max-height: 880px) { .visual-hook { zoom: .76; } }
+@media (min-width: 801px) and (max-height: 800px) { .visual-hook { zoom: .68; } }
+@media (min-width: 801px) and (max-height: 720px) { .visual-hook { zoom: .6; } }
 .visual-hook { min-height: 0; display: grid; justify-items: center; padding: 6px 0 24px; }
 .visual-hook .tel { translate: -22px 0; }
 .visual-hook .flota { right: 0; bottom: 14px; }
-.con-flota .tel { padding-bottom: 92px; }
+.con-flota .tel { padding-bottom: 84px; }
+
+/* Pantallas que "encajan" al bajar (scroll snap), solo en escritorio y en ventanas altas: la portada y cada escena
+   se acomodan centradas al soltar el scroll. "proximity" solo ajusta cuando ya estás cerca; nunca secuestra el scroll. */
+@media (min-width: 801px) and (min-height: 700px) {
+  html { scroll-snap-type: y proximity; }
+  .portada-hook { scroll-snap-align: start; min-height: calc(100vh - 72px); display: grid; align-content: center; }
+  .caso { scroll-snap-align: center; min-height: min(calc(100vh - 72px), 760px); }
+  .casos-intro { scroll-snap-align: start; scroll-margin-top: 72px; }
+}
 
 /* Un día con Skandar */
 .casos { padding-bottom: 60px; }
@@ -158,7 +174,7 @@
 
 @media (max-width: 800px) {
   .portada-hook .portada-rejilla { grid-template-columns: 1fr; gap: 40px; }
-  .visual-hook { padding: 0 0 26px; }
+  .visual-hook { padding: 0 0 26px; zoom: 1; }
   .visual-hook .tel, .caso-visual .tel { translate: 0 0; width: min(var(--esc-ancho), calc(100% - 40px)); justify-self: start; }
   .visual-hook .flota, .caso-visual .flota.cita { right: 0; bottom: 10px; width: 176px; }
   .con-flota .tel { padding-bottom: 112px; }
