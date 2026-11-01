@@ -24,7 +24,7 @@ Casi todo lo que te comentan cae en uno de estos:
 
 **Al elogio,** una respuesta corta, en el tono de la persona. Si escribió con energía, con energía. Si fue sobrio, sobrio. Repetir la misma frase en veinte comentarios se nota.
 
-**A la intención de compra,** confirmación pública breve y la conversación por DM, donde ya puedes mandar un link de pago. Si tienes una [palabra clave activa](/blog/comenta-y-recibe-por-dm), este paso se hace solo.
+**A la intención de compra,** confirmación pública breve y la conversación por DM, donde ya puedes cotizar o mandar el link de tu tienda. Si tienes una [palabra clave activa](/blog/comenta-y-recibe-por-dm), este paso se hace solo.
 
 **A la queja,** dos cosas en público: que la viste y que la vas a resolver. Nada de discutir ni de pedir pruebas en el comentario. El resto, por DM, y esa conversación la debe tomar una persona de tu equipo, no un sistema.
 

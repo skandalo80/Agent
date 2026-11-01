@@ -33,14 +33,13 @@ GIROS = RAIZ / "giros"
 PAGINAS = RAIZ / "paginas"
 WEB = RAIZ / "web"
 SITIO = "https://skandar.online"
-CSS_VERSION = "2026-11-01b"
+CSS_VERSION = "2026-11-01d"
 
 # Orden en el índice: el primero es el destacado.
 ORDEN = [
     "contestar-mensajes-instagram-24-horas",
     "avisar-a-meta-ventas-por-dm",
     "agendar-citas-por-instagram",
-    "cobrar-por-instagram-link-de-pago",
     "contestar-comentarios-instagram-segun-quien-escribe",
     "empezar-a-vender-por-instagram-desde-el-celular",
     "como-escribir-el-brief-de-una-campana",
@@ -51,6 +50,7 @@ ORDEN = [
     "community-manager-con-inteligencia-artificial",
     "skandar-vs-manychat",
     "alternativas-a-manychat",
+    "cobrar-por-instagram-link-de-pago",
 ]
 
 MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",

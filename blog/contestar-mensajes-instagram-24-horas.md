@@ -60,7 +60,7 @@ Lo explicamos a detalle en [cuándo un asistente debe pasar la conversación a u
 
 ## Cómo lo hace Skandar
 
-Tu asistente contesta por Instagram y Messenger a cualquier hora con tu información, tus precios y tu tono. Agenda citas en tu Google Calendar, cobra con links de Mercado Pago o Stripe dentro del chat y, cuando alguien pide a una persona, se pausa y te avisa por correo. Todo se configura desde el celular en un panel guiado.
+Tu asistente contesta por Instagram y Messenger a cualquier hora con tu información, tus precios y tu tono. Cotiza, agenda citas en tu Google Calendar, manda el link de tu tienda y, cuando alguien pide a una persona, se pausa y te avisa por correo. Todo se configura desde el celular en un panel guiado.
 
 ## En resumen
 
