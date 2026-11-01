@@ -31,3 +31,21 @@ def test_el_zip_lleva_las_bases(tmp_path):
         db.execute("create table t (x)")
     nombres = zipfile.ZipFile(BytesIO(respaldo.comprimir(tmp_path))).namelist()
     assert nombres == ["cliente/bot.db"]
+
+
+def test_el_zip_cifrado_no_se_abre_sin_clave(tmp_path):
+    import pyzipper
+    base = tmp_path / "cliente" / "bot.db"
+    base.parent.mkdir()
+    with sqlite3.connect(base) as db:
+        db.execute("create table t (x)")
+    datos = respaldo.comprimir(tmp_path, "frase-secreta")
+    with pyzipper.AESZipFile(BytesIO(datos)) as z:
+        assert z.namelist() == ["cliente/bot.db"]
+        try:
+            z.read("cliente/bot.db")
+            assert False, "se leyó sin clave"
+        except RuntimeError:
+            pass
+        z.setpassword(b"frase-secreta")
+        assert z.read("cliente/bot.db")[:15] == b"SQLite format 3"

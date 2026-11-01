@@ -561,7 +561,7 @@ async def receive_entry(c: Cuenta, entry: dict) -> None:
         if change.get("field") != "comments":
             continue
         value = change.get("value") or {}
-        log.info("Comentario de %s: %r", (value.get("from") or {}).get("username"), value.get("text", "")[:80])
+        log.info("Comentario %s de %s", value.get("id"), (value.get("from") or {}).get("username"))
         if google and comentarios.available() or c.hide_spam or c.imagenes_mes:
             in_background(handle_comment(value, de_pagina=bool(value.pop("pagina", False))))
         else:

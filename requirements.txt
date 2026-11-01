@@ -12,3 +12,4 @@ PyYAML==6.0.2
 Pillow==12.3.0
 python-multipart==0.0.32
 PyJWT[crypto]==2.15.0
+pyzipper==0.3.6

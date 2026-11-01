@@ -5,8 +5,24 @@ After=network.target
 [Service]
 User=ubuntu
 WorkingDirectory=/home/ubuntu/ig-bot
-ExecStart=/home/ubuntu/ig-bot/.venv/bin/uvicorn app:app --host 127.0.0.1 --port 8001
+# Sin log de acceso: anotaba cada URL con su query (enlaces de entrar por correo, códigos de OAuth, verify token).
+# Los logs de la app (igbot.*) siguen igual en journalctl.
+ExecStart=/home/ubuntu/ig-bot/.venv/bin/uvicorn app:app --host 127.0.0.1 --port 8001 --no-access-log
 Restart=always
+RestartSec=3
+
+# Sandbox: el proceso no puede escalar privilegios ni escribir fuera de su carpeta y de /tmp propio.
+# ProtectSystem=full deja /usr, /boot, /etc y /efi de solo lectura. No se usa ProtectHome porque el Agent SDK
+# lanza la CLI de Claude, que guarda su configuración en ~/.claude.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictRealtime=yes
 
 [Install]
 WantedBy=multi-user.target
