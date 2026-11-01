@@ -1474,10 +1474,10 @@ body:has(>.lateral) main{padding-top:var(--margen-arriba);padding-bottom:var(--m
 body:has(>.lateral) .compacta{padding-top:var(--margen-arriba)}
 body:has(>.lateral) :is(.compacta+main,.compacta.delgada~main,.compacta.delgada~.oscuro-pag>main){padding-top:1.5rem}
 }
-/* Menú lateral compacto en computadora (medidas en ajustes.css): todas las opciones caben al 100% sin deslizar,
-   también con la tarjeta de pasos iniciales. En pantallas bajas se aprieta un poco más. El celular no cambia. */
-@media(min-width:901px){
-.lat-item{padding-top:var(--menu-item-relleno);padding-bottom:var(--menu-item-relleno);font-size:var(--menu-item-letra)}
+/* Menú lateral compacto (medidas en ajustes.css): todas las opciones caben al 100% sin deslizar,
+   también con la tarjeta de pasos iniciales. En pantallas bajas se aprieta un poco más. Igual en el celular,
+   donde el menú se abre con la hamburguesa. */
+.lat-item,html.menu-plegado .lat-item{padding-top:var(--menu-item-relleno);padding-bottom:var(--menu-item-relleno);font-size:var(--menu-item-letra)}
 .lat-nav,.lat-abajo{gap:var(--menu-hueco)}
 .lat-cabeza,html.menu-plegado .lat-cabeza{padding-bottom:var(--menu-separacion);margin-bottom:var(--menu-separacion)}
 .lat-etiqueta{padding-top:var(--menu-separacion);padding-bottom:.25rem}
@@ -1485,8 +1485,12 @@ body:has(>.lateral) :is(.compacta+main,.compacta.delgada~main,.compacta.delgada~
 .lat-abajo [data-abrir-skandi]{margin-top:.25rem;padding-top:calc(var(--menu-item-relleno) + .25rem)}
 .lat-pie{padding-top:.5rem}
 .pasos-ini>summary{padding-top:.45rem;padding-bottom:.45rem}
-}
-@media(min-width:901px) and (max-height:800px){:root{--menu-item-relleno:var(--menu-item-relleno-bajo);--menu-separacion:var(--menu-separacion-bajo)}}
+@media(max-height:800px){:root{--menu-item-relleno:var(--menu-item-relleno-bajo);--menu-separacion:var(--menu-separacion-bajo)}}
+@media(max-height:700px){:root{--menu-item-relleno:var(--menu-item-relleno-mini);--menu-separacion:var(--menu-separacion-mini)}}
+/* Celular: si aun así no cabe (teléfono chico), se desliza el menú completo y no una cajita a la mitad
+   que corta las opciones. Con el menú abierto, Skandi minimizada no tapa tu cuenta. */
+@media(max-width:900px){.lateral{overflow-y:auto}.lat-nav{flex:1 0 auto;overflow:visible}}
+.lateral:target~.skandi.minimizada,html.menu-abierto .skandi.minimizada{display:none!important}
 @media(max-width:900px){:is(.as-resumen,.wiz-resumen,.resumen-tarjetas){grid-template-columns:1fr}.avance-pasos{display:none}}
 /* Barra de pasos .wiz-pasos (marca y nueva campaña) en el celular: el paso actual con su nombre y los demás
    solo con su círculo, para que quepan todos sin deslizar. */
