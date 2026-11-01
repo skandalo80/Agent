@@ -97,19 +97,20 @@ def _tipo_imagen(data: bytes) -> str:
     return ""  # un video u otra cosa: no se describe
 
 
-async def describir(c: Cuenta, url: str) -> str:
-    """Una línea sobre la historia en la que nos mencionaron, o '' si no se pudo (video, link caducado…)."""
+async def describir(c: Cuenta, url: str, sistema: str = DESCRIBIR, pregunta: str = "Describe esta historia.") -> str:
+    """Una línea sobre la historia en la que nos mencionaron (o, con otro `sistema`, sobre cualquier imagen que
+    manden por DM: ver adjuntos.py), o '' si no se pudo (video, link caducado…)."""
     try:
         data = await c.instagram.download(url)
         tipo = _tipo_imagen(data)
         if not tipo or len(data) > 5_000_000:
             return ""
         msg = await agent.api().messages.create(
-            model=config.COMMENTS_MODEL, max_tokens=200, system=DESCRIBIR,
+            model=config.COMMENTS_MODEL, max_tokens=200, system=sistema,
             messages=[{"role": "user", "content": [
                 {"type": "image", "source": {"type": "base64", "media_type": tipo,
                                              "data": base64.b64encode(data).decode()}},
-                {"type": "text", "text": "Describe esta historia."}]}])
+                {"type": "text", "text": pregunta}]}])
         await limites.add_cost(agent.costo(config.COMMENTS_MODEL, msg.usage.input_tokens, msg.usage.output_tokens),
                                limites.ATENCION)
         return _corto("".join(b.text for b in msg.content if b.type == "text"), 300)
