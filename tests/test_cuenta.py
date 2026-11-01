@@ -214,3 +214,19 @@ def test_con_retencion_cero_no_se_borra_el_historial():
         return borrado
 
     assert asyncio.run(main()) == {"sent": 0}
+
+
+def test_cada_linea_del_registro_dice_de_que_cuenta_es(caplog):
+    import logging
+    import app as bot
+    from igbot.cuenta import usar
+
+    filtro = bot.ConCuenta()
+    otra = dataclasses.replace(bot.principal, slug="cafelunar")
+    rec = logging.LogRecord("igbot", logging.INFO, "", 0, "hola", None, None)
+    filtro.filter(rec)
+    assert rec.cuenta == "principal"
+    with usar(otra):
+        filtro.filter(rec)
+    assert rec.cuenta == "cafelunar"
+    assert logging.getLogger().handlers and any(isinstance(f, bot.ConCuenta) for f in logging.getLogger().handlers[0].filters)

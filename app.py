@@ -40,7 +40,17 @@ from igbot.instagram import Instagram
 from igbot.pagina_fb import de_facebook
 from igbot.store import Store
 
-logging.basicConfig(level=logging.INFO)
+class ConCuenta(logging.Filter):
+    """Cada línea del registro dice de qué cuenta habla, para filtrar con `journalctl -u igbot | grep '\[slug\]'`."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.cuenta = cuenta().slug or "principal"
+        return True
+
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:[%(cuenta)s] %(message)s")
+for _h in logging.getLogger().handlers:
+    _h.addFilter(ConCuenta())
 # httpx anota cada URL completa en INFO, y algunas llevan llaves (client_secret, access_token).
 logging.getLogger("httpx").setLevel(logging.WARNING)
 log = logging.getLogger("igbot")

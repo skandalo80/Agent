@@ -109,6 +109,7 @@ nano clientes/cafelunar/system.md       # el prompt del negocio
 nano .env                                # agrega cafelunar a CUENTAS
 sudo systemctl restart igbot
 sudo journalctl -u igbot -f              # dice "Cuenta de Instagram: @cafe.lunar"
+sudo journalctl -u igbot | grep '\[cafelunar\]'   # solo lo de esa cuenta: cada línea lleva [slug]
 ```
 En esa cuenta revisa también: Configuración → Mensajes → *Permitir acceso a los mensajes*.
 
