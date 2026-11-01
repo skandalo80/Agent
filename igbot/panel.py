@@ -2368,11 +2368,22 @@ async def responder(request: Request):
         log.exception("No se pudo mandar la respuesta del panel a %s", usuario_chat)
         return await panel_de(c, "Instagram no aceptó el mensaje. Intenta de nuevo en un momento o contéstale"
                               " desde Instagram.", **bandeja)
-    await c.store.pause(usuario_chat, time.time() + c.human_pause_hours * 3600)
     await c.store.add_owner_message(usuario_chat, None, texto)
     log.info("@%s contestó a %s desde el panel", await usuario(c), usuario_chat)
-    return await panel_de(c, f"Enviado. Tu asistente no contesta en este chat las próximas {c.human_pause_hours:g} h.",
-                          **bandeja)
+    # Al aclarar un dato que el asistente no tenía, el chat sigue con él (si así lo dejó) y la respuesta se
+    # puede guardar como pregunta frecuente, para que la próxima vez ya la sepa.
+    pregunta = f.get("pregunta", "").strip()
+    if pregunta and f.get("seguir"):
+        await c.store.add_event(usuario_chat, "sin_dato_listo", {})
+        aviso = "Enviado. Tu asistente sigue contestando este chat."
+    else:
+        await c.store.pause(usuario_chat, time.time() + c.human_pause_hours * 3600)
+        aviso = f"Enviado. Tu asistente no contesta en este chat las próximas {c.human_pause_hours:g} h."
+    if pregunta and f.get("guardar_faq"):
+        from . import empresa  # import tardío: empresa importa el panel
+        if await empresa.agregar_faq(c, pregunta, texto):
+            aviso += " La respuesta quedó en las preguntas frecuentes de tu Perfil de empresa."
+    return await panel_de(c, aviso, **bandeja)
 
 
 @router.post("/venta")
