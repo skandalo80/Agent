@@ -349,6 +349,24 @@ document.querySelectorAll("form[data-marca]").forEach((form) => {
 document.querySelectorAll(".cal-filtros select").forEach((s) => {
   s.addEventListener("change", () => s.form.submit());
 });
+// Calendario en celular: los filtros se abren con el botón "Filtros", y la primera vez que se entra sin elegir
+// vista se abre la Lista (la cuadrícula del mes no cabe); después manda lo que elija.
+document.querySelectorAll(".cal-filtros .cal-tog").forEach((b) => {
+  b.addEventListener("click", () => {
+    const abierta = b.form.classList.toggle("abierta");
+    b.setAttribute("aria-expanded", abierta ? "true" : "false");
+  });
+});
+(() => {
+  const cal = document.getElementById("cal");
+  if (!cal || !window.matchMedia("(max-width: 560px)").matches) return;
+  const url = new URL(location.href);
+  let visto = false;
+  try { visto = sessionStorage.getItem("cal-celular") === "1"; sessionStorage.setItem("cal-celular", "1"); } catch (e) { visto = true; }
+  if (visto || url.searchParams.has("ver") || !cal.querySelector(".cal-sw.modo")) return;
+  url.searchParams.set("ver", "lista");
+  location.replace(url.toString());
+})();
 
 // Conversaciones en vivo: cuando llega o sale un mensaje, el servidor manda la lista y el chat abierto
 // ya armados (EventSource a /panel/vivo, sin fetch) y aquí solo se cambian. Lo que llevas escrito en

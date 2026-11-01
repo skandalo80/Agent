@@ -1779,10 +1779,10 @@ async def calendario(c: Cuenta, camp: dict, sel: str) -> str:
         semanas.append(f'<div class="semana-cam"><h3>{nombre}</h3><span>{lunes.day} {MESES[lunes.month - 1]} – {hasta.day} {MESES[hasta.month - 1]}</span></div>'
                        f'<div class="cal-cam{" fuera" if toda_fuera else ""}">{"".join(celdas)}</div>')
     return (f'<div class="tarjeta" data-camp="{url_de(camp)}"><span class="titulo-sec"><h2>Calendario</h2></span>'
-            '<p class="ayuda">Cada tarjeta dice si es post o historia y a qué hora sale. Arrastra un post sobre otro'
-            " para intercambiarlos, o al espacio libre de un día para que ese día salgan dos. Si lo sueltas en un día"
-            " rayado, la campaña se estira hasta ahí. Toca uno para editar su texto, su imagen y su regla de"
-            " respuesta.</p>" + se_prueba(camp) + "".join(semanas) + "</div>")
+            '<p class="ayuda">Cada tarjeta dice si es post o historia y a qué hora sale. <span class="solo-raton">Arrastra'
+            " un post sobre otro para intercambiarlos, o al espacio libre de un día para que ese día salgan dos. Si lo"
+            ' sueltas en un día rayado, la campaña se estira hasta ahí. </span>Toca uno para editar su texto, su imagen'
+            " y su regla de respuesta.</p>" + se_prueba(camp) + "".join(semanas) + "</div>")
 
 
 def se_prueba(camp: dict) -> str:

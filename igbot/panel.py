@@ -1518,6 +1518,18 @@ body:has(>.lateral) :is(.compacta+main,.compacta.delgada~main,.compacta.delgada~
 body:has(:is(input,textarea):focus:not(.skandi *)) .sk-boton{display:none}
 main{padding-bottom:4.5rem}
 }
+/* Lote 2. Lo de arrastrar solo se cuenta donde hay ratón: en pantallas táctiles no funciona. En celular los
+   filtros del Calendario van plegados tras "Filtros" (abiertos si hay un filtro puesto o al tocar el botón). */
+@media(hover:none){.solo-raton{display:none}}
+.cal-tog{display:none}
+@media(max-width:560px){
+.cal-filtros .cal-tog{display:inline-block}
+.cal-campos{display:none;flex-basis:100%;flex-wrap:wrap;gap:.6rem}
+.cal-filtros:is(.con-filtro,.abierta) .cal-campos{display:flex}
+.cal-filtros .cal-campos input[type=search]{max-width:none}
+.cal-filtros .cal-campos select{flex:1 1 100%;max-width:none;min-width:0}
+}
+@media(min-width:561px){.cal-campos{display:contents}}
 """
 
 
