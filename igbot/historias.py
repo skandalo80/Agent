@@ -110,7 +110,8 @@ async def describir(c: Cuenta, url: str) -> str:
                 {"type": "image", "source": {"type": "base64", "media_type": tipo,
                                              "data": base64.b64encode(data).decode()}},
                 {"type": "text", "text": "Describe esta historia."}]}])
-        await limites.add_cost(agent.costo(config.COMMENTS_MODEL, msg.usage.input_tokens, msg.usage.output_tokens))
+        await limites.add_cost(agent.costo(config.COMMENTS_MODEL, msg.usage.input_tokens, msg.usage.output_tokens),
+                               limites.ATENCION)
         return _corto("".join(b.text for b in msg.content if b.type == "text"), 300)
     except Exception:
         log.exception("No se pudo describir la historia en la que mencionaron a %s", c.slug or "principal")

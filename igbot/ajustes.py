@@ -222,11 +222,13 @@ async def conexion(c: Cuenta) -> tuple[str, str]:
                  ir.format("Conectar Google Calendar"))
     if not c.slug:
         with usar(c):
-            gasto = await limites.spent_today(c.store)
+            gasto = await limites.spent_today(c.store, limites.ATENCION)
+            total = await limites.spent_today(c.store)
         tope = c.daily_budget_usd
         lleno = tope > 0 and gasto >= tope
         fila("mal" if lleno else "ok", "Límite de gasto",
-             f"Hoy vas en US${gasto:.2f}" + (f" de US${tope:.2f}" if tope > 0 else " (sin límite)")
+             f"Hoy el asistente va en US${gasto:.2f}" + (f" de US${tope:.2f}" if tope > 0 else " (sin límite)")
+             + (f"; con contenido, US${total:.2f}" if total > gasto + 0.005 else "")
              + (": el asistente no contesta hasta mañana" if lleno else ""))
     fila("no", "Tu sesión en este panel", "Si perdiste un celular o entraste desde una computadora ajena, cierra la"
          " sesión en todos los dispositivos; vuelves a entrar con tu correo o con Meta.",

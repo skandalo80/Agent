@@ -152,6 +152,12 @@ async def handle(value: dict, store: Store, instagram: Instagram, google: Google
                  classify=claude_matches, spam_check=claude_spam, escribe=None) -> None:
     """Procesa un aviso de comentario del webhook (campo 'comments').
     `escribe`: quien escribe las respuestas de la tabla de interacciones (las pruebas pasan uno falso)."""
+    with limites.rubro(limites.ATENCION):
+        await _handle(value, store, instagram, google, account_id, classify, spam_check, escribe)
+
+
+async def _handle(value: dict, store: Store, instagram: Instagram, google: Google, account_id: str,
+                  classify, spam_check, escribe) -> None:
     comment_id = value.get("id", "")
     author = (value.get("from") or {}).get("id", "")
     media_id = (value.get("media") or {}).get("id", "")

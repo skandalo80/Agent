@@ -40,7 +40,7 @@ async def json_de(sistema: str, prompt: str, max_tokens: int = 16000, imagenes: 
     costo = (uso.get("prompt_tokens", 0) * config.OPENAI_TEXT_USD_IN
              + uso.get("completion_tokens", 0) * config.OPENAI_TEXT_USD_OUT) / 1_000_000
     log.info("OpenAI texto (%s): %s tokens, US$%.4f", config.OPENAI_TEXT_MODEL, uso.get("total_tokens"), costo)
-    await limites.add_cost(costo)
+    await limites.add_cost(costo, limites.CONTENIDO)
     try:
         salida = json.loads(datos["choices"][0]["message"]["content"] or "{}")
     except (KeyError, IndexError, TypeError, json.JSONDecodeError):
