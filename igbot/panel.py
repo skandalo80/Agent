@@ -1308,6 +1308,7 @@ input[type=text],input[type=search],textarea,select,.inbox input[type=search],.e
 .res-vista a{font-size:.95rem;padding:.45rem 1.1rem}
 @media(max-width:700px){.res-vista{width:100%;overflow-x:auto;scrollbar-width:none}.res-vista a{flex:1 0 auto;text-align:center;padding:.45rem .8rem;font-size:.88rem}}
 .res-barra .cal-sw a.on{background:var(--acento);color:var(--tinta)}
+.res-barra .res-cada{margin-left:.5rem}@media(max-width:700px){.res-barra .res-cada{margin-left:0}}
 .res-kpis .kpi b{color:var(--negro)}
 .res-dos{display:grid;grid-template-columns:minmax(0,2fr) minmax(16rem,1fr);gap:1rem;margin-bottom:1.25rem}.res-dos>*{margin:0}
 .res-dos .met-c{grid-column:auto}
@@ -1371,6 +1372,7 @@ h1,h2,h3{text-wrap:balance}
 .met-graf.barras .mh.der.abajo span{transform:translate(calc(-100% - 1rem),-.3rem)}
 .mh:hover::before,.mh:hover i,.mh:hover span{opacity:1}
 .mh{outline:none}.mh:focus::before,.mh:focus i,.mh:focus span{opacity:1}
+.mh span{display:none}.mh:hover span,.mh:focus span{display:block} /* oculta de verdad: la etiqueta no ensancha la página en el celular */
 /* Resultados (lote 1): Vistas apiladas (seguidores en naranja, los demás en naranja claro) con el periodo anterior
    punteado en gris; las pastillas de formato; Tu público plegado con sus tarjetas adentro; el rango personalizado
    y el menú de descargas, los dos plegados sin JS. */
@@ -1390,7 +1392,8 @@ h1,h2,h3{text-wrap:balance}
 .res-bajar>div{position:absolute;right:0;top:calc(100% + .5rem);z-index:5;display:grid;min-width:13rem;padding:.4rem;border-radius:.9rem;background:#1E1C26;border:1px solid var(--linea-oscura);box-shadow:0 12px 28px rgba(0,0,0,.45)}
 .res-bajar>div a{padding:.55rem .8rem;border-radius:.6rem;color:var(--negro);text-decoration:none;font-size:.88rem;white-space:nowrap}.res-bajar>div a:hover{background:#2E3035}
 .res-barra{position:relative}
-.res-formatos{margin:.25rem 0 1.25rem}.res-formatos table{width:100%;border-collapse:collapse;font-size:.92rem;margin-top:.5rem}.res-formatos th{text-align:right;font-weight:500;color:var(--gris);font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;padding:.4rem 0}.res-formatos th:first-child,.res-formatos td:first-child{text-align:left}.res-formatos td{text-align:right;padding:.55rem 0;border-top:1px solid var(--linea-oscura)}.res-formatos td small{color:var(--gris)}.res-formatos td b{color:var(--naranja-t)}
+.res-formatos{margin:.25rem 0 1.25rem}.res-formatos table{width:100%;border-collapse:collapse;font-size:.92rem;margin-top:.5rem}.res-formatos th{text-align:right;font-weight:500;color:var(--gris);font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;padding:.4rem 0}.res-formatos th:first-child,.res-formatos td:first-child{text-align:left}.res-formatos td{text-align:right;padding:.55rem 0;border-top:1px solid var(--linea-oscura)}.res-formatos td small{color:var(--gris)}.res-formatos td b{color:var(--naranja-t)}.res-formatos th,.res-formatos td{padding-left:.6rem}.res-formatos th:first-child,.res-formatos td:first-child{padding-left:0}
+@media(max-width:700px){.res-formatos{overflow-x:auto}.res-formatos table{min-width:26rem}}
 .res-embudo li{grid-template-columns:minmax(7.5rem,10rem) 1fr auto}.res-embudo .rt-barra{height:.9rem}.res-embudo .rt-barra i{background:var(--acento)}
 .res-temas p{margin:.4rem 0 0;color:var(--negro);line-height:1.5;max-width:60rem}
 @media(max-width:700px){.res-pers{position:static}.res-pers-f{left:1rem;right:1rem;grid-template-columns:1fr 1fr auto}.res-bajar{margin-left:0}.res-bajar>div{right:auto;left:0}

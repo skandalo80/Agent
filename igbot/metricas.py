@@ -49,6 +49,7 @@ CLAVE_HORA = "metricas_hora"  # cuándo fue el último guardado (para "actualiza
 CLAVE_HORAS = "metricas_horas"  # a qué horas están conectados sus seguidores (semanal; las campañas eligen la hora)
 CLAVE_TEMAS = "metricas_temas"  # lo que más preguntan por chat, escrito por Claude una vez al día (7 y 30 días)
 TEMAS_DIAS = (7, 30)
+CADA = {"dia": ("Por día", 1), "semana": ("Por semana", 7), "mes": ("Por mes", 30)}  # granularidad de las gráficas
 TOP_HORAS = 3
 
 # nombre en Instagram -> nombre guardado
@@ -275,6 +276,64 @@ def seguidores_en(dias: dict[str, dict], dia: date) -> int | None:
     return dias[max(previos)]["seguidores"] if previos else None
 
 
+def cada_por_defecto(dias: int) -> str:
+    """Hasta dos semanas se ve día por día; después por semana, y por mes a partir de medio año."""
+    return "dia" if dias <= 14 else "semana" if dias <= 180 else "mes"
+
+
+def opciones_cada(dias: int) -> list[str]:
+    """Las granularidades con al menos dos bloques completos en el periodo."""
+    return [k for k, (_, bloque) in CADA.items() if dias >= 2 * bloque]
+
+
+def leer_cada(texto: str, dias: int) -> str:
+    return texto if texto in opciones_cada(dias) else cada_por_defecto(dias)
+
+
+def salto(dias: int, cada: str) -> int:
+    """Cuántos días atrás está el periodo anterior: el mismo largo, pero en semanas o meses completos para
+    que caigan los mismos días de la semana (un sábado contra un sábado, no contra un lunes)."""
+    bloque = CADA[cada][1]
+    return bloque * -(-dias // bloque)
+
+
+def sumar_dias(xs: list[dict]) -> dict:
+    """Un bloque (semana o mes) a partir de sus días: todo se suma; los seguidores son los del último día con
+    dato y el alcance es el promedio al día (cada día cuenta personas distintas)."""
+    con = [x for x in xs if x]
+    if not con:
+        return {}
+    salida: dict = {}
+    for x in con:
+        for k, v in x.items():
+            if k in ("v", "seguidores", "alcance", "siguiendo", "publicaciones"):
+                continue
+            if isinstance(v, dict):
+                g = salida.setdefault(k, {})
+                for kk, vv in v.items():
+                    g[kk] = g.get(kk, 0) + vv
+            elif isinstance(v, (int, float)):
+                salida[k] = salida.get(k, 0) + v
+    alcances = [x["alcance"] for x in con if x.get("alcance") is not None]
+    if alcances:
+        salida["alcance"] = round(sum(alcances) / len(alcances))
+    for x in reversed(con):
+        if "seguidores" in x:
+            salida["seguidores"] = x["seguidores"]
+            break
+    return salida
+
+
+def bloques(fechas: list[date], serie: list[dict], bloque: int) -> tuple[list[date], list[dict]]:
+    """Los días en bloques completos de `bloque` días, contados desde el final (el último bloque termina en el
+    último día). Devuelve la fecha en que empieza cada bloque y su suma; los días sueltos del principio sobran."""
+    n = len(fechas) // bloque
+    sobran = len(fechas) - n * bloque
+    inicios = [fechas[sobran + i * bloque] for i in range(n)]
+    sumas = [sumar_dias(serie[sobran + i * bloque: sobran + (i + 1) * bloque]) for i in range(n)]
+    return inicios, sumas
+
+
 def suma_tipos(serie: list[dict], clave: str) -> dict[str, int]:
     """{formato o botón: total del periodo} de un desglose guardado por día."""
     total: dict[str, int] = {}
@@ -290,29 +349,39 @@ def por_formato(d: dict, clave: str, formato: str) -> int | None:
     return None if tipos is None else tipos.get(formato, 0)
 
 
-async def numeros(c: Cuenta, rango_dias: int, fin: date | None = None) -> dict:
+async def numeros(c: Cuenta, rango_dias: int, fin: date | None = None, cada: str = "dia") -> dict:
     """Los `rango_dias` que terminan en `fin` (hoy si no viene), y el periodo anterior del mismo largo para
     comparar. Hoy no tiene insights aún: las líneas llegan hasta ayer; los seguidores son los del último día
-    guardado hasta `fin`."""
+    guardado hasta `fin`. Con `cada` semana o mes, las series van en bloques completos (ver `bloques`) y el
+    periodo anterior se corre semanas o meses enteros para que coincidan los días de la semana; los números
+    del periodo (totales y comparaciones) siempre cuentan todos los días del rango."""
     hoy = datetime.now(ZoneInfo(c.timezone)).date()
     fin = min(fin or hoy, hoy)
     ultimo = min(fin, hoy - timedelta(days=1))
-    desde = fin - timedelta(days=2 * max(rango_dias, 30) + 1)
+    atras = salto(rango_dias, cada)
+    desde = fin - timedelta(days=rango_dias + max(atras, 30) + 1)
     dias = await c.store.metricas(desde.isoformat())
     dias = {k: v for k, v in dias.items() if k <= fin.isoformat()}
     fechas = [ultimo - timedelta(days=i) for i in range(rango_dias - 1, -1, -1)]  # días completos
     serie = [dias.get(f.isoformat(), {}) for f in fechas]
-    antes = [dias.get((f - timedelta(days=rango_dias)).isoformat(), {}) for f in fechas]  # el periodo anterior
+    antes = [dias.get((f - timedelta(days=atras)).isoformat(), {}) for f in fechas]  # el periodo anterior
     con_seguidores = [d for d in dias if "seguidores" in dias[d]]
     actual = seguidores_en(dias, fin)
     inicio_periodo = fin - timedelta(days=rango_dias)  # el día antes de que empiece el periodo
+    bloque = CADA[cada][1]
+    if bloque > 1:
+        fechas_g, serie_g = bloques(fechas, serie, bloque)
+        _, antes_g = bloques(fechas, antes, bloque)
+    else:
+        fechas_g, serie_g, antes_g = fechas, serie, antes
     suma = lambda k, s=serie: sum(d.get(k, 0) for d in s)  # noqa: E731
     promedio = lambda k, s: (lambda xs: sum(xs) / len(xs) if xs else None)([d[k] for d in s if d.get(k) is not None])  # noqa: E731
     inter = {k: suma(k) for k in ("likes", "comentarios", "compartidos", "guardados")}
     inter_antes = sum(suma(k, antes) for k in inter)
     relleno = await c.store.get(CLAVE_RELLENO)
     return {
-        "fechas": fechas, "serie": serie, "antes": antes, "hay": bool(dias),
+        "fechas": fechas_g, "serie": serie_g, "antes": antes_g, "hay": bool(dias),
+        "cada": cada, "bloque": bloque, "dias_fechas": fechas, "dias_serie": serie,
         "seguidores": actual,
         "semana": cambio(actual, seguidores_en(dias, fin - timedelta(days=7))),
         "mes": cambio(actual, seguidores_en(dias, fin - timedelta(days=30))),
@@ -323,7 +392,7 @@ async def numeros(c: Cuenta, rango_dias: int, fin: date | None = None) -> dict:
         "vistas": suma("vistas"), "vistas_cambio": cambio(suma("vistas"), suma("vistas", antes)),
         "clics": suma("clics"), "clics_cambio": cambio(suma("clics"), suma("clics", antes)),
         "interacciones": inter, "interacciones_cambio": cambio(sum(inter.values()), inter_antes),
-        "alcance_dia": [d.get("alcance") for d in serie],
+        "alcance_dia": [d.get("alcance") for d in serie_g],
         "alcance_promedio": promedio("alcance", serie),
         "alcance_cambio": cambio(promedio("alcance", serie), promedio("alcance", antes)),
         "vistas_seg": suma_tipos(serie, "vistas_seg"), "alcance_seg": suma_tipos(serie, "alcance_seg"),
@@ -378,19 +447,29 @@ def puntos_hover(columnas: list[tuple[float | None, str, str]], punto: bool = Tr
     return f'<div class="met-hover">{"".join(partes)}</div>'
 
 
-def eje_fechas(fechas: list[date]) -> str:
-    cada = 1 if len(fechas) <= 7 else 7 if len(fechas) <= 30 else 15
-    return "".join(f"<span>{f:%d/%m}</span>" if (len(fechas) - 1 - i) % cada == 0 else "<span></span>"
+def eje_fechas(fechas: list[date], cada: str = "dia") -> str:
+    if cada != "dia":  # cada bloque lleva su fecha de inicio; en tiras largas, una de cada dos o tres
+        paso = 1 if len(fechas) <= 8 else 2 if len(fechas) <= 16 else 3
+    else:
+        paso = 1 if len(fechas) <= 7 else 7 if len(fechas) <= 30 else 15
+    return "".join(f"<span>{f:%d/%m}</span>" if (len(fechas) - 1 - i) % paso == 0 else "<span></span>"
                    for i, f in enumerate(fechas))
 
 
-def linea(valores: list[int | None], fechas: list[date], nombre: str, antes: list[int | None] | None = None) -> str:
-    """Línea por día con su relleno, desde 0; los días sin dato se saltan. Con `antes`, el periodo anterior en
-    gris punteado. Al pasar el cursor (o tocar) sale el valor y, si lo hay, el del periodo anterior."""
+POR_CADA = {"dia": "por día", "semana": "por semana", "mes": "por mes"}
+VACIO = {"dia": "Aún sin datos de estos días.", "semana": "Aún no hay una semana completa con datos.",
+         "mes": "Aún no hay un mes completo con datos."}
+
+
+def linea(valores: list[int | None], fechas: list[date], nombre: str, antes: list[int | None] | None = None,
+          cada: str = "dia") -> str:
+    """Línea por día (o por semana o mes) con su relleno, desde 0; los puntos sin dato se saltan. Con `antes`,
+    el periodo anterior en gris punteado. Al pasar el cursor (o tocar) sale el valor y, si lo hay, el del
+    periodo anterior."""
     ancho, alto = 10 * len(valores), 100
     hay = [v for v in valores if v is not None]
     if not hay:
-        return '<p class="ayuda met-vacio">Aún sin datos de estos días.</p>'
+        return f'<p class="ayuda met-vacio">{VACIO[cada]}</p>'
     antes = antes or [None] * len(valores)
     tope = max(hay + [v for v in antes if v is not None]) or 1
     y = lambda v: 8 + (tope - v) / tope * 84  # noqa: E731
@@ -406,21 +485,21 @@ def linea(valores: list[int | None], fechas: list[date], nombre: str, antes: lis
                           for v, a in zip(valores, antes)])
     return (f'<div class="met-graf"><div class="met-escala"><span>{cifra(tope)}</span><span>0</span></div>'
             f'<svg class="met-linea" viewBox="0 0 {ancho} {alto}" preserveAspectRatio="none" role="img"'
-            f' aria-label="{escape(nombre)} por día">{guias}<path class="area" d="{relleno}"/>{gris}'
+            f' aria-label="{escape(nombre)} {POR_CADA[cada]}">{guias}<path class="area" d="{relleno}"/>{gris}'
             f'<path class="trazo" d="{camino}" vector-effect="non-scaling-stroke"/></svg>{zonas}</div>'
-            f'<div class="ejex met-eje">{eje_fechas(fechas)}</div>')
+            f'<div class="ejex met-eje">{eje_fechas(fechas, cada)}</div>')
 
 
 def apiladas(partes: list[tuple[int | None, int | None]], fechas: list[date], antes: list[int | None],
-             nombre: str) -> str:
-    """Barras por día apiladas (seguidores abajo, otros arriba) desde 0, con el periodo anterior en gris
-    punteado. Cada parte es (seguidores, otros); sin desglose va (total, None)."""
+             nombre: str, cada: str = "dia") -> str:
+    """Barras por día (o semana o mes) apiladas (seguidores abajo, otros arriba) desde 0, con el periodo
+    anterior en gris punteado. Cada parte es (seguidores, otros); sin desglose va (total, None)."""
     n = len(partes)
     ancho, alto = 10 * n, 100
     totales = [None if (a is None and b is None) else (a or 0) + (b or 0) for a, b in partes]
     hay = [v for v in totales if v is not None]
     if not hay:
-        return '<p class="ayuda met-vacio">Aún sin datos de estos días.</p>'
+        return f'<p class="ayuda met-vacio">{VACIO[cada]}</p>'
     tope = max(hay + [v for v in antes if v is not None]) or 1
     y = lambda v: 8 + (tope - v) / tope * 84  # noqa: E731
     barras = []
@@ -447,8 +526,8 @@ def apiladas(partes: list[tuple[int | None, int | None]], fechas: list[date], an
         for (seg, otros), t, a in zip(partes, totales, antes)], punto=False)
     return (f'<div class="met-graf apiladas"><div class="met-escala"><span>{cifra(tope)}</span><span>0</span></div>'
             f'<svg class="met-linea" viewBox="0 0 {ancho} {alto}" preserveAspectRatio="none" role="img"'
-            f' aria-label="{escape(nombre)} por día">{guias}{"".join(barras)}{gris}</svg>{zonas}</div>'
-            f'<div class="ejex met-eje">{eje_fechas(fechas)}</div>')
+            f' aria-label="{escape(nombre)} {POR_CADA[cada]}">{guias}{"".join(barras)}{gris}</svg>{zonas}</div>'
+            f'<div class="ejex met-eje">{eje_fechas(fechas, cada)}</div>')
 
 
 def dona(partes: list[tuple[str, int]], centro: str, debajo: str) -> str:
@@ -550,6 +629,7 @@ def seccion(d: dict, formato: str = "", enlace_formato=None, picos: dict[date, s
                 '<p class="ayuda">Empezamos a guardar tus números de Instagram. Mañana verás tus seguidores, '
                 'alcance y vistas aquí, y en unas horas tu historial de los últimos 90 días.</p></section></div>')
     fechas, serie, antes = d["fechas"], d["serie"], d["antes"]
+    cada, bloque = d.get("cada", "dia"), d.get("bloque", 1)
     inter = d["interacciones"]
     total_inter = sum(inter.values())
     alcance_prom = d["alcance_promedio"]
@@ -587,24 +667,31 @@ def seccion(d: dict, formato: str = "", enlace_formato=None, picos: dict[date, s
     if any(t for t in totales if t):
         i = max(range(len(totales)), key=lambda i: totales[i] or 0)
         from .resultados import DIAS
-        pico = f"Pico el {DIAS[fechas[i].weekday()]} {fechas[i]:%d/%m}: {cifra(totales[i])} vistas"
-        if picos and fechas[i] in picos:
-            pico += f', el día que salió "{escape(picos[fechas[i]][:60])}"'
+        if cada == "dia":
+            pico = f"Pico el {DIAS[fechas[i].weekday()]} {fechas[i]:%d/%m}: {cifra(totales[i])} vistas"
+        else:
+            pico = (f"Pico {'la semana' if cada == 'semana' else 'el mes'} del {fechas[i]:%d/%m}"
+                    f" al {fechas[i] + timedelta(days=bloque - 1):%d/%m}: {cifra(totales[i])} vistas")
+        salieron = [picos[f] for f in (fechas[i] + timedelta(days=k) for k in range(bloque)) if picos and f in picos]
+        if salieron:
+            pico += (f', el día que salió "{escape(salieron[0][:60])}"' if cada == "dia" else
+                     f', cuando salió "{escape(salieron[0][:60])}"' if len(salieron) == 1 else
+                     f", cuando salieron {len(salieron)} publicaciones")
         pico = f'<p class="ayuda chica">{pico}.</p>'
     leyenda = ('<div class="leyenda"><span><i class="seg"></i>Seguidores</span><span><i class="otros"></i>No te siguen</span>'
                '<span><i class="antes"></i>Periodo anterior</span></div>'
                if not formato and any(b is not None for _, b in partes) else
                '<div class="leyenda"><span><i class="seg"></i>Vistas</span><span><i class="antes"></i>Periodo anterior</span></div>')
-    vistas = tarjeta("Vistas", pastillas + apiladas(partes, fechas, de_antes, "vistas") + leyenda + pico,
+    vistas = tarjeta("Vistas", pastillas + apiladas(partes, fechas, de_antes, "vistas", cada) + leyenda + pico,
                      f"{cifra(total_vistas)} {nota_seg}", "ancho")
     alc_seg = d["alcance_seg"]
     alc_otros = alc_seg.get("otros", 0) + alc_seg.get("sin_dato", 0)
     nota_alc = (f' <small>al día · {alc_otros / (alc_seg.get("seguidores", 0) + alc_otros):.0%} no te siguen</small>'
                 if alc_seg.get("seguidores", 0) + alc_otros else " <small>al día</small>")
-    alcance = tarjeta("Alcance", linea(d["alcance_dia"], fechas, "cuentas alcanzadas", [x.get("alcance") for x in antes]),
+    alcance = tarjeta("Alcance", linea(d["alcance_dia"], fechas, "cuentas alcanzadas", [x.get("alcance") for x in antes], cada),
                       (cifra(alcance_prom) + nota_alc) if alcance_prom is not None else "", "t6")
     neto = d["nuevos"] - d["perdidos"]
-    nuevos = tarjeta("Seguidores nuevos", linea([x.get("nuevos") for x in serie], fechas, "nuevos", [x.get("nuevos") for x in antes])
+    nuevos = tarjeta("Seguidores nuevos", linea([x.get("nuevos") for x in serie], fechas, "nuevos", [x.get("nuevos") for x in antes], cada)
                      + f'<p class="ayuda chica">{cifra(d["perdidos"])} dejaron de seguirte · neto {"+" if neto > 0 else ""}{cifra(neto)}'
                      + (f' · {comparado(d["nuevos_cambio"])}' if d["nuevos_cambio"] is not None else "") + "</p>",
                      f'+{cifra(d["nuevos"])}', "t6")

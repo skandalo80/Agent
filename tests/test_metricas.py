@@ -274,3 +274,60 @@ def test_estadisticas_de_cada_post_se_guardan_una_vez_al_dia(cliente, monkeypatc
     for _ in range(2):
         assert client.portal.call(informe.numeros, c, "m1", time.time() - 40 * 86400) == {"reach": 50, "likes": 5}
     assert pedidos == ["m0", "m1"]
+
+
+def test_granularidad_semana_y_mes(cliente, monkeypatch):  # noqa: F811
+    """Por día / semana / mes se elige una vez en la barra y manda en todas las gráficas: las series van en
+    bloques completos desde el final, y el periodo anterior se corre semanas (o meses) enteros para comparar
+    los mismos días de la semana."""
+    client, c = cliente
+    assert metricas.opciones_cada(7) == ["dia"] and metricas.opciones_cada(30) == ["dia", "semana"]
+    assert metricas.opciones_cada(90) == ["dia", "semana", "mes"]
+    assert metricas.cada_por_defecto(7) == "dia" and metricas.cada_por_defecto(30) == "semana"
+    assert metricas.salto(30, "dia") == 30 and metricas.salto(30, "semana") == 35 and metricas.salto(45, "mes") == 60
+    assert metricas.leer_cada("mes", 30) == "semana" and metricas.leer_cada("dia", 30) == "dia"
+    assert metricas.sumar_dias([{"seguidores": 10, "alcance": 20, "vistas": 5, "vistas_seg": {"seguidores": 3}},
+                                {"alcance": 40, "vistas": 7, "vistas_seg": {"seguidores": 4, "otros": 1}, "v": 2}]) == {
+        "seguidores": 10, "alcance": 30, "vistas": 12, "vistas_seg": {"seguidores": 7, "otros": 1}}
+
+    hoy = datetime.now(ZoneInfo(c.timezone)).date()
+
+    async def llenar():
+        for i in range(1, 15):  # dos semanas completas
+            await c.store.guardar_metricas((hoy - timedelta(days=i)).isoformat(),
+                                           {"alcance": 30, "vistas": 100, "nuevos": 2, "seguidores": 200 - i})
+        for i in range(15, 70):  # antes, la mitad
+            await c.store.guardar_metricas((hoy - timedelta(days=i)).isoformat(), {"alcance": 10, "vistas": 50, "nuevos": 1})
+        await c.store.add_incoming("ana", "m1", "hola")
+    client.portal.call(llenar)
+    d = client.portal.call(metricas.numeros, c, 14, None, "semana")
+    assert d["cada"] == "semana" and len(d["fechas"]) == 2 and d["fechas"][0] == hoy - timedelta(days=14)
+    assert [x["vistas"] for x in d["serie"]] == [700, 700] and [x["vistas"] for x in d["antes"]] == [350, 350]
+    assert d["alcance_dia"] == [30, 30] and d["serie"][1]["seguidores"] == 199 and len(d["dias_fechas"]) == 14
+    assert d["vistas"] == 1400 and d["vistas_cambio"] == 100.0  # los totales siguen contando todos los días
+    d = client.portal.call(metricas.numeros, c, 30, None, "semana")
+    assert len(d["fechas"]) == 4 and d["fechas"][-1] == hoy - timedelta(days=7)  # los 2 días sueltos sobran
+    assert [x["vistas"] for x in d["serie"]] == [350, 350, 700, 700]
+    assert [x.get("vistas") for x in d["antes"]] == [350, 350, 350, 350]  # 35 días atrás: mismos días de la semana
+
+    monkeypatch.setattr("igbot.resultados._cache", {})
+    html = client.get("/panel/resultados?dias=30").text
+    assert 'class="cal-sw modo res-cada">' in html and 'class="on">Por semana</a>' in html and "Por mes" not in html
+    assert 'href="/panel/resultados?dias=30&cada=dia">Por día</a>' in html
+    assert "Comparado con 5 semanas atrás, mismos días de la semana" in html
+    assert 'aria-label="vistas por semana"' in html and "Pico la semana del" in html
+    assert "Por semana" not in client.get("/panel/resultados?dias=7").text  # con 7 días solo hay por día
+    html = client.get("/panel/resultados?dias=30&cada=dia").text
+    assert 'class="on">Por día</a>' in html and "Comparado con los 30 días anteriores" in html
+    assert 'aria-label="vistas por día"' in html and 'href="/panel/resultados?dias=90&cada=dia">90 días' in html
+    html = client.get("/panel/resultados?dias=90").text
+    assert 'cada=mes">Por mes</a>' in html and 'class="on">Por semana</a>' in html
+    html = client.get("/panel/resultados?dias=90&cada=mes").text
+    assert 'aria-label="vistas por mes"' in html and "Comparado con 3 meses atrás" in html
+    # Conversaciones sigue la misma elección, y el PDF también; el CSV siempre va día por día.
+    html = client.get("/panel/resultados?ver=conversaciones&dias=30").text
+    assert 'aria-label="Mensajes recibidos por semana"' in html and 'href="/panel/resultados?dias=30&ver=conversaciones&cada=dia">Por día' in html
+    r = client.get("/panel/resultados/descargar?dias=30&cada=dia&archivo=csv")
+    assert len(r.content.decode("utf-8-sig").splitlines()) == 31
+    r = client.get("/panel/resultados/descargar?dias=30")
+    assert r.content.startswith(b"%PDF")

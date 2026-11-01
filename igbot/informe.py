@@ -763,17 +763,19 @@ async def posts_pdf(c: Cuenta, titulo: str, filas: list[list], cuenta: str) -> b
     return await asyncio.to_thread(armar)
 
 
-async def resultados_pdf(c: Cuenta, titulo: str, d: dict, m: dict, cuenta: str, vista: str = "instagram") -> bytes:
+async def resultados_pdf(c: Cuenta, titulo: str, d: dict, m: dict, cuenta: str, vista: str = "instagram",
+                         cada: str = "dia") -> bytes:
     """Lo que se ve en Resultados para un periodo: en Instagram, sus números, día por día y el público; en
     Conversaciones, los mensajes, los comentarios, lo que dejaron y lo que más preguntan. `d` sale de resultados.numeros_de y `m` de
     metricas.numeros."""
     from . import contenido
 
     marca = await contenido.marca_de(c)
-    return await asyncio.to_thread(_resultados_pdf, c, titulo, d, m, cuenta, vista, marca)
+    return await asyncio.to_thread(_resultados_pdf, c, titulo, d, m, cuenta, vista, marca, cada)
 
 
-def _resultados_pdf(c: Cuenta, titulo: str, d: dict, m: dict, cuenta: str, vista: str, marca: dict) -> bytes:
+def _resultados_pdf(c: Cuenta, titulo: str, d: dict, m: dict, cuenta: str, vista: str, marca: dict,
+                    cada: str = "dia") -> bytes:
     from . import metricas
     from .resultados import duracion
 
@@ -823,6 +825,9 @@ def _resultados_pdf(c: Cuenta, titulo: str, d: dict, m: dict, cuenta: str, vista
                                                 if seg.get("seguidores", 0) + otros else "")),
                ("Interacciones", cifra(sum(inter.values()))),
                ("Likes", cifra(inter["likes"])), ("Clics a tu perfil", cifra(m["clics"]))])
+    if cada != "dia":
+        from .resultados import nota_comparacion
+        doc.seccion("Comparación", [nota_comparacion(len(m.get("dias_fechas") or m["fechas"]), cada) + "."])
     doc.datos([("Vistas vs. periodo anterior", signo(m.get("vistas_cambio"))),
                ("Alcance vs. anterior", signo(m.get("alcance_cambio"))),
                ("Interacciones vs. anterior", signo(m.get("interacciones_cambio"))),
@@ -837,7 +842,8 @@ def _resultados_pdf(c: Cuenta, titulo: str, d: dict, m: dict, cuenta: str, vista
         doc.por_dia([(fecha(f), cifra(x.get("seguidores")) if "seguidores" in x else "-",
                       f"+{x['nuevos']}" if "nuevos" in x else "-", cifra(x.get("alcance")), cifra(x.get("vistas")),
                       cifra(x.get("interacciones")) if "interacciones" in x else "-")
-                     for f, x in dias], ("Día", "Seguidores", "Nuevos", "Alcance", "Vistas", "Interacciones"))
+                     for f, x in dias], ({"dia": "Día", "semana": "Semana del", "mes": "Mes del"}[cada],
+                                         "Seguidores", "Nuevos", "Alcance al día", "Vistas", "Interacciones"))
     if p.get("edad") or p.get("genero") or p.get("ciudad"):
         doc.seccion("Tu público", [x for x in (
             f"Edad: {top(p['edad'])}" if p.get("edad") else "",

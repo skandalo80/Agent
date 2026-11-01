@@ -209,13 +209,29 @@ def plural(n: int, palabra: str) -> str:
     return f"{n} {palabra}" + ("" if n == 1 else "s")
 
 
-def por_dia(d: dict) -> str:
-    fechas = [d["inicio"] + timedelta(days=i) for i in range(d["dias"])]
+def por_dia(d: dict, cada: str = "dia") -> str:
+    """Mensajes recibidos por día, o sumados por semana o por mes (bloques completos desde el final)."""
+    fechas = [d["inicio"].date() + timedelta(days=i) for i in range(d["dias"])]
+    bloque = metricas.CADA[cada][1]
+    if bloque > 1:
+        n = d["dias"] // bloque
+        sobran = d["dias"] - n * bloque
+        valores = [sum(d["por_dia"][sobran + i * bloque: sobran + (i + 1) * bloque]) for i in range(n)]
+        fechas = [fechas[sobran + i * bloque] for i in range(n)]
+        paso = 1 if n <= 8 else 2 if n <= 16 else 3
+        etiquetas = [f"{f:%d/%m}" if (n - 1 - i) % paso == 0 else "" for i, f in enumerate(fechas)]
+        nombre = "semana" if cada == "semana" else "mes"
+        detalles = [f"{nombre} del {f:%d/%m}: {plural(v, 'mensaje')}" for f, v in zip(fechas, valores)]
+        pico = max(range(n), key=lambda i: valores[i])
+        resumen = (f'Promedio: {sum(valores) / n:.0f} por {nombre} · {"la" if cada == "semana" else "el"} {nombre}'
+                   f' con más fue {"la" if cada == "semana" else "el"} del {fechas[pico]:%d/%m} ({valores[pico]}).')
+        return (barras(valores, etiquetas, detalles, descripcion=f"Mensajes recibidos por {nombre}")
+                + f'<p class="ayuda" style="margin-top:.75rem">{resumen}</p>')
     if d["dias"] <= 7:
         etiquetas = [DIAS[f.weekday()] for f in fechas]
     else:  # una de cada cinco (de cada quince en 90 días), contando hacia atrás desde el último
-        cada = 5 if d["dias"] <= 30 else 15
-        etiquetas = [f"{f:%d/%m}" if (d["dias"] - 1 - i) % cada == 0 else "" for i, f in enumerate(fechas)]
+        paso = 5 if d["dias"] <= 30 else 15
+        etiquetas = [f"{f:%d/%m}" if (d["dias"] - 1 - i) % paso == 0 else "" for i, f in enumerate(fechas)]
     detalles = [f"{DIAS[f.weekday()]} {f:%d/%m}: {plural(v, 'mensaje')}" for f, v in zip(fechas, d["por_dia"])]
     pico = max(range(d["dias"]), key=lambda i: d["por_dia"][i])
     resumen = (f'Promedio: {sum(d["por_dia"]) / d["dias"]:.0f} al día · el día con más fue el'
@@ -386,13 +402,17 @@ def vistas_de(c: Cuenta) -> dict[str, str]:
 
 
 def enlace(rango: str, fin: date, hoy: date, vista: str = "instagram", base: str = "/panel/resultados",
-           formato: str = "", **extra) -> str:
+           formato: str = "", cada: str = "", **extra) -> str:
+    """`cada` (día, semana o mes) solo va en el enlace cuando no es la que tocaría por defecto para ese rango."""
+    if cada and cada not in metricas.opciones_cada(int(rango)):  # al cambiar de rango, si ya no cabe, vuelve a la de defecto
+        cada = ""
     return (f"{base}?dias={rango}" + (f"&fin={fin.isoformat()}" if fin < hoy else "")
             + (f"&ver={vista}" if vista != "instagram" else "") + (f"&formato={formato}" if formato else "")
+            + (f"&cada={cada}" if cada and cada != metricas.cada_por_defecto(int(rango)) else "")
             + "".join(f"&{k}={v}" for k, v in extra.items() if v))
 
 
-def personalizado(rango: str, fin: date, hoy: date, vista: str) -> str:
+def personalizado(rango: str, fin: date, hoy: date, vista: str, cada: str = "") -> str:
     """La pastilla "Personalizado" a la izquierda de 7 días: un formulario plegado (sin JS) con desde y hasta.
     Con un rango que no es 7, 30 ni 90 queda marcada y dice las fechas."""
     dias = int(rango)
@@ -405,14 +425,16 @@ def personalizado(rango: str, fin: date, hoy: date, vista: str) -> str:
         f'<label for="res-desde">Desde</label><input id="res-desde" type="date" name="desde" value="{ini.isoformat()}" max="{hoy.isoformat()}" required>'
         f'<label for="res-fin">Hasta</label><input id="res-fin" type="date" name="fin" value="{fin.isoformat()}" max="{hoy.isoformat()}" required>'
         + (f'<input type="hidden" name="ver" value="{vista}">' if vista != "instagram" else "")
+        + (f'<input type="hidden" name="cada" value="{cada}">' if cada else "")
         + '<button class="boton chico" type="submit">Ver</button></form></details>'
     )
 
 
-def descargas(rango: str, fin: date, hoy: date, vista: str) -> str:
-    """El menú de Descargar (plegado, sin JS): PDF y CSV de la cuenta y, en Instagram, por post."""
+def descargas(rango: str, fin: date, hoy: date, vista: str, cada: str = "") -> str:
+    """El menú de Descargar (plegado, sin JS): PDF y CSV de la cuenta y, en Instagram, por post. El PDF sigue
+    la granularidad que se ve; el CSV siempre va día por día."""
     base = "/panel/resultados/descargar"
-    opciones = [("PDF del periodo", enlace(rango, fin, hoy, vista, base)),
+    opciones = [("PDF del periodo", enlace(rango, fin, hoy, vista, base, cada=cada)),
                 ("CSV día por día", enlace(rango, fin, hoy, vista, base, archivo="csv"))]
     if vista == "instagram":
         opciones += [("PDF por publicación", enlace(rango, fin, hoy, vista, base, que="posts")),
@@ -421,19 +443,36 @@ def descargas(rango: str, fin: date, hoy: date, vista: str) -> str:
             + "".join(f'<a href="{href}">{nombre}</a>' for nombre, href in opciones) + "</div></details>")
 
 
-async def barra(c: Cuenta, rango: str, fin: date, hoy: date, vista: str) -> str:
+def nota_comparacion(dias: int, cada: str) -> str:
+    """Con qué se compara el periodo: los mismos días anteriores, o semanas o meses enteros atrás para que
+    coincidan los días de la semana."""
+    if cada == "dia":
+        return f"Comparado con los {dias} días anteriores"
+    n = metricas.salto(dias, cada) // metricas.CADA[cada][1]
+    if cada == "semana":
+        return f"Comparado con {plural(n, 'semana')} atrás, mismos días de la semana"
+    return f"Comparado con {n} {'mes' if n == 1 else 'meses'} atrás"
+
+
+async def barra(c: Cuenta, rango: str, fin: date, hoy: date, vista: str, cada: str = "dia") -> str:
     """La barra de arriba, como la de Calendario: el periodo con ‹ › y Hoy, Instagram o Conversaciones,
-    7/30/90 días, cuándo se actualizaron los números y la descarga en PDF de lo que se ve."""
+    7/30/90 días, por día / semana / mes (una vez, para todas las gráficas), cuándo se actualizaron los
+    números y la descarga en PDF de lo que se ve."""
     dias = int(rango)
     ini = fin - timedelta(days=dias - 1)
-    antes = enlace(rango, fin - timedelta(days=dias), hoy, vista)
-    siguiente = (f'<a href="{enlace(rango, min(fin + timedelta(days=dias), hoy), hoy, vista)}" aria-label="Siguiente">›</a>'
+    antes = enlace(rango, fin - timedelta(days=dias), hoy, vista, cada=cada)
+    siguiente = (f'<a href="{enlace(rango, min(fin + timedelta(days=dias), hoy), hoy, vista, cada=cada)}" aria-label="Siguiente">›</a>'
                  if fin < hoy else '<span class="off" aria-hidden="true">›</span>')
-    vistas = "".join(f'<a href="{enlace(rango, fin, hoy, k)}"{panel.ACTIVA if k == vista else ""}>{nombre}</a>'
+    vistas = "".join(f'<a href="{enlace(rango, fin, hoy, k, cada=cada)}"{panel.ACTIVA if k == vista else ""}>{nombre}</a>'
                      for k, nombre in vistas_de(c).items())
-    rangos = personalizado(rango, fin, hoy, vista) + "".join(
-        f'<a href="{enlace(k, fin, hoy, vista)}"{panel.ACTIVA if k == rango else ""}>{nombre}</a>'
+    rangos = personalizado(rango, fin, hoy, vista, cada) + "".join(
+        f'<a href="{enlace(k, fin, hoy, vista, cada=cada)}"{panel.ACTIVA if k == rango else ""}>{nombre}</a>'
         for k, nombre in RANGOS.items())
+    opciones = metricas.opciones_cada(dias)
+    granularidad = ("" if len(opciones) < 2 or vista not in VISTAS_PDF else
+                    '<div class="cal-sw modo res-cada">' + "".join(
+                        f'<a href="{enlace(rango, fin, hoy, vista, cada=k)}"{panel.ACTIVA if k == cada else ""}>{metricas.CADA[k][0]}</a>'
+                        for k in opciones) + "</div>")
     guardado = await c.store.get(metricas.CLAVE_HORA)
     if guardado:
         cuando = datetime.fromtimestamp(float(guardado), ZoneInfo(c.timezone))
@@ -445,18 +484,18 @@ async def barra(c: Cuenta, rango: str, fin: date, hoy: date, vista: str) -> str:
         '<div class="tarjeta cal res-barra"><div class="cal-cab">'
         f'<h2>{titulo_periodo(ini, fin)}</h2><div class="cal-nav">'
         f'<a href="{antes}" aria-label="Anterior">‹</a>{siguiente}'
-        f'<a class="hoy-b" href="{enlace(rango, hoy, hoy, vista)}">Hoy</a></div>'
-        f'<div class="cal-sw modo">{rangos}</div></div>'
+        f'<a class="hoy-b" href="{enlace(rango, hoy, hoy, vista, cada=cada)}">Hoy</a></div>'
+        f'<div class="cal-sw modo">{rangos}</div>{granularidad}</div>'
         f'<div class="cal-filtros res-info"><div class="cal-sw res-vista">{vistas}</div>'
         + (f'<span><i class="punto"></i>{instagram}</span>'
-           '<span class="res-comp">Comparado con el periodo anterior del mismo largo</span>'
+           f'<span class="res-comp">{nota_comparacion(dias, cada)}</span>'
            if vista == "instagram" else
            '<span><i class="punto"></i>Anuncios: números de Meta y de tus chats, cada 10 minutos</span>'
            if vista == "anuncios" else
            '<span><i class="punto"></i>Comentarios: se actualizan cada 10 minutos</span>'
            if vista == "comentarios" else
            '<span><i class="punto"></i>Mensajes: se actualizan cada 10 minutos</span>')
-        + ("" if vista not in VISTAS_PDF else descargas(rango, fin, hoy, vista)) + "</div></div>"
+        + ("" if vista not in VISTAS_PDF else descargas(rango, fin, hoy, vista, cada)) + "</div></div>"
     )
 
 
@@ -506,7 +545,7 @@ def temas_html(d: dict) -> str:
             '<p class="ayuda chica">Lo escribe tu asistente una vez al día a partir de los mensajes de tus clientes.</p></div>')
 
 
-def conversaciones_html(c: Cuenta, d: dict) -> str:
+def conversaciones_html(c: Cuenta, d: dict, cada: str = "dia") -> str:
     if d["recibidos"]:
         pct = round(d["resueltas"] / d["escribieron"] * 100) if d["escribieron"] else 0
         e = d["embudo"]
@@ -526,7 +565,7 @@ def conversaciones_html(c: Cuenta, d: dict) -> str:
             + "</div>"
             + (f'<div class="hoy kpis res-kpis">{dejaron}</div>' if dejaron else "")
             + '<div class="res-dos"><div class="tarjeta"><span class="num">Por día</span><h2>Mensajes recibidos</h2>'
-            f"{por_dia(d)}</div>"
+            f"{por_dia(d, cada)}</div>"
             f'<div class="tarjeta"><span class="num">Hasta dónde llegaron</span><h2>Lo que dejaron</h2>{embudo_html(d)}</div></div>'
             + temas_html(d)
             + '<div class="tarjeta"><span class="num">Por hora</span><h2>A qué hora te escriben</h2>'
@@ -809,24 +848,25 @@ async def picos_de(c: Cuenta, d: dict) -> dict[date, str]:
 
 
 async def pagina(c: Cuenta, rango: str, fin: date | None = None, vista: str = "instagram",
-                 formato: str = "") -> HTMLResponse:
+                 formato: str = "", cada: str = "") -> HTMLResponse:
     hoy = datetime.now(ZoneInfo(c.timezone)).date()
     fin = min(fin or hoy, hoy)
+    cada = metricas.leer_cada(cada, int(rango))
     if vista == "anuncios":
         cuerpo = await anuncios_html(c, fin - timedelta(days=int(rango) - 1), fin)
     elif vista == "comentarios":
         cuerpo = await comentarios_html(c, rango, fin)
     elif vista == "conversaciones":
-        cuerpo = conversaciones_html(c, await numeros_de(c, rango, fin))
+        cuerpo = conversaciones_html(c, await numeros_de(c, rango, fin), cada)
     else:
         d = await numeros_de(c, rango, fin) if c.imagenes_mes > 0 else {}
-        cuerpo = metricas.seccion(await metricas.numeros(c, int(rango), fin), formato,
-                                  lambda f: enlace(rango, fin, hoy, vista, formato=f), await picos_de(c, d))
+        cuerpo = metricas.seccion(await metricas.numeros(c, int(rango), fin, cada), formato,
+                                  lambda f: enlace(rango, fin, hoy, vista, formato=f, cada=cada), await picos_de(c, d))
         if c.imagenes_mes > 0:
             cuerpo += f'<div class="met">{await seccion_publicaciones(c, d)}</div>'
     return panel.pagina(
         await panel.menu_de(c, "resultados")
-        + f'<main><div class="contenedor res">{await barra(c, rango, fin, hoy, vista)}{cuerpo}</div></main>'
+        + f'<main><div class="contenedor res">{await barra(c, rango, fin, hoy, vista, cada)}{cuerpo}</div></main>'
     )
 
 
@@ -847,13 +887,13 @@ def leer_rango(dias: str, desde: str, fin: date | None, hoy: date) -> tuple[str,
 
 @router.get("")
 async def ver(request: Request, dias: str = "7", fin: str = "", ver: str = "instagram", desde: str = "",
-              formato: str = ""):
+              formato: str = "", cada: str = ""):
     if not (c := panel.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     hoy = datetime.now(ZoneInfo(c.timezone)).date()
     rango, fin_ = leer_rango(dias, desde, leer_fin(fin), hoy)
     return await pagina(c, rango, fin_, ver if ver in vistas_de(c) else "instagram",
-                        formato if formato in metricas.NOMBRES_FORMATO else "")
+                        formato if formato in metricas.NOMBRES_FORMATO else "", cada)
 
 
 # --- descargas: PDF y CSV, del periodo (día por día) o por publicación ---
@@ -878,7 +918,7 @@ def csv_cuenta(m: dict, d: dict) -> bytes:
                 "compartidos", "guardados", "clics_perfil", "mensajes_recibidos"]
     por_dia = {(d["inicio"] + timedelta(days=i)).date(): n for i, n in enumerate(d["por_dia"])}
     filas = []
-    for f, x in zip(m["fechas"], m["serie"]):
+    for f, x in zip(m["dias_fechas"], m["serie"] if "dias_serie" not in m else m["dias_serie"]):
         seg_v, seg_a, tipos = x.get("vistas_seg") or {}, x.get("alcance_seg") or {}, x.get("vistas_tipo") or {}
         otros = lambda g: (g.get("otros", 0) + g.get("sin_dato", 0)) if g else None  # noqa: E731
         filas.append([f.isoformat(), x.get("seguidores"), x.get("nuevos"), x.get("perdidos"), x.get("alcance"),
@@ -912,7 +952,7 @@ COLUMNAS_POSTS = ["fecha", "hora", "tipo", "texto", "enlace", "alcance", "vistas
 
 @router.get("/descargar")
 async def descargar(request: Request, dias: str = "7", fin: str = "", ver: str = "instagram", desde: str = "",
-                    archivo: str = "pdf", que: str = "cuenta"):
+                    archivo: str = "pdf", que: str = "cuenta", cada: str = ""):
     """Lo que se ve en Resultados (Instagram o Conversaciones, en su periodo): en PDF o CSV, del periodo
     día por día (`que=cuenta`) o una fila por publicación (`que=posts`, solo Instagram)."""
     if not (c := panel.cuenta_de_sesion(request)):
@@ -925,7 +965,8 @@ async def descargar(request: Request, dias: str = "7", fin: str = "", ver: str =
     que = "posts" if que == "posts" and ver == "instagram" else "cuenta"
     archivo = "csv" if archivo == "csv" else "pdf"
     d = await numeros_de(c, rango, fin_)
-    m = await metricas.numeros(c, int(rango), fin_)
+    cada = metricas.leer_cada(cada, int(rango))
+    m = await metricas.numeros(c, int(rango), fin_, cada)  # el PDF sigue la granularidad; el CSV va día por día
     nombre = f"resultados-{ver if que == 'cuenta' else 'publicaciones'}-{ini.isoformat()}-al-{fin_.isoformat()}.{archivo}"
     if archivo == "csv":
         cuerpo = await filas_posts(c, d) if que == "posts" else None
@@ -935,6 +976,6 @@ async def descargar(request: Request, dias: str = "7", fin: str = "", ver: str =
         datos = await informe.posts_pdf(c, titulo_periodo(ini, fin_), await filas_posts(c, d), await panel.usuario(c))
         tipo = "application/pdf"
     else:
-        datos = await informe.resultados_pdf(c, titulo_periodo(ini, fin_), d, m, await panel.usuario(c), ver)
+        datos = await informe.resultados_pdf(c, titulo_periodo(ini, fin_), d, m, await panel.usuario(c), ver, cada)
         tipo = "application/pdf"
     return Response(datos, media_type=tipo, headers={"Content-Disposition": f'attachment; filename="{nombre}"'})
