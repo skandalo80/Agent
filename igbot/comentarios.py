@@ -164,6 +164,13 @@ async def _handle(value: dict, store: Store, instagram: Instagram, google: Googl
     text = value.get("text", "")
     if not (comment_id and author and text) or author == account_id:
         return  # vacío o es la propia cuenta (p. ej. su respuesta pública)
+    # Una respuesta dentro de un hilo: si la escribe la misma persona que abrió el hilo ("¿y en talla M?" debajo
+    # de su propio comentario, o contestando a nuestra respuesta), es su pregunta y se atiende como un comentario
+    # más; lo público se responde en el hilo (Instagram solo deja responder al comentario de arriba). Un hilo
+    # entre terceros se deja en paz (solo aplican las palabras clave).
+    parent = str(value.get("parent_id") or "")
+    if parent and await store.comment_author(parent) == author:
+        parent = ""
     if not await store.add_comment(comment_id, author, media_id, text):
         return  # Meta reintentó un aviso que ya se atendió
 
@@ -201,7 +208,8 @@ async def _handle(value: dict, store: Store, instagram: Instagram, google: Googl
     if not matched:
         # Sin palabra clave que aplique: lo que diga la tabla de Configura tus interacciones (con Claude dentro del tope).
         if con_claude and await interacciones.atender(cuenta(), comment_id, author, text, store, instagram,
-                                                      parent=value.get("parent_id", ""), escribe=escribe):
+                                                      parent=parent, escribe=escribe,
+                                                      responde_a=str(value.get("parent_id") or "")):
             return
         if not rules:
             log.info("La publicación no tiene palabras clave; se ignora el comentario %s", comment_id)
@@ -220,7 +228,7 @@ async def _handle(value: dict, store: Store, instagram: Instagram, google: Googl
         log.exception("No se pudo mandar el DM por el comentario %s", comment_id)
     if public := next((r.public for r in matched if r.public), ""):
         try:
-            await instagram.public_reply(comment_id, public)
+            await instagram.public_reply(str(value.get("parent_id") or comment_id), public)  # en el hilo, al de arriba
             replied = True
         except Exception:
             log.exception("No se pudo responder en público el comentario %s", comment_id)

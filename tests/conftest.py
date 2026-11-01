@@ -1,6 +1,11 @@
+import os
 import sys
 
 import pytest
+
+# Las pruebas de DMs esperan la respuesta como mucho un segundo: la espera para agrupar mensajes debe ser corta
+# en toda la corrida, sin importar qué módulo importe `app` primero (config lee el entorno al importarse).
+os.environ.setdefault("DEBOUNCE_SECONDS", "0.2")
 
 
 @pytest.fixture(autouse=True)

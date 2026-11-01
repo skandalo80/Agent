@@ -196,11 +196,18 @@ def idioma(e: dict) -> str:
     return f"Español {'neutro de Latinoamérica' if codigo in ('XX', 'US') else 'de ' + nombre}, {trato}"
 
 
+HABLA_FIJA = "como se habla en México"  # lo que dice prompts/comun.md (el estilo del asistente de DMs)
+
+
 def con_idioma(sistema: str, e: dict) -> str:
-    """Un prompt del sistema con el español del país de la empresa en vez del de fábrica (México)."""
-    if pais_de(e)[0] == PAIS_INICIAL:
+    """Un prompt del sistema con el español del país de la empresa en vez del de fábrica (México): sirve para los
+    prompts de contenido (IDIOMA_FIJO) y para el del asistente de DMs (HABLA_FIJA, en comun.md)."""
+    codigo, nombre, trato = pais_de(e)
+    if codigo == PAIS_INICIAL:
         return sistema
-    return sistema.replace(IDIOMA_FIJO, idioma(e)).replace("Español de México", idioma(e))
+    donde = "Latinoamérica" if codigo in ("XX", "US") else nombre
+    return (sistema.replace(IDIOMA_FIJO, idioma(e)).replace("Español de México", idioma(e))
+            .replace(HABLA_FIJA, f"como se habla en {donde}, {trato}"))
 
 
 def nombre_giro(e: dict) -> str:

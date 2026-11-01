@@ -354,6 +354,12 @@ class Store:
         await self.db.commit()
         self.avisar()
 
+    async def comment_author(self, comment_id: str) -> str:
+        """Quién escribió un comentario que ya atendimos ('' si no lo tenemos)."""
+        cur = await self.db.execute("SELECT user_id FROM comments WHERE comment_id = ?", (comment_id,))
+        row = await cur.fetchone()
+        return row[0] if row else ""
+
     async def add_comment(self, comment_id: str, user_id: str, media_id: str, text: str) -> bool:
         """Anota un comentario. False si ya se había procesado (Meta reintenta)."""
         cur = await self.db.execute(

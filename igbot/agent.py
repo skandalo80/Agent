@@ -160,6 +160,13 @@ def system_prompt() -> str:
     return system
 
 
+async def system_prompt_de(c) -> str:
+    """Las instrucciones del asistente en el español del país de la empresa (las de fábrica hablan como en México)."""
+    from . import empresa  # import tardío: empresa importa el panel, que importa este módulo
+
+    return empresa.con_idioma(system_prompt(), await empresa.de(c))
+
+
 async def reply(
     store: Store,
     google: Google | None,
@@ -168,7 +175,7 @@ async def reply(
     instagram: Instagram | None = None,
 ) -> tuple[str, bool]:
     """Devuelve (respuesta, si alguna herramienta hizo algo fuera del chat)."""
-    system = system_prompt()
+    system = await system_prompt_de(cuenta())
     state: dict = {}
     # Con su Shopify conectado, el asistente revisa el inventario en vivo.
     extra = tienda_shopify.herramientas(cuenta()) if (await tienda_shopify.conexion(cuenta())).get("token") else []
@@ -209,5 +216,5 @@ async def summarize_if_needed(store: Store, user_id: str) -> None:
         + f"<mensajes>\n{render([(r, t) for _, r, t in old])}\n</mensajes>\n\n"
         "Escribe el resumen actualizado."
     )
-    text = await run_claude(prompt, SUMMARY_SYSTEM, max_turns=1)
+    text = await run_claude(prompt, SUMMARY_SYSTEM, max_turns=1, model=config.COMMENTS_MODEL)  # resumir no necesita el modelo caro
     await store.save_summary(user_id, text, upto_id=old[-1][0])
