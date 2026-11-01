@@ -188,8 +188,14 @@ USO_TARJETA = {
 VIEJOS_USOS = {"oscuro": "natural", "contraste": "natural"}  # opciones de versiones anteriores
 USO_INICIAL = "equilibrado"
 
+# Tipografías de títulos que puede elegir el cliente (archivos en fonts/, todas OFL).
+# Nombre que ve el cliente -> archivo en fonts/ (Google Fonts, licencia OFL; 400, 600 y 700 cada una).
+FUENTES = {"Inter": "Inter", "Montserrat": "Montserrat", "Poppins": "Poppins", "Raleway": "Raleway",
+           "Nunito": "Nunito", "DM Sans": "DMSans", "Work Sans": "WorkSans", "Space Grotesk": "SpaceGrotesk", "Oswald": "Oswald",
+           "Playfair Display": "PlayfairDisplay", "Lora": "Lora", "Cormorant Garamond": "CormorantGaramond"}
+
 LETRAS = {
-    # fuente (de imagenes.FUENTES): (grosor de los títulos, nombre, descripción, antetítulo y título de muestra)
+    # fuente (de FUENTES): (grosor de los títulos, nombre, descripción, antetítulo y título de muestra)
     "Inter": (600, "Moderna y limpia", "Clara, actual y fácil de leer en cualquier tamaño. Funciona para casi todo.",
               "Una idea clara", "Tu negocio, un paso adelante."),
     "Playfair Display": (600, "Elegante y editorial",

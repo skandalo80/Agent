@@ -46,7 +46,7 @@ def run(values, datos=None, escribe=None, monkeypatch=None, imagenes=40, con_reg
         monkeypatch.setattr(comentarios, "load_rules", fake_rules)
         monkeypatch.setattr(comentarios, "available", lambda: con_reglas)
         monkeypatch.setattr("igbot.contenido.reglas", sin_reglas_del_panel)
-        monkeypatch.setattr("igbot.panel.usuario", lambda c: asyncio.sleep(0, "cafe.lunar"))
+        monkeypatch.setattr("igbot.marco.usuario", lambda c: asyncio.sleep(0, "cafe.lunar"))
         for v in values:
             await comentarios.handle(v, store, ig, "google", "negocio", classify=no_claude, spam_check=never_spam,
                                      escribe=falso)
@@ -165,7 +165,7 @@ class FakeCuenta:
 
 
 def con_cuenta(datos, prueba, monkeypatch, imagenes=40):
-    monkeypatch.setattr("igbot.panel.usuario", lambda c: asyncio.sleep(0, "cafe.lunar"))
+    monkeypatch.setattr("igbot.marco.usuario", lambda c: asyncio.sleep(0, "cafe.lunar"))
 
     async def main():
         store = Store(":memory:")

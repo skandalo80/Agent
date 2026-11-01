@@ -18,7 +18,7 @@ from html import escape
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
-from . import config, panel
+from . import config, marco
 from .cuenta import Cuenta, usar
 
 log = logging.getLogger(__name__)
@@ -143,21 +143,21 @@ async def conexion(c: Cuenta) -> tuple[str, str]:
     reconectar = '<a class="boton secundario chico" href="/conectar/instagram">Volver a conectar</a>'
     renovado = float(await c.store.get("ig_token_refreshed_at") or 0)
     if c.ig_via == "facebook":  # va con el token de su página, que no vence
-        fila("ok", "Instagram conectado", f"@{escape(await panel.usuario(c))} · a través de tu página de Facebook")
+        fila("ok", "Instagram conectado", f"@{escape(await marco.usuario(c))} · a través de tu página de Facebook")
     elif c.ig_via == "sistema":  # Conectar con Meta sin página: su token no vence
-        fila("ok", "Instagram conectado", f"@{escape(await panel.usuario(c))} · a través de Meta")
+        fila("ok", "Instagram conectado", f"@{escape(await marco.usuario(c))} · a través de Meta")
     elif renovado:
         dias = int((ahora - renovado) // config.DIA)
         quedan = TOKEN_DIAS - dias
         fila("ok" if quedan > 7 else "mal", "Instagram conectado",
-             f"@{escape(await panel.usuario(c))} · el acceso se renovó hace {dias} día{'s' if dias != 1 else ''},"
+             f"@{escape(await marco.usuario(c))} · el acceso se renovó hace {dias} día{'s' if dias != 1 else ''},"
              f" vence en {quedan}", "" if quedan > 7 else reconectar)
     else:
-        fila("ok", "Instagram conectado", f"@{escape(await panel.usuario(c))}")
+        fila("ok", "Instagram conectado", f"@{escape(await marco.usuario(c))}")
     ultimo = await c.store.last_client_message()
     if ultimo:
         fila("ok" if ahora - ultimo < 7 * 86400 else "aviso", "Recibiendo mensajes",
-             f"El último llegó {panel.hace(ultimo)}")
+             f"El último llegó {marco.hace(ultimo)}")
     else:
         fila("aviso", "Recibiendo mensajes", "Aún no llega ninguno: escríbele a tu cuenta desde otro Instagram para probar.")
     with usar(c):
@@ -248,13 +248,13 @@ async def guardar_del_form(c: Cuenta, form) -> None:
     datos = del_form(f, [str(d) for d in form.getlist("dias")], c)
     await c.store.set("ajustes", json.dumps(datos, ensure_ascii=False))
     aplicar(c, datos)
-    log.info("@%s cambió sus ajustes desde el panel", await panel.usuario(c))
+    log.info("@%s cambió sus ajustes desde el panel", await marco.usuario(c))
 
 
 @router.post("/ajustes")  # el formulario anterior; ahora todo se guarda con /panel/guardar
 async def guardar(request: Request):
-    panel.de_aqui(request)
-    if not (c := panel.cuenta_de_sesion(request)):
+    marco.de_aqui(request)
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     await guardar_del_form(c, await request.form())
     aviso = "Guardado: tu asistente ya trabaja con estos ajustes."

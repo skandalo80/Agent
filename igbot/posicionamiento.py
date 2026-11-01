@@ -14,7 +14,8 @@ import logging
 import re
 from html import escape
 
-from . import config
+from . import config, marco
+from .panel import POLITICAS, politicas, preguntas
 from .cuenta import Cuenta, usar
 
 log = logging.getLogger("igbot.posicionamiento")
@@ -40,8 +41,6 @@ _tareas: set[asyncio.Task] = set()
 
 def fuente(perfil: dict) -> str:
     """El texto de Configura del que se saca (negocio, precios, preguntas y políticas)."""
-    from .panel import POLITICAS, politicas, preguntas  # panel importa este módulo
-
     partes = [perfil.get(k, "").strip() for k in ("negocio", "precios")]
     partes += [f"{q['p'].strip()} {q['r'].strip()}".strip() for q in preguntas(perfil) if q["r"].strip()]
     temas = politicas(perfil)
@@ -98,9 +97,7 @@ async def de(c: Cuenta) -> dict:
 async def texto(c: Cuenta) -> str:
     """Para el prompt del contenido (escapado: lo escribió el cliente). Las cuentas que guardaron
     Configura antes de que existiera esto lo calculan aquí la primera vez."""
-    from .panel import perfil  # panel importa este módulo
-
     if not (datos := await de(c)):
-        await actualizar(c, await perfil(c))
+        await actualizar(c, await marco.perfil(c))
         datos = await de(c)
     return "\n".join(f"- {etq}: {escape(datos[k])}" for k, etq, _ in CAMPOS if datos.get(k))

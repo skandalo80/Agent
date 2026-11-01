@@ -15,7 +15,7 @@ import re
 import time
 from datetime import datetime
 
-from . import config, empresa, tools
+from . import campanas, config, empresa, informe, tools
 from .cuenta import Cuenta, usar
 
 log = logging.getLogger("igbot.sugeridos")
@@ -66,7 +66,6 @@ def _ya_tiene(datos: dict) -> str:
 
 
 async def _lo_que_funciono(c: Cuenta) -> str:
-    from . import campanas, informe  # campanas importa medio panel
     try:
         g = await informe.ganadores(c, await informe.todas(c, await campanas.todas_las(c)))
     except Exception:

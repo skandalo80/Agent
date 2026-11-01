@@ -156,7 +156,7 @@ def con_facebook(cliente, monkeypatch):
         suscritas.append(c.slug)
         c.fb_page_id = await c.store.get("fb_page_id") or ""
 
-    monkeypatch.setattr(bot.panel, "conectar_pagina", suscribir)
+    monkeypatch.setattr(bot.marco, "conectar_pagina", suscribir)
     return (*cliente, suscritas)
 
 

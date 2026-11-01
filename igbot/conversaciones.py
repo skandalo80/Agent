@@ -17,7 +17,7 @@ from pathlib import Path
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
-from . import config
+from . import config, marco
 from .cuenta import Cuenta, usar
 from .store import MANUAL
 
@@ -108,7 +108,6 @@ async def partes(c: Cuenta, ver: str = "", buscar: str = "", hoja: int = 1, chat
     ("" si no hay o no es de esta cuenta). También el filtro, la página y el chat que quedaron."""
     import asyncio
 
-    from . import panel
     ahora = time.time()
     zona = ZoneInfo(c.timezone)
     hoy = datetime.fromtimestamp(ahora, zona)
@@ -205,7 +204,7 @@ async def partes(c: Cuenta, ver: str = "", buscar: str = "", hoja: int = 1, chat
     lista = (f'<nav class="lados" aria-label="Quién atiende">{lados}</nav>'
              f'<nav class="filtros-chat" aria-label="Filtros">{pestanas}</nav>{cuantos_txt}'
              + ("".join(conv) or f'<p class="vacio">{vacio}</p>')
-             + panel.paginas(hoja, total, lambda x: enlace(ver, buscar, x, chat)))
+             + marco.paginas(hoja, total, lambda x: enlace(ver, buscar, x, chat)))
     hilo = await _hilo(c, chat, ver, buscar, hoja, n, ahora, zona, hoy, humano_desde, sin_dato.get(chat, [])) if chat else ""
     return {"busqueda": busqueda, "lista": lista, "hilo": hilo, "ver": ver, "buscar": buscar, "hoja": hoja,
             "chat": chat if hilo else "", "pendientes": pendientes}
@@ -252,8 +251,7 @@ async def _hilo(c: Cuenta, u: str, ver: str, buscar: str, hoja: int, n: int, aho
     horas = max(1, round((hasta - ahora) / config.HORA))
     ocultos = _ocultos(ver, buscar, hoja, u) + f'<input type="hidden" name="usuario" value="{escape(u)}">'
 
-    from . import panel
-    sub = (f"Último mensaje {panel.hace(ultimo_cliente)}" if ultimo_cliente else "Aún no te escribe")
+    sub = (f"Último mensaje {marco.hace(ultimo_cliente)}" if ultimo_cliente else "Aún no te escribe")
     if anuncio := (await c.store.anuncios_de([u])).get(u):
         sub += " · Llegó por " + (f"el anuncio «{escape(anuncio['titulo'][:80])}»" if anuncio["titulo"] else "un anuncio")
     if ventas := await c.store.ventas_de(u):

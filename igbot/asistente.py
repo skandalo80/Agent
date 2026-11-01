@@ -20,7 +20,7 @@ from html import escape
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from . import panel
+from . import ajustes, empresa, marco, panel
 from .cuenta import Cuenta
 
 log = logging.getLogger("igbot.asistente")
@@ -258,7 +258,7 @@ def _lista(actual: str, perfil: dict, hechos: set[str]) -> str:
     return ('<nav class="as-pasos" aria-label="Pasos"><p class="as-t">Tus pasos</p>' + "".join(items)
             + f'<a class="as-paso{" on" if actual == "resumen" else ""}" href="{_href("resumen")}">'
             '<span class="as-n">★</span><span><b>Resumen</b></span></a>'
-            + panel.avance(listos * 100 // len(ORDEN))
+            + marco.avance(listos * 100 // len(ORDEN))
             + f'<small class="as-nota">{listos} de {len(ORDEN)} listos. Puedes volver a cualquier paso cuando'
             " quieras.</small></nav>")
 
@@ -277,7 +277,7 @@ def _pie(paso: str) -> str:
     i = ORDEN.index(paso)
     atras = f'<a class="boton secundario" href="{_href(ORDEN[i - 1])}">← Anterior</a>' if i else ""
     nombre = PASOS[i + 1][1].lower() if i + 1 < len(ORDEN) else "resumen"
-    return panel.pie_config(atras, f'<button class="boton" name="accion" value="siguiente">Siguiente: {nombre} →</button>')
+    return marco.pie_config(atras, f'<button class="boton" name="accion" value="siguiente">Siguiente: {nombre} →</button>')
 
 
 def _radios(nombre: str, opciones: dict, actual: str, pregunta: str) -> str:
@@ -388,7 +388,6 @@ def _tabla_pases(perfil: dict, pie: str = "") -> str:
 
 
 def _equipo(c: Cuenta, perfil: dict) -> str:
-    from . import ajustes  # ajustes importa panel
     # Primero cuándo pasa la conversación a tu equipo y qué recibe el cliente; luego la pausa y los avisos.
     return (_cabeza("equipo", "Tu equipo")
             + _tabla_pases(perfil, ajustes.aviso_correo(c))
@@ -402,19 +401,18 @@ async def _resumen(c: Cuenta, perfil: dict) -> str:
 
     def caja(titulo: str, paso: str, lineas: list[str]) -> str:
         lis = "".join(f"<li>{escape(x)}</li>" for x in lineas if x)
-        return f'<div class="as-caja as-res">{panel.cab_tarjeta(titulo, _href(paso))}<ul>{lis}</ul></div>'
+        return f'<div class="as-caja as-res">{marco.cab_tarjeta(titulo, _href(paso))}<ul>{lis}</ul></div>'
 
-    from . import empresa  # empresa importa panel
     datos_empresa, catalogo = await empresa.de(c), await empresa.productos(c)
     if datos_empresa:
         negocio = [datos_empresa.get("nombre") or empresa.nombre_giro(datos_empresa) or "Tu Perfil de empresa",
-                   panel.plural_(len(catalogo), "producto o servicio", "productos y servicios"),
-                   panel.plural_(sum(1 for q in datos_empresa.get("faq") or [] if q.get("r")),
+                   marco.plural_(len(catalogo), "producto o servicio", "productos y servicios"),
+                   marco.plural_(sum(1 for q in datos_empresa.get("faq") or [] if q.get("r")),
                                  "pregunta frecuente", "preguntas frecuentes")]
     else:
         negocio = ["Aún no llenas tu Perfil de empresa",
                    "Mientras, usa lo que guardaste antes" if perfil.get("negocio", "").strip() else ""]
-    encendido = await panel.activo(c)
+    encendido = await marco.activo(c)
     if c.en_revision:
         boton = f'<p class="ayuda">{panel.REVISION}</p>'
     elif encendido:
@@ -456,7 +454,7 @@ async def _resumen(c: Cuenta, perfil: dict) -> str:
 
 async def pagina(c: Cuenta, paso: str = "", aviso: str = "", nota: str = "", perfil: dict | None = None) -> HTMLResponse:
     """Un paso de Configura. `perfil`: lo que trae el formulario cuando no se guardó (para no perderlo)."""
-    guardado = await panel.perfil(c)
+    guardado = await marco.perfil(c)
     perfil = guardado if perfil is None else perfil
     hechos = _hechos(guardado)
     if paso not in ORDEN and paso != "resumen":
@@ -479,10 +477,10 @@ async def pagina(c: Cuenta, paso: str = "", aviso: str = "", nota: str = "", per
                   '<button class="oculto" name="accion" value="siguiente" tabindex="-1" aria-hidden="true">'
                   "Siguiente</button>"
                   f'<input type="hidden" name="paso" value="{paso}">{cuerpo}</form>')
-    return panel.pagina(
+    return marco.pagina(
         f"<style>{ESTILO}</style>"
-        + await panel.menu_de(c, "asistente", sub="configura")
-        + panel.encabezado("Tu asistente · Configura")
+        + await marco.menu_de(c, "asistente", sub="configura")
+        + marco.encabezado("Tu asistente · Configura")
         + '<main class="as-main"><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
         + f'<div class="asis">{_lista(paso, guardado, hechos)}<div class="as-cont">'
@@ -493,8 +491,8 @@ async def pagina(c: Cuenta, paso: str = "", aviso: str = "", nota: str = "", per
 
 @router.get("/asistente/configura")
 async def ver(request: Request):
-    if not (c := panel.cuenta_de_sesion(request)):
-        return panel.entrar(request)
+    if not (c := marco.cuenta_de_sesion(request)):
+        return marco.entrar(request)
     q = request.query_params
     return await pagina(c, q.get("paso", ""), aviso={"1": "Guardado.", "aplicado": "Cambios aplicados."}.get(q.get("ok", ""), ""))
 
@@ -508,15 +506,15 @@ def _texto(f: dict, campo: str, maximo: int) -> str:
 
 @router.post("/asistente/paso")
 async def guardar(request: Request):
-    panel.de_aqui(request)
-    c = panel.cuenta_de_sesion(request)
+    marco.de_aqui(request)
+    c = marco.cuenta_de_sesion(request)
     if not c:
         return RedirectResponse("/panel", status_code=303)
-    f = await panel.form(request)
+    f = await marco.form(request)
     paso = f.get("paso", "")
     if paso not in ORDEN:
         return RedirectResponse("/panel/asistente/configura", status_code=303)
-    antes = await panel.perfil(c)
+    antes = await marco.perfil(c)
     datos = dict(antes)
     if paso == "personalidad":
         k = f.get("personalidad", "")
@@ -545,7 +543,7 @@ async def guardar(request: Request):
         for viejo in ("msg_quejas", "msg_enojado", "pasar_equipo"):  # ya van en la tabla
             datos.pop(viejo, None)
     datos["pasos"] = sorted(set(datos.get("pasos") or []) | {paso})
-    nombre = await panel.usuario(c)
+    nombre = await marco.usuario(c)
     prompt = panel.generar(nombre, datos, await panel.negocio_de_empresa(c))
     destino = c.prompt_destino()
     igual = destino.is_file() and destino.read_text(encoding="utf-8") == prompt  # ya se revisó al guardarlo

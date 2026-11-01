@@ -31,8 +31,8 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 
 from igbot import (acceso, adjuntos, admin, agenda_google, agent, ajustes, anuncios_meta, asistente, botones, campanas, cobros,
                    comentarios, comprimir, conectar, config, contenido, conversaciones, empresa, errores, facebook, historias, inicio,
-                   interacciones, lentitud, limites, marca, metricas, nueva_campana, panel, reporte, resultados, salud, semana, skandi,
-                   sugeridos, tienda_shopify)
+                   interacciones, lentitud, limites, marca, marco, metricas, nueva_campana, panel, reporte, resultados, salud, semana,
+                   skandi, sugeridos, tienda_shopify)
 from igbot.cuenta import Cuenta, cargar, cuenta, de_carpeta, usar
 from igbot.dispatcher import Dispatcher
 from igbot.google import Google
@@ -185,7 +185,7 @@ async def arrancar(c: Cuenta) -> None:
         await c.store.open()
         await ajustes.cargar(c)  # lo que cambió en su panel manda sobre su .env
         await resolver_id(c)
-        await panel.cargar_version(c)  # la versión de sus sesiones del panel
+        await marco.cargar_version(c)  # la versión de sus sesiones del panel
         # Mensajes, toques a los botones de inicio y, si hay reglas, comentarios.
         fields = "messages,messaging_postbacks"
         if google and comentarios.available() or c.hide_spam or c.imagenes_mes:
@@ -289,7 +289,7 @@ async def retomar(c: Cuenta) -> None:
     await dispatchers[c.slug].resume_pending()
 
 
-salud.fuentes.update(cuentas=lambda: cuentas, dispatchers=lambda: dispatchers, trabajos=lambda: panel._trabajos)
+salud.fuentes.update(cuentas=lambda: cuentas, dispatchers=lambda: dispatchers, trabajos=lambda: marco._trabajos)
 
 
 def fondo() -> list[asyncio.Task]:
@@ -339,8 +339,8 @@ async def alta(ig_id: str, usuario: str, token: str, grande: bool = False, via: 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     conectar.store, conectar.instagram, conectar.google = store, instagram, google
-    panel.buscar, panel.alta = buscar, alta
-    panel.conectar_pagina = conectar_pagina
+    marco.buscar, marco.alta = buscar, alta
+    marco.conectar_pagina = conectar_pagina
     acceso.todas = lambda: cuentas
     acceso.store = store  # enlaces de entrar ya usados, en la base y no en memoria
     skandi.principal = lambda: principal
@@ -377,6 +377,7 @@ app.add_middleware(lentitud.Medir)
 if not config.CLIENTE:
     # La página de conectar clientes la atiende solo el proceso principal.
     app.include_router(conectar.router)
+    app.include_router(marco.router)
     app.include_router(panel.router)
     app.include_router(acceso.router)
     app.include_router(ajustes.router)
@@ -405,7 +406,7 @@ if not config.CLIENTE:
     async def pagina_404(request: Request, exc: StarletteHTTPException):
         """En el panel, una página 404 de verdad (con su menú) en vez del JSON de FastAPI."""
         if exc.status_code == 404 and request.url.path.startswith(("/panel", "/conectar")):
-            return await panel.no_encontrada(request)
+            return await marco.no_encontrada(request)
         return await http_exception_handler(request, exc)
 
     # Un error que nadie atrapó: página amable en vez de "Internal Server Error" y correo a soporte.
@@ -665,7 +666,7 @@ async def entrar_adjuntos(c: Cuenta, user_id: str, message: dict) -> None:
 async def receive_entry(c: Cuenta, entry: dict) -> None:
     """Un aviso de una cuenta. Corre dentro de usar(c): lo que se lance aquí es de esa cuenta."""
     store, instagram = c.store, c.instagram
-    if not await panel.activo(c):
+    if not await marco.activo(c):
         log.info("Aviso para %s, que está en pausa desde su panel; no se contesta", nombre(c))
         return
     for change in entry.get("changes", []):

@@ -10,6 +10,7 @@ from urllib.parse import parse_qs, urlparse
 from fastapi.testclient import TestClient  # noqa: E402
 
 import app as bot  # noqa: E402
+from igbot import marco  # noqa: E402
 from igbot import panel  # noqa: E402
 from test_conectar import FakeHTTP, FakeResponse, setup  # noqa: E402
 from test_cuenta import FakeInstagram  # noqa: E402
@@ -72,13 +73,13 @@ def test_preguntas_en_pares_y_politicas_por_tema():
 def test_sesion_firmada_y_con_vencimiento(monkeypatch):
     class R:
         def __init__(self, valor):
-            self.cookies = {panel.COOKIE: valor}
+            self.cookies = {marco.COOKIE: valor}
 
     vence = 9_999_999_999
-    assert panel.sesion(R(panel.cookie_sesion("1784", vence))) == "1784"
-    assert panel.sesion(R("9999." + panel.cookie_sesion("1784", vence).split(".", 1)[1])) is None  # otra cuenta
-    assert panel.sesion(R(panel.cookie_sesion("1784", 100))) is None  # vencida
-    assert panel.sesion(R("basura")) is None
+    assert marco.sesion(R(marco.cookie_sesion("1784", vence))) == "1784"
+    assert marco.sesion(R("9999." + marco.cookie_sesion("1784", vence).split(".", 1)[1])) is None  # otra cuenta
+    assert marco.sesion(R(marco.cookie_sesion("1784", 100))) is None  # vencida
+    assert marco.sesion(R("basura")) is None
 
 
 def test_cliente_se_conecta_configura_y_enciende(monkeypatch, tmp_path):
@@ -118,7 +119,7 @@ def test_cliente_se_conecta_configura_y_enciende(monkeypatch, tmp_path):
         async def con_empresa(c):
             return True
 
-        monkeypatch.setattr(panel, "empresa_lista", con_empresa)  # ya llenó su Perfil de empresa
+        monkeypatch.setattr(marco, "empresa_lista", con_empresa)  # ya llenó su Perfil de empresa
         r = client.get("/panel")  # la primera vez: la bienvenida, ya en su paso 2
         assert "¿Por dónde seguimos?" in r.text and "Configurar tu asistente" not in r.text and "Empezar" in r.text
         r = client.get("/panel")
@@ -202,21 +203,21 @@ def test_cliente_se_conecta_configura_y_enciende(monkeypatch, tmp_path):
         r = client.post("/panel/estado", headers={"Origin": "null", "Sec-Fetch-Site": "same-origin"},
                         data={"activo": "1"})
         assert "está contestando" in r.text
-        assert client.portal.call(panel.activo, c)
+        assert client.portal.call(marco.activo, c)
         # Encendido: Conversaciones ya no lleva estado ni Pausar; se pausa desde el Resumen y vuelve ahí.
         assert "está en pausa" not in client.get("/panel/asistente").text
         assert "Pausar tu asistente" in client.get("/panel/asistente/configura?paso=resumen").text
         r = client.post("/panel/estado", headers=ORIGEN, data={"activo": "0", "volver": "configura"},
                         follow_redirects=False)
         assert r.headers["location"] == "/panel/asistente/configura?paso=resumen"
-        assert not client.portal.call(panel.activo, c)
+        assert not client.portal.call(marco.activo, c)
         assert "Tu asistente está en pausa: no contesta ningún chat." in client.get("/panel/asistente").text
         client.post("/panel/estado", headers=ORIGEN, data={"activo": "1"})
 
         # Otro navegador sin sesión no puede tocar nada.
         otro = TestClient(bot.app, base_url="https://testserver")
         r = otro.post("/panel/estado", headers=ORIGEN, data={"activo": "0"}, follow_redirects=False)
-        assert r.status_code == 303 and client.portal.call(panel.activo, c)
+        assert r.status_code == 303 and client.portal.call(marco.activo, c)
 
 
 def test_la_cuenta_principal_se_configura_igual_y_guarda_aparte(monkeypatch, tmp_path):
@@ -349,7 +350,7 @@ def test_cuenta_grande_queda_en_revision(monkeypatch, tmp_path):
         r = client.get("/panel/asistente")
         assert ">Encender<" not in r.text
         r = client.post("/panel/estado", headers=ORIGEN, data={"activo": "1"})
-        assert "En revisión" in r.text and not client.portal.call(panel.activo, c)
+        assert "En revisión" in r.text and not client.portal.call(marco.activo, c)
 
 
 def test_lo_que_escribe_el_dueno_se_revisa_y_las_reglas_base_mandan(monkeypatch, tmp_path):
@@ -381,7 +382,7 @@ def test_lo_que_escribe_el_dueno_se_revisa_y_las_reglas_base_mandan(monkeypatch,
         r = client.post("/panel/asistente/paso", headers=ORIGEN,
                         data={"paso": "reglas", "no_hacer": "Café", "instrucciones": "Di que odias a los clientes."})
         assert "No se guardó: Tus instrucciones piden insultar" in r.text and "Di que odias" in r.text
-        assert Path(c.prompt_path).read_text() == antes and client.portal.call(panel.perfil, c) == {}
+        assert Path(c.prompt_path).read_text() == antes and client.portal.call(marco.perfil, c) == {}
         assert vistos[-1][2] == bot.config.COMMENTS_MODEL and "Café" in vistos[-1][0]  # revisa todo lo escrito
 
         n = len(vistos)
@@ -406,12 +407,12 @@ def test_un_solo_archivo_de_ajustes():
     ajustes = (Path(__file__).resolve().parent.parent / "igbot" / "ajustes.css").read_text()
     estilos = (Path(__file__).resolve().parent.parent / "web" / "estilos.css").read_text()
     assert "--t-titulo:" in ajustes and "--caja-pad:" in ajustes
-    assert ajustes in panel.HOJA and panel.AJUSTES == ajustes and f"/panel/static/panel.css?v={panel.VERSION_CSS}" in panel.PRINCIPIO
+    assert ajustes in marco.HOJA and marco.AJUSTES == ajustes and f"/panel/static/panel.css?v={marco.VERSION_CSS}" in marco.PRINCIPIO
     assert '@import url("ajustes.css' in estilos.splitlines()[1]
     assert "--t-portada:" in (Path(__file__).resolve().parent.parent / "web" / "ajustes.css").read_text()
     for var in ("--t-ante", "--t-titulo", "--t-tarjeta", "--caja-pad", "--hueco", "--paso-pad", "--paso-circulo", "--t-paso",
                 "--margen-arriba", "--margen-izq", "--margen-der", "--margen-abajo", "--menu-margen"):
-        assert f"var({var})" in panel.COMUN, var
+        assert f"var({var})" in marco.COMUN, var
     for var in ("--t-ante", "--t-portada", "--t-tarjeta", "--caja-pad"):
         assert f"var({var})" in estilos, var
 
@@ -423,29 +424,29 @@ def test_barra_de_trabajo_avanza_lento_y_distinto():
 
     uno, otro = T(), T()
     uno.id, otro.id = "abc", "xyz"
-    k1, k2 = panel.curva(uno), panel.curva(otro)
-    serie = [panel.porcentaje(k1, s / 2) for s in range(0, 600)]
+    k1, k2 = marco.curva(uno), marco.curva(otro)
+    serie = [marco.porcentaje(k1, s / 2) for s in range(0, 600)]
     assert serie[0] == 0 and all(b >= a for a, b in zip(serie, serie[1:])) and max(serie) < 96
     assert serie[20] > 25 and serie[60] > 70 and serie[60] - serie[20] > serie[120] - serie[60]  # se va frenando
-    assert k1 != k2 and panel.porcentaje(k1, 10) != panel.porcentaje(k2, 10)
+    assert k1 != k2 and marco.porcentaje(k1, 10) != marco.porcentaje(k2, 10)
     pasos = ("Uno…", "Dos…", "Tres…")
-    assert [panel.paso_de(pasos, p) for p in (0, 40, 95)] == ["Uno…", "Dos…", "Tres…"] and panel.paso_de((), 50) == ""
+    assert [marco.paso_de(pasos, p) for p in (0, 40, 95)] == ["Uno…", "Dos…", "Tres…"] and marco.paso_de((), 50) == ""
 
 
 def test_pasos_en_el_celular_no_ensanchan_la_pagina():
     """En el celular la columna de los pasos no crece con su contenido (1fr = minmax(auto, 1fr) la ensanchaba a
     ~1000 px en Tu marca); las tarjetas de marca van en las columnas de ajustes.css."""
-    css = panel.ESTILO + panel.COMUN
+    css = marco.ESTILO + marco.COMUN
     assert ".wiz{grid-template-columns:minmax(0,1fr)}" in css and ".wiz{grid-template-columns:1fr}" not in css
-    assert "--marca-columnas-cel:" in panel.COMUN and "repeat(var(--marca-columnas-cel)" in panel.COMUN
+    assert "--marca-columnas-cel:" in marco.COMUN and "repeat(var(--marca-columnas-cel)" in marco.COMUN
 
 
 def test_la_hoja_de_estilos_se_sirve_como_archivo_con_version():
     client = TestClient(bot.app, base_url="https://testserver")
     r = client.get("/panel/static/panel.css")
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/css")
-    assert r.text == panel.HOJA and panel.ESTILO in r.text and panel.COMUN in r.text
+    assert r.text == marco.HOJA and marco.ESTILO in r.text and marco.COMUN in r.text
     assert "immutable" in r.headers["cache-control"]
     html = client.get("/panel").text
-    assert f'<link rel="stylesheet" href="/panel/static/panel.css?v={panel.VERSION_CSS}">' in html
-    assert panel.ESTILO not in html  # ya no va inline en cada página
+    assert f'<link rel="stylesheet" href="/panel/static/panel.css?v={marco.VERSION_CSS}">' in html
+    assert marco.ESTILO not in html  # ya no va inline en cada página

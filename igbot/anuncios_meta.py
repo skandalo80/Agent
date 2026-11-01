@@ -23,7 +23,7 @@ import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
-from . import config, conectar, panel
+from . import conectar, config, marco
 from .cuenta import Cuenta
 from .pagina_fb import FB_GRAPH
 
@@ -93,8 +93,8 @@ def _dialogo() -> RedirectResponse:
 
 @router.post("/conectar")
 async def conectar_cuenta(request: Request):
-    panel.de_aqui(request)
-    if not panel.cuenta_de_sesion(request):
+    marco.de_aqui(request)
+    if not marco.cuenta_de_sesion(request):
         return RedirectResponse("/panel", status_code=303)
     return _dialogo() if enabled() else RedirectResponse("/panel/anuncios", status_code=303)
 
@@ -139,13 +139,13 @@ async def _guardar_cuenta(c: Cuenta, token: dict, cuenta: dict) -> None:
                       "moneda": cuenta.get("currency", ""), "fecha": time.time()})
     for k in [k for k in _cache if k[0] == c.slug]:
         del _cache[k]
-    log.info("@%s conectó su cuenta de anuncios %s (%s)", await panel.usuario(c), cuenta.get("name"), cuenta["id"])
+    log.info("@%s conectó su cuenta de anuncios %s (%s)", await marco.usuario(c), cuenta.get("name"), cuenta["id"])
 
 
 @router.get("/callback")
 async def callback(request: Request):
     p = request.query_params
-    if not (c := panel.cuenta_de_sesion(request)):
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     if p.get("error") or not p.get("code"):
         return _volver("cancelada")
@@ -173,9 +173,9 @@ async def callback(request: Request):
         f'<div class="datos"><b>{escape(x.get("name", ""))}</b><span>{escape(x["id"].removeprefix("act_"))}'
         f'{" · " + escape(x["currency"]) if x.get("currency") else ""}</span></div>'
         '<button class="boton secundario chico">Elegir</button></form>' for x in cuentas)
-    r = panel.pagina(
-        await panel.menu_de(c, "cuenta", sub="conexion")
-        + f'<main class="contenido">{panel.encabezado("Tu cuenta de anuncios")}'
+    r = marco.pagina(
+        await marco.menu_de(c, "cuenta", sub="conexion")
+        + f'<main class="contenido">{marco.encabezado("Tu cuenta de anuncios")}'
         '<div class="tarjeta"><h2>¿Qué cuenta de anuncios conectamos?</h2>'
         '<p class="ayuda">Solo leemos sus números: no creamos, cambiamos ni pagamos anuncios.</p>'
         + filas + "</div></main>")
@@ -187,11 +187,11 @@ async def callback(request: Request):
 
 @router.post("/elegir")
 async def elegir(request: Request):
-    panel.de_aqui(request)
-    if not (c := panel.cuenta_de_sesion(request)):
+    marco.de_aqui(request)
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     t, token, cuentas = _por_elegir.pop(request.cookies.get(ELEGIR_COOKIE, ""), (0, {}, []))
-    cuenta_id = (await panel.form(request)).get("cuenta", "")
+    cuenta_id = (await marco.form(request)).get("cuenta", "")
     elegida = next((x for x in cuentas if x["id"] == cuenta_id), None)
     if not elegida or time.time() - t > TTL:
         return _volver("fallo")
@@ -203,8 +203,8 @@ async def elegir(request: Request):
 
 @router.post("/desconectar")
 async def desconectar(request: Request):
-    panel.de_aqui(request)
-    if not (c := panel.cuenta_de_sesion(request)):
+    marco.de_aqui(request)
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     await guardar(c, {})
     return _volver("desconectada")
@@ -221,7 +221,7 @@ AVISOS = {
 
 @router.get("")
 async def ver(request: Request):
-    if not (c := panel.cuenta_de_sesion(request)):
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     aviso = request.query_params.get("aviso", "")
     datos = await conexion(c)
@@ -256,9 +256,9 @@ async def ver(request: Request):
                   + ('<p class="ayuda">El permiso anterior venció.</p>' if vencida(datos) else "")
                   + boton.format("Conectar tu cuenta de anuncios") + "</div>")
     aviso_html = f'<div class="aviso">{escape(AVISOS[aviso])}</div>' if aviso in AVISOS else ""
-    return panel.pagina(
-        await panel.menu_de(c, "cuenta", sub="conexion")
-        + f'<main class="contenido">{panel.encabezado("Tu cuenta de anuncios")}{aviso_html}{cuerpo}</main>')
+    return marco.pagina(
+        await marco.menu_de(c, "cuenta", sub="conexion")
+        + f'<main class="contenido">{marco.encabezado("Tu cuenta de anuncios")}{aviso_html}{cuerpo}</main>')
 
 
 # --- los números de Meta ---

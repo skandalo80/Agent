@@ -26,7 +26,7 @@ from html import escape
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
-from . import brief, campanas, empresa, limites, panel, tienda_shopify, tools
+from . import brief, campanas, empresa, limites, marco, tienda_shopify, tools
 from .contenido import TOKEN_FOTO, archivo, guardar_fotos, marca_de, modo_de, sin_plan, url_imagen
 from .cuenta import Cuenta, usar
 
@@ -82,7 +82,7 @@ MAX_TEXTO, MAX_CONDICION = 400, 120
 
 # Las imágenes de las tarjetas: igbot/static/tarjetas/campana/<sección>-<clave>.webp (el usuario las hace aparte).
 # Mientras no estén, cada tarjeta lleva su color de respaldo.
-TARJETAS = campanas.panel.STATIC / "tarjetas" / "campana"
+TARJETAS = campanas.marco.STATIC / "tarjetas" / "campana"
 
 # enfoque del contenido: (título, descripción, tema de campanas.TEMAS, color de respaldo)
 ENFOQUES = {
@@ -277,7 +277,7 @@ def precio_de(p: dict) -> str:
 
 async def lista_para_empezar(c: Cuenta) -> tuple[bool, bool]:
     """(empresa lista, marca lista): sin las dos no se puede crear una campaña."""
-    return await empresa.empresa_lista(c), await panel.marca_lista(c)
+    return await empresa.empresa_lista(c), await marco.marca_lista(c)
 
 
 # --- de lo que eligió a la campaña ---
@@ -566,7 +566,7 @@ def riel(b: dict, actual: int) -> str:
             f'<button class="wiz-paso{" actual" if actual == RESUMEN else ""}{"" if listo else " apagado"}" name="ir"'
             f' value="{RESUMEN}"><b>✓</b>Resumen</button>'
             + (f'<button class="wiz-paso{" actual" if actual == BRIEF else ""}" name="ir" value="{BRIEF}"><b>✓</b>Brief'
-               "</button>" if b.get("brief") else "") + panel.avance(avance) + "</nav>")
+               "</button>" if b.get("brief") else "") + marco.avance(avance) + "</nav>")
 
 
 def cab(b: dict, n: int, titulo: str) -> str:
@@ -840,7 +840,7 @@ async def resumen(c: Cuenta, b: dict, objetivos: list[dict], mensajes: list[dict
         ("Cantidad y fechas", fechas, 7, True)]
     tarjetas = "".join(
         f'<div class="wiz-res{" ancho" if ancho else ""}">'
-        + panel.cab_tarjeta(t, boton=f'<button class="editar" name="ir" value="{n}">Editar</button>')
+        + marco.cab_tarjeta(t, boton=f'<button class="editar" name="ir" value="{n}">Editar</button>')
         + f'<p>{v if t in ("Cantidad y fechas", "Fechas") else escape(v)}</p></div>' for t, v, n, ancho in bloques)
     with usar(c):
         quedan = await campanas.ia_restantes(c)
@@ -1038,8 +1038,8 @@ async def pagina(c: Cuenta, paso: int, aviso: str = "", b: dict | None = None):
                   f'<input type="hidden" name="paso" value="{paso}">{riel(b, paso)}'
                   f'<div class="wiz-main">{contenido}</div></form>')
     editar = bool(b.get("cid"))
-    return panel.pagina(
-        await panel.menu_de(c, "contenido", sub="campanas")
+    return marco.pagina(
+        await marco.menu_de(c, "contenido", sub="campanas")
         + campanas.cabeza(f'<a class="boton secundario chico" href="{campanas.BASE}/{escape(str(b["cid"]))}">'
                           '‹ Volver a la campaña</a>' if editar else "", "",
                           "Planificación" if editar else "Nueva campaña")
@@ -1060,7 +1060,7 @@ def foto_de(c: Cuenta, prod: dict) -> bool:
 
 @router.get("/campanas/nueva")
 async def ver(request: Request):
-    if not (c := panel.cuenta_de_sesion(request)):
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     if c.imagenes_mes <= 0:
         return sin_plan()
@@ -1077,8 +1077,8 @@ async def ver(request: Request):
 
 @router.post("/campanas/nueva")
 async def guardar(request: Request):
-    panel.de_aqui(request)
-    if not (c := panel.cuenta_de_sesion(request)):
+    marco.de_aqui(request)
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     if c.imagenes_mes <= 0:
         return sin_plan()
@@ -1157,7 +1157,7 @@ async def adn_de(c: Cuenta, b: dict) -> str:
     return b["adn"]["texto"]
 
 
-# Lo que va diciendo la espera, según avanza la barra (panel.paso_de).
+# Lo que va diciendo la espera, según avanza la barra (marco.paso_de).
 PASOS_BRIEF = ("Leyendo tu empresa y tu marca…", "Revisando tus campañas anteriores…", "Generando opciones de campaña…",
                "Definiendo el mensaje y los pilares…", "Generando dirección visual…", "Puliendo las ideas…")
 PASOS_RAPIDA = ("Leyendo tu empresa y tu marca…", "Generando opciones de campaña…", "Escribiendo el brief…",
@@ -1224,8 +1224,8 @@ async def pagina_rapida(c: Cuenta, aviso: str = "", b: dict | None = None):
         if not b["objetivo"] and objetivos:  # uno ya marcado: el sugerido de esta semana, si hay
             b["objetivo"] = next((o["k"] for o in objetivos if o.get("sugerido")), objetivos[0]["k"])
         cuerpo = pagina_rapida_html(b, objetivos)
-    return panel.pagina(
-        await panel.menu_de(c, "contenido", sub="campanas")
+    return marco.pagina(
+        await marco.menu_de(c, "contenido", sub="campanas")
         + campanas.cabeza("", "", "Crear con IA")
         + '<div class="oscuro-pag"><main><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
@@ -1250,7 +1250,7 @@ def borrador_rapido(b: dict, f, objetivos: list[dict], mensajes: list[dict]) -> 
 
 @router.get("/campanas/rapida")
 async def ver_rapida(request: Request):
-    if not (c := panel.cuenta_de_sesion(request)):
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     if c.imagenes_mes <= 0:
         return sin_plan()
@@ -1259,8 +1259,8 @@ async def ver_rapida(request: Request):
 
 @router.post("/campanas/rapida")
 async def crear_rapida(request: Request):
-    panel.de_aqui(request)
-    if not (c := panel.cuenta_de_sesion(request)):
+    marco.de_aqui(request)
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     if c.imagenes_mes <= 0:
         return sin_plan()

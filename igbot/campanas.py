@@ -41,7 +41,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from PIL import Image
 
-from . import brief, config, empresa, imagenes, informe, limites, metricas, openai_texto, panel, semana, tools
+from . import brief, config, empresa, imagenes, informe, limites, marco, metricas, openai_texto, semana, tools
 from .admin import PANEL
 from .contenido import (DESDE, ESTADOS, ESTILO_REFERENCIA, HASHTAGS_FIJO, IMAGEN, MAX_CAPTION, archivo, contexto_marca,
                         cuando, estilo_foto, limitar_hashtags, regla_hashtags,
@@ -1221,7 +1221,7 @@ async def generar_imagen(c: Cuenta, camp: dict, p: dict, extra: bool) -> int:
         marca = await marca_de(c)
         # "Cómo se arman tus posts" de esta campaña (asistente, paso Estilo); si no lo eligió, el de Tu marca.
         modo = camp.get("modo_img") if camp.get("modo_img") in ("plantilla", "libre") else modo_de(marca)
-        usuario = await panel.usuario(c)
+        usuario = await marco.usuario(c)
         # Foto sola y Esto o aquello necesitan su foto limpia: sin diseño libre.
         plantilla = imagenes.LIBRE if (modo == "libre" and formato == "titular") or (
             camp.get("brief") and ia_completa(p) and formato in CON_TEXTO) else plantilla_de(marca)
@@ -1706,7 +1706,7 @@ async def subir_imagen(c: Cuenta, camp: dict, p: dict, data: bytes) -> int:
     formato = formato_de(p)
     with usar(c):
         marca = await marca_de(c)
-        usuario = await panel.usuario(c)
+        usuario = await marco.usuario(c)
         plantilla = plantilla_de(marca) if formato in ("titular", "vs") else imagenes.LIBRE
         pieza_ = pieza_de(camp, p, plantilla)
         try:
@@ -1956,7 +1956,7 @@ def de_a(ini: date, fin: date) -> str:
 
 def cabeza(boton: str = "", pasos: str = "", donde: str = "") -> str:
     """El encabezado de Campañas: antetítulo y botones. `donde` (ya escapado) se suma al antetítulo."""
-    return panel.encabezado("Contenido · Campañas" + (f" · {donde}" if donde else ""), boton, pasos)
+    return marco.encabezado("Contenido · Campañas" + (f" · {donde}" if donde else ""), boton, pasos)
 
 
 def botones_nueva() -> str:
@@ -2069,12 +2069,12 @@ async def pagina_campana(c: Cuenta, camp: dict, aviso: str = "", sel: str = "", 
                f'<div>{descargas}</div></details>'
                f'<a class="boton chico peligro" href="{u}?borrar=1">Borrar campaña</a></span>')
     cab = cabecera_campana(camp, hoy, botones)
-    return panel.pagina(
-        await panel.menu_de(c, "contenido", sub="campanas")
+    return marco.pagina(
+        await marco.menu_de(c, "contenido", sub="campanas")
         + cabeza(donde=escape(camp["nombre"]))
         + '<div class="oscuro-pag"><main><div class="contenedor pag-camp">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
-        + await panel.pendiente(c, "campanas") + cab + cuerpo + "</div></main>" + modal + "</div>")
+        + await marco.pendiente(c, "campanas") + cab + cuerpo + "</div></main>" + modal + "</div>")
 
 
 async def pagina_nueva(c: Cuenta, aviso: str = "", form: dict | None = None) -> HTMLResponse:
@@ -2294,7 +2294,7 @@ async def pagina_lista(c: Cuenta, ver: str = "", aviso: str = "", q: dict | None
         ver = next((k for k in ("activa", "proxima") if grupos[k]), "pasada")
     n_pasadas = len(await informe.todas(c, grupos["pasada"]))
     pestanas = '<nav class="cal-sw tabs-cam">' + "".join(
-        f'<a href="{BASE}?ver={k}"{panel.ACTIVA if k == ver else ""}>{v}'
+        f'<a href="{BASE}?ver={k}"{marco.ACTIVA if k == ver else ""}>{v}'
         f'<small>{n_pasadas if k == "pasada" else len(grupos[k])}</small></a>' for k, v in PESTANAS.items()) + "</nav>"
     if ver == "pasada":
         cuerpo = await pasadas_html(c, grupos["pasada"], q)
@@ -2308,11 +2308,11 @@ async def pagina_lista(c: Cuenta, ver: str = "", aviso: str = "", q: dict | None
     if ver == "proxima" and grupos[ver]:
         cuerpo += (f'<div class="acciones"><a class="boton secundario chico" href="{BASE}/nueva">+ Planear otra campaña'
                    "</a></div>")
-    return panel.pagina(
-        await panel.menu_de(c, "contenido", sub="campanas")
+    return marco.pagina(
+        await marco.menu_de(c, "contenido", sub="campanas")
         + '<div class="oscuro-pag"><main><div class="contenedor pag-camp">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
-        + await panel.pendiente(c, "campanas")
+        + await marco.pendiente(c, "campanas")
         + f'<div class="tarjeta cal barra-camps"><div class="cal-cab">{pestanas}{botones_nueva()}</div></div>'  # la barra, como la de Resultados
         + f'<div class="tarjeta">{cuerpo}</div></div></main></div>')
 
@@ -2366,7 +2366,7 @@ def tarjeta_extra(accion: str, k: str, destino: str) -> str:
             f'<a class="boton secundario" href="{destino}">Cancelar</a></div></form>')
 
 
-# Lo que va diciendo la espera, según avanza la barra (panel.paso_de).
+# Lo que va diciendo la espera, según avanza la barra (marco.paso_de).
 PASOS_ARMAR = ("Leyendo tu brief…", "Repartiendo los posts en el calendario…", "Generando el plan de cada post…",
                "Generando contenido…", "Escribiendo los textos…", "Generando dirección visual…",
                "Revisando que todo cuadre…")
@@ -2374,10 +2374,10 @@ PASOS_ARMAR = ("Leyendo tu brief…", "Repartiendo los posts en el calendario…
 
 async def trabajando(c: Cuenta, titulo: str, nota: str, trabajo, destino: str = BASE, clave: str = "",
                      segundos: float = 30, pasos: tuple[str, ...] = ()) -> HTMLResponse:
-    """En segundo plano (panel.trabajo_largo): sigue aunque cierre la página y, al terminar, lleva de vuelta a la
+    """En segundo plano (marco.trabajo_largo): sigue aunque cierre la página y, al terminar, lleva de vuelta a la
     campaña. Si ese mismo trabajo (`clave`, o el título y el destino) ya está corriendo por un doble clic o al
     recargar, no se repite."""
-    return await panel.trabajo_largo(c, clave or f"{titulo} {destino}", titulo, nota, destino, trabajo,
+    return await marco.trabajo_largo(c, clave or f"{titulo} {destino}", titulo, nota, destino, trabajo,
                                      menu=("contenido", "campanas"), boton="Ver tu campaña", segundos=segundos,
                                      pasos=pasos)
 
@@ -2386,7 +2386,7 @@ async def trabajando(c: Cuenta, titulo: str, nota: str, trabajo, destino: str = 
 
 @router.get("/campanas")
 async def ver(request: Request):
-    if not (c := panel.cuenta_de_sesion(request)):
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     if c.imagenes_mes <= 0:
         return sin_plan()
@@ -2403,7 +2403,7 @@ def archivo_de(nombre: str) -> str:
 
 @router.get("/campanas/reporte")
 async def reporte(request: Request):
-    if not (c := panel.cuenta_de_sesion(request)):
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     if c.imagenes_mes <= 0:
         return sin_plan()
@@ -2414,7 +2414,7 @@ async def reporte(request: Request):
             return await pagina_lista(c, "pasada", "Elige al menos una campaña para el reporte.")
         if len(camps) > informe.MAX_REPORTE:
             return await pagina_lista(c, "pasada", f"Elige hasta {informe.MAX_REPORTE} campañas por reporte.")
-        contenido_pdf = await informe.pdf(c, camps, await marca_de(c), await panel.usuario(c))
+        contenido_pdf = await informe.pdf(c, camps, await marca_de(c), await marco.usuario(c))
     nombre = f"reporte-{archivo_de(camps[0]['nombre'])}" if len(camps) == 1 else f"reporte-{len(camps)}-campanas"
     return Response(contenido_pdf, media_type="application/pdf",
                     headers={"Content-Disposition": f'attachment; filename="{nombre}.pdf"'})
@@ -2422,7 +2422,7 @@ async def reporte(request: Request):
 
 @router.get("/campanas/{cid}")
 async def ver_campana(request: Request, cid: str):
-    if not (c := panel.cuenta_de_sesion(request)):
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     if c.imagenes_mes <= 0:
         return sin_plan()
@@ -2437,7 +2437,7 @@ async def ver_campana(request: Request, cid: str):
 @router.get("/campanas/{cid}/brief")
 async def descargar_brief(request: Request, cid: str):
     """El brief de la campaña en PDF (también de las que ya pasaron al historial)."""
-    if not (c := panel.cuenta_de_sesion(request)):
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     if c.imagenes_mes <= 0:
         return sin_plan()
@@ -2445,7 +2445,7 @@ async def descargar_brief(request: Request, cid: str):
         camp = await leer(c, cid) or next((x for x in await informe.historial(c) if str(x["id"]) == cid), {})
         if not camp.get("brief"):
             return RedirectResponse(BASE, status_code=303)
-        contenido_pdf = await informe.brief_pdf(c, camp, await marca_de(c), await panel.usuario(c))
+        contenido_pdf = await informe.brief_pdf(c, camp, await marca_de(c), await marco.usuario(c))
     return Response(contenido_pdf, media_type="application/pdf",
                     headers={"Content-Disposition": f'attachment; filename="brief-{archivo_de(camp["nombre"])}.pdf"'})
 
@@ -2506,7 +2506,7 @@ def documentos(camp: dict) -> bytes:
 @router.get("/campanas/{cid}/documentos")
 async def descargar_documentos(request: Request, cid: str):
     """Los documentos de cada etapa del flujo (brief, plan editorial, posts y prompts), en un ZIP."""
-    if not (c := panel.cuenta_de_sesion(request)):
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     if c.imagenes_mes <= 0:
         return sin_plan()
@@ -2521,7 +2521,7 @@ async def descargar_documentos(request: Request, cid: str):
 @router.get("/campanas/{cid}/propuesta")
 async def descargar_propuesta(request: Request, cid: str):
     """La campaña en PDF, para mandarla a la marca antes de publicar."""
-    if not (c := panel.cuenta_de_sesion(request)):
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     if c.imagenes_mes <= 0:
         return sin_plan()
@@ -2529,7 +2529,7 @@ async def descargar_propuesta(request: Request, cid: str):
         camp = await leer(c, cid)
         if not camp.get("posts"):
             return RedirectResponse(BASE, status_code=303)
-        contenido_pdf = await informe.propuesta(c, camp, await marca_de(c), await panel.usuario(c))
+        contenido_pdf = await informe.propuesta(c, camp, await marca_de(c), await marco.usuario(c))
     return Response(contenido_pdf, media_type="application/pdf",
                     headers={"Content-Disposition": f'attachment; filename="propuesta-{archivo_de(camp["nombre"])}.pdf"'})
 
@@ -2585,12 +2585,12 @@ async def armar(c: Cuenta, datos: dict, camp: dict, borrador: bool = False):
 
 @router.post("/campanas")
 async def nueva_campana(request: Request):
-    panel.de_aqui(request)
-    if not (c := panel.cuenta_de_sesion(request)):
+    marco.de_aqui(request)
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     if c.imagenes_mes <= 0:
         return sin_plan()
-    f = await panel.form(request)
+    f = await marco.form(request)
     if f.get("accion") != "proponer":
         return RedirectResponse(BASE, status_code=303)
     return await armar(c, del_form(f), {})
@@ -2598,8 +2598,8 @@ async def nueva_campana(request: Request):
 
 @router.post("/campanas/{cid}")
 async def accion(request: Request, cid: str):
-    panel.de_aqui(request)
-    if not (c := panel.cuenta_de_sesion(request)):
+    marco.de_aqui(request)
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     if c.imagenes_mes <= 0:
         return sin_plan()

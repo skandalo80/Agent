@@ -32,7 +32,7 @@ from html import escape
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from . import config, contenido, panel, posicionamiento, shopify, sitio
+from . import config, contenido, marco, panel, posicionamiento, shopify, sitio
 from .cuenta import Cuenta, usar
 
 log = logging.getLogger("igbot.empresa")
@@ -158,7 +158,7 @@ async def empresa_lista(c: Cuenta) -> bool:
 
 async def precarga(c: Cuenta) -> dict:
     """La primera vez: lo que ya escribió en Configura y en Tu marca, y su posicionamiento."""
-    perfil = await panel.perfil(c)
+    perfil = await marco.perfil(c)
     marca = await contenido.marca_de(c)
     pos = await posicionamiento.de(c)
     temas = panel.politicas(perfil)
@@ -379,7 +379,7 @@ async def agregar_faq(c: Cuenta, pregunta: str, respuesta: str) -> bool:
     e["actualizado"] = int(time.time())
     await c.store.set(CLAVE, json.dumps(e, ensure_ascii=False))
     programar_revision(c, ya=True)
-    log.info("@%s guardó una pregunta frecuente desde Conversaciones", await panel.usuario(c))
+    log.info("@%s guardó una pregunta frecuente desde Conversaciones", await marco.usuario(c))
     return True
 
 
@@ -388,12 +388,12 @@ async def agregar_faq(c: Cuenta, pregunta: str, respuesta: str) -> bool:
 async def aplicar(c: Cuenta) -> None:
     """El asistente usa el perfil desde ya; las opciones de campaña se rehacen si cambió."""
     texto = await texto_de(c)  # también la principal (prompt_destino: aparte del repo)
-    prompt = panel.generar(await panel.usuario(c), await panel.perfil(c), texto)
+    prompt = panel.generar(await marco.usuario(c), await marco.perfil(c), texto)
     c.prompt_destino().parent.mkdir(parents=True, exist_ok=True)
     c.prompt_destino().write_text(prompt, encoding="utf-8")
     if (await de(c)).get("terminado"):
         programar_opciones(c)
-        posicionamiento.programar(c, await panel.perfil(c))  # sale del perfil; no se rehace si no cambió
+        posicionamiento.programar(c, await marco.perfil(c))  # sale del perfil; no se rehace si no cambió
 
 
 async def revisar(c: Cuenta, e: dict, prods: list[dict]) -> str:
@@ -425,7 +425,7 @@ async def revisar_y_aplicar(c: Cuenta) -> None:
         await c.store.set(CLAVE_RECHAZO, "")
         await aplicar(c)
         return
-    log.warning("@%s: perfil de empresa rechazado: %s", await panel.usuario(c), motivo)
+    log.warning("@%s: perfil de empresa rechazado: %s", await marco.usuario(c), motivo)
     viejos = aprobado.get("productos", [])
     nuevos = [p for p in prods if p not in viejos]
     producto = nuevos[-1] if nuevos else None
@@ -804,7 +804,7 @@ def riel(e: dict, prods: list[dict], actual: int, con_form: bool) -> str:
     pct = round(len(listos) / len(PASOS) * 100)
     return ('<nav class="riel" aria-label="Pasos del perfil"><h2>Perfil de empresa</h2>'
             f'<div class="lista">{"".join(items)}</div>'
-            + panel.avance(pct) + "</nav>")
+            + marco.avance(pct) + "</nav>")
 
 
 def numero(paso: int) -> int:
@@ -824,7 +824,7 @@ def pie(paso: int, nota: str = "") -> str:
     nombre = PASOS[siguiente][0].lower() if siguiente in PASOS else "resumen"
     atras = (f'<button class="boton secundario" name="accion" value="ir_{ORDEN[i - 1]}">← Anterior</button>'
              if i else "")
-    return panel.pie_config(atras, f'<button class="boton" name="accion" value="ir_{siguiente}">Siguiente: {nombre} →</button>',
+    return marco.pie_config(atras, f'<button class="boton" name="accion" value="ir_{siguiente}">Siguiente: {nombre} →</button>',
                             nota)
 
 
@@ -1034,7 +1034,7 @@ def _editar(n: int) -> str:
 
 
 def resumen(e: dict, prods: list[dict]) -> str:
-    filas = "".join(f'<div class="caja-o">{panel.cab_tarjeta(PASOS[n][0], boton=_editar(n))}'
+    filas = "".join(f'<div class="caja-o">{marco.cab_tarjeta(PASOS[n][0], boton=_editar(n))}'
                     f'<p>{_resumen_de(e, prods, n)}</p></div>' for n in ORDEN)
     falta = "" if lista(e) else '<span class="nota">Te falta lo esencial del paso 1.</span>'
     return (
@@ -1071,10 +1071,10 @@ async def pagina(c: Cuenta, paso: int, e: dict | None = None, aviso: str = "", e
     if not guardado and paso != RESUMEN and not aviso and not nota:
         avisos = ('<div class="aviso">Te precargamos lo que ya escribiste en tu asistente y en Tu marca.'
                   " Revísalo y pulsa Aplicar o Siguiente para guardarlo.</div>" if e else "")
-    return panel.pagina(
+    return marco.pagina(
         f"<style>{ESTILO}</style>"
-        + await panel.menu_de(c, "cuenta", sub="empresa")
-        + panel.encabezado("Tu cuenta · Perfil de empresa")
+        + await marco.menu_de(c, "cuenta", sub="empresa")
+        + marco.encabezado("Tu cuenta · Perfil de empresa")
         + f'<main class="emp"><div class="contenedor">{avisos}<div class="mago">'
         f'{riel(e, prods, paso, con_form=True)}<div class="hoja-o">{cuerpo}</div></div></div></main>'
     )
@@ -1092,7 +1092,7 @@ def _paso(valor) -> int:
 
 @router.get("")
 async def ver(request: Request):
-    if not (c := panel.cuenta_de_sesion(request)):
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     q = request.query_params
     e = await de(c)
@@ -1105,8 +1105,8 @@ async def ver(request: Request):
 
 @router.post("")
 async def guardar(request: Request):
-    panel.de_aqui(request)
-    if not (c := panel.cuenta_de_sesion(request)):
+    marco.de_aqui(request)
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     f = await request.form()
     paso = _paso(f.get("paso")) or 1
@@ -1127,7 +1127,7 @@ async def guardar(request: Request):
         e["actualizado"] = int(time.time())
         await c.store.set(CLAVE, json.dumps(e, ensure_ascii=False))
         programar_revision(c, ya=accion == "terminar")  # revisa y, si se aprueba, el asistente y las opciones lo usan
-        log.info("@%s guardó el paso %s de su perfil de empresa", await panel.usuario(c), paso)
+        log.info("@%s guardó el paso %s de su perfil de empresa", await marco.usuario(c), paso)
     if accion == "terminar":
         if not cambio:  # si cambió, se piden al aprobarse
             programar_opciones(c)
@@ -1144,8 +1144,8 @@ async def guardar(request: Request):
 
 @router.post("/producto")
 async def guardar_producto(request: Request):
-    panel.de_aqui(request)
-    if not (c := panel.cuenta_de_sesion(request)):
+    marco.de_aqui(request)
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     f = await request.form()
     accion = str(f.get("accion", "guardar"))
@@ -1200,7 +1200,7 @@ async def guardar_producto(request: Request):
         prods.append(nuevo)
     await c.store.set(CLAVE_PRODUCTOS, json.dumps(prods, ensure_ascii=False))
     programar_revision(c)
-    log.info("@%s guardó un producto de su perfil de empresa", await panel.usuario(c))
+    log.info("@%s guardó un producto de su perfil de empresa", await marco.usuario(c))
     seguir = f"&producto={nuevo['id']}#editar" if aviso == "foto_quitada" else ""
     return RedirectResponse(f"/panel/empresa?paso=3&aviso={aviso}{seguir}", status_code=303)
 
@@ -1230,7 +1230,7 @@ async def llenar_web(c: Cuenta, e: dict) -> HTMLResponse:
         await sitio.llenar(c, url, GIROS)
         yield "/panel/empresa/sitio"
 
-    return await panel.trabajo_largo(c, "sitio_web", "Leyendo tu sitio web",
+    return await marco.trabajo_largo(c, "sitio_web", "Leyendo tu sitio web",
                                      "Revisamos tu página de inicio y algunas más; tarda alrededor de medio minuto.",
                                      "/panel/empresa/sitio", correr, menu=("cuenta", "empresa"),
                                      boton="Ver lo que encontramos")
@@ -1283,7 +1283,7 @@ def pagina_sugerencias(e: dict, datos: dict) -> str:
 
 @router.get("/sitio")
 async def ver_sitio(request: Request):
-    if not (c := panel.cuenta_de_sesion(request)):
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     datos = await sitio.sugerencias(c)
     if not datos:
@@ -1297,17 +1297,17 @@ async def ver_sitio(request: Request):
                   "Volver a tu empresa</a></span></div>")
     else:
         cuerpo = (f'<form method="post" action="/panel/empresa/sitio">{pagina_sugerencias(e, datos)}</form>')
-    return panel.pagina(
+    return marco.pagina(
         f"<style>{ESTILO}</style>"
-        + await panel.menu_de(c, "cuenta", sub="empresa")
+        + await marco.menu_de(c, "cuenta", sub="empresa")
         + f'<main class="emp"><div class="contenedor"><div class="hoja-o">{cuerpo}</div></div></main>'
     )
 
 
 @router.post("/sitio")
 async def usar_sitio(request: Request):
-    panel.de_aqui(request)
-    if not (c := panel.cuenta_de_sesion(request)):
+    marco.de_aqui(request)
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     f = await request.form()
     datos = await sitio.sugerencias(c)
@@ -1338,7 +1338,7 @@ async def usar_sitio(request: Request):
         e["actualizado"] = int(time.time())
         await c.store.set(CLAVE, json.dumps(e, ensure_ascii=False))
         programar_revision(c)
-        log.info("@%s llenó su perfil de empresa con su sitio web", await panel.usuario(c))
+        log.info("@%s llenó su perfil de empresa con su sitio web", await marco.usuario(c))
     return RedirectResponse("/panel/empresa?paso=1&aviso=web", status_code=303)
 
 
@@ -1346,8 +1346,8 @@ async def usar_sitio(request: Request):
 
 @router.post("/shopify")
 async def leer_shopify(request: Request):
-    panel.de_aqui(request)
-    if not (c := panel.cuenta_de_sesion(request)):
+    marco.de_aqui(request)
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     url = (await de(c) or {}).get("sitio_web", "")
     if not url:
@@ -1357,7 +1357,7 @@ async def leer_shopify(request: Request):
         await shopify.preparar(c, url, MONEDAS)
         yield "/panel/empresa/shopify"
 
-    return await panel.trabajo_largo(c, "shopify", "Leyendo tu tienda", "Traemos la lista de tus productos;"
+    return await marco.trabajo_largo(c, "shopify", "Leyendo tu tienda", "Traemos la lista de tus productos;"
                                      " tarda unos segundos.", "/panel/empresa/shopify", correr,
                                      menu=("cuenta", "empresa"), boton="Elegir tus productos")
 
@@ -1376,7 +1376,7 @@ def fila_shopify(p: dict, ya: bool) -> str:
 
 @router.get("/shopify")
 async def ver_shopify(request: Request):
-    if not (c := panel.cuenta_de_sesion(request)):
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     datos = await shopify.lista(c)
     if not datos:
@@ -1402,9 +1402,9 @@ async def ver_shopify(request: Request):
             '<div class="pie-config"><button class="boton secundario" name="accion" value="descartar">Cancelar</button>'
             '<span class="pie-nota"></span><span class="pie-der">'
             '<button class="boton" name="accion" value="importar">Agregar a mi catálogo</button></span></div></form>')
-    return panel.pagina(
+    return marco.pagina(
         f"<style>{ESTILO}</style>"
-        + await panel.menu_de(c, "cuenta", sub="empresa")
+        + await marco.menu_de(c, "cuenta", sub="empresa")
         + f'<main class="emp"><div class="contenedor"><div class="hoja-o">{cuerpo}</div></div></main>'
     )
 
@@ -1423,13 +1423,13 @@ async def importar(c: Cuenta, elegidos: list[dict], moneda: str) -> None:
                       "url": p["url"], "tipo": "producto", "destacado": False, "opciones": p["opciones"]})
         await c.store.set(CLAVE_PRODUCTOS, json.dumps(prods, ensure_ascii=False))
     programar_revision(c)
-    log.info("@%s importó %d productos de Shopify", await panel.usuario(c), len(elegidos))
+    log.info("@%s importó %d productos de Shopify", await marco.usuario(c), len(elegidos))
 
 
 @router.post("/shopify/importar")
 async def importar_shopify(request: Request):
-    panel.de_aqui(request)
-    if not (c := panel.cuenta_de_sesion(request)):
+    marco.de_aqui(request)
+    if not (c := marco.cuenta_de_sesion(request)):
         return RedirectResponse("/panel", status_code=303)
     f = await request.form()
     datos = await shopify.lista(c)
@@ -1449,6 +1449,6 @@ async def importar_shopify(request: Request):
             await importar(c, lista_[i:i + 5], datos.get("moneda", MONEDAS[0]))
         yield "/panel/empresa?paso=3&aviso=shopify"
 
-    return await panel.trabajo_largo(c, "shopify_importar", "Agregando tus productos",
+    return await marco.trabajo_largo(c, "shopify_importar", "Agregando tus productos",
                                      "Bajamos sus fotos y los agregamos a tu catálogo.", "/panel/empresa?paso=3",
                                      correr, menu=("cuenta", "empresa"), boton="Ver tu catálogo")

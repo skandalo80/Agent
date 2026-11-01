@@ -34,7 +34,7 @@ import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from . import config, panel
+from . import config, marco
 from .cuenta import cuenta
 from .google import Google
 from .instagram import GRAPH, Instagram
@@ -266,7 +266,7 @@ async def callback(request: Request):
     # Con mucho movimiento no se enciende sola: se revisa antes (costo y carga del servidor).
     grande = seguidores > config.CUENTA_GRANDE_SEGUIDORES or posts > config.CUENTA_GRANDE_POSTS
     try:
-        c = await panel.alta(ig_id, usuario, token, grande) if panel.alta else None
+        c = await marco.alta(ig_id, usuario, token, grande) if marco.alta else None
     except Exception:
         log.exception("No se pudo dar de alta a @%s; se hace a mano con scripts/alta_cliente.py", usuario)
         c = None
@@ -283,7 +283,7 @@ async def callback(request: Request):
     if c:
         # Entra directo a su panel para configurar su asistente.
         response = RedirectResponse(f"{config.PUBLIC_URL}/panel", status_code=303)
-        panel.iniciar_sesion(response, ig_id)
+        marco.iniciar_sesion(response, ig_id)
     else:
         response = back("/conectado")
     response.delete_cookie(STATE_COOKIE, path="/conectar")
@@ -328,7 +328,7 @@ async def desautorizar(request: Request):
         return JSONResponse({"error": "signed_request inválido"}, status_code=400)
     log.info("%s quitó la app desde Instagram", quien[1])
     apagado = False
-    if panel.buscar and (c := panel.buscar(quien[0])):  # su token ya no sirve: que no siga intentando contestar
+    if marco.buscar and (c := marco.buscar(quien[0])):  # su token ya no sirve: que no siga intentando contestar
         await c.store.set("bot_activo", "0")
         apagado = True
     await avisar(f"Quitaron la app: {quien[1]}",

@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 import app as bot  # noqa: E402
 from igbot import acceso, conectar, config, panel  # noqa: E402
+from igbot import marco  # noqa: E402
 
 ORIGEN = {"Origin": "https://console.skandar.online"}
 
@@ -35,7 +36,7 @@ def preparar(monkeypatch):
     async def usuario(c):
         return c.slug or "principal"
 
-    monkeypatch.setattr(panel, "usuario", usuario)
+    monkeypatch.setattr(marco, "usuario", usuario)
     return google
 
 
@@ -50,7 +51,7 @@ def test_cuenta_de_correo(monkeypatch):
 def test_enlace_por_correo_entra_una_sola_vez(monkeypatch):
     with TestClient(bot.app, base_url="https://testserver") as client:
         google = preparar(monkeypatch)
-        monkeypatch.setattr(panel, "buscar", lambda ig_id: SimpleNamespace(ig_account_id="222") if ig_id == "222" else None)
+        monkeypatch.setattr(marco, "buscar", lambda ig_id: SimpleNamespace(ig_account_id="222") if ig_id == "222" else None)
         assert "Entrar con mi correo" in client.get("/panel").text
         r = client.post("/panel/correo", headers=ORIGEN, data={"correo": "ana@cafe.mx"})
         assert "Revisa tu correo" in r.text
@@ -64,12 +65,12 @@ def test_enlace_por_correo_entra_una_sola_vez(monkeypatch):
 
         r = client.post("/panel/correo/entrar", headers=ORIGEN, data={"t": t}, follow_redirects=False)
         assert r.headers["location"] == "/panel"
-        assert panel.sesion(SimpleNamespace(cookies={panel.COOKIE: r.cookies[panel.COOKIE]})) == "222"
+        assert marco.sesion(SimpleNamespace(cookies={marco.COOKIE: r.cookies[marco.COOKIE]})) == "222"
 
         # Ya usado, o alterado: no entra.
         otro = TestClient(bot.app, base_url="https://testserver")
         r = otro.post("/panel/correo/entrar", headers=ORIGEN, data={"t": t}, follow_redirects=False)
-        assert "ya no sirve" in r.text and panel.COOKIE not in r.cookies
+        assert "ya no sirve" in r.text and marco.COOKIE not in r.cookies
         b64, resto = t.split(".", 1)
         falso = acceso._b64("i:111") + "." + resto
         assert "ya no sirve" in otro.get(f"/panel/correo/entrar?t={falso}").text
@@ -118,7 +119,7 @@ def test_correo_nuevo_enlaza_su_instagram(monkeypatch):
         t = re.search(r"/panel/correo/entrar\?t=(\S+)", cuerpo).group(1)
         assert "Crea tu cuenta" in client.get(f"/panel/correo/entrar?t={t}").text
         r = client.post("/panel/correo/entrar", headers=ORIGEN, data={"t": t}, follow_redirects=False)
-        assert r.headers["location"] == "/panel/correo/conecta" and panel.COOKIE not in r.cookies
+        assert r.headers["location"] == "/panel/correo/conecta" and marco.COOKIE not in r.cookies
         pagina = client.get("/panel/correo/conecta").text
         assert "Conecta tu Instagram" in pagina and "/conectar/instagram" in pagina
         # En el iPhone, Instagram abre su app y se atora: no se ofrece "Solo con Instagram", queda la nota de Meta.
@@ -128,13 +129,13 @@ def test_correo_nuevo_enlaza_su_instagram(monkeypatch):
         # Enlazó su Instagram (cuenta nueva sin correo propio: tiene el tuyo por omisión).
         nueva = SimpleNamespace(slug="tienda", owner_email="yo@gmail.com", ig_account_id="444", store=FakeStore(),
                                 human_pause_hours=12)
-        monkeypatch.setattr(panel, "buscar", lambda ig_id: nueva if ig_id == "444" else None)
+        monkeypatch.setattr(marco, "buscar", lambda ig_id: nueva if ig_id == "444" else None)
 
         async def inicio(c):
             return "/panel/bienvenida"
 
         monkeypatch.setattr(panel, "inicio", inicio)
-        r = client.get("/panel", cookies={panel.COOKIE: _cookie("444")}, follow_redirects=False)
+        r = client.get("/panel", cookies={marco.COOKIE: _cookie("444")}, follow_redirects=False)
         assert r.status_code == 303 and nueva.owner_email == "nuevo@tienda.mx"
         assert "nuevo@tienda.mx" in nueva.store.kv["ajustes"]
 
@@ -142,7 +143,7 @@ def test_correo_nuevo_enlaza_su_instagram(monkeypatch):
 def _cookie(ig_id):
     from fastapi.responses import Response
     r = Response()
-    panel.iniciar_sesion(r, ig_id)
+    marco.iniciar_sesion(r, ig_id)
     return r.headers["set-cookie"].split(";")[0].split("=", 1)[1]
 
 
@@ -190,4 +191,4 @@ def test_entrar_con_apple(monkeypatch, tmp_path):
         # Sin el state de su cookie no entra.
         r = client.post("/panel/correo/apple/vuelta", data={"code": "c", "state": "apple.1.x.y"},
                         follow_redirects=False)
-        assert panel.COOKIE not in r.cookies and "No pudimos entrar con Apple" in r.text
+        assert marco.COOKIE not in r.cookies and "No pudimos entrar con Apple" in r.text

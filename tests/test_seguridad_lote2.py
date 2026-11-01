@@ -17,8 +17,9 @@ os.environ.setdefault("DB_PATH", ":memory:")
 
 import pytest  # noqa: E402
 
-from igbot import cobros, config, limites, panel, unavez  # noqa: E402
+from igbot import cobros, config, limites, unavez  # noqa: E402
 from igbot.store import Store  # noqa: E402
+from igbot import marco  # noqa: E402
 
 
 def corre(coro):
@@ -26,49 +27,49 @@ def corre(coro):
 
 
 def cookie(valor: str):
-    return SimpleNamespace(cookies={panel.COOKIE: valor})
+    return SimpleNamespace(cookies={marco.COOKIE: valor})
 
 
 def test_sesion_nueva_y_vieja(monkeypatch):
     monkeypatch.setattr(config, "SESSION_SECRET", "propio")
     monkeypatch.setattr(config, "APP_SECRET", "meta")
-    monkeypatch.setattr(panel, "VERSIONES", {})
+    monkeypatch.setattr(marco, "VERSIONES", {})
     r = SimpleNamespace(cookies={})
 
     def set_cookie(k, v, **kw):
         r.cookies[k] = v
     r.set_cookie = set_cookie
-    panel.iniciar_sesion(r, "222")
-    assert panel.sesion(cookie(r.cookies[panel.COOKIE])) == "222"
-    assert r.cookies[panel.COOKIE].count(".") == 3
+    marco.iniciar_sesion(r, "222")
+    assert marco.sesion(cookie(r.cookies[marco.COOKIE])) == "222"
+    assert r.cookies[marco.COOKIE].count(".") == 3
     # Cookie de antes (3 partes, firmada con el secreto de Meta): sigue valiendo hasta que se cierren las sesiones.
     vence = int(time.time()) + 1000
     vieja_key = hmac.new(b"meta", b"panel-sesion", hashlib.sha256).digest()
     firma = hmac.new(vieja_key, f"222.{vence}".encode(), hashlib.sha256).hexdigest()
-    assert panel.sesion(cookie(f"222.{vence}.{firma}")) == "222"
+    assert marco.sesion(cookie(f"222.{vence}.{firma}")) == "222"
     # Firmada con otro secreto, o alterada: no.
-    assert panel.sesion(cookie(f"333.{vence}.{firma}")) is None
-    v = r.cookies[panel.COOKIE]
-    assert panel.sesion(cookie(v[:-1] + ("1" if v[-1] == "0" else "0"))) is None
+    assert marco.sesion(cookie(f"333.{vence}.{firma}")) is None
+    v = r.cookies[marco.COOKIE]
+    assert marco.sesion(cookie(v[:-1] + ("1" if v[-1] == "0" else "0"))) is None
     # Cerrar sesiones: sube la versión y ya no vale ni la nueva ni la vieja.
-    panel.VERSIONES["222"] = "1"
-    assert panel.sesion(cookie(r.cookies[panel.COOKIE])) is None
-    assert panel.sesion(cookie(f"222.{vence}.{firma}")) is None
+    marco.VERSIONES["222"] = "1"
+    assert marco.sesion(cookie(r.cookies[marco.COOKIE])) is None
+    assert marco.sesion(cookie(f"222.{vence}.{firma}")) is None
 
 
 def test_cerrar_sesiones_guarda_la_version(tmp_path, monkeypatch):
     async def _t():
-        monkeypatch.setattr(panel, "VERSIONES", {})
+        monkeypatch.setattr(marco, "VERSIONES", {})
         store = Store(str(tmp_path / "a.db"))
         await store.open()
         c = SimpleNamespace(ig_account_id="222", store=store)
-        await panel.cargar_version(c)
-        assert panel.version_de("222") == "0"
-        await panel.cerrar_sesiones(c)
-        assert panel.version_de("222") == "1" and await store.get("sesion_version") == "1"
-        panel.VERSIONES.clear()
-        await panel.cargar_version(c)  # al reiniciar se vuelve a leer
-        assert panel.version_de("222") == "1"
+        await marco.cargar_version(c)
+        assert marco.version_de("222") == "0"
+        await marco.cerrar_sesiones(c)
+        assert marco.version_de("222") == "1" and await store.get("sesion_version") == "1"
+        marco.VERSIONES.clear()
+        await marco.cargar_version(c)  # al reiniciar se vuelve a leer
+        assert marco.version_de("222") == "1"
         await store.close()
     corre(_t())
 

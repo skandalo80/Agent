@@ -9,7 +9,7 @@ from datetime import date, datetime, timedelta
 from html import escape
 from urllib.parse import urlencode
 
-from . import campanas, contenido, panel, tools
+from . import campanas, contenido, marco, tools
 from .admin import PANEL
 from .comentarios import shortcode
 from .cuenta import Cuenta, usar
@@ -297,7 +297,7 @@ async def descarga(c: Cuenta, vista: str, fecha: date | None, q: str, estado: st
     items = filtrar(await items_de(c, ini, fin), q, estado if estado in ESTADOS else "", campana)
     with usar(c):
         pdf = await informe.calendario_pdf(c, titulo_rango(vista, fecha), ini, fin, items, await contenido.marca_de(c),
-                                           await panel.usuario(c))
+                                           await marco.usuario(c))
     nombre = f"calendario-{ini.isoformat()}" + (f"-al-{fin.isoformat()}" if fin != ini else "")
     return pdf, nombre
 

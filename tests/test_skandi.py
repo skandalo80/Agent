@@ -8,10 +8,11 @@ from urllib.parse import parse_qs, urlparse
 from fastapi.testclient import TestClient  # noqa: E402
 
 import app as bot  # noqa: E402
-from igbot import conectar, panel, skandi  # noqa: E402
+from igbot import conectar, skandi  # noqa: E402
 from test_conectar import setup  # noqa: E402
 from test_cuenta import FakeInstagram  # noqa: E402
 from test_panel import ORIGEN, campos_con_nombre  # noqa: E402
+from igbot import marco  # noqa: E402
 
 PROMPT = Path(__file__).resolve().parent.parent / "prompts" / "skandi.md"
 
@@ -209,7 +210,7 @@ def test_chats_de_skandi_para_la_cuenta_principal(monkeypatch, tmp_path):
         web = client.portal.call(guardar, None, "web", "a" * 32, "",
                                  [["user", "Quiero una demo"], ["assistant", "Claro."]], True)
         vence = 9_999_999_999
-        client.cookies.set(panel.COOKIE, panel.cookie_sesion("negocio", vence))
+        client.cookies.set(marco.COOKIE, marco.cookie_sesion("negocio", vence))
         html = client.get("/panel/skandi").text
         assert "Chats de Skandi" in html  # en su menú de perfil
         assert "¿Dónde cambio mi &lt;logo&gt;?" in html and "@cafe.lunar" in html and "Visitante de la web" in html

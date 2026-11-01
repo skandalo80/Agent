@@ -21,6 +21,7 @@ from igbot.cuenta import usar  # noqa: E402
 from test_conectar import setup  # noqa: E402
 from test_cuenta import FakeInstagram  # noqa: E402
 from test_imagenes import Falso  # noqa: E402
+from igbot import marco  # noqa: E402
 
 MARCA = "/panel/contenido/marca"
 ORIGEN = {"Origin": "https://console.skandar.online"}
@@ -411,7 +412,7 @@ def test_publicados_de_instagram_solo_del_rango(cliente, monkeypatch):
 
 def test_script_y_fuentes(cliente):
     client, *_ = cliente
-    assert f'<script src="/panel/static/panel.js?v={panel.VERSION_JS}" defer></script>' in client.get("/panel").text
+    assert f'<script src="/panel/static/panel.js?v={marco.VERSION_JS}" defer></script>' in client.get("/panel").text
     r = client.get("/panel/static/panel.js")
     assert r.status_code == 200 and "javascript" in r.headers["content-type"]
     assert client.get("/panel/static/fuentes/Lora-Bold.ttf").headers["content-type"] == "font/ttf"
@@ -486,7 +487,7 @@ def test_conversaciones_en_vivo(cliente, monkeypatch):
     import json as json_
     client, c, *_ = cliente
     store = c.store
-    monkeypatch.setattr(panel, "VIVO_SEGUNDOS", 0.5)
+    monkeypatch.setattr(marco, "VIVO_SEGUNDOS", 0.5)
     client.portal.call(store.add_incoming, "caro", "m2", "Hola, ¿precios?")
     r = client.get("/panel/asistente?ver=bot&chat=caro")
     visto = store.cambios
@@ -683,7 +684,7 @@ def test_tu_marca_menu_de_pasos_y_marca_de_antes(cliente, monkeypatch):
     # Una marca guardada con el formulario de antes cuenta como lista y abre en el resumen; lo que falta dice Completar.
     client.portal.call(c.store.set, "marca", json.dumps({"principal": "#111111", "acento": "#E8590C", "fondo": "#F7F5F1",
                                                          "fuente": "Lora", "peso": 700, "estilo": "premium"}))
-    assert client.portal.call(panel.marca_lista, c)
+    assert client.portal.call(marco.marca_lista, c)
     r = client.get(MARCA)
     assert "Así se verá tu contenido" in r.text and "<b>Lujo sobrio</b><small>Estilo principal" in r.text
     assert r.text.count(">Completar</a>") == 1
@@ -692,7 +693,7 @@ def test_tu_marca_menu_de_pasos_y_marca_de_antes(cliente, monkeypatch):
     # Los estilos de la versión anterior pasan a los nuevos (urbano y geométrico: brutalista y pop gráfico).
     client.portal.call(c.store.set, "marca", json.dumps({"estilos": ["urbano", "geometrico", "minimal"]}))
     assert 'name="orden" value="brutalista,pop,minimalista"' in client.get(f"{MARCA}?paso=1").text
-    assert not client.portal.call(panel.marca_lista, c)
+    assert not client.portal.call(marco.marca_lista, c)
     assert "Paso 2 de 4" in client.get(MARCA).text
 
     # «Oscuro» y «Alto contraste» de versiones anteriores son ahora Natural.
@@ -780,8 +781,7 @@ def test_ajustes_y_conexion(cliente, monkeypatch):
 
     # El paso Tu equipo de Configura guarda Horario y avisos; ya no pregunta qué decir si piden una persona
     # (eso está en Reglas y en "Fuera de ese horario"), pero el texto que alguien guardó antes no se pierde.
-    from igbot import panel
-    viejo = {**client.portal.call(panel.perfil, c), "humano": "Te escribe Ana."}
+    viejo = {**client.portal.call(marco.perfil, c), "humano": "Te escribe Ana."}
     client.portal.call(c.store.set, "perfil", json.dumps(viejo))
     r = client.get("/panel/asistente/configura?paso=equipo")
     assert "Guardar ajustes" not in r.text and 'name="humano"' not in r.text and 'name="pausa"' in r.text
@@ -813,7 +813,7 @@ def test_bienvenida_con_contenido_y_lo_que_falta(cliente, monkeypatch):
     async def con_empresa(c):
         return True
 
-    monkeypatch.setattr(panel, "empresa_lista", con_empresa)  # ya llenó su Perfil de empresa
+    monkeypatch.setattr(marco, "empresa_lista", con_empresa)  # ya llenó su Perfil de empresa
     r = client.get("/panel")
     assert "Configurar tu asistente" in r.text and "Configurar tu marca" in r.text and "Tu plan Asistente virtual" not in r.text
     assert client.get("/panel", follow_redirects=False).headers["location"] != "/panel/bienvenida"  # solo una vez
@@ -1074,7 +1074,7 @@ def test_con_human_agent_el_panel_contesta_hasta_7_dias(cliente, monkeypatch):
 def test_menu_js_antes_de_pintar(cliente):
     client, *_ = cliente
     html = client.get("/panel").text
-    menu = html.index(f'<script src="/panel/static/menu.js?v={panel.VERSION_MENU}"></script>')
+    menu = html.index(f'<script src="/panel/static/menu.js?v={marco.VERSION_MENU}"></script>')
     assert menu < html.index("</head>")  # sin defer y en el <head>: se pliega antes de pintar
     r = client.get("/panel/static/menu.js")
     assert r.status_code == 200 and "menu-plegado" in r.text
@@ -1203,7 +1203,7 @@ def test_abajo_del_menu_pasos_iniciales_y_ayuda(cliente, monkeypatch):
     async def todo(c):
         return [("x", "/panel", True)]
 
-    monkeypatch.setattr(panel, "pasos_iniciales", todo)
+    monkeypatch.setattr(marco, "pasos_iniciales", todo)
     assert "Pasos iniciales" not in client.get("/panel/asistente").text
 
 
@@ -1241,7 +1241,7 @@ def test_personalidad_sin_imagenes_y_con_toque_personal(cliente):
     r = client.post("/panel/asistente/paso", headers=ORIGEN, follow_redirects=False,
                     data={"paso": "personalidad", "personalidad": "empatico", "toque": "Que explique <todo> con calma."})
     assert r.status_code == 303
-    perfil = client.portal.call(panel.perfil, c)
+    perfil = client.portal.call(marco.perfil, c)
     assert perfil["toque"] == "Que explique <todo> con calma." and perfil["personalidad"] == "empatico"
     prompt = Path(c.prompt_path).read_text()
     assert "<como_quiere_que_hables>\nQue explique &lt;todo&gt; con calma.\n</como_quiere_que_hables>" in prompt
@@ -1255,7 +1255,7 @@ def test_reglas_opcionales_plegadas_y_casilla_vacia_las_borra(cliente):
     datos = {"paso": "reglas", "opcionales": "1", "no_hacer": "No hablar de precios.", "no_hacer_on": "1",
              "instrucciones": "Vendemos carteras."}
     client.post("/panel/asistente/paso", headers=ORIGEN, data=datos)
-    perfil = client.portal.call(panel.perfil, c)
+    perfil = client.portal.call(marco.perfil, c)
     assert perfil["no_hacer"] == "No hablar de precios." and perfil["instrucciones"] == ""
 
 
@@ -1293,7 +1293,7 @@ def test_nombre_ia_y_tabla_de_pasar_a_tu_equipo(cliente):
     assert "Si pide hablar con una persona: usa pasar_a_humano (razón pide_persona) y dile con tus palabras" in prompt
     assert "Si quiere negociar el precio o pide un trato especial: no la pases" in prompt
     assert "<cuando_pasar_al_equipo>\nPedidos de más de 10 piezas\n" in prompt
-    perfil = client.portal.call(panel.perfil, c)
+    perfil = client.portal.call(marco.perfil, c)
     assert asistente.mensaje_al_pasar(perfil, "molesto") == "Entiendo tu molestia <ya>."
     assert asistente.mensaje_al_pasar(perfil, "queja") == ""  # sin mensaje
     assert asistente.mensaje_al_pasar(perfil, "pide_persona") is None  # contesta la IA

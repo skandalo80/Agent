@@ -14,6 +14,7 @@ from test_contenido import ORIGEN, cliente  # noqa: E402
 
 from igbot import campanas, contenido, imagenes  # noqa: E402
 from igbot.cuenta import usar  # noqa: E402
+from igbot import marco  # noqa: E402
 
 assert cliente  # el fixture de test_contenido, que usan estas pruebas
 
@@ -492,9 +493,8 @@ def test_tasa_de_interaccion():
 
 def test_clases_sin_choque():
     """Cada clase de CSS de Campañas se define en un solo bloque."""
-    from igbot import panel
     for clase in ("fila-cam", "camp", "modal-cam", "wiz"):
-        assert len(re.findall(rf"^\.{clase}\{{", panel.ESTILO, re.M)) == 1, clase
+        assert len(re.findall(rf"^\.{clase}\{{", marco.ESTILO, re.M)) == 1, clase
 
 
 def test_repetir_reparte_con_la_mezcla():
@@ -874,9 +874,8 @@ def test_un_trabajo_largo_sigue_aunque_cierres_la_pagina(cliente, monkeypatch):
     trabajo y al terminar lleva al resultado. Solo lo ve su cuenta."""
     import asyncio
 
-    from igbot import panel
     client, c, *_ = cliente
-    monkeypatch.setattr(panel, "ESPERA_TRABAJO", 0)
+    monkeypatch.setattr(marco, "ESPERA_TRABAJO", 0)
     corridas, sigue = [], {}
 
     async def correr():
@@ -887,7 +886,7 @@ def test_un_trabajo_largo_sigue_aunque_cierres_la_pagina(cliente, monkeypatch):
 
     async def lanzar():
         sigue.setdefault("evento", asyncio.Event())
-        return await panel.trabajo_largo(c, "generar 7", "Generando las imágenes…", "Tarda un minuto.", BASE, correr)
+        return await marco.trabajo_largo(c, "generar 7", "Generando las imágenes…", "Tarda un minuto.", BASE, correr)
 
     r = client.portal.call(lanzar)
     html = r.body.decode()
@@ -899,10 +898,10 @@ def test_un_trabajo_largo_sigue_aunque_cierres_la_pagina(cliente, monkeypatch):
     assert tid in client.portal.call(lanzar).body.decode() and corridas == [1]  # doble clic: el mismo trabajo
 
     client.portal.call(sigue["evento"].set)
-    client.portal.call(asyncio.wait, {panel._trabajos[tid].tarea})
+    client.portal.call(asyncio.wait, {marco._trabajos[tid].tarea})
     r = client.get(f"/panel/trabajo/{tid}")
     assert "Listo." in r.text and f'content="0;url={BASE}/7"' in r.text
-    monkeypatch.setattr(panel._trabajos[tid], "slug", "otra-cuenta")
+    monkeypatch.setattr(marco._trabajos[tid], "slug", "otra-cuenta")
     assert client.get(f"/panel/trabajo/{tid}", follow_redirects=False).headers["location"] == BASE
     assert client.get("/panel/trabajo/no-existe", follow_redirects=False).status_code == 303
 
