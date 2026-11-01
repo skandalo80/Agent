@@ -122,7 +122,7 @@ def test_correo_nuevo_enlaza_su_instagram(monkeypatch):
         r = client.post("/panel/correo/entrar", headers=ORIGEN, data={"t": t}, follow_redirects=False)
         assert r.headers["location"] == "/panel/correo/conecta" and panel.COOKIE not in r.cookies
         pagina = client.get("/panel/correo/conecta").text
-        assert "Enlaza tu Instagram" in pagina and "/conectar/instagram" in pagina
+        assert "Conecta tu Instagram" in pagina and "/conectar/instagram" in pagina
         # En el iPhone, Instagram abre su app y se atora: solo Facebook o terminar en la computadora.
         iphone = client.get("/panel/correo/conecta", headers={"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0)"})
         assert "/conectar/instagram" not in iphone.text and "computadora" in iphone.text
