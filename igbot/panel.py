@@ -674,7 +674,7 @@ label.check input[type=email]{flex:1;max-width:22rem;margin:0}
 .grafica{width:100%;height:9rem;display:block;margin-top:1.25rem}
 .ejex{display:flex;color:#A8A8AE;font-size:.75rem;margin-top:.35rem}
 .ejex span{flex:1;text-align:center;white-space:nowrap;min-width:0;overflow:visible}
-.grafica .b{fill:var(--acento-claro)}
+.grafica .b{fill:var(--acento-claro)}.grafica .b.mejor{fill:var(--acento)}
 .grafica .b.fuera{fill:#64646B}
 .grafica .eje{stroke:var(--linea-clara)}
 .leyenda{display:flex;gap:1.25rem;flex-wrap:wrap;color:#A8A8AE;font-size:.85rem;margin-top:.75rem}
@@ -919,7 +919,7 @@ select,input[type=date],input[type=number]{color:var(--negro);background:var(--c
 .wiz-campos{display:grid;grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:.9rem 1rem}
 .wiz-campos label,.wiz-bloque label.t{display:block;font-weight:600;font-size:.9rem;margin:0 0 .35rem}
 .wiz-campos input,.wiz-campos select,.wiz-bloque select,.wiz-bloque textarea,.wiz-bloque input[type=number],.wiz-bloque input[type=date],.wiz-bloque input[type=text]{width:100%;font:inherit;font-size:1rem;padding:.65rem .8rem;border:1px solid var(--linea-clara);border-radius:.8rem;background:var(--claro);color:var(--negro)}
-.wiz-bloque{margin-top:1.5rem;padding:1.25rem;border-radius:1rem;background:var(--suave,#1B1C1F);border:1px solid var(--linea-clara)}
+.wiz-bloque{margin-top:1.5rem;padding:1.25rem;border-radius:1rem;background:var(--suave,#1B1C1F);border:1px solid var(--linea-clara)}.wiz-lista{margin:.6rem 0 0;padding-left:1.1rem;font-size:var(--t-texto-tarjeta);color:var(--texto2)}.wiz-lista li{margin:.2rem 0}
 .wiz-bloque h3{margin:0 0 .15rem;font-size:1rem}.wiz-bloque>.ayuda{margin:0 0 .9rem}
 .wiz-si{display:none;margin-top:1rem}
 .wiz-pie{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-top:2rem;padding-top:1.25rem;border-top:1px solid var(--linea-clara)}

@@ -31,6 +31,12 @@ class InstagramConInsights:
                           "city": [(["Guadalajara, Jalisco"], 50), (["Zapopan, Jalisco"], 20)]}[params["breakdown"]]
             return [{"name": metric, "total_value": {"breakdowns": [{"results": [
                 {"dimension_values": d, "value": v} for d, v in resultados]}]}}]
+        if metric == "online_followers":  # por hora UTC, un renglón por día
+            if self.chica:
+                raise RuntimeError("Instagram respondió 400: not enough followers")
+            return [{"name": metric, "period": "lifetime", "values": [
+                {"value": {"2": 10, "3": 30, "14": 4}, "end_time": "2026-10-27T07:00:00+0000"},
+                {"value": {"2": 20, "3": 10, "14": 6}, "end_time": "2026-10-28T07:00:00+0000"}]}]
         if "," in metric and self.chica:
             raise RuntimeError("Instagram respondió 400: profile_links_taps no disponible")
         if metric == "profile_links_taps" and self.chica:
@@ -54,11 +60,16 @@ def test_tick_guarda_una_vez_al_dia_y_rellena_la_semana(cliente, monkeypatch):  
     assert ig.llamadas == []  # antes de las 6 no hace nada
     ahora["t"] = ahora["t"].replace(hour=7)
     client.portal.call(metricas.tick, c)
-    # 1 de la cuenta + 7 días × (insights + seguidores ganados) + 3 del público.
+    # 1 de la cuenta + 7 días × (insights + seguidores ganados) + 3 del público + 1 de a qué horas está conectado.
     assert ig.llamadas.count("me") == 1 and ig.llamadas.count("follows_and_unfollows") == 7
-    assert ig.llamadas.count("follower_demographics") == 3 and len(ig.llamadas) == 18
+    assert ig.llamadas.count("follower_demographics") == 3 and ig.llamadas.count("online_followers") == 1
+    assert len(ig.llamadas) == 19
     client.portal.call(metricas.tick, c)
-    assert len(ig.llamadas) == 18  # una vez al día
+    assert len(ig.llamadas) == 19  # una vez al día
+    # Las horas se guardan en la zona de la cuenta, promediadas por día (UTC-6 en octubre para América/Mexico_City).
+    horas = json.loads(client.portal.call(c.store.get, metricas.CLAVE_HORAS))["horas"]
+    corrimiento = int(datetime.now(zona).utcoffset().total_seconds() // 3600)
+    assert horas == {str((2 + corrimiento) % 24): 15.0, str((3 + corrimiento) % 24): 20.0, str((14 + corrimiento) % 24): 5.0}
 
     dias = client.portal.call(c.store.metricas, "2026-10-01")
     assert dias["2026-10-28"] == {"seguidores": 120, "siguiendo": 80, "publicaciones": 30}
@@ -80,6 +91,7 @@ def test_cuenta_chica_se_salta_lo_que_no_hay(cliente, monkeypatch):  # noqa: F81
     valores = client.portal.call(metricas.insights_del_dia, c, date(2026, 10, 27))
     assert valores["alcance"] == 10 and "clics" not in valores and "nuevos" not in valores
     assert client.portal.call(metricas.publico, c) == {}
+    assert client.portal.call(metricas.horas_activas, c) == {}
 
 
 def test_resultados_muestra_tarjetas(cliente, monkeypatch):  # noqa: F811
@@ -99,6 +111,7 @@ def test_resultados_muestra_tarjetas(cliente, monkeypatch):  # noqa: F811
         await c.store.set(metricas.CLAVE_PUBLICO, json.dumps({
             "semana": "x", "edad": {"18-24": 40, "25-34": 60}, "genero": {"F": 70, "M": 30},
             "ciudad": {"Guadalajara, Jalisco": 50}}))
+        await c.store.set(metricas.CLAVE_HORAS, json.dumps({"semana": "x", "horas": {"9": 4, "20": 12, "21": 9}}))
 
     client.portal.call(llenar)
     monkeypatch.setattr("igbot.resultados._cache", {})
@@ -107,6 +120,7 @@ def test_resultados_muestra_tarjetas(cliente, monkeypatch):  # noqa: F811
     assert "+14" in html and "7 dejaron de seguirte · neto +7" in html
     assert ">700<" in html and ">63<" in html  # vistas e interacciones (9 × 7)
     assert "7 clics al enlace" in html and "Mujeres" in html and "Guadalajara<b>50" in html
+    assert "Cuándo está tu público" in html and "a las 20:00, 21:00 y 09:00" in html and 'class="b mejor"' in html
     assert "<span><b>60</b></span>" in html and "<title>" not in html.split("<main")[1]
 
 
