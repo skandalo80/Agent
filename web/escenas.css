@@ -98,7 +98,13 @@
   .caso { scroll-snap-align: start; scroll-margin-top: 72px; min-height: calc(100vh - 72px); padding: 24px 0; box-sizing: border-box; }
   .caso + .caso { border-top: 0; }
   .casos-intro { scroll-snap-align: start; scroll-margin-top: 72px; min-height: calc(100vh - 72px); display: grid; align-content: center; margin-bottom: 0; }
+  /* Cómo funciona y Planes también son un slide cada uno */
+  #como-funciona, #planes { scroll-snap-align: start; scroll-margin-top: 72px; min-height: calc(100vh - 72px); box-sizing: border-box; display: grid; align-content: center; padding: 24px 0; }
 }
+@media (min-width: 801px) and (min-height: 700px) and (max-height: 1040px) { #planes .contenedor { zoom: .92; } }
+@media (min-width: 801px) and (min-height: 700px) and (max-height: 960px) { #planes .contenedor { zoom: .85; } }
+@media (min-width: 801px) and (min-height: 700px) and (max-height: 880px) { #planes .contenedor { zoom: .78; } }
+@media (min-width: 801px) and (min-height: 700px) and (max-height: 800px) { #planes .contenedor { zoom: .72; } }
 @media (min-width: 801px) and (min-height: 700px) and (max-height: 780px) { .caso-visual { zoom: .9; } }
 @media (min-width: 801px) and (min-height: 700px) and (max-height: 720px) { .caso-visual { zoom: .82; } }
 
