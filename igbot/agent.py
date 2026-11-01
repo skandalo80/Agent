@@ -12,13 +12,19 @@ from html import escape
 from pathlib import Path
 
 import anthropic
-from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query
 
 from . import agenda_google, catalog, cobros, config, limites, tienda, tienda_shopify, tools
 from .cuenta import cuenta
 from .google import Google
 from .instagram import Instagram
 from .store import Store
+
+
+def query(*args, **kwargs):
+    """El SDK de Claude Code se carga en la primera llamada, no al importar: tarda y diez módulos importan este
+    (las pruebas lo reemplazan con `monkeypatch.setattr(agent, "query", ...)`)."""
+    from claude_agent_sdk import query as _query
+    return _query(*args, **kwargs)
 
 log = logging.getLogger("igbot.agent")
 
@@ -74,6 +80,7 @@ async def run_claude(
         return await run_directo(prompt, system, model or cuenta().model)
     cwd = workdir()
     cwd.mkdir(parents=True, exist_ok=True)
+    from claude_agent_sdk import ClaudeAgentOptions
     options = ClaudeAgentOptions(
         system_prompt=system,
         model=model or cuenta().model,
@@ -88,6 +95,7 @@ async def run_claude(
         cwd=str(cwd),
         extra_args={"no-session-persistence": None},  # la memoria es nuestra
     )
+    from claude_agent_sdk import ResultMessage
     result = None
     try:
         async with asyncio.timeout(config.CLAUDE_TIMEOUT_SECONDS):

@@ -223,7 +223,7 @@ def _buscar(productos: list[dict], nombre: str) -> dict | None:
 async def _vigente_mercadopago(c: Cuenta) -> dict:
     """La conexión de Mercado Pago, con el token renovado si vence en menos de una semana."""
     con = await conexion(c, "mercadopago")
-    if con and con.get("refresh") and con.get("vence", 0) < time.time() + 7 * 86400:
+    if con and con.get("refresh") and con.get("vence", 0) < time.time() + 7 * config.DIA:
         try:
             con = {**con, **await _token_mercadopago({"grant_type": "refresh_token", "refresh_token": con["refresh"]})}
             await guardar(c, "mercadopago", con)

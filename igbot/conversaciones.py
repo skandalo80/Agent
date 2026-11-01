@@ -26,8 +26,8 @@ POR_TANDA = 40
 MAX_MENSAJES = 400
 MAX_RESPUESTA = 1000
 # Instagram solo deja contestar dentro de las 24 h desde el último mensaje del cliente.
-VENTANA = 24 * 3600
-VENTANA_HUMANO = 7 * 24 * 3600  # con la etiqueta Human Agent (config.HUMAN_AGENT_TAG) una persona puede contestar 7 días
+VENTANA = 24 * config.HORA
+VENTANA_HUMANO = 7 * 24 * config.HORA  # con la etiqueta Human Agent (config.HUMAN_AGENT_TAG) una persona puede contestar 7 días
 
 
 def ventana_panel() -> float:
@@ -216,7 +216,7 @@ async def partes(c: Cuenta, ver: str = "", buscar: str = "", hoja: int = 1, chat
     hoy = datetime.fromtimestamp(ahora, zona)
     buscar = buscar.strip()[:60]
     # Quién pidió una persona: el asistente lo pasó contigo (pasar_a_humano) durante su pausa actual.
-    humano_desde = ahora - c.human_pause_hours * 3600 - 60
+    humano_desde = ahora - c.human_pause_hours * config.HORA - 60
 
     from .limites import LIMIT_NOTICE
     from .tools import RAZONES
@@ -351,7 +351,7 @@ async def _hilo(c: Cuenta, u: str, ver: str, buscar: str, hoja: int, n: int, aho
     pidio = None  # lo que dijo el asistente al pasártelo (pasar_a_humano), si fue así
     if en_pausa:
         pidio = ([d for x, d, _ in await c.store.events("humano", humano_desde, ahora + 1) if x == u] or [None])[-1]
-    horas = max(1, round((hasta - ahora) / 3600))
+    horas = max(1, round((hasta - ahora) / config.HORA))
     ocultos = _ocultos(ver, buscar, hoja, u) + f'<input type="hidden" name="usuario" value="{escape(u)}">'
 
     from . import panel

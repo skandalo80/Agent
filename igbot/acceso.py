@@ -46,7 +46,7 @@ VIGENCIA = 900
 CORREO = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,190}\.[a-z]{2,}$", re.I)
 MAX_POR_CORREO = 3   # enlaces por correo por hora
 MAX_POR_HORA = 30    # en total, contra abusos
-ALTA_VIGENCIA = 3600  # una hora para enlazar su Instagram después de comprobar su correo
+ALTA_VIGENCIA = config.HORA  # una hora para enlazar su Instagram después de comprobar su correo
 COOKIE_ALTA = "correo_alta"
 COOKIE_ULTIMO = "ultimo_metodo"
 
@@ -141,7 +141,7 @@ def entrar_a(c: Cuenta, metodo: str) -> RedirectResponse:
 
 def ultimo(r, metodo: str) -> None:
     """Recuerda con qué entró (la etiqueta "Último usado" de la pantalla de entrar)."""
-    r.set_cookie(COOKIE_ULTIMO, metodo, max_age=365 * 86400, path="/panel", secure=True, httponly=True,
+    r.set_cookie(COOKIE_ULTIMO, metodo, max_age=365 * config.DIA, path="/panel", secure=True, httponly=True,
                  samesite="lax")
 
 
@@ -165,7 +165,7 @@ def cuenta_de_correo(correo: str) -> Cuenta | None:
 
 def _puede_enviar(correo: str) -> bool:
     ahora = time.time()
-    _enviados[:] = [(t, c) for t, c in _enviados if ahora - t < 3600]
+    _enviados[:] = [(t, c) for t, c in _enviados if ahora - t < config.HORA]
     if len(_enviados) >= MAX_POR_HORA or sum(c == correo for _, c in _enviados) >= MAX_POR_CORREO:
         return False
     _enviados.append((ahora, correo))

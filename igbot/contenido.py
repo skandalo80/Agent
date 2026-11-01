@@ -294,11 +294,6 @@ def estilos_de(datos: dict) -> list[str]:
     return list(dict.fromkeys(k for k in elegidos if k))[:MAX_ESTILOS]
 
 
-def estilo_de(datos: dict) -> str:
-    """El estilo que manda: el elegido solo para un post (Crear post > Con otra plantilla) o el primero de Tu marca."""
-    return estilo_nuevo(datos.get("estilo")) or (estilos_de(datos) or [ESTILO_INICIAL])[0]
-
-
 def estilo_foto(datos: dict) -> str:
     """El estilo de la foto para el generador: el primero manda y los demás aportan matices."""
     if propio := estilo_nuevo(datos.get("estilo")):
@@ -759,13 +754,6 @@ def tarjeta_extra(c: Cuenta, accion: str) -> str:
             f"Generar por US${config.EXTRA_IMAGE_USD}</button>"
             '<input type="hidden" name="extra" value="1">'
             f'<a class="boton secundario" href="/panel/contenido">Cancelar</a></div></div>')
-
-
-def opciones_modo(actual: str) -> str:
-    return "".join(
-        f'<label class="opcion"><input type="radio" name="modo" value="{k}"{" checked" if k == actual else ""}>'
-        f"<b>{nombre}</b><span>{desc}</span></label>"
-        for k, (nombre, desc) in MODOS.items())
 
 
 def campo(nombre: str, etiqueta: str, valor: str, maximo: int, ayuda: str = "") -> str:

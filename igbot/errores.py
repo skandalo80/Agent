@@ -12,12 +12,12 @@ import traceback
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
-from . import panel, skandi
+from . import config, panel, skandi
 
 log = logging.getLogger("igbot.errores")
 
 MAX_CORREOS_DIA = 20
-REPETIR_CADA = 3600  # segundos antes de volver a avisar del mismo error
+REPETIR_CADA = config.HORA  # segundos antes de volver a avisar del mismo error
 
 _avisados: dict[tuple[str, str], float] = {}
 _dia = {"fecha": "", "enviados": 0}

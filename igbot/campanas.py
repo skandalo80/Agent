@@ -2029,18 +2029,6 @@ async def con_resultados(c: Cuenta, camps: list[dict]) -> int:
     return sum(1 for p in posts.values() if p["status"] == "publicada" and 0 < (p["publish_at"] or 0) <= hace)
 
 
-async def contexto_form(c: Cuenta) -> tuple[int, int, list[dict], dict, int]:
-    """Lo que necesita el formulario de una campaña: cuántas propuestas le quedan hoy, fotos de Tu marca, sus
-    campañas (para el reporte y lo que funcionó), lo de Contenido sugerido y cuántos posts tienen resultados."""
-    quedan_ia = await ia_restantes(c)
-    with usar(c):
-        fotos = len(fotos_marca(c, await marca_de(c)))
-        anteriores = await informe.todas(c, await todas_las(c))
-        resultados = await con_resultados(c, anteriores)
-        sugerido = await ya_sugerido(c)
-    return quedan_ia, fotos, anteriores, sugerido, resultados
-
-
 def aviso_faltantes(camp: dict) -> str:
     """Si al escribir la campaña quedaron posts sin escribir, se dice en su página hasta que se complete."""
     n = int(camp.get("sin_escribir") or 0)

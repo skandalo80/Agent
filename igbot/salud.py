@@ -17,14 +17,14 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from . import lentitud, limites
+from . import config, lentitud, limites
 from .cuenta import Cuenta
 
 log = logging.getLogger("igbot.salud")
 
 router = APIRouter(prefix="/panel")
 
-VENTANA = 24 * 3600  # los tiempos de respuesta que se guardan (en memoria; se pierden al reiniciar)
+VENTANA = 24 * config.HORA  # los tiempos de respuesta que se guardan (en memoria; se pierden al reiniciar)
 MAXIMO = 2000  # por cuenta
 _respuestas: dict[str, collections.deque] = collections.defaultdict(lambda: collections.deque(maxlen=MAXIMO))
 RESPALDOS = Path.home() / "respaldos"
@@ -182,7 +182,7 @@ RAM_LIBRE_MIN = 15  # % de RAM libre por debajo del cual se avisa
 COLA_MAX = 20  # conversaciones esperando (en todas las cuentas) dos revisiones seguidas
 REINICIOS_MAX = 3  # arranques en una hora
 RESPALDO_DIAS = 2  # días sin carpeta de respaldo nueva
-SILENCIO = 3600  # entre dos avisos del mismo tipo
+SILENCIO = config.HORA  # entre dos avisos del mismo tipo
 _avisado: dict[str, float] = {}
 _cola_alta = False  # la revisión anterior ya tenía la cola alta
 avisar = None  # la pone app.py: conectar.avisar (DM a ADMIN_IG_IDS y correo al dueño de la principal)
@@ -205,7 +205,7 @@ async def anotar_arranque(store, ahora: float | None = None) -> int:
     """Guarda el arranque en la base de la principal y devuelve cuántos hubo en la última hora."""
     ahora = ahora or time.time()
     import json
-    previos = [t for t in json.loads(await store.get("arranques") or "[]") if ahora - t < 3600]
+    previos = [t for t in json.loads(await store.get("arranques") or "[]") if ahora - t < config.HORA]
     previos.append(ahora)
     await store.set("arranques", json.dumps(previos))
     return len(previos)

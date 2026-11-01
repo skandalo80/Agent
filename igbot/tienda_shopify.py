@@ -388,7 +388,7 @@ async def mas_vendidos(c: Cuenta, productos: list[dict], dias: int = DIAS_VENDID
     """Los ids de sus productos que más se vendieron en los últimos `dias` (ventas que llegaron de la tienda), de
     mayor a menor; [] si no hay ventas. Se cruzan por nombre: el catálogo importado de Shopify usa el título."""
     vendidos: dict[str, int] = {}
-    for detalle in await c.store.ventas_recientes(time.time() - dias * 86400):
+    for detalle in await c.store.ventas_recientes(time.time() - dias * config.DIA):
         for linea in detalle.get("productos") or []:
             n = re.match(r"^(\d+)\s*×", str(linea))
             vendidos[_nombre(str(linea))] = vendidos.get(_nombre(str(linea)), 0) + (int(n.group(1)) if n else 1)

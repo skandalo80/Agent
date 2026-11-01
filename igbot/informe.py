@@ -33,10 +33,10 @@ from .pdf_marca import GRIS, LINEA, NEGRO, Cotizacion
 log = logging.getLogger("igbot.informe")
 
 ACCIONES = ("likes", "comments", "saved", "shares")
-MADURO = 3 * 86400  # publicado hace al menos esto para contar en "qué funcionó"
+MADURO = 3 * config.DIA  # publicado hace al menos esto para contar en "qué funcionó"
 MAX_HISTORIAL = 30
 MAX_REPORTE = 6  # campañas por PDF
-CACHE_SEG = 3600  # un post de menos de MADURO (aún junta interacciones) se pide otra vez después de esto
+CACHE_SEG = config.HORA  # un post de menos de MADURO (aún junta interacciones) se pide otra vez después de esto
 PAGINAS_BUSQUEDA = 4  # páginas de 50 de "me/media" para hallar posts viejos sin id guardado
 DIAS_REFRESCO = 30  # metricas.py refresca cada día las estadísticas de los posts de estos últimos días
 
@@ -133,8 +133,8 @@ async def ids_de_instagram(c: Cuenta, posts: list[dict]) -> dict[int, str]:
     return ids
 
 
-HISTORIA_VIVE = 86400  # Instagram da los números de una historia solo sus primeras 24 h
-HISTORIA_LEER = 20 * 3600  # se leen pasadas estas horas (ya juntó casi todo) y antes de que venza
+HISTORIA_VIVE = config.DIA  # Instagram da los números de una historia solo sus primeras 24 h
+HISTORIA_LEER = 20 * config.HORA  # se leen pasadas estas horas (ya juntó casi todo) y antes de que venza
 
 
 async def pedir_numeros(c: Cuenta, media_id: str, tipo: str = "post") -> dict | None:
@@ -209,7 +209,7 @@ async def publicados_entre(c: Cuenta, desde: float, hasta: float, del_panel: lis
 async def refrescar_numeros(c: Cuenta) -> int:
     """Las estadísticas de lo publicado en los últimos DIAS_REFRESCO días, del panel y a mano en Instagram
     (lo llama metricas.py cada día). Las historias no: se leen aparte antes de que venzan. Devuelve cuántos pidió."""
-    desde = time.time() - DIAS_REFRESCO * 86400
+    desde = time.time() - DIAS_REFRESCO * config.DIA
     posts = [p for p in await c.store.posts(("publicada",), desde=desde) if p.get("tipo") != "historia"]
     ids = await ids_de_instagram(c, posts)
     for media_id in ids.values():

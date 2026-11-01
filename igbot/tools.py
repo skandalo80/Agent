@@ -238,10 +238,10 @@ def workspace_tools(
         email = args["email"].strip()
         if problem := await check_email(email):
             return error(problem)
-        sent = await store.emails_since(user_id, time.time() - 86400)
+        sent = await store.emails_since(user_id, time.time() - config.DIA)
         if sent >= cuenta().max_emails_per_user_per_day:
             return error("Ya se le enviaron los correos permitidos hoy. Ofrece seguir por aquí.")
-        if await store.emails_total_since(time.time() - 86400) >= cuenta().max_emails_per_day:
+        if await store.emails_total_since(time.time() - config.DIA) >= cuenta().max_emails_per_day:
             return error("Hoy ya no se pueden mandar más correos desde esta cuenta. Ofrece seguir por aquí.")
         subject = args["asunto"].strip()[:150]
         await google.send_email(
@@ -284,9 +284,9 @@ async def check_quote_delivery(
             return "Para mandarla por correo pídele su correo; si prefiere no darlo, mándala solo por este chat."
         if problem := await check_client_email(store, user_id, email):
             return problem
-        if await store.emails_since(user_id, time.time() - 86400) >= cuenta().max_emails_per_user_per_day:
+        if await store.emails_since(user_id, time.time() - config.DIA) >= cuenta().max_emails_per_user_per_day:
             return "Ya se le enviaron los correos permitidos hoy. Ofrece mandarla por este chat."
-        if await store.emails_total_since(time.time() - 86400) >= cuenta().max_emails_per_day:
+        if await store.emails_total_since(time.time() - config.DIA) >= cuenta().max_emails_per_day:
             return "Hoy ya no se pueden mandar más correos desde esta cuenta. Mándala por este chat."
     return None
 

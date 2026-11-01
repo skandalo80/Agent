@@ -75,7 +75,7 @@ def vencida(datos: dict) -> bool:
 
 
 def por_vencer(datos: dict) -> bool:
-    return bool(datos.get("token")) and float(datos.get("vence") or 0) < time.time() + AVISO_DIAS * 86400
+    return bool(datos.get("token")) and float(datos.get("vence") or 0) < time.time() + AVISO_DIAS * config.DIA
 
 
 # --- conectar (login de Facebook, solo lectura de anuncios) ---
@@ -119,7 +119,7 @@ async def cuentas_del_codigo(code: str) -> tuple[dict, list[dict]]:
             "client_secret": config.FB_APP_SECRET, "fb_exchange_token": r.json()["access_token"]})
         _check(r)
         datos = r.json()
-        token = {"token": datos["access_token"], "vence": time.time() + float(datos.get("expires_in") or 60 * 86400)}
+        token = {"token": datos["access_token"], "vence": time.time() + float(datos.get("expires_in") or 60 * config.DIA)}
         r = await http.get(f"{base}/me/adaccounts", params={
             "access_token": token["token"], "limit": 100, "fields": "id,name,currency,account_status"})
         _check(r)
