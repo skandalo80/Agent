@@ -19,6 +19,7 @@ panel de Meta > Instagram > Configuración del inicio de sesión para empresas).
 Se avisa al dueño, que borra a mano, y la persona consulta su solicitud en
 /conectar/borrado?codigo=... (Meta le muestra ese enlace).
 """
+from html import escape
 import base64
 import hashlib
 import hmac
@@ -155,8 +156,25 @@ def state_valido(state: str, cookie: str | None) -> bool:
     return ok
 
 
+def _sin_app(url: str) -> HTMLResponse:
+    """En iPhone/iPad: www.instagram.com es un "enlace universal" y, si la navegación viene de un toque, iOS
+    la abre en la app de Instagram, que no sabe qué hacer con /oauth/authorize ("Loading" y "Something went
+    wrong"). iOS solo abre la app cuando la navegación nace de un toque; un meta refresh no es un toque, así
+    que Safari se queda con la página de permisos."""
+    destino = escape(url, quote=True)
+    return HTMLResponse(
+        '<!doctype html><html lang="es"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">'
+        f'<meta http-equiv="refresh" content="0;url={destino}"><title>Abriendo Instagram…</title>'
+        "<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#2B2C30;color:#F5F5F4;"
+        "font:1rem/1.5 system-ui,sans-serif;text-align:center;padding:1.5rem}p{max-width:22rem;color:#A8A8AE}"
+        "</style></head><body><div><h1 style=\"font-weight:600\">Abriendo Instagram…</h1>"
+        "<p>Si se abre la app de Instagram y se queda cargando, regresa a Safari y usa Enlazar con Facebook.</p>"
+        "</div></body></html>")
+
+
 @router.get("/instagram")
-def start():
+def start(request: Request):
     """Manda al cliente a iniciar sesión en Instagram y autorizar la app."""
     if not enabled():
         return back("/conectar-error")
@@ -170,7 +188,9 @@ def start():
         "enable_fb_login": "0",
         "force_authentication": "1",
     })
-    response = RedirectResponse(url, status_code=303)
+    ua = request.headers.get("user-agent", "")
+    iphone = any(x in ua for x in ("iPhone", "iPad", "iPod"))
+    response = _sin_app(url) if iphone else RedirectResponse(url, status_code=303)
     # Se compara al volver para que nadie conecte una cuenta con un enlace armado.
     response.set_cookie(STATE_COOKIE, state, max_age=STATE_TTL, path="/conectar",
                         secure=True, httponly=True, samesite="lax")

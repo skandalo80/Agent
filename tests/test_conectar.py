@@ -180,3 +180,14 @@ def test_quitar_app_y_borrar_datos(monkeypatch):
         assert "borremos sus datos" in avisos[-1][1]
         assert "Recibimos tu solicitud" in client.get(f"/conectar/borrado?codigo={j['confirmation_code']}").text
         assert "No encontramos" in client.get("/conectar/borrado?codigo=0000000000000000").text
+
+
+def test_iphone_no_abre_la_app_de_instagram(monkeypatch):
+    """En el iPhone, un meta refresh (no un toque) lleva a los permisos: así iOS no abre la app de Instagram."""
+    setup(monkeypatch)
+    with TestClient(bot.app, base_url="https://testserver") as client:
+        iphone = {"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15"}
+        r = client.get("/conectar/instagram", headers=iphone, follow_redirects=False)
+        assert r.status_code == 200 and 'http-equiv="refresh"' in r.text
+        assert "https://api.instagram.com/oauth/authorize?" in r.text and "&amp;state=" in r.text
+        assert "state" in r.headers.get("set-cookie", "")
