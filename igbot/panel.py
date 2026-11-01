@@ -21,7 +21,7 @@ clientes/<nombre>/ con su token, ver preparar_carpeta) y queda en pausa hasta
 que la encienden aquí. Las reglas comunes (prompts/comun.md) siempre van
 después de lo que escriba el cliente, así que no las puede quitar.
 
-La sesión es una cookie firmada con IG_APP_SECRET que dura SESSION_DAYS; los
+La sesión es una cookie firmada con SESSION_SECRET que dura SESSION_DAYS; los
 POST solo se aceptan si vienen de esta misma página (cabecera Origin) y la
 cookie es SameSite=Lax.
 """
@@ -202,26 +202,67 @@ def preparar_carpeta(ig_id: str, usuario: str, token: str, correo: str, ocupados
 
 # --- sesión ---
 
-def _key() -> bytes:
-    return hmac.new(config.APP_SECRET.encode(), b"panel-sesion", hashlib.sha256).digest()
+def _key(secreto: str = "") -> bytes:
+    return hmac.new((secreto or config.SESSION_SECRET).encode(), b"panel-sesion", hashlib.sha256).digest()
 
 
-def _firma(ig_id: str, vence: int) -> str:
-    return hmac.new(_key(), f"{ig_id}.{vence}".encode(), hashlib.sha256).hexdigest()
+# Versión de sesión de cada cuenta (clave kv "sesion_version"): va dentro de la firma de la cookie, así "Cerrar
+# sesión en todos los dispositivos" solo tiene que subirla. La lee app.py al arrancar cada cuenta.
+VERSIONES: dict[str, str] = {}
+
+
+def version_de(ig_id: str) -> str:
+    return VERSIONES.get(ig_id, "0")
+
+
+async def cargar_version(c: Cuenta) -> None:
+    if c.ig_account_id:
+        VERSIONES[c.ig_account_id] = await c.store.get("sesion_version") or "0"
+
+
+async def cerrar_sesiones(c: Cuenta) -> None:
+    """Invalida todas las cookies de la cuenta (las de hoy y las viejas)."""
+    nueva = str(int(version_de(c.ig_account_id)) + 1)
+    await c.store.set("sesion_version", nueva)
+    VERSIONES[c.ig_account_id] = nueva
+
+
+def _firma(ig_id: str, vence: int, version: str | None = None) -> str:
+    v = version_de(ig_id) if version is None else version
+    return hmac.new(_key(), f"{ig_id}.{vence}.{v}".encode(), hashlib.sha256).hexdigest()
+
+
+def _firma_vieja(ig_id: str, vence: int) -> str:
+    """La cookie de antes: ig_id.vence.firma con IG_APP_SECRET. Vale mientras nadie cierre las sesiones de la cuenta,
+    para que el cambio no saque a nadie del panel."""
+    return hmac.new(_key(config.APP_SECRET), f"{ig_id}.{vence}".encode(), hashlib.sha256).hexdigest()
+
+
+def cookie_sesion(ig_id: str, vence: int) -> str:
+    v = version_de(ig_id)
+    return f"{ig_id}.{vence}.{v}.{_firma(ig_id, vence, v)}"
 
 
 def iniciar_sesion(response, ig_id: str) -> None:
     vence = int(time.time()) + SESSION_DAYS * 86400
-    response.set_cookie(COOKIE, f"{ig_id}.{vence}.{_firma(ig_id, vence)}", max_age=SESSION_DAYS * 86400,
+    response.set_cookie(COOKIE, cookie_sesion(ig_id, vence), max_age=SESSION_DAYS * 86400,
                         path="/panel", secure=True, httponly=True, samesite="lax")
 
 
 def sesion(request: Request) -> str | None:
-    """El id de Instagram de quien entró, si la cookie es válida y no ha vencido."""
+    """El id de Instagram de quien entró, si la cookie es válida, no ha vencido y no se cerraron sus sesiones."""
+    partes = request.cookies.get(COOKIE, "").split(".")
     try:
-        ig_id, vence, firma = request.cookies.get(COOKIE, "").split(".")
-        if int(vence) > time.time() and hmac.compare_digest(firma, _firma(ig_id, int(vence))):
-            return ig_id
+        if len(partes) == 4:
+            ig_id, vence, v, firma = partes
+            if (int(vence) > time.time() and v == version_de(ig_id)
+                    and hmac.compare_digest(firma, _firma(ig_id, int(vence), v))):
+                return ig_id
+        elif len(partes) == 3:
+            ig_id, vence, firma = partes
+            if (int(vence) > time.time() and version_de(ig_id) == "0"
+                    and hmac.compare_digest(firma, _firma_vieja(ig_id, int(vence)))):
+                return ig_id
     except ValueError:
         pass
     return None
@@ -2532,6 +2573,17 @@ def tarjeta(seccion: str, archivo: str):
 @router.post("/salir")
 async def salir(request: Request):
     de_aqui(request)
+    response = RedirectResponse("/panel", status_code=303)
+    response.delete_cookie(COOKIE, path="/panel")
+    return response
+
+
+@router.post("/salir-todos")
+async def salir_todos(request: Request):
+    """Cerrar sesión en todos los dispositivos: cambia la versión de sesión de la cuenta y la cookie de aquí."""
+    de_aqui(request)
+    if c := cuenta_de_sesion(request):
+        await cerrar_sesiones(c)
     response = RedirectResponse("/panel", status_code=303)
     response.delete_cookie(COOKIE, path="/panel")
     return response

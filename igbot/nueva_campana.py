@@ -26,7 +26,7 @@ from html import escape
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
-from . import brief, campanas, empresa, panel, tienda_shopify, tools
+from . import brief, campanas, empresa, limites, panel, tienda_shopify, tools
 from .contenido import TOKEN_FOTO, archivo, guardar_fotos, marca_de, modo_de, sin_plan, url_imagen
 from .cuenta import Cuenta, usar
 
@@ -1288,6 +1288,8 @@ async def crear_rapida(request: Request):
         anteriores = await campanas.informe.todas(c, todas)
         fotos = len(campanas.fotos_marca(c, await marca_de(c)))
     camp = {**datos, "id": int(time.time() * 1000), "posts": [], "creada": time.time()}
+    if not await limites.cabe_generacion(c.store):
+        return await pagina_rapida(c, limites.TOPE_GENERACIONES, b)
 
     async def trabajo():
         with usar(c):

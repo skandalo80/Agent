@@ -74,6 +74,7 @@ class Cuenta:
     min_notice_hours: float
     max_meetings_per_user: int
     max_emails_per_user_per_day: int
+    max_emails_per_day: int
     max_replies_per_user_per_day: int
     max_message_chars: int
     daily_budget_usd: float
@@ -168,6 +169,7 @@ class Cuenta:
             min_notice_hours=float(get("MIN_NOTICE_HOURS", "2")),
             max_meetings_per_user=int(get("MAX_MEETINGS_PER_USER", "2")),
             max_emails_per_user_per_day=int(get("MAX_EMAILS_PER_USER_PER_DAY", "3")),
+            max_emails_per_day=int(get("MAX_EMAILS_PER_DAY", "40")),  # a todas las personas; cuida tu Gmail
             # Límites contra abuso: respuestas por persona al día, caracteres de
             # cada DM que se le pasan a Claude y gasto máximo diario (0 = sin límite).
             max_replies_per_user_per_day=int(get("MAX_REPLIES_PER_USER_PER_DAY", "30")),

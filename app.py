@@ -157,6 +157,7 @@ async def arrancar(c: Cuenta) -> None:
         await c.store.open()
         await ajustes.cargar(c)  # lo que cambió en su panel manda sobre su .env
         await resolver_id(c)
+        await panel.cargar_version(c)  # la versión de sus sesiones del panel
         # Mensajes, toques a los botones de inicio y, si hay reglas, comentarios.
         fields = "messages,messaging_postbacks"
         if google and comentarios.available() or c.hide_spam or c.imagenes_mes:
@@ -272,6 +273,7 @@ async def lifespan(app: FastAPI):
     panel.buscar, panel.alta = buscar, alta
     panel.conectar_pagina = conectar_pagina
     acceso.todas = lambda: cuentas
+    acceso.store = store  # enlaces de entrar ya usados, en la base y no en memoria
     skandi.principal = lambda: principal
     tienda_shopify.cuentas = cobros.cuentas = lambda: cuentas
     for c in cuentas:

@@ -241,6 +241,8 @@ def workspace_tools(
         sent = await store.emails_since(user_id, time.time() - 86400)
         if sent >= cuenta().max_emails_per_user_per_day:
             return error("Ya se le enviaron los correos permitidos hoy. Ofrece seguir por aquí.")
+        if await store.emails_total_since(time.time() - 86400) >= cuenta().max_emails_per_day:
+            return error("Hoy ya no se pueden mandar más correos desde esta cuenta. Ofrece seguir por aquí.")
         subject = args["asunto"].strip()[:150]
         await google.send_email(
             config.MAIL_FROM, cuenta().mail_from_name, email, cuenta().mail_cc,
@@ -284,6 +286,8 @@ async def check_quote_delivery(
             return problem
         if await store.emails_since(user_id, time.time() - 86400) >= cuenta().max_emails_per_user_per_day:
             return "Ya se le enviaron los correos permitidos hoy. Ofrece mandarla por este chat."
+        if await store.emails_total_since(time.time() - 86400) >= cuenta().max_emails_per_day:
+            return "Hoy ya no se pueden mandar más correos desde esta cuenta. Mándala por este chat."
     return None
 
 

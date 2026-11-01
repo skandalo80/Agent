@@ -77,9 +77,9 @@ def test_sesion_firmada_y_con_vencimiento(monkeypatch):
             self.cookies = {panel.COOKIE: valor}
 
     vence = 9_999_999_999
-    assert panel.sesion(R(f"1784.{vence}.{panel._firma('1784', vence)}")) == "1784"
-    assert panel.sesion(R(f"9999.{vence}.{panel._firma('1784', vence)}")) is None  # otra cuenta
-    assert panel.sesion(R(f"1784.100.{panel._firma('1784', 100)}")) is None  # vencida
+    assert panel.sesion(R(panel.cookie_sesion("1784", vence))) == "1784"
+    assert panel.sesion(R("9999." + panel.cookie_sesion("1784", vence).split(".", 1)[1])) is None  # otra cuenta
+    assert panel.sesion(R(panel.cookie_sesion("1784", 100))) is None  # vencida
     assert panel.sesion(R("basura")) is None
 
 

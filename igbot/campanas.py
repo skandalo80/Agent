@@ -41,7 +41,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from PIL import Image
 
-from . import brief, config, empresa, imagenes, informe, metricas, openai_texto, panel, semana, tools
+from . import brief, config, empresa, imagenes, informe, limites, metricas, openai_texto, panel, semana, tools
 from .admin import PANEL
 from .contenido import (DESDE, ESTADOS, ESTILO_REFERENCIA, HASHTAGS_FIJO, IMAGEN, MAX_CAPTION, archivo, contexto_marca,
                         cuando, estilo_foto, limitar_hashtags, regla_hashtags,
@@ -2556,6 +2556,8 @@ async def armar(c: Cuenta, datos: dict, camp: dict, borrador: bool = False):
 
     if falta := falta_en(datos):
         return await de_vuelta(falta, datos)
+    if not await limites.cabe_generacion(c.store):
+        return await de_vuelta(limites.TOPE_GENERACIONES, datos)
     with usar(c):
         anteriores = await informe.todas(c, await todas_las(c))
         if datos["modo"] == "repetir" and await con_resultados(c, anteriores) < CON_RESULTADOS:

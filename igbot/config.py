@@ -30,6 +30,12 @@ else:
 # lee en igbot/cuenta.py; aquí queda solo lo común a todas.
 VERIFY_TOKEN = os.environ["IG_VERIFY_TOKEN"]
 APP_SECRET = os.environ["IG_APP_SECRET"]
+# Firma las sesiones del panel, los enlaces de entrar por correo y los states de OAuth. Si falta, se usa
+# IG_APP_SECRET (como antes), pero conviene uno propio: así rotar el secreto de Meta no toca las sesiones y al revés.
+SESSION_SECRET = os.getenv("SESSION_SECRET", "").strip() or APP_SECRET
+# Generaciones de texto con IA (brief, plan, posts, opciones) por cuenta y hora desde el panel: frena el gasto si
+# alguien pulsa Generar sin parar. 0 = sin tope.
+GENERACIONES_HORA = int(os.getenv("GENERACIONES_HORA", "20"))
 API_VERSION = os.getenv("IG_API_VERSION", "v23.0")
 # Cuentas de clientes que atiende este mismo proceso, además de la suya:
 # nombres de carpetas de clientes/ con su .env (p. ej. CUENTAS=nortex,cafelunar).
@@ -143,6 +149,9 @@ SHOPIFY_API_VERSION = os.getenv("SHOPIFY_API_VERSION", "2025-10")
 # Conecta tu Mercado Pago / tu Stripe (cobros.py). Sin estas llaves no salen en Conexión.
 MP_CLIENT_ID = os.getenv("MP_CLIENT_ID", "")
 MP_CLIENT_SECRET = os.getenv("MP_CLIENT_SECRET", "")
+# La "clave secreta" del webhook de Mercado Pago (Tus integraciones > tu app > Webhooks). Con ella se exige la firma
+# x-signature de cada aviso; sin ella, los avisos solo se verifican preguntando el pago a la API.
+MP_WEBHOOK_SECRET = os.getenv("MP_WEBHOOK_SECRET", "").strip()
 STRIPE_CLIENT_ID = os.getenv("STRIPE_CLIENT_ID", "")  # ca_…, de Connect > Configuración de OAuth
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")  # la llave secreta de la plataforma (sk_…)
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")  # whsec_… del webhook de Connect
