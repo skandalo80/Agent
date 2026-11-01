@@ -257,9 +257,12 @@ async def opciones(c: Cuenta, objetivo: str = "") -> tuple[list[dict], list[dict
 
 
 def base_de(op: dict, propias: dict, palabras: tuple) -> str:
-    """A cuál de las de respaldo se parece una opción (para saber qué temas le sirven)."""
+    """A cuál de las de respaldo se parece una opción (para saber qué temas le sirven): la que dijo la IA al
+    escribirla ("tipo"); en las de antes, por sus palabras."""
     if op.get("k") in propias:
         return op["k"]
+    if op.get("tipo") in propias:
+        return op["tipo"]
     texto = f"{op.get('titulo', '')} {op.get('descripcion', '')}".lower()
     return next((k for k, claves in palabras if any(p in texto for p in claves)), next(iter(propias)))
 
@@ -322,7 +325,8 @@ async def a_campana(c: Cuenta, b: dict) -> dict:
             "enfoques": bool(enfoques), "formatos": formatos, "horarios": horarios, "horas": horas,
             "clientes": bool(b.get("preguntan")),  # responde lo que más le preguntan (paso Mensaje)
             "objetivo": f"{obj['titulo']}: {obj.get('descripcion', '')}".strip(": "),
-            "mensaje": "; ".join(f"{m['titulo']}: {m.get('descripcion', '')}" for m in msgs),
+            "mensaje": "; ".join(f"{m['titulo']}: {m.get('descripcion', '')}"
+                                 + (f" (por ejemplo: «{m['ejemplo']}»)" if m.get("ejemplo") else "") for m in msgs),
             "producto": producto, "producto_id": prod["id"] if prod else "", "visual": visual, "estilo": estilo,
             "fotos_propias": "propias" in b["visual"], "modo_img": b["armado"], "regla": base == "interaccion",
             "ves": [[k, f"{VISUAL[k][0]}: {VISUAL[k][1]}"] for k in ves],
@@ -666,7 +670,8 @@ def paso_1(b: dict, objetivos: list[dict], funciono: str = "") -> str:
 
 def paso_2(b: dict, mensajes: list[dict], prods: list[dict], objetivos: list[dict], preguntan: list[str] = ()) -> str:
     ops = "".join(op("mensajes", m["k"], m["titulo"], m.get("descripcion", ""), "checkbox", m["k"] in b["mensajes"],
-                     sugerido=bool(m.get("sugerido"))) for m in mensajes)
+                     em=f"«{escape(m['ejemplo'])}»" if m.get("ejemplo") else "", sugerido=bool(m.get("sugerido")))
+                  for m in mensajes)  # el ejemplo: cómo sonaría un post con ese mensaje
     responder = ""
     if preguntan:  # lo que más le preguntaron sus clientes esta semana (Contenido sugerido)
         responder = ('<div class="wiz-bloque">' + abre("preguntan", "Responder lo que más te preguntan", b.get("preguntan"))
