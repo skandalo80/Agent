@@ -27,7 +27,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.exception_handlers import http_exception_handler
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 
 from igbot import (acceso, adjuntos, admin, agenda_google, agent, ajustes, anuncios_meta, asistente, botones, campanas, cobros,
                    comentarios, comprimir, conectar, config, contenido, empresa, errores, facebook, historias, inicio,
@@ -350,7 +350,16 @@ def health():
 # Los íconos y el logo de skandar.online (web/), para que el panel lleve los mismos.
 WEB = Path(__file__).resolve().parent / "web"
 ICONOS = {"favicon.ico": "image/x-icon", "favicon-32.png": "image/png", "apple-touch-icon.png": "image/png",
+          "icono-192.png": "image/png", "icono-512.png": "image/png",
           "logo-skandar.svg": "image/svg+xml", "logo-sk.svg": "image/svg+xml"}
+
+# Para "Agregar a inicio" en el celular: la consola abre como app, sin la barra del navegador.
+MANIFIESTO = {
+    "name": "Skandar", "short_name": "Skandar", "lang": "es", "start_url": "/panel", "scope": "/",
+    "display": "standalone", "background_color": "#2B2C30", "theme_color": "#2B2C30",
+    "icons": [{"src": "/icono-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+              {"src": "/icono-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}],
+}
 
 
 def _icono(nombre: str):
@@ -362,6 +371,12 @@ def _icono(nombre: str):
 
 for _nombre in ICONOS:
     app.get(f"/{_nombre}", include_in_schema=False)(_icono(_nombre))
+
+
+@app.get("/manifest.webmanifest", include_in_schema=False)
+def manifiesto():
+    return JSONResponse(MANIFIESTO, media_type="application/manifest+json",
+                        headers={"Cache-Control": "public, max-age=86400"})
 
 
 @app.get("/", include_in_schema=False)
