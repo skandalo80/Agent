@@ -138,7 +138,7 @@ async def diagnostico_sin_paginas() -> None:
         "me_ig_cuentas": ("/me/instagram_accounts", {"fields": "id,username"}),
         "me_activos": ("/me/assigned_business_assets", {}),
     }
-    negocio = ""
+    negocio = uid = ""
     async with httpx.AsyncClient(timeout=15) as http:
         for nombre, (ruta, params) in consultas.items():
             try:
@@ -147,18 +147,17 @@ async def diagnostico_sin_paginas() -> None:
                 log.warning("META SIN PAGINA %s %s: %s", nombre, r.status_code, r.text[:1500])
                 if nombre == "me_negocio" and r.status_code == 200:
                     negocio = str(r.json().get("client_business_id") or "")
+                if nombre == "debug_token" and r.status_code == 200:
+                    uid = str((r.json().get("data") or {}).get("user_id") or "")
             except (httpx.HTTPError, ValueError) as e:
                 log.warning("META SIN PAGINA %s: %s", nombre, e)
-        try:
-            uid = str((await http.get(base + "/me", params={"fields": "id", "access_token": _ultimo_token})).json().get("id") or "")
-        except (httpx.HTTPError, ValueError):
-            uid = ""
         rutas = [f"/{uid}/assigned_pages", f"/{uid}/assigned_business_asset_groups",
                  f"/{uid}/assigned_instagram_accounts", "/me/instagram_business_accounts",
                  f"/{negocio}?fields=id,name", f"/{negocio}/owned_instagram_assets",
                  f"/{negocio}/client_instagram_assets?fields=id,username,instagram_account",
                  f"/{negocio}/owned_pages", f"/{negocio}/client_pages",
                  f"/{negocio}/system_user_access_tokens?fetch_only=true"] if uid and negocio else []
+        log.warning("META SIN PAGINA barrido usuario=%s negocio=%s rutas=%d", uid, negocio, len(rutas))
         for ruta in rutas:
             ruta, _, q = ruta.partition("?")
             params = dict(x.split("=", 1) for x in q.split("&") if x)
