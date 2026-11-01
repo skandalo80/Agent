@@ -230,15 +230,26 @@ async def metricas_del_dia(c: Cuenta) -> None:
     await metricas.tick(c)  # seguidores, alcance y vistas de cada día, para Resultados
 
 
-async def cada_cuenta(paso, every: float) -> None:
-    """Un solo bucle de fondo por tarea, que pasa por todas las cuentas."""
-    while True:
-        for c in cuentas:
+async def cada_cuenta(paso, every: float, a_la_vez: int = 0, tope: float = 0) -> None:
+    """Un solo bucle de fondo por tarea, que pasa por todas las cuentas.
+
+    Las cuentas van en paralelo (hasta `a_la_vez`), así una cuenta lenta o con Meta caído no retrasa a las
+    demás; y cada paso tiene un tope de tiempo para que un atasco en una cuenta no detenga el bucle."""
+    turno = asyncio.Semaphore(a_la_vez or config.FONDO_A_LA_VEZ)
+    tope = tope or config.FONDO_TOPE_SEG
+
+    async def una(c: Cuenta) -> None:
+        async with turno:
             with usar(c):
                 try:
-                    await paso(c)
+                    await asyncio.wait_for(paso(c), tope)
+                except asyncio.TimeoutError:
+                    log.error("%s tardó más de %.0f s en la cuenta %s: se cortó", paso.__name__, tope, nombre(c))
                 except Exception:
                     log.exception("Falló %s en la cuenta %s", paso.__name__, nombre(c))
+
+    while True:
+        await asyncio.gather(*(una(c) for c in list(cuentas)))
         await asyncio.sleep(every)
 
 

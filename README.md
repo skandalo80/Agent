@@ -100,7 +100,7 @@ Un solo proceso (`igbot`, puerto 8001) atiende todas las cuentas sobre el mismo 
 CUENTAS=cafelunar,otra_cuenta
 ```
 
-Meta manda los avisos de todas las cuentas al mismo webhook (`console.skandar.online/webhook`). Cada aviso trae el id de su cuenta y el bot lo atiende con la configuración de esa cuenta: su base, su token, su prompt y sus límites (ver `igbot/cuenta.py`). Cada cuenta tiene su cola; `MAX_CONCURRENT` (4) es el tope de respuestas a la vez entre todas y `MAX_CONCURRENT_PER_ACCOUNT` (3) el de una sola cuenta. La renovación de tokens, las publicaciones programadas y el reporte semanal son un bucle por tarea que pasa por todas las cuentas.
+Meta manda los avisos de todas las cuentas al mismo webhook (`console.skandar.online/webhook`). Cada aviso trae el id de su cuenta y el bot lo atiende con la configuración de esa cuenta: su base, su token, su prompt y sus límites (ver `igbot/cuenta.py`). Cada cuenta tiene su cola; `MAX_CONCURRENT` (4) es el tope de respuestas a la vez entre todas y `MAX_CONCURRENT_PER_ACCOUNT` (3) el de una sola cuenta. La renovación de tokens, las publicaciones programadas y el reporte semanal son un bucle por tarea que pasa por todas las cuentas, `FONDO_A_LA_VEZ` (5) a la vez y con `FONDO_TOPE_SEG` (900) de tope por cuenta, para que una cuenta lenta o con Meta caído no retrase a las demás.
 
 Para dar de alta un cliente que ya se conectó en skandar.online/conectar:
 ```bash
