@@ -256,6 +256,19 @@ def conecta(request: Request):
     if not (correo := correo_alta(request)):
         return RedirectResponse("/panel", status_code=303)
     from . import facebook
+    ua = request.headers.get("user-agent", "")
+    if any(x in ua for x in ("iPhone", "iPad", "iPod")):
+        # En iOS, www.instagram.com/oauth/authorize lo abre la app de Instagram (enlace universal) y se queda en
+        # "Loading": ni el redirect ni un meta refresh lo evitan. En el iPhone: Facebook o terminar en la compu.
+        fb = ('<div class="acciones"><a class="boton" href="/panel/facebook/entrar">Enlazar con Facebook</a></div>'
+              if facebook.enabled() else "")
+        return pagina(
+            "Enlaza tu Instagram",
+            f"Ya comprobamos {escape(correo)}. Último paso: enlaza el Instagram de tu negocio para que tu asistente"
+            " pueda contestar por ti.",
+            fb + '<p class="nota">Con Facebook, tu Instagram tiene que estar enlazado a una página de Facebook.'
+            " Si no lo está, termina en tu computadora: entra a console.skandar.online con este mismo correo y"
+            " enlaza tu Instagram ahí. En el iPhone, Instagram abre su app y no deja terminar.</p>")
     return pagina(
         "Enlaza tu Instagram",
         f"Ya comprobamos {escape(correo)}. Último paso: enlaza el Instagram de tu negocio para que tu asistente"
@@ -263,8 +276,7 @@ def conecta(request: Request):
         '<div class="acciones"><a class="boton" href="/conectar/instagram">Enlazar con Instagram</a>'
         + ('<a class="boton secundario" href="/panel/facebook/entrar">Enlazar con Facebook</a>'
            if facebook.enabled() else "") + "</div>"
-        '<p class="nota">Si en el iPhone Instagram se queda cargando, usa Facebook: tu Instagram tiene que'
-        " estar enlazado a una página de Facebook.</p>")
+        '<p class="nota">Con Facebook, tu Instagram tiene que estar enlazado a una página de Facebook.</p>')
 
 
 # --- entrar con Google: solo el correo (openid email), con el mismo cliente web de Google Calendar ---
