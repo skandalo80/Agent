@@ -21,7 +21,7 @@
 .anima .escena .elegida { border-color: #3A3C42; box-shadow: none; }
 .anima .escena .elegida .prop-check { opacity: 0; }
 .escena .tecla { display: none; }
-.anima .escena .tecla { display: flex; }
+.anima .escena .tecla { display: flex; position: absolute; right: 2px; top: var(--arriba, 0px); z-index: 1; }
 @keyframes esc-msj { from { opacity: 0; translate: 0 8px; scale: .96; } to { opacity: 1; translate: 0 0; scale: 1; } }
 @keyframes esc-pop { from { opacity: 0; scale: .8; } 70% { scale: 1.04; } to { opacity: 1; scale: 1; } }
 @keyframes esc-tecla { 0%, 100% { opacity: 0; } 12%, 88% { opacity: 1; } }
@@ -47,7 +47,7 @@
 .tel-nombre small { display: flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 500; color: var(--tenue); }
 .tel-nombre small::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--neon); }
 .tel-hora { font-size: 11px; font-weight: 600; color: var(--tenue); font-variant-numeric: tabular-nums; }
-.tel-cuerpo { padding: 12px 2px 4px; display: flex; flex-direction: column; gap: 8px; font-size: 11.5px; }
+.tel-cuerpo { position: relative; padding: 12px 2px 4px; display: flex; flex-direction: column; gap: 8px; font-size: 11.5px; }
 .tel-sistema { align-self: center; text-align: center; font-size: 10px; color: var(--tenue); padding: 0 8px; margin-bottom: 2px; }
 .tel-sistema b { color: var(--texto); font-weight: 700; }
 .bur { padding: 9px 12px; border-radius: 15px; line-height: 1.45; max-width: 86%; box-shadow: 0 2px 5px #00000022; }
@@ -89,10 +89,11 @@
 .con-flota .tel { padding-bottom: 84px; }
 
 /* Pantallas que "encajan" al bajar (scroll snap), solo en escritorio y en ventanas altas: la portada y cada escena
-   se acomodan centradas al soltar el scroll. "proximity" solo ajusta cuando ya estás cerca; nunca secuestra el scroll. */
+   se acomodan centradas al soltar el scroll. "proximity" solo ajusta cuando ya estás cerca; nunca secuestra el scroll.
+   La portada no encaja (el usuario lo prefirió así); solo la intro y las escenas. */
 @media (min-width: 801px) and (min-height: 700px) {
   html { scroll-snap-type: y proximity; }
-  .portada-hook { scroll-snap-align: start; min-height: calc(100vh - 72px); display: grid; align-content: center; }
+  .portada-hook { min-height: calc(100vh - 72px); display: grid; align-content: center; }
   .caso { scroll-snap-align: center; min-height: min(calc(100vh - 72px), 760px); }
   .casos-intro { scroll-snap-align: start; scroll-margin-top: 72px; }
 }

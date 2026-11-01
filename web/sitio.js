@@ -170,7 +170,15 @@ document.querySelectorAll('.filtros [data-filtro]').forEach(function (b) {
   document.querySelectorAll('.escena[data-ciclo]').forEach(function (escena) {
     var ciclo = parseInt(escena.dataset.ciclo, 10) || 12000;
     var reloj = null;
+    // Los puntitos de "escribiendo" no ocupan lugar: se dibujan sobre el sitio donde va a entrar la respuesta.
+    var acomodarTeclas = function () {
+      escena.querySelectorAll('.tecla').forEach(function (t) {
+        var sig = t.nextElementSibling;
+        if (sig) t.style.setProperty('--arriba', sig.offsetTop + 'px');
+      });
+    };
     var correr = function () {
+      acomodarTeclas();
       escena.classList.remove('corre');
       void escena.offsetWidth; // reinicia las animaciones
       escena.classList.add('corre');
