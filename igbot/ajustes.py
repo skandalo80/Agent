@@ -228,6 +228,10 @@ async def conexion(c: Cuenta) -> tuple[str, str]:
         fila("mal" if lleno else "ok", "Límite de gasto",
              f"Hoy vas en US${gasto:.2f}" + (f" de US${tope:.2f}" if tope > 0 else " (sin límite)")
              + (": el asistente no contesta hasta mañana" if lleno else ""))
+    fila("no", "Tu sesión en este panel", "Si perdiste un celular o entraste desde una computadora ajena, cierra la"
+         " sesión en todos los dispositivos; vuelves a entrar con tu correo o con Meta.",
+         '<form method="post" action="/panel/salir-todos"><button class="boton secundario chico">Cerrar en todos'
+         "</button></form>")
     peor = "mal" if any(e == "mal" for e, _ in filas) else "aviso" if any(e == "aviso" for e, _ in filas) else "ok"
     titulo = {"ok": "Todo funcionando", "aviso": "Hay algo que revisar", "mal": "Algo no está funcionando"}[peor]
     return peor, ('<div class="tarjeta" id="conexion"><span class="num">Conexión</span>'

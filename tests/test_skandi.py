@@ -211,7 +211,7 @@ def test_chats_de_skandi_para_la_cuenta_principal(monkeypatch, tmp_path):
         web = client.portal.call(guardar, None, "web", "a" * 32, "",
                                  [["user", "Quiero una demo"], ["assistant", "Claro."]], True)
         vence = 9_999_999_999
-        client.cookies.set(panel.COOKIE, f"negocio.{vence}.{panel._firma('negocio', vence)}")
+        client.cookies.set(panel.COOKIE, panel.cookie_sesion("negocio", vence))
         html = client.get("/panel/skandi").text
         assert "Chats de Skandi" in html  # en su menú de perfil
         assert "¿Dónde cambio mi &lt;logo&gt;?" in html and "@cafe.lunar" in html and "Visitante de la web" in html

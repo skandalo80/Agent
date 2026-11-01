@@ -484,6 +484,11 @@ class Store:
         )
         return (await cur.fetchone())[0]
 
+    async def emails_total_since(self, since: float) -> int:
+        """Correos mandados por el asistente a cualquier persona desde `since` (tope por cuenta)."""
+        cur = await self.db.execute("SELECT COUNT(*) FROM emails WHERE sent_at > ?", (since,))
+        return (await cur.fetchone())[0]
+
     async def add_quote(self, user_id, token, paquete, pago, bloques, total, email) -> int:
         cur = await self.db.execute(
             "INSERT INTO quotes (user_id, token, paquete, pago, bloques, total, email, created_at)"
@@ -1171,3 +1176,12 @@ class Store:
             (key, value),
         )
         await self.db.commit()
+
+    async def borrar_kv(self, key: str) -> None:
+        await self.db.execute("DELETE FROM kv WHERE key = ?", (key,))
+        await self.db.commit()
+
+    async def kv_con_prefijo(self, prefijo: str) -> list[tuple[str, str]]:
+        cur = await self.db.execute("SELECT key, value FROM kv WHERE key LIKE ? ESCAPE '\\'",
+                                    (prefijo.replace("_", "\\_").replace("%", "\\%") + "%",))
+        return [(k, v) for k, v in await cur.fetchall()]

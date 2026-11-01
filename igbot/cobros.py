@@ -80,7 +80,7 @@ def cliente() -> httpx.AsyncClient:
 
 
 def _firmar(texto: str) -> str:
-    return hmac.new(config.APP_SECRET.encode(), f"cobros:{texto}".encode(), hashlib.sha256).hexdigest()
+    return hmac.new(config.SESSION_SECRET.encode(), f"cobros:{texto}".encode(), hashlib.sha256).hexdigest()
 
 
 def nuevo_state(c: Cuenta, prov: str) -> str:
@@ -314,10 +314,37 @@ async def _guardar_pago(c: Cuenta, origen: str, externo: str, codigo: str, monto
     return nueva
 
 
+MAX_AVISOS_MP_MINUTO = 60  # avisos de Mercado Pago que se atienden por minuto (cada uno consulta su API)
+_avisos_mp: list[float] = []
+
+
+def firma_mp_valida(pago: str, cabecera: str, request_id: str, ahora: float | None = None,
+                    tolerancia: int = 300) -> bool:
+    """x-signature de Mercado Pago: "ts=...,v1=..."; v1 = HMAC-SHA256 del manifiesto
+    "id:<data.id>;request-id:<x-request-id>;ts:<ts>;" con la clave secreta del webhook."""
+    pares = dict(x.strip().split("=", 1) for x in cabecera.split(",") if "=" in x)
+    ts, v1 = pares.get("ts", ""), pares.get("v1", "")
+    if not ts.isdigit() or not v1 or abs((time.time() if ahora is None else ahora) - int(ts) / (1000 if len(ts) > 11 else 1)) > tolerancia:
+        return False
+    manifiesto = f"id:{pago.lower()};request-id:{request_id};ts:{ts};"
+    esperada = hmac.new(config.MP_WEBHOOK_SECRET.encode(), manifiesto.encode(), hashlib.sha256).hexdigest()
+    return hmac.compare_digest(esperada, v1)
+
+
+def _cabe_aviso_mp(ahora: float | None = None) -> bool:
+    ahora = time.time() if ahora is None else ahora
+    _avisos_mp[:] = [t for t in _avisos_mp if ahora - t < 60]
+    if len(_avisos_mp) >= MAX_AVISOS_MP_MINUTO:
+        return False
+    _avisos_mp.append(ahora)
+    return True
+
+
 @publico.post("/mercadopago/aviso")
 async def aviso_mercadopago(request: Request):
     """Mercado Pago avisa que cambió un pago. No se cree lo que dice el aviso: se pregunta el pago a Mercado
-    Pago con el token de esa cuenta, así un aviso falso no guarda nada."""
+    Pago con el token de esa cuenta, así un aviso falso no guarda nada. Con MP_WEBHOOK_SECRET se exige además
+    la firma x-signature; y se atienden como mucho MAX_AVISOS_MP_MINUTO por minuto."""
     q = request.query_params
     try:
         cuerpo = json.loads(await request.body() or b"{}")
@@ -327,6 +354,12 @@ async def aviso_mercadopago(request: Request):
     pago = str(q.get("data.id") or q.get("id") or (cuerpo.get("data") or {}).get("id") or "")
     if tipo != "payment" or not pago.isdigit():
         return Response(status_code=200)
+    if config.MP_WEBHOOK_SECRET and not firma_mp_valida(pago, request.headers.get("x-signature", ""),
+                                                        request.headers.get("x-request-id", "")):
+        log.warning("Aviso de Mercado Pago con firma inválida")
+        raise HTTPException(status_code=401)
+    if not _cabe_aviso_mp():
+        raise HTTPException(status_code=429)  # que lo vuelva a mandar más tarde
     c = next((x for x in cuentas() if (x.slug or "-") == q.get("c")), None)
     if not c:
         return Response(status_code=200)

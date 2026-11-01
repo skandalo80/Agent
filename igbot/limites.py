@@ -39,6 +39,18 @@ async def replies_today(db: Store, user_id: str) -> int:
     return await db.bot_replies_since(user_id, today_start())
 
 
+async def cabe_generacion(store: Store, ahora: float | None = None) -> bool:
+    """True si la cuenta puede pedir otra generación de texto con IA desde el panel esta hora (y la anota)."""
+    from . import config, unavez
+    if config.GENERACIONES_HORA <= 0:
+        return True
+    return await unavez.cabe(store, "generaciones", config.GENERACIONES_HORA, 3600, ahora)
+
+
+TOPE_GENERACIONES = ("Ya pediste muchas propuestas en la última hora. Espera un rato y vuelve a intentar; lo que ya"
+                     " generaste sigue aquí.")
+
+
 async def add_cost(usd: float) -> None:
     """Suma al gasto del día de la cuenta actual (sin base, en pruebas sueltas, no se anota)."""
     store = cuenta().store

@@ -126,7 +126,7 @@ async def solicitud(request: Request):
 
 
 def firmar(texto: str) -> str:
-    return hmac.new(config.IG_OAUTH_SECRET.encode(), texto.encode(), hashlib.sha256).hexdigest()[:32]
+    return hmac.new(config.SESSION_SECRET.encode(), texto.encode(), hashlib.sha256).hexdigest()[:32]
 
 
 def nuevo_state() -> str:
@@ -154,6 +154,12 @@ def state_valido(state: str, cookie: str | None) -> bool:
     if ok:
         _usados[state] = ahora
     return ok
+
+
+async def state_gastable(state: str, cookie: str | None) -> bool:
+    """state_valido y además lo anota en la base: un reinicio no lo vuelve a dar por bueno."""
+    from . import unavez
+    return state_valido(state, cookie) and await unavez.gastar(store, "state:" + state[-24:], STATE_TTL)
 
 
 def _sin_app(url: str) -> HTMLResponse:
@@ -246,7 +252,7 @@ async def callback(request: Request):
         # Canceló, o su cuenta no es tester todavía.
         log.info("Conexión cancelada o rechazada: %s", p.get("error_reason") or p.get("error"))
         return back("/conectar-error")
-    if not state_valido(p.get("state", ""), expected):
+    if not await state_gastable(p.get("state", ""), expected):
         log.warning("Callback con state inválido")
         return back("/conectar-error")
     try:
@@ -321,8 +327,13 @@ async def desautorizar(request: Request):
     if not quien:
         return JSONResponse({"error": "signed_request inválido"}, status_code=400)
     log.info("%s quitó la app desde Instagram", quien[1])
+    apagado = False
+    if panel.buscar and (c := panel.buscar(quien[0])):  # su token ya no sirve: que no siga intentando contestar
+        await c.store.set("bot_activo", "0")
+        apagado = True
     await avisar(f"Quitaron la app: {quien[1]}",
-                 f"{quien[1]} quitó a Skandar de su Instagram. Su token ya no sirve: apaga su asistente.")
+                 f"{quien[1]} quitó a Skandar de su Instagram. Su token ya no sirve"
+                 + (": su asistente quedó apagado." if apagado else ": apaga su asistente."))
     return {"ok": True}
 
 

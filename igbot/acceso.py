@@ -38,8 +38,9 @@ from .cuenta import Cuenta
 log = logging.getLogger("igbot.acceso")
 router = APIRouter(prefix="/panel/correo")
 
-# Lo pone app.py al arrancar: todas las cuentas cargadas.
+# Lo pone app.py al arrancar: todas las cuentas cargadas, y la base principal (enlaces ya usados).
 todas: Callable[[], list[Cuenta]] = lambda: []
+store = None
 
 VIGENCIA = 900
 CORREO = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,190}\.[a-z]{2,}$", re.I)
@@ -54,7 +55,7 @@ _enviados: list[tuple[float, str]] = []  # (cuándo, correo)
 
 
 def _firma(texto: str) -> str:
-    clave = hmac.new(config.APP_SECRET.encode(), b"panel-correo", hashlib.sha256).digest()
+    clave = hmac.new(config.SESSION_SECRET.encode(), b"panel-correo", hashlib.sha256).digest()
     return hmac.new(clave, texto.encode(), hashlib.sha256).hexdigest()[:32]
 
 
@@ -88,12 +89,17 @@ def de_enlace(t: str) -> str | None:
     return _de_b64(partes[0]) or None
 
 
-def usar_enlace(t: str) -> None:
+async def usar_enlace(t: str) -> bool:
+    """Gasta el enlace. False si ya se había gastado (también si fue antes de un reinicio: queda en la base)."""
+    from . import unavez
     ahora = time.time()
     for k, vence in list(_usados.items()):
         if vence < ahora:
             del _usados[k]
+    if t in _usados:
+        return False
     _usados[t] = ahora + VIGENCIA
+    return await unavez.gastar(store, "enlace:" + t.rsplit(".", 1)[-1], VIGENCIA)
 
 
 # --- correo comprobado sin cuenta todavía: se guarda en una cookie firmada hasta que enlaza su Instagram ---
@@ -238,10 +244,12 @@ async def entrar(request: Request):
     dato = de_enlace(t) or ""
     tipo, _, valor = dato.partition(":")
     if tipo == "i" and (c := panel.buscar(valor)):
-        usar_enlace(t)
+        if not await usar_enlace(t):
+            return vencido()
         return entrar_a(c, "correo")
     if tipo == "c" and CORREO.match(valor):
-        usar_enlace(t)
+        if not await usar_enlace(t):
+            return vencido()
         if c := cuenta_de_correo(valor):  # ya enlazó su Instagram en otra ventana
             return entrar_a(c, "correo")
         r = a_enlazar(valor)
