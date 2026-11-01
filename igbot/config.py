@@ -134,6 +134,9 @@ POSTS_IA = os.getenv("POSTS_IA", "openai").strip().lower()
 PROMPT_IA = os.getenv("PROMPT_IA", "openai").strip().lower()
 # El modelo de texto de OpenAI (platform.openai.com/docs/models) y su esfuerzo de razonamiento ("" = no se manda).
 OPENAI_TEXT_MODEL = os.getenv("OPENAI_TEXT_MODEL", "gpt-5")
+# Audios que mandan por DM: se transcriben con OpenAI (sin OPENAI_API_KEY, el asistente solo sabe que fue un audio).
+OPENAI_AUDIO_MODEL = os.getenv("OPENAI_AUDIO_MODEL", "gpt-4o-mini-transcribe")
+OPENAI_AUDIO_USD = float(os.getenv("OPENAI_AUDIO_USD", "0.003"))  # por audio (≈ un minuto), para el gasto del día
 OPENAI_TEXT_EFFORT = os.getenv("OPENAI_TEXT_EFFORT", "low").strip()
 # Lo que cuesta, en US$ por millón de tokens de entrada y de salida, para el gasto diario de la cuenta.
 OPENAI_TEXT_USD_IN = float(os.getenv("OPENAI_TEXT_USD_IN", "1.25"))

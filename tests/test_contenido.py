@@ -8,7 +8,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-os.environ.update(IG_VERIFY_TOKEN="vt", IG_APP_SECRET="secreto", IG_ACCESS_TOKEN="tok", DB_PATH=":memory:")
+os.environ.update(IG_VERIFY_TOKEN="vt", IG_APP_SECRET="secreto", IG_ACCESS_TOKEN="tok", DB_PATH=":memory:",
+                  DEBOUNCE_SECONDS="0.2")  # como test_admin y test_bot: el primero en importar app fija la espera
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

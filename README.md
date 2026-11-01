@@ -74,6 +74,8 @@ Pruebas locales: `pip install pytest && python -m pytest -q`
 
 **Si contestas tú desde Instagram**, el bot lo detecta (Meta le avisa de cada DM que sale de la cuenta) y también se calla en esa conversación durante `HUMAN_PAUSE_HOURS`. Lo que escribiste queda en su memoria, así que al volver sigue desde ahí.
 
+**Fotos y audios en los DMs.** Una foto se describe con Claude (Haiku) en una línea (qué se ve y el texto que traiga, por ejemplo el monto de una transferencia) y entra al chat como `[envió una foto: …]`; un audio se transcribe con OpenAI (`OPENAI_AUDIO_MODEL`) y entra como `[envió un audio que dice: «…»]`. Videos, stickers y publicaciones compartidas quedan como una marca corta. Las reglas base le dicen al asistente que son descripciones hechas por máquina (`igbot/adjuntos.py`).
+
 **Límites contra abuso.** El bot solo habla del negocio: si le piden tareas, código, traducciones o cualquier cosa ajena, contesta en una frase que eso no lo ve y regresa al tema (reglas en `prompts/comun.md`, junto con el estilo de escritura). Además, cada DM se corta a `MAX_MESSAGE_CHARS` (1000), cada persona recibe como mucho `MAX_REPLIES_PER_USER_PER_DAY` respuestas al día (30; al llegar se le avisa una vez y el bot se calla hasta mañana) y la cuenta gasta como mucho `DAILY_BUDGET_USD` al día en atender (US$5 entre DMs, comentarios e historias; al pasarlo deja de contestar hasta mañana y te avisa por correo). Generar campañas, posts e imágenes se anota aparte (rubro `contenido`) y nunca descuenta de ese presupuesto, así una campaña de 40 imágenes no deja mudo al asistente. Los administradores no tienen tope.
 
 **Actualizar el servidor:**
