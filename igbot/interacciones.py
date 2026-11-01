@@ -239,9 +239,10 @@ async def claude_escribe(c: Cuenta, texto: str, usuario: str, va_dm: bool, menci
 
 
 async def atender(c: Cuenta, comment_id: str, author: str, text: str, store, instagram, parent: str = "",
-                  escribe=None) -> bool:
-    """Contesta un comentario según la tabla. False si la tabla no aplica (no la ha guardado, otro plan, un hilo,
-    o pausó sus interacciones)."""
+                  escribe=None, responde_a: str = "") -> bool:
+    """Contesta un comentario según la tabla. False si la tabla no aplica (no la ha guardado, otro plan, un hilo
+    de terceros, o pausó sus interacciones). `responde_a`: dónde va la respuesta pública cuando el comentario está
+    dentro de un hilo (el de arriba; Instagram no deja responder a una respuesta)."""
     datos = await guardado(c, store)
     if not disponible(c) or "comentarios" not in datos or parent or not activo(datos):
         return False
@@ -269,7 +270,7 @@ async def atender(c: Cuenta, comment_id: str, author: str, text: str, store, ins
             log.exception("No se pudo mandar el DM por el comentario %s", comment_id)
     if publica:
         try:
-            await instagram.public_reply(comment_id, publica[:MAX_RESPUESTA])
+            await instagram.public_reply(responde_a or comment_id, publica[:MAX_RESPUESTA])
             replied = True
         except Exception:
             log.exception("No se pudo responder en público el comentario %s", comment_id)

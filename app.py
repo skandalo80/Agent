@@ -449,7 +449,9 @@ def media(slug: str, token: str):
     return FileResponse(path, media_type="image/jpeg")
 
 
-ECHO_WAIT = 5  # segundos para que el bot termine de anotar sus propios envíos
+ECHO_WAIT = 15  # segundos, como mucho, para que el bot termine de anotar su propio envío (se revisa cada medio segundo)
+ECHO_PASO = 0.5
+ECHO_TEXTO = 120  # respaldo: si el id no coincide, un texto que el bot dijo hace menos de esto también es eco
 
 
 async def owner_replied(user_id: str, mid: str, text: str) -> None:
@@ -458,11 +460,17 @@ async def owner_replied(user_id: str, mid: str, text: str) -> None:
     En ese caso el bot se calla en esa conversación por HUMAN_PAUSE_HOURS.
     """
     store = cuenta().store
-    await asyncio.sleep(ECHO_WAIT)
-    since = time.time() - 600
-    if await store.was_sent(mid) or (text and (
-        await store.bot_said(user_id, text, since) or await store.bot_said(admin.key(user_id), text, since)
-    )):
+    # Primero por id, que es lo seguro: Instagram manda el eco a veces antes de que send_text anote su id, así
+    # que se espera (poco y varias veces) en vez de decidir de una vez. El texto es solo respaldo, con ventana corta.
+    limite = time.time() + ECHO_WAIT
+    while True:
+        if await store.was_sent(mid):
+            return
+        if time.time() >= limite:
+            break
+        await asyncio.sleep(ECHO_PASO)
+    since = time.time() - ECHO_TEXTO
+    if text and (await store.bot_said(user_id, text, since) or await store.bot_said(admin.key(user_id), text, since)):
         return
     log.info("El dueño contestó a %s; el bot se pausa en esa conversación", user_id)
     await store.pause(user_id, time.time() + cuenta().human_pause_hours * 3600)

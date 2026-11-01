@@ -243,3 +243,15 @@ def test_mencion_en_un_post_se_agradece_ahi(monkeypatch):
 
     assert con_cuenta({"menciones": {"post": {"pub": {"on": False}}}}, apagada, monkeypatch) == []
     assert con_cuenta({}, apagada, monkeypatch, imagenes=0) == []
+
+
+def test_la_misma_persona_sigue_en_su_hilo_y_se_le_contesta_arriba(monkeypatch):
+    """"¿Y en talla M?" debajo de su propio comentario es su pregunta: se atiende, y lo público va al de arriba."""
+    primero = comment("c0", "me encanta", media="m2")
+    hilo = {**comment("c2", "¿y en talla M?", media="m2"), "parent_id": "c0"}
+    ajeno = {**comment("c3", "yo también quiero", media="m2", author="beto"), "parent_id": "c0"}
+    ig, _, llamadas = run([primero, hilo, ajeno], tabla(pregunta={"pub": {"on": True, "modo": "ia"}}),
+                          lambda t: {"tipo": "pregunta", "publica": "Sí, tenemos M."} if "talla" in t else {"tipo": "elogio"},
+                          monkeypatch)
+    assert llamadas == ["me encanta", "¿y en talla M?"]  # el hilo de un tercero se deja en paz
+    assert ig.public == [("c0", "Sí, tenemos M.")]

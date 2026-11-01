@@ -85,3 +85,44 @@ def test_con_herramientas_sigue_en_el_sdk(monkeypatch):
 def test_precio_de_modelo_desconocido_es_sonnet():
     assert agent.costo("claude-opus-5-5", 1_000_000, 0) == 4.0
     assert agent.costo("otro", 0, 1_000_000) == 10.0
+
+
+def test_el_asistente_habla_como_en_el_pais_de_la_empresa(monkeypatch):
+    from igbot import empresa
+    base = "Lenguaje natural y cotidiano, como se habla en México. Nada de plantillas."
+    assert empresa.con_idioma(base, {"pais": "MX"}) == base
+    assert "como se habla en Argentina, con voseo rioplatense" in empresa.con_idioma(base, {"pais": "AR"})
+    assert "como se habla en Latinoamérica, tuteando" in empresa.con_idioma(base, {"pais": "US"})
+
+    async def de(c):
+        return {"pais": "AR"}
+
+    monkeypatch.setattr(empresa, "de", de)
+    monkeypatch.setattr(agent, "system_prompt", lambda: base)
+    assert "Argentina" in asyncio.run(agent.system_prompt_de(cuenta()))
+
+
+def test_el_resumen_usa_el_modelo_barato(monkeypatch):
+    from igbot import config
+    from igbot.store import Store
+    usados = []
+
+    async def claude(prompt, system, mcp=None, allowed=(), max_turns=5, model=None):
+        usados.append(model)
+        return "resumen"
+
+    monkeypatch.setattr(agent, "run_claude", claude)
+
+    async def main():
+        store = Store(":memory:")
+        await store.open()
+        monkeypatch.setattr(cuenta(), "store", store)
+        monkeypatch.setattr(cuenta(), "history_window", 2)
+        for i in range(14):
+            await store.add_incoming("ana", f"m{i}", f"hola {i}")
+            await store.mark_answered("ana", [r[0] for r in await store.pending("ana")], f"ok {i}")
+        await agent.summarize_if_needed(store, "ana")
+        await store.close()
+
+    asyncio.run(main())
+    assert usados == [config.COMMENTS_MODEL]

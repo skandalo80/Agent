@@ -185,3 +185,28 @@ def test_si_el_duenio_contesta_el_bot_se_calla(monkeypatch):
 def test_el_prompt_lleva_el_estilo():
     prompt = bot.agent.system_prompt()
     assert "<estilo>" in prompt and "Una sola pregunta" in prompt and "<temas>" in prompt
+
+
+def test_el_eco_espera_a_que_el_bot_anote_su_envio(monkeypatch):
+    """El eco llega antes de que send_text anote el id: no es el dueño, el chat no se pausa."""
+    import asyncio
+
+    async def main():
+        store = bot.cuenta().store
+        await store.open()
+        monkeypatch.setattr(bot, "ECHO_WAIT", 1)
+        monkeypatch.setattr(bot, "ECHO_PASO", 0.05)
+
+        async def anotar_tarde():
+            await asyncio.sleep(0.2)
+            await store.add_sent("tarde")
+
+        asyncio.create_task(anotar_tarde())
+        await bot.owner_replied("ana", "tarde", "Hola Ana")
+        assert await store.paused_until("ana") == 0
+        # Un eco con id desconocido y texto nuevo sí es el dueño: pausa.
+        await bot.owner_replied("ana", "a-mano", "Te mando la lista")
+        assert await store.paused_until("ana") > 0
+        await store.close()
+
+    asyncio.run(main())

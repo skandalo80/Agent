@@ -2516,7 +2516,7 @@ async def responder_prueba(c: Cuenta, previos: list[list[str]], texto: str) -> s
         partes.append(f"<ahora>{tools.fmt(tools.now())} ({c.timezone}), {tools.now():%Y-%m-%d}</ahora>")
         partes.append(f"<mensajes_nuevos>\n{agent.dato(texto)}\n</mensajes_nuevos>\n\n"
                       "Escribe la respuesta que se enviará por DM (solo el texto del mensaje).")
-        return await agent.run_claude("\n\n".join(partes), agent.system_prompt() + NOTA_PRUEBA, max_turns=1)
+        return await agent.run_claude("\n\n".join(partes), await agent.system_prompt_de(c) + NOTA_PRUEBA, max_turns=1)
 
 
 # Adonde llega la página (#ultimo) al mandar un mensaje: va justo después de
