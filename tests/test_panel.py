@@ -443,6 +443,7 @@ def test_pasos_en_el_celular_no_ensanchan_la_pagina():
 
 
 def test_la_hoja_de_estilos_se_sirve_como_archivo_con_version():
+    client = TestClient(bot.app, base_url="https://testserver")
     r = client.get("/panel/static/panel.css")
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/css")
     assert r.text == panel.HOJA and panel.ESTILO in r.text and panel.COMUN in r.text
