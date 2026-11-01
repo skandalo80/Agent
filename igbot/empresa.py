@@ -1072,7 +1072,7 @@ async def pagina(c: Cuenta, paso: int, e: dict | None = None, aviso: str = "", e
         avisos = ('<div class="aviso">Te precargamos lo que ya escribiste en tu asistente y en Tu marca.'
                   " Revísalo y pulsa Aplicar o Siguiente para guardarlo.</div>" if e else "")
     return panel.pagina(
-        f"<style>{ESTILO}{panel.COMUN}</style>"
+        f"<style>{ESTILO}</style>"
         + await panel.menu_de(c, "cuenta", sub="empresa")
         + panel.encabezado("Tu cuenta · Perfil de empresa")
         + f'<main class="emp"><div class="contenedor">{avisos}<div class="mago">'
@@ -1298,7 +1298,7 @@ async def ver_sitio(request: Request):
     else:
         cuerpo = (f'<form method="post" action="/panel/empresa/sitio">{pagina_sugerencias(e, datos)}</form>')
     return panel.pagina(
-        f"<style>{ESTILO}{panel.COMUN}</style>"
+        f"<style>{ESTILO}</style>"
         + await panel.menu_de(c, "cuenta", sub="empresa")
         + f'<main class="emp"><div class="contenedor"><div class="hoja-o">{cuerpo}</div></div></main>'
     )
@@ -1403,7 +1403,7 @@ async def ver_shopify(request: Request):
             '<span class="pie-nota"></span><span class="pie-der">'
             '<button class="boton" name="accion" value="importar">Agregar a mi catálogo</button></span></div></form>')
     return panel.pagina(
-        f"<style>{ESTILO}{panel.COMUN}</style>"
+        f"<style>{ESTILO}</style>"
         + await panel.menu_de(c, "cuenta", sub="empresa")
         + f'<main class="emp"><div class="contenedor"><div class="hoja-o">{cuerpo}</div></div></main>'
     )

@@ -135,7 +135,7 @@ def test_skandi_contesta_y_pasa_a_soporte(monkeypatch, tmp_path):
                 and 'href="/panel/conexion" data-enlace-skandi>Conexión</a>' in dice)
         assert "inventada" not in dice and "[[" not in dice and "&lt;b&gt;" in dice  # lo demás va escapado
         assert "[[catalogo]] = Tu catálogo" in vistos[-1][1]
-        assert ".sk-enlace{color:#C6FA2C" in r.text
+        assert ".sk-enlace{color:#C6FA2C" in client.get("/panel/static/panel.css").text
         for _, _, href, _, _ in skandi.SECCIONES:
             assert client.get(href.split("#")[0]).status_code == 200, href
         # Sin contenido en el plan, las secciones de contenido salen como nombre, sin enlace.

@@ -540,7 +540,7 @@ async def pagina(c: Cuenta, paso: str = "", aviso: str = "") -> HTMLResponse:
               f' aria-hidden="true">Siguiente</button><input type="hidden" name="paso" value="{paso}">'
               f'<p class="as-num">{num}</p>{cuerpo}{_pie(paso)}</form>')
     return panel.pagina(
-        f"<style>{asistente.ESTILO}{panel.COMUN}{ESTILO}</style>"
+        f"<style>{asistente.ESTILO}{ESTILO}</style>"
         + await panel.menu_de(c, "contenido", sub="interacciones")
         + '<main class="as-main"><div class="contenedor">'
         + (f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")

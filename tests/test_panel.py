@@ -408,7 +408,7 @@ def test_un_solo_archivo_de_ajustes():
     ajustes = (Path(__file__).resolve().parent.parent / "igbot" / "ajustes.css").read_text()
     estilos = (Path(__file__).resolve().parent.parent / "web" / "estilos.css").read_text()
     assert "--t-titulo:" in ajustes and "--caja-pad:" in ajustes
-    assert ajustes in panel.PRINCIPIO and panel.AJUSTES == ajustes
+    assert ajustes in panel.HOJA and panel.AJUSTES == ajustes and f"/panel/static/panel.css?v={panel.VERSION_CSS}" in panel.PRINCIPIO
     assert '@import url("ajustes.css' in estilos.splitlines()[1]
     assert "--t-portada:" in (Path(__file__).resolve().parent.parent / "web" / "ajustes.css").read_text()
     for var in ("--t-ante", "--t-titulo", "--t-tarjeta", "--caja-pad", "--hueco", "--paso-pad", "--paso-circulo", "--t-paso",
@@ -440,3 +440,14 @@ def test_pasos_en_el_celular_no_ensanchan_la_pagina():
     css = panel.ESTILO + panel.COMUN
     assert ".wiz{grid-template-columns:minmax(0,1fr)}" in css and ".wiz{grid-template-columns:1fr}" not in css
     assert "--marca-columnas-cel:" in panel.COMUN and "repeat(var(--marca-columnas-cel)" in panel.COMUN
+
+
+def test_la_hoja_de_estilos_se_sirve_como_archivo_con_version():
+    client = TestClient(bot.app, base_url="https://testserver")
+    r = client.get("/panel/static/panel.css")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/css")
+    assert r.text == panel.HOJA and panel.ESTILO in r.text and panel.COMUN in r.text
+    assert "immutable" in r.headers["cache-control"]
+    html = client.get("/panel").text
+    assert f'<link rel="stylesheet" href="/panel/static/panel.css?v={panel.VERSION_CSS}">' in html
+    assert panel.ESTILO not in html  # ya no va inline en cada página

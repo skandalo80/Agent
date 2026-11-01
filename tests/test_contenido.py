@@ -1323,7 +1323,7 @@ def test_el_logo_se_sirve_y_el_menu_plegado_lleva_solo_el_icono(cliente):
     client, *_ = cliente
     r = client.get("/panel/asistente").text
     assert 'class="logo-largo"' in r and 'class="logo-corto" src="/logo-sk.svg"' in r
-    assert "html.menu-plegado .lateral .logo-corto{display:block}" in r
+    assert "html.menu-plegado .lateral .logo-corto{display:block}" in client.get("/panel/static/panel.css").text
     for nombre in ("logo-skandar.svg", "logo-sk.svg"):
         logo = client.get(f"/{nombre}")
         assert logo.status_code == 200 and logo.headers["content-type"].startswith("image/svg+xml")
