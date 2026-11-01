@@ -129,7 +129,7 @@ def test_basico_sin_mensajes_y_con_mensajes(cliente, monkeypatch):
     assert "1 de 2 sin ayuda" in html and "50%" in html
     assert ">1 respuesta<" in html
     assert html.split("<main")[1].count("<svg") == 2 and "no cuenta" not in html
-    assert "De dónde es tu público" in html and "Seguidores nuevos" not in html  # solo conversaciones
+    assert "Lo que dejaron" in html and "De dónde es tu público" not in html and "Seguidores nuevos" not in html  # solo conversaciones
     assert "De comentario a mensaje" not in html  # Básico: sin bloque de contenido
     assert 'class="on">30 días' in client.get("/panel/resultados?dias=30").text
     html = client.get("/panel/resultados?dias=30&ver=conversaciones").text
@@ -358,4 +358,55 @@ def test_rango_personalizado_y_descargas(cliente, monkeypatch):
     assert "resultados-conversaciones-" in r.headers["content-disposition"]
     # El PDF del periodo lleva la comparación y las vistas por formato.
     r = client.get("/panel/resultados/descargar?dias=7")
+    assert r.content.startswith(b"%PDF")
+
+
+def test_conversaciones_lo_que_dejaron_y_temas(cliente, monkeypatch):
+    """La segunda fila de números y el embudo salen de lo que ya anota el asistente (cotizaciones, citas, pases,
+    ventas); solo los pasos con datos. "Lo que más preguntan" lo escribe Claude una vez al día y se guarda en kv."""
+    import json
+
+    from igbot import metricas, reporte
+    client, c = cliente
+
+    async def actividad():
+        for u in ("ana", "beto", "carla", "dani"):
+            await c.store.add_incoming(u, f"m-{u}", "hola, precio?")
+            await c.store.mark_answered(u, [1], "Son $55")
+        await c.store.add_event("ana", "interes", {"tipo": "cotizacion"})
+        await c.store.add_event("ana", "cotizacion", {"total": 100})  # la misma persona: cuenta una vez
+        await c.store.add_event("beto", "interes", {"tipo": "visita"})
+        await c.store.add_event("beto", "cita", {"id": "ev1"})
+        await c.store.add_event("carla", "humano", {"razon": "queja"})
+        await c.store.add_venta("stripe", "p1", "ana", "", 550, "MXN", {}, time.time())
+        await c.store.add_venta("manual", "p2", "ana", "", 200, "MXN", {}, time.time())
+    client.portal.call(actividad)
+    monkeypatch.setattr(resultados, "_cache", {})
+    html = client.get("/panel/resultados?ver=conversaciones").text
+    assert "Pidieron cotización</span><b>2</b>" in html and "Agendaron cita</span><b>1</b>" in html
+    assert "Ventas por chat</span><b>2</b><small>$750 MXN" in html and "Pasaron a tu equipo</span><b>1</b>" in html
+    assert 'class="res-tipos res-embudo"' in html and "Te escribieron</span>" in html
+    assert "50% de quienes escribieron" in html and "25% de quienes escribieron" in html  # cotización y cita; compró 1 de 4
+    assert "Compraron</span>" in html and "2 ventas · $750 MXN" in html
+    assert "Lo que más preguntan" not in html  # todavía no lo escribe Claude
+
+    # El guardado diario pide los temas de 7 y 30 días con el modelo barato y Resultados los muestra.
+    pedidos = []
+
+    async def topics(store, since, until, periodo="una semana"):
+        pedidos.append(periodo)
+        return f"Precios y envíos ({periodo}).\nOportunidad: poner los precios en el perfil."
+    monkeypatch.setattr(reporte, "topics", topics)
+    hoy = datetime.now(ZoneInfo(c.timezone)).date()
+    client.portal.call(metricas.guardar_temas, c, hoy)
+    assert pedidos == ["los últimos 7 días", "los últimos 30 días"]
+    guardado = json.loads(client.portal.call(c.store.get, metricas.CLAVE_TEMAS))
+    assert guardado["7"]["hasta"] == hoy.isoformat() and "30 días" in guardado["30"]["texto"]
+    monkeypatch.setattr(resultados, "_cache", {})
+    html = client.get("/panel/resultados?ver=conversaciones").text
+    assert "Lo que más preguntan" in html and "<p>Precios y envíos (los últimos 7 días).</p>" in html
+    assert f"Últimos 7 días · al {hoy:%d/%m}" in html
+    html = client.get("/panel/resultados?ver=conversaciones&dias=90").text
+    assert "Últimos 30 días" in html and "(los últimos 30 días)" in html
+    r = client.get("/panel/resultados/descargar?dias=7&ver=conversaciones")
     assert r.content.startswith(b"%PDF")

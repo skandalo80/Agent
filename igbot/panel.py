@@ -1390,6 +1390,8 @@ h1,h2,h3{text-wrap:balance}
 .res-bajar>div{position:absolute;right:0;top:calc(100% + .5rem);z-index:5;display:grid;min-width:13rem;padding:.4rem;border-radius:.9rem;background:#1E1C26;border:1px solid var(--linea-oscura);box-shadow:0 12px 28px rgba(0,0,0,.45)}
 .res-bajar>div a{padding:.55rem .8rem;border-radius:.6rem;color:var(--negro);text-decoration:none;font-size:.88rem;white-space:nowrap}.res-bajar>div a:hover{background:#2E3035}
 .res-barra{position:relative}
+.res-embudo li{grid-template-columns:minmax(7.5rem,10rem) 1fr auto}.res-embudo .rt-barra{height:.9rem}.res-embudo .rt-barra i{background:var(--acento)}
+.res-temas p{margin:.4rem 0 0;color:var(--negro);line-height:1.5;max-width:60rem}
 @media(max-width:700px){.res-pers{position:static}.res-pers-f{left:1rem;right:1rem;grid-template-columns:1fr 1fr auto}.res-bajar{margin-left:0}.res-bajar>div{right:auto;left:0}
 .met-formatos{display:flex;align-self:stretch;max-width:100%;overflow-x:auto;scrollbar-width:none}.met-formatos a{flex:0 0 auto}}
 .met-graf.barras .mh::before{display:none}

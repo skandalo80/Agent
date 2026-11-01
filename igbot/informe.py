@@ -695,7 +695,7 @@ async def posts_pdf(c: Cuenta, titulo: str, filas: list[list], cuenta: str) -> b
 
 async def resultados_pdf(c: Cuenta, titulo: str, d: dict, m: dict, cuenta: str, vista: str = "instagram") -> bytes:
     """Lo que se ve en Resultados para un periodo: en Instagram, sus números, día por día y el público; en
-    Conversaciones, los mensajes, los comentarios y las ciudades. `d` sale de resultados.numeros_de y `m` de
+    Conversaciones, los mensajes, los comentarios, lo que dejaron y lo que más preguntan. `d` sale de resultados.numeros_de y `m` de
     metricas.numeros."""
     from . import contenido
 
@@ -729,8 +729,16 @@ def _resultados_pdf(c: Cuenta, titulo: str, d: dict, m: dict, cuenta: str, vista
             doc.seccion("De comentario a mensaje", [])
             doc.datos([("Comentarios", cifra(d["comentarios"])), ("DMs por comentario", cifra(d["dms"])),
                        ("Respuestas públicas", cifra(d["publicas"])), ("Spam ocultado", cifra(d["spam"]))])
-        if p.get("ciudad"):
-            doc.seccion("De dónde es tu público", [f"Ciudades: {top(p['ciudad'])}"])
+        e = d.get("embudo") or {}
+        if any(e.get(k) for k in ("cotizaciones", "citas", "ventas", "equipo")):
+            doc.seccion("Lo que dejaron", [x for x in (
+                f"Pidieron cotización: {cifra(e['cotizaciones'])}" if e.get("cotizaciones") else "",
+                f"Agendaron cita: {cifra(e['citas'])}" if e.get("citas") else "",
+                f"Ventas por chat: {cifra(e['ventas'])} (${e['monto']:,.0f} {e['moneda']})".replace(" )", ")") if e.get("ventas") else "",
+                f"Pasaron a tu equipo: {cifra(e['equipo'])}" if e.get("equipo") else "") if x])
+        if (d.get("temas") or {}).get("texto"):
+            doc.seccion(f"Lo que más preguntan (últimos {d['temas']['dias']} días)",
+                        [x.strip() for x in d["temas"]["texto"].split("\n") if x.strip()])
         return doc.bytes()
     doc.titulo("Resultados · Instagram", titulo)
     inter = m["interacciones"]

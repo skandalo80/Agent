@@ -47,6 +47,8 @@ CLAVE_RELLENO = "metricas_relleno"  # hasta qué día (hacia atrás) ya se revis
 CLAVE_PUBLICO = "metricas_publico"
 CLAVE_HORA = "metricas_hora"  # cuándo fue el último guardado (para "actualizado hoy a las 6:00")
 CLAVE_HORAS = "metricas_horas"  # a qué horas están conectados sus seguidores (semanal; las campañas eligen la hora)
+CLAVE_TEMAS = "metricas_temas"  # lo que más preguntan por chat, escrito por Claude una vez al día (7 y 30 días)
+TEMAS_DIAS = (7, 30)
 TOP_HORAS = 3
 
 # nombre en Instagram -> nombre guardado
@@ -184,6 +186,7 @@ async def guardar(c: Cuenta, hoy: date) -> None:
                  c.slug or "la principal")
     except Exception:  # no deja sin público ni seguidores a la cuenta
         log.exception("No se pudieron refrescar las estadísticas de los posts de %s", c.slug or "la principal")
+    await guardar_temas(c, hoy)
     semana = f"{hoy.isocalendar()[0]}-{hoy.isocalendar()[1]}"
     anterior = json.loads(await store.get(CLAVE_PUBLICO) or "{}")
     if anterior.get("semana") != semana:
@@ -216,6 +219,23 @@ async def rellenar(c: Cuenta, hoy: date) -> int:
         dia -= timedelta(days=1)
     await store.set(CLAVE_RELLENO, "listo" if dia < tope else (dia + timedelta(days=1)).isoformat())
     return pedidos
+
+
+async def guardar_temas(c: Cuenta, hoy: date) -> None:
+    """Lo que más preguntan por chat en los últimos 7 y 30 días, para Resultados > Conversaciones. Una llamada
+    barata por periodo con mensajes; si Claude falla, se queda lo anterior."""
+    from . import reporte
+    zona = ZoneInfo(c.timezone)
+    hasta = datetime(hoy.year, hoy.month, hoy.day, tzinfo=zona).timestamp()
+    temas = json.loads(await c.store.get(CLAVE_TEMAS) or "{}")
+    for dias in TEMAS_DIAS:
+        try:
+            texto = await reporte.topics(c.store, hasta - dias * 86400, hasta, f"los últimos {dias} días")
+        except Exception:
+            log.exception("No se pudieron resumir los temas de %d días para %s", dias, c.slug or "la principal")
+            continue
+        temas[str(dias)] = {"texto": texto, "hasta": hoy.isoformat()}
+    await c.store.set(CLAVE_TEMAS, json.dumps(temas, ensure_ascii=False))
 
 
 async def tick(c: Cuenta) -> None:

@@ -145,6 +145,8 @@ async def calcular(c: Cuenta, rango: str, fin: date | None = None) -> dict:
         **numeros, **conv,
         "inicio": inicio, "dias": dias,
         "resueltas": len(escribieron - con_persona), "escribieron": len(escribieron),
+        "embudo": await store.embudo(since, until),
+        "temas": temas_de(json.loads(await store.get(metricas.CLAVE_TEMAS) or "{}"), dias),
     }
     if c.imagenes_mes > 0:
         comentarios = await store.week_comments(since, until)
@@ -406,9 +408,62 @@ async def barra(c: Cuenta, rango: str, fin: date, hoy: date, vista: str) -> str:
     )
 
 
-def conversaciones_html(c: Cuenta, d: dict, publico: dict) -> str:
+def temas_de(guardados: dict, dias: int) -> dict:
+    """Los temas que escribió Claude para el periodo más parecido (7 días, o 30 para lo demás)."""
+    clave = "7" if dias <= 7 else "30"
+    return {**(guardados.get(clave) or {}), "dias": int(clave)}
+
+
+def embudo_html(d: dict) -> str:
+    """Hasta dónde llegaron las conversaciones: te escribieron → pidieron cotización → agendaron cita →
+    compraron, con el porcentaje de cada paso respecto a quienes escribieron. Solo los pasos con datos."""
+    e = d["embudo"]
+    pasos = [("Te escribieron", d["escribieron"], "")]
+    if e["cotizaciones"]:
+        pasos.append(("Pidieron cotización", e["cotizaciones"], ""))
+    if e["citas"]:
+        pasos.append(("Agendaron cita", e["citas"], ""))
+    if e["ventas"]:
+        pasos.append(("Compraron", e["compradores"] or e["ventas"],
+                      f'{plural(e["ventas"], "venta")} · {dinero(e["monto"], e["moneda"])}'))
+    tope = max(n for _, n, _ in pasos) or 1
+    filas = []
+    for i, (nombre, n, nota) in enumerate(pasos):
+        pct = f"{n / d['escribieron']:.0%}" if i and d["escribieron"] else ""
+        filas.append(f'<li><span class="rt-nombre">{nombre}</span>'
+                     f'<span class="rt-barra"><i style="width:{max(n / tope * 100, 2):.0f}%"></i></span>'
+                     f'<b>{n:,}</b>' + (f"<small>{escape(nota)}{' · ' if nota and pct else ''}{pct}{' de quienes escribieron' if pct else ''}</small>" if nota or pct else "") + "</li>")
+    ayuda = ("" if len(pasos) > 1 else
+             '<p class="ayuda chica">Cuando tu asistente anote cotizaciones, agende citas o cobre, aquí verás hasta dónde llegó cada conversación.</p>')
+    return f'<ul class="res-tipos res-embudo">{"".join(filas)}</ul>{ayuda}'
+
+
+def temas_html(d: dict) -> str:
+    t = d.get("temas") or {}
+    if not t.get("texto"):
+        return ""
+    cuando = ""
+    if t.get("hasta"):
+        try:
+            cuando = f' · al {date.fromisoformat(t["hasta"]):%d/%m}'
+        except ValueError:
+            pass
+    parrafos = "".join(f"<p>{escape(x.strip())}</p>" for x in t["texto"].split("\n") if x.strip())
+    return (f'<div class="tarjeta res-temas"><span class="num">Últimos {t["dias"]} días{cuando}</span>'
+            f'<h2>Lo que más preguntan</h2>{parrafos}'
+            '<p class="ayuda chica">Lo escribe tu asistente una vez al día a partir de los mensajes de tus clientes.</p></div>')
+
+
+def conversaciones_html(c: Cuenta, d: dict) -> str:
     if d["recibidos"]:
         pct = round(d["resueltas"] / d["escribieron"] * 100) if d["escribieron"] else 0
+        e = d["embudo"]
+        dejaron = "".join(x for x in (
+            kpi("Pidieron cotización", e["cotizaciones"], "cotización, visita o sus datos") if e["cotizaciones"] else "",
+            kpi("Agendaron cita", e["citas"], "con tu asistente") if e["citas"] else "",
+            kpi("Ventas por chat", e["ventas"], dinero(e["monto"], e["moneda"])) if e["ventas"] else "",
+            kpi("Pasaron a tu equipo", e["equipo"], "1 conversación" if e["equipo"] == 1 else f'{e["equipo"]} conversaciones') if e["equipo"] else "",
+        ))
         cuerpo = (
             '<div class="hoy kpis res-kpis">'
             + kpi("Conversaciones", d["personas"], plural(d["nuevas"], "nueva"))
@@ -417,12 +472,14 @@ def conversaciones_html(c: Cuenta, d: dict, publico: dict) -> str:
             + kpi("Tiempo de respuesta", duracion(d["respuesta"]), "lo normal (mediana)")
             + kpi("Fuera de horario", d["fuera"], plural(d["fuera"], "respuesta"))
             + "</div>"
-            '<div class="tarjeta"><span class="num">Por día</span><h2>Mensajes recibidos</h2>'
+            + (f'<div class="hoy kpis res-kpis">{dejaron}</div>' if dejaron else "")
+            + '<div class="res-dos"><div class="tarjeta"><span class="num">Por día</span><h2>Mensajes recibidos</h2>'
             f"{por_dia(d)}</div>"
-            '<div class="res-dos"><div class="tarjeta"><span class="num">Por hora</span><h2>A qué hora te escriben</h2>'
+            f'<div class="tarjeta"><span class="num">Hasta dónde llegaron</span><h2>Lo que dejaron</h2>{embudo_html(d)}</div></div>'
+            + temas_html(d)
+            + '<div class="tarjeta"><span class="num">Por hora</span><h2>A qué hora te escriben</h2>'
             f"{por_hora(d, c)}"
             '<div class="leyenda"><span><i></i>Dentro de tu horario</span><span><i class="fuera"></i>Fuera de tu horario</span></div></div>'
-            + metricas.ciudades(publico, "De dónde es tu público") + "</div>"
         )
     else:
         cuerpo = ('<div class="tarjeta"><h2>Aún no hay mensajes en este periodo</h2>'
@@ -708,8 +765,7 @@ async def pagina(c: Cuenta, rango: str, fin: date | None = None, vista: str = "i
     elif vista == "comentarios":
         cuerpo = await comentarios_html(c, rango, fin)
     elif vista == "conversaciones":
-        publico = json.loads(await c.store.get(metricas.CLAVE_PUBLICO) or "{}")
-        cuerpo = conversaciones_html(c, await numeros_de(c, rango, fin), publico)
+        cuerpo = conversaciones_html(c, await numeros_de(c, rango, fin))
     else:
         d = await numeros_de(c, rango, fin) if c.imagenes_mes > 0 else {}
         cuerpo = metricas.seccion(await metricas.numeros(c, int(rango), fin), formato,
