@@ -8,6 +8,7 @@ proceso mismo (/proc), sin servicios de fuera. Lo que no se mide se ve como "sin
 """
 import asyncio
 import collections
+import logging
 import os
 import time
 from html import escape
@@ -18,6 +19,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from . import lentitud, limites
 from .cuenta import Cuenta
+
+log = logging.getLogger("igbot.salud")
 
 router = APIRouter(prefix="/panel")
 
@@ -171,6 +174,86 @@ def html(d: dict) -> str:
         '<p class="nota">Los tiempos van del primer mensaje pendiente al envío de la respuesta y se guardan en memoria:'
         ' al reiniciar empiezan de cero.</p></div></div>'
     )
+
+
+# --- alertas al administrador (la cuenta principal), por DM y correo, con una hora de silencio por tipo ---
+
+RAM_LIBRE_MIN = 15  # % de RAM libre por debajo del cual se avisa
+COLA_MAX = 20  # conversaciones esperando (en todas las cuentas) dos revisiones seguidas
+REINICIOS_MAX = 3  # arranques en una hora
+RESPALDO_DIAS = 2  # días sin carpeta de respaldo nueva
+SILENCIO = 3600  # entre dos avisos del mismo tipo
+_avisado: dict[str, float] = {}
+_cola_alta = False  # la revisión anterior ya tenía la cola alta
+avisar = None  # la pone app.py: conectar.avisar (DM a ADMIN_IG_IDS y correo al dueño de la principal)
+
+
+async def alertar(tipo: str, texto: str, ahora: float | None = None) -> bool:
+    """Manda el aviso si no se mandó uno igual en la última hora. True si se mandó."""
+    ahora = ahora or time.time()
+    if ahora - _avisado.get(tipo, 0) < SILENCIO or avisar is None:
+        return False
+    _avisado[tipo] = ahora
+    try:
+        await avisar(f"Skandar: {tipo}", texto)
+    except Exception:
+        log.exception("No se pudo mandar la alerta «%s»", tipo)
+    return True
+
+
+async def anotar_arranque(store, ahora: float | None = None) -> int:
+    """Guarda el arranque en la base de la principal y devuelve cuántos hubo en la última hora."""
+    ahora = ahora or time.time()
+    import json
+    previos = [t for t in json.loads(await store.get("arranques") or "[]") if ahora - t < 3600]
+    previos.append(ahora)
+    await store.set("arranques", json.dumps(previos))
+    return len(previos)
+
+
+async def revisar(ahora: float | None = None) -> list[str]:
+    """Una revisión: qué alertas tocaba mandar (y las manda). Para las pruebas devuelve sus tipos."""
+    global _cola_alta
+    ahora = ahora or time.time()
+    mandadas = []
+    m = memoria()
+    if m["total_mb"] and 100 * m["libre_mb"] / m["total_mb"] < RAM_LIBRE_MIN:
+        if await alertar("poca memoria", f"Quedan {m['libre_mb']} MB libres de {m['total_mb']} MB en el servidor. "
+                         f"El bot usa {m['proceso_mb']} MB y sus {m['hijos']} subproceso(s) de Claude {m['hijos_mb']} MB. "
+                         "Si sigue así, el sistema va a matar el proceso. Revisa /panel/salud.", ahora):
+            mandadas.append("poca memoria")
+    esperando = 0
+    for c in fuentes["cuentas"]():
+        if c.store and c.store.db:
+            d = fuentes["dispatchers"]().get(c.slug)
+            esperando += sum(1 for u in await c.store.pending_users() if not d or u not in d.active)
+    if esperando > COLA_MAX and _cola_alta:
+        if await alertar("cola atascada", f"Hay {esperando} conversaciones esperando respuesta desde hace más de un minuto "
+                         "entre todas las cuentas. Revisa /panel/salud y el registro (journalctl -u igbot).", ahora):
+            mandadas.append("cola atascada")
+    _cola_alta = esperando > COLA_MAX
+    ultimo = ultimo_respaldo()
+    if ultimo:
+        from datetime import date
+        try:
+            dias = (date.fromtimestamp(ahora) - date.fromisoformat(ultimo)).days
+        except ValueError:
+            dias = 0
+        if dias >= RESPALDO_DIAS and await alertar(
+                "respaldo atrasado", f"El último respaldo es del {ultimo}, hace {dias} días. Revisa el timer: "
+                "systemctl status igbot-respaldo.timer y journalctl -u igbot-respaldo.", ahora):
+            mandadas.append("respaldo atrasado")
+    return mandadas
+
+
+async def vigilar(cada: float = 60) -> None:
+    """Bucle de fondo: revisa cada minuto y avisa al administrador cuando algo se sale de lo normal."""
+    while True:
+        try:
+            await revisar()
+        except Exception:
+            log.exception("Falló la revisión de salud")
+        await asyncio.sleep(cada)
 
 
 @router.get("/salud")

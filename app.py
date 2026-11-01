@@ -302,6 +302,7 @@ def fondo() -> list[asyncio.Task]:
         asyncio.create_task(cada_cuenta(metricas_del_dia, 600)),
         asyncio.create_task(cada_cuenta(limpiar, 86400)),
         asyncio.create_task(lentitud.vigilar_bucle()),
+        asyncio.create_task(salud.vigilar()),
     ]
 
 
@@ -351,6 +352,11 @@ async def lifespan(app: FastAPI):
     for c in cuentas:
         dispatchers[c.slug] = cola(c)
         await arrancar(c)
+    salud.avisar = conectar.avisar
+    with usar(principal):
+        if (n := await salud.anotar_arranque(principal.store)) >= salud.REINICIOS_MAX:
+            await salud.alertar("reinicios seguidos", f"El bot arrancó {n} veces en la última hora. Si no fueron deploys, "
+                                "se está cayendo: revisa journalctl -u igbot y /panel/salud.")
     await skandi.cargar()  # el historial de Skandi de cada cuenta, a la memoria
     loops = fondo()
     yield
