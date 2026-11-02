@@ -4,7 +4,7 @@ uvicorn[standard]==0.34.2
 httpx==0.28.1
 python-dotenv==1.2.4
 aiosqlite==0.22.1
-claude-agent-sdk==0.2.165
+claude-agent-sdk==0.2.175
 anthropic==1.13.0
 google-auth==2.62.0
 requests==2.34.2
