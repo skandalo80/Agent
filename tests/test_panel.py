@@ -33,9 +33,12 @@ def campos_con_nombre(html: str) -> None:
 
 def test_404_sin_sesion():
     with TestClient(bot.app, base_url="https://testserver") as client:
-        # El ícono de la pestaña (el de skandar.online) y la raíz, que lleva al panel.
+        # El ícono de la pestaña y la raíz, que lleva al panel.
         r = client.get("/favicon.ico")
         assert r.status_code == 200 and r.headers["content-type"] == "image/x-icon"
+        # El de la plataforma (naranja), no el de la web (grafito).
+        assert r.content == (bot.ICONOS_PLATAFORMA / "favicon.ico").read_bytes()
+        assert r.content != (bot.WEB / "favicon.ico").read_bytes()
         assert client.get("/apple-touch-icon.png").headers["content-type"] == "image/png"
         assert client.get("/", follow_redirects=False).headers["location"] == "/panel"
         assert 'rel="icon" href="/favicon.ico"' in client.get("/panel").text
