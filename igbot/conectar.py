@@ -34,7 +34,7 @@ import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from . import config, marco
+from . import config, marco, oauth
 from .cuenta import cuenta
 from .google import Google
 from .instagram import GRAPH, Instagram
@@ -60,7 +60,6 @@ SCOPES = ",".join([
     "instagram_business_manage_insights",
 ])
 STATE_COOKIE = "conectar_state"
-STATE_TTL = 900
 USUARIO = re.compile(r"^[a-z0-9._]{1,30}$")
 CORREO = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,190}\.[a-z]{2,}$", re.I)
 MAX_SOLICITUDES_POR_HORA = 20  # contra bots que llenen el formulario
@@ -125,43 +124,6 @@ async def solicitud(request: Request):
     return back("/conectar?enviado=1#paso-2")
 
 
-def firmar(texto: str) -> str:
-    return hmac.new(config.SESSION_SECRET.encode(), texto.encode(), hashlib.sha256).hexdigest()[:32]
-
-
-def nuevo_state() -> str:
-    base = f"{int(time.time())}.{secrets.token_urlsafe(18)}"
-    return f"{base}.{firmar(base)}"
-
-
-_usados: dict[str, float] = {}  # states ya usados (cada uno sirve una vez)
-
-
-def state_valido(state: str, cookie: str | None) -> bool:
-    """El state vale si es el de la cookie o, si volvió en otro navegador (en el cel, Instagram
-    regresa en su propio navegador, sin la cookie de Safari), si lo firmamos hace menos de 15 min."""
-    ahora = time.time()
-    for s, t in list(_usados.items()):
-        if ahora - t > STATE_TTL:
-            del _usados[s]
-    if not state or state in _usados:
-        return False
-    ok = bool(cookie) and secrets.compare_digest(cookie, state)
-    if not ok:
-        partes = state.split(".")
-        ok = (len(partes) == 3 and partes[0].isdigit() and 0 <= ahora - int(partes[0]) < STATE_TTL
-              and secrets.compare_digest(partes[2], firmar(f"{partes[0]}.{partes[1]}")))
-    if ok:
-        _usados[state] = ahora
-    return ok
-
-
-async def state_gastable(state: str, cookie: str | None) -> bool:
-    """state_valido y además lo anota en la base: un reinicio no lo vuelve a dar por bueno."""
-    from . import unavez
-    return state_valido(state, cookie) and await unavez.gastar(store, "state:" + state[-24:], STATE_TTL)
-
-
 def _sin_app(url: str) -> HTMLResponse:
     """En iPhone/iPad: www.instagram.com es un "enlace universal" y, si la navegación viene de un toque, iOS
     la abre en la app de Instagram, que no sabe qué hacer con /oauth/authorize ("Loading" y "Something went
@@ -184,7 +146,7 @@ def start(request: Request):
     """Manda al cliente a iniciar sesión en Instagram y autorizar la app."""
     if not enabled():
         return back("/conectar-error")
-    state = nuevo_state()
+    state = oauth.nuevo_state("instagram")
     url = AUTHORIZE + "?" + urlencode({
         "client_id": config.IG_APP_ID,
         "redirect_uri": redirect_uri(),
@@ -198,7 +160,7 @@ def start(request: Request):
     iphone = any(x in ua for x in ("iPhone", "iPad", "iPod"))
     response = _sin_app(url) if iphone else RedirectResponse(url, status_code=303)
     # Se compara al volver para que nadie conecte una cuenta con un enlace armado.
-    response.set_cookie(STATE_COOKIE, state, max_age=STATE_TTL, path="/conectar",
+    response.set_cookie(STATE_COOKIE, state, max_age=oauth.STATE_TTL, path="/conectar",
                         secure=True, httponly=True, samesite="lax")
     return response
 
@@ -252,7 +214,8 @@ async def callback(request: Request):
         # Canceló, o su cuenta no es tester todavía.
         log.info("Conexión cancelada o rechazada: %s", p.get("error_reason") or p.get("error"))
         return back("/conectar-error")
-    if not await state_gastable(p.get("state", ""), expected):
+    # En el celular, Instagram vuelve en su propio navegador, sin la cookie: basta la firma fresca.
+    if not await oauth.gastable(p.get("state", ""), expected, "instagram", store=store, sin_cookie=True):
         log.warning("Callback con state inválido")
         return back("/conectar-error")
     try:

@@ -116,11 +116,13 @@ def test_conectar_y_desconectar(shopify):
 
 def test_state_es_de_la_cuenta(shopify):
     client, c, *_ = shopify
-    state = ts.nuevo_state(c)
-    assert ts.state_valido(state, state, c)
-    assert not ts.state_valido(state, None, c) and not ts.state_valido(state, state + "x", c)
+    from igbot import oauth
+    state = oauth.nuevo_state("shopify", c)
+    assert oauth.state_valido(state, state, "shopify", c)
+    assert not oauth.state_valido(state, None, "shopify", c) and not oauth.state_valido(state, state + "x", "shopify", c)
+    assert not oauth.state_valido(state, state, "google", c)  # el de otra conexión no sirve
     otra = type("C", (), {"slug": "otra"})()
-    assert not ts.state_valido(state, state, otra)
+    assert not oauth.state_valido(state, state, "shopify", otra)
 
 
 def test_inventario_para_el_asistente(shopify):

@@ -25,7 +25,6 @@ import hmac
 import json
 import logging
 import re
-import secrets
 import time
 from datetime import datetime
 from html import escape
@@ -35,7 +34,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
 
-from . import config, empresa, marco, sitio
+from . import config, empresa, marco, oauth, sitio
 from .cuenta import Cuenta, usar
 
 log = logging.getLogger("igbot.tienda_shopify")
@@ -48,7 +47,6 @@ CLAVE = "shopify_conexion"
 SCOPES = "read_products,read_inventory,read_locations,read_orders"
 TIENDA = re.compile(r"^[a-z0-9][a-z0-9-]{0,60}\.myshopify\.com$")
 STATE_COOKIE = "shopify_state"
-STATE_TTL = 900
 PARAMETRO = "sk"  # el del código del chat en los enlaces
 _transporte: httpx.AsyncBaseTransport | None = None  # las pruebas ponen uno falso
 
@@ -81,20 +79,6 @@ def hmac_valido(params: list[tuple[str, str]]) -> bool:
     recibido = next((v for k, v in params if k == "hmac"), "")
     texto = "&".join(f"{k}={v}" for k, v in sorted((k, v) for k, v in params if k != "hmac"))
     return bool(recibido) and hmac.compare_digest(recibido, _firmar(texto))
-
-
-def nuevo_state(c: Cuenta) -> str:
-    base = f"{c.slug or '-'}.{int(time.time())}.{secrets.token_urlsafe(12)}"
-    return f"{base}.{_firmar(base)[:32]}"
-
-
-def state_valido(state: str, cookie: str | None, c: Cuenta) -> bool:
-    partes = state.split(".")
-    if len(partes) != 4 or not cookie or not secrets.compare_digest(cookie, state):
-        return False
-    slug, ts, nonce, firma = partes
-    return (slug == (c.slug or "-") and ts.isdigit() and 0 <= time.time() - int(ts) < STATE_TTL
-            and secrets.compare_digest(firma, _firmar(f"{slug}.{ts}.{nonce}")[:32]))
 
 
 _Cliente = httpx.AsyncClient  # el de verdad, aunque las pruebas de otras partes cambien httpx.AsyncClient
@@ -227,13 +211,10 @@ async def conectar(request: Request, c: marco.Formulario):
         tienda = await tienda_de(f.get("tienda", "")[:200])
     except sitio.ErrorSitio as e:
         return await pagina(c, error=str(e))
-    state = nuevo_state(c)
+    state = oauth.nuevo_state("shopify", c)
     url = f"https://{tienda}/admin/oauth/authorize?" + urlencode({
         "client_id": config.SHOPIFY_API_KEY, "scope": SCOPES, "redirect_uri": redirect_uri(), "state": state})
-    r = RedirectResponse(url, status_code=303)
-    r.set_cookie(STATE_COOKIE, state, max_age=STATE_TTL, path="/panel/shopify", secure=True, httponly=True,
-                 samesite="lax")
-    return r
+    return oauth.ir(url, STATE_COOKIE, "/panel/shopify", state)
 
 
 @router.get("/callback")
@@ -244,7 +225,7 @@ async def callback(request: Request, c: marco.Sesion):
     if not p.get("code"):
         return _volver("cancelada")
     if not (enabled() and TIENDA.match(tienda) and hmac_valido(params)
-            and state_valido(p.get("state", ""), request.cookies.get(STATE_COOKIE), c)):
+            and await oauth.gastable(p.get("state", ""), request.cookies.get(STATE_COOKIE), "shopify", c)):
         log.warning("Vuelta de Shopify con firma o state inválidos (%s)", tienda)
         return _volver("fallo")
     try:
@@ -270,9 +251,7 @@ async def callback(request: Request, c: marco.Sesion):
 
 
 def _volver(aviso: str) -> RedirectResponse:
-    r = RedirectResponse(f"/panel/shopify?aviso={aviso}", status_code=303)
-    r.delete_cookie(STATE_COOKIE, path="/panel/shopify")
-    return r
+    return oauth.volver(f"/panel/shopify?aviso={aviso}", STATE_COOKIE, "/panel/shopify")
 
 
 @router.post("/desconectar")

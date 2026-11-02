@@ -32,7 +32,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from urllib.parse import urlencode
 
-from . import conectar, config, marco
+from . import conectar, config, marco, oauth
 from .cuenta import Cuenta
 
 log = logging.getLogger("igbot.acceso")
@@ -290,15 +290,11 @@ def con_google():
     from . import agenda_google as g
     if not g.enabled():
         return RedirectResponse("/panel", status_code=303)
-    base = f"entrar.{int(time.time())}.{secrets.token_urlsafe(12)}"
-    state = f"{base}.{_firma(base)}"
+    state = oauth.nuevo_state("entrar")
     url = g.AUTORIZAR + "?" + urlencode({
         "client_id": config.GOOGLE_WEB_CLIENT_ID, "redirect_uri": g.redirect_uri(), "response_type": "code",
         "scope": "openid email", "prompt": "select_account", "state": state})
-    r = RedirectResponse(url, status_code=303)
-    r.set_cookie(GOOGLE_COOKIE, state, max_age=600, path="/panel/google", secure=True, httponly=True,
-                 samesite="lax")
-    return r
+    return oauth.ir(url, GOOGLE_COOKIE, "/panel/google", state)
 
 
 def es_de_entrar(state: str) -> bool:
@@ -309,13 +305,9 @@ async def vuelta_google(request: Request):
     """La vuelta de Google (/panel/google/callback) cuando el state es de entrar, no de conectar el calendario."""
     from . import agenda_google as g
     p = dict(request.query_params)
-    state, cookie = p.get("state", ""), request.cookies.get(GOOGLE_COOKIE, "")
-    partes = state.split(".")
     if not p.get("code"):
         return RedirectResponse("/panel", status_code=303)
-    if (len(partes) != 4 or not cookie or not hmac.compare_digest(cookie, state) or not partes[1].isdigit()
-            or not 0 <= time.time() - int(partes[1]) < 600
-            or not hmac.compare_digest(partes[3], _firma(".".join(partes[:3])))):
+    if not await oauth.gastable(p.get("state", ""), request.cookies.get(GOOGLE_COOKIE, ""), "entrar", store=store):
         log.warning("Vuelta de Google para entrar con state inválido")
         return marco.entrar(request, "No pudimos entrar con Google. Intenta de nuevo.")
     try:
