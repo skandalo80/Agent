@@ -115,8 +115,9 @@ TONO_VIEJO = {"amigable": ("cercano", "tu", "breve", "aveces"),
               "formal": ("profesional", "usted", "equilibrada", "nunca")}
 # (clave, título, para qué sirve, encendida al empezar, lo que va al prompt encendida, y apagada)
 REGLAS = [
-    ("ia", "Dice que es una IA al saludar", "En su primer mensaje aclara que es un asistente virtual.",
-     True, "En tu primer mensaje de cada conversación, aclara que eres un asistente virtual con inteligencia artificial.",
+    ("ia", "Dice que es un asistente virtual al saludar", "En su primer mensaje aclara que es un asistente virtual.",
+     True, ("En tu primer mensaje de cada conversación, aclara que eres un asistente virtual. Dilo así, sin agregar"
+            " «con inteligencia artificial»; si te preguntan si eres una IA, dilo con honestidad."),
      ""),
     ("preguntar", "Pregunta antes de recomendar", "Hace una o dos preguntas para entender qué busca la persona.",
      True, "Antes de recomendar algo, haces una o dos preguntas para entender qué busca la persona.",
