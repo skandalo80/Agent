@@ -10,8 +10,7 @@ Cada paso guarda solo lo suyo en kv "perfil" y vuelve a escribir el prompt (pane
 Lo que el dueño escribe a mano pasa por panel.revisar_instrucciones; elegir de una lista no.
 Las reglas base (prompts/base.md) siguen al final de todo prompt, como antes.
 Sin JavaScript: radios y casillas con CSS (:has) y un POST por paso.
-La cuenta principal se configura igual; su prompt va aparte del repo (Cuenta.prompt_destino) y
-POST /panel/guardar con accion=restaurar la regresa a prompts/system.md (ya sin botón en el panel).
+La cuenta principal se configura igual; su prompt va aparte del repo (Cuenta.prompt_destino).
 """
 import json
 import logging
@@ -115,8 +114,9 @@ TONO_VIEJO = {"amigable": ("cercano", "tu", "breve", "aveces"),
               "formal": ("profesional", "usted", "equilibrada", "nunca")}
 # (clave, título, para qué sirve, encendida al empezar, lo que va al prompt encendida, y apagada)
 REGLAS = [
-    ("ia", "Dice que es una IA al saludar", "En su primer mensaje aclara que es un asistente virtual.",
-     True, "En tu primer mensaje de cada conversación, aclara que eres un asistente virtual con inteligencia artificial.",
+    ("ia", "Dice que es un asistente virtual al saludar", "En su primer mensaje aclara que es un asistente virtual.",
+     True, ("En tu primer mensaje de cada conversación, aclara que eres un asistente virtual. Dilo así, sin agregar"
+            " «con inteligencia artificial»; si te preguntan si eres una IA, dilo con honestidad."),
      ""),
     ("preguntar", "Pregunta antes de recomendar", "Hace una o dos preguntas para entender qué busca la persona.",
      True, "Antes de recomendar algo, haces una o dos preguntas para entender qué busca la persona.",

@@ -1288,7 +1288,7 @@ def test_nombre_ia_y_tabla_de_pasar_a_tu_equipo(cliente):
         "p_quejas": "1", "m_quejas": "nada", "p_persona": "1", "m_persona": "ia",
         "m_precio": "ia", "p_otro": "1", "m_otro": "ia", "t_otro": "Pedidos de más de 10 piezas"})
     prompt = Path(c.prompt_path).read_text()
-    assert "Te llamas Sofía &lt;b&gt;;" in prompt and "asistente virtual con inteligencia artificial" in prompt
+    assert "Te llamas Sofía &lt;b&gt;;" in prompt and "aclara que eres un asistente virtual. Dilo así" in prompt
     assert "Si notas a la persona molesta o enojada: usa pasar_a_humano (razón molesto). El mensaje" in prompt
     assert "Si pide hablar con una persona: usa pasar_a_humano (razón pide_persona) y dile con tus palabras" in prompt
     assert "Si quiere negociar el precio o pide un trato especial: no la pases" in prompt

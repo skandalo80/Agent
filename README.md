@@ -29,7 +29,7 @@ Instagram → Caddy (HTTPS) → POST /webhook (app.py, puerto 8001)
 | `igbot/google.py` | Llamadas a Google Calendar, Gmail y Sheets (solo lectura) |
 | `igbot/instagram.py` | Envía DMs (parte los de más de 1000 caracteres) y renueva el token cada semana |
 | `clientes/<nombre>/` | Prompt, reglas y `.env` de otra cuenta de Instagram (hoy: `nortex`) |
-| `prompts/system.md` | Personalidad e instrucciones del bot (hoy: asesor de ventas). Edítalo y reinicia para cambiar cómo habla. El catálogo se le agrega solo |
+| `data/system.md` | Instrucciones de la cuenta principal, armadas por el panel con sus datos (fuera de git). El catálogo se le agrega solo |
 
 **Memoria.** Cada persona tiene su historial completo, un resumen de lo viejo y "datos guardados" que el agente anota con `recordar`. En cada respuesta Claude ve: datos + resumen + los últimos `HISTORY_WINDOW` mensajes (20). Cuando sobran 10 mensajes viejos se condensan en el resumen, así el costo por respuesta no crece.
 

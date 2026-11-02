@@ -10,8 +10,7 @@ va lo propio de esta sección:
   (/panel/asistente: la lista, tomar o reactivar un chat, responder desde el panel), Conexión, encender o
   pausar el asistente y Probar tu asistente.
 
-La cuenta principal se configura igual que las demás; lo que guarda va a data/system.md y manda sobre
-prompts/system.md hasta que lo restaure. Las reglas comunes (prompts/comun.md) siempre van después de lo
+La cuenta principal se configura igual que las demás; lo que guarda va a data/system.md (fuera de git). Las reglas comunes (prompts/comun.md) siempre van después de lo
 que escriba el cliente, así que no las puede quitar.
 """
 
@@ -368,14 +367,7 @@ async def conexion_vieja():
 
 @router.post("/guardar")
 async def guardar(request: Request, c: marco.Formulario):
-    """El formulario de antes. Ahora todo se guarda por pasos (asistente.py); aquí solo queda que la
-    principal vuelva a las instrucciones del servidor (prompts/system.md)."""
-    if not c.slug and (await marco.form(request)).get("accion") == "restaurar":
-        c.prompt_editado().unlink(missing_ok=True)
-        log.info("@%s volvió a las instrucciones del servidor", await marco.usuario(c))
-        from . import asistente
-        return await asistente.pagina(c, "resumen", aviso="Listo: tu asistente vuelve a usar las instrucciones"
-                                                         " del servidor.")
+    """El formulario de antes: ahora todo se guarda por pasos (asistente.py)."""
     return RedirectResponse("/panel/asistente/configura", status_code=303)
 
 

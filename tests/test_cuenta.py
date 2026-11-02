@@ -13,7 +13,7 @@ def test_cuenta_de_cliente_usa_su_carpeta():
     assert c.db_path == "data/cafelunar/bot.db"
     assert c.media_slug == "cafelunar" and c.model == "claude-haiku-5-5"
     principal = Cuenta.desde_env("", {"IG_ACCESS_TOKEN": "t"})
-    assert principal.prompt_path == "prompts/system.md" and principal.media_slug == "principal"
+    assert principal.prompt_path == "data/system.md" and principal.media_slug == "principal"
 
 
 def test_dos_cuentas_a_la_vez_no_se_mezclan():
@@ -114,7 +114,7 @@ def test_un_proceso_atiende_dos_cuentas_sin_mezclarlas(monkeypatch):
         while (not principal_sent or not cliente.instagram.sent) and time.time() < deadline:
             time.sleep(0.05)
 
-    assert principal_sent == [("ana", "prompts/system.md: hola vendedor")]
+    assert principal_sent == [("ana", "data/system.md: hola vendedor")]
     assert cliente.instagram.sent == [("beto", "clientes/cafelunar/system.md: hola café")]
 
 

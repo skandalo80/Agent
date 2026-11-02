@@ -154,9 +154,17 @@ STYLE_PATH = Path("prompts/comun.md")
 BASE_PATH = Path(__file__).resolve().parent.parent / "prompts" / "base.md"
 
 
+# Si la cuenta todavía no guarda nada en el panel: sin datos de ningún negocio, solo el método.
+SIN_INSTRUCCIONES = ("Eres el asistente de Instagram de este negocio. Contestas los mensajes directos de sus clientes."
+                     "\n\nREGLAS\n- Todavía no tienes información del negocio. Si te falta un dato, usa"
+                     " pregunta_sin_dato: di que lo consultas con el equipo y sigue atendiendo.\n"
+                     "- No inventes precios, promociones, existencias ni horarios.\n")
+
+
 def system_prompt() -> str:
     """Las instrucciones del bot más el catálogo del negocio, si hay."""
-    system = cuenta().ruta_prompt().read_text(encoding="utf-8")
+    ruta = cuenta().ruta_prompt()
+    system = ruta.read_text(encoding="utf-8") if ruta.is_file() else SIN_INSTRUCCIONES
     system += "\n\n" + STYLE_PATH.read_text(encoding="utf-8")
     system += "\n\n" + BASE_PATH.read_text(encoding="utf-8")
     from .ajustes import prompt_horario  # ajustes importa el panel, que importa este módulo
