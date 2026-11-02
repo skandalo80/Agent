@@ -2571,106 +2571,113 @@ async def nueva_campana(request: Request, c: marco.Formulario):
     return await armar(c, del_form(f), {})
 
 
-@router.post("/campanas/{cid}")
-async def accion(request: Request, c: marco.Formulario, cid: str):
-    if c.imagenes_mes <= 0:
-        return sin_plan()
-    datos = await request.form()  # el editor del post es multipart: puede traer su imagen ("Subir imagen")
-    subida = datos.get("imagen")
-    f = {k: v for k, v in datos.items() if isinstance(v, str)}
-    que = f.get("accion", "")
-    tomar_desde(f.get("desde"))
-    if not (camp := await leer(c, cid)) or not camp.get("posts"):
-        return RedirectResponse(BASE, status_code=303)
+# --- las acciones de una campaña (POST /campanas/{cid}) ---
+# Cada acción es una función chica con la misma firma; `accion` lee el formulario, carga la campaña y despacha.
+# Las de la campaña (ACCIONES_CAMPANA) reciben (c, camp, f). Las de un post (ACCIONES_POST) reciben además el
+# post `p`, su fila `post` en la base (None si no tiene imagen aún) y la imagen subida; antes de ellas se guarda
+# lo que cambió en el panel lateral (guardar_cambios_del_post). Si una acción devuelve None, se contesta la
+# página de la campaña con lo guardado.
+
+class Rechazo(Exception):
+    """Lo que el dueño mandó no se puede guardar; su texto se muestra en la página del post."""
+
+
+async def _proponer(c: Cuenta, camp: dict, f: dict):
+    return await armar(c, del_form(f), camp)
+
+
+async def _borrar(c: Cuenta, camp: dict, f: dict):
+    # Ya confirmó en tarjeta_borrar.
+    with usar(c):
+        n = await borrar(c, camp)
+    return await pagina_lista(c, aviso=f"Borraste la campaña {camp['nombre']}"
+                              + (f" y se quitaron {n} post{'s' if n != 1 else ''} de Calendario." if n else "."))
+
+
+async def _editar(c: Cuenta, camp: dict, f: dict):
+    """Nombre y fechas; las fechas no pueden dejar un post fuera."""
+    try:
+        ini, fin = date.fromisoformat(f.get("inicio", "")), date.fromisoformat(f.get("fin", ""))
+    except ValueError:
+        return await pagina_campana(c, camp, "Elige el día en que empieza y el día en que termina.")
+    if fin < ini:
+        return await pagina_campana(c, camp, "La campaña no puede terminar antes de empezar.")
+    if (fin - ini).days + 1 > MAX_DIAS:
+        return await pagina_campana(c, camp, f"Una campaña puede durar hasta {MAX_DIAS // 7} semanas.")
+    if fuera := sorted(p["dia"] for p in camp["posts"] if not ini.isoformat() <= p["dia"] <= fin.isoformat()):
+        return await pagina_campana(c, camp, f"El post del {fechas.larga(fuera[0])} quedaría fuera de la campaña:"
+                                    " muévelo antes, o elige fechas que lo incluyan.")
+    camp.update(nombre=f.get("nombre", "").strip()[:MAX_NOMBRE] or camp["nombre"], inicio=ini.isoformat(),
+                fin=fin.isoformat())
+    with usar(c):
+        await guardar(c, camp)
+    return await pagina_campana(c, camp, "Guardado.")
+
+
+async def _mover(c: Cuenta, camp: dict, f: dict):
+    """Lo manda el arrastre (panel.js), como formulario: la CSP no deja usar fetch."""
     url = url_de(camp)
-
-    if que == "proponer":
-        return await armar(c, del_form(f), camp)
-
-    if que == "borrar":  # ya confirmó en tarjeta_borrar
-        with usar(c):
-            n = await borrar(c, camp)
-        return await pagina_lista(c, aviso=f"Borraste la campaña {camp['nombre']}"
-                                  + (f" y se quitaron {n} post{'s' if n != 1 else ''} de Calendario." if n else "."))
-
-    if que == "editar":
-        try:
-            ini, fin = date.fromisoformat(f.get("inicio", "")), date.fromisoformat(f.get("fin", ""))
-        except ValueError:
-            return await pagina_campana(c, camp, "Elige el día en que empieza y el día en que termina.")
-        if fin < ini:
-            return await pagina_campana(c, camp, "La campaña no puede terminar antes de empezar.")
-        if (fin - ini).days + 1 > MAX_DIAS:
-            return await pagina_campana(c, camp, f"Una campaña puede durar hasta {MAX_DIAS // 7} semanas.")
-        if fuera := sorted(p["dia"] for p in camp["posts"] if not ini.isoformat() <= p["dia"] <= fin.isoformat()):
-            return await pagina_campana(c, camp, f"El post del {fechas.larga(fuera[0])} quedaría fuera de la campaña:"
-                                        " muévelo antes, o elige fechas que lo incluyan.")
-        camp.update(nombre=f.get("nombre", "").strip()[:MAX_NOMBRE] or camp["nombre"], inicio=ini.isoformat(),
-                    fin=fin.isoformat())
-        with usar(c):
+    if not (p := buscar_post(camp, f.get("k", ""))):
+        return RedirectResponse(url, status_code=303)
+    with usar(c):
+        error = await mover(c, camp, p, f.get("dia", ""), f.get("con", ""), f.get("juntar") == "1")
+        if not error:
             await guardar(c, camp)
-        return await pagina_campana(c, camp, "Guardado.")
+    if error:
+        return await pagina_campana(c, camp, error)
+    if f.get("suave") == "1":  # panel.js ya movió la tarjeta: 204 deja la página como está, sin recargar
+        return Response(status_code=204)
+    return RedirectResponse(f"{url}#d-{p['dia']}", status_code=303)
 
-    if que == "mover":  # lo manda el arrastre (panel.js), como formulario: la CSP no deja usar fetch
-        if not (p := buscar_post(camp, f.get("k", ""))):
-            return RedirectResponse(url, status_code=303)
-        with usar(c):
-            error = await mover(c, camp, p, f.get("dia", ""), f.get("con", ""), f.get("juntar") == "1")
-            if not error:
-                await guardar(c, camp)
-        if error:
-            return await pagina_campana(c, camp, error)
-        if f.get("suave") == "1":  # panel.js ya movió la tarjeta: 204 deja la página como está, sin recargar
-            return Response(status_code=204)
-        return RedirectResponse(f"{url}#d-{p['dia']}", status_code=303)
 
-    if que == "generar_todas":
-        pendientes = [p for p in camp["posts"] if not await estado_post(c, p)]
-        extra = f.get("extra") == "1"
-        with usar(c):
-            incluidas, _ = await imagenes.usadas(c.store)
-        if incluidas + sum(costo(p) for p in pendientes) > c.imagenes_mes and not extra:
-            return await pagina_campana(c, camp, confirmar="generar_todas")
+async def _generar_todas(c: Cuenta, camp: dict, f: dict):
+    url = url_de(camp)
+    pendientes = [p for p in camp["posts"] if not await estado_post(c, p)]
+    extra = f.get("extra") == "1"
+    with usar(c):
+        incluidas, _ = await imagenes.usadas(c.store)
+    if incluidas + sum(costo(p) for p in pendientes) > c.imagenes_mes and not extra:
+        return await pagina_campana(c, camp, confirmar="generar_todas")
 
-        async def todas():
-            for i, p in enumerate(pendientes, 1):
-                yield f"Pieza {i} de {len(pendientes)}: {p['titulo']}…"
-                with usar(c):  # lo último de ese post: mientras tanto pudo moverlo, editarlo o borrarlo
-                    fresca = await leer(c, camp["id"])
-                    p = buscar_post(fresca, p["k"]) if fresca else None
-                    if not p or await estado_post(c, p):
-                        continue
-                    await generar_imagen(c, fresca, p, extra)
-                    await guardar_post(c, fresca, p)
-            yield url
+    async def todas():
+        for i, p in enumerate(pendientes, 1):
+            yield f"Pieza {i} de {len(pendientes)}: {p['titulo']}…"
+            with usar(c):  # lo último de ese post: mientras tanto pudo moverlo, editarlo o borrarlo
+                fresca = await leer(c, camp["id"])
+                p = buscar_post(fresca, p["k"]) if fresca else None
+                if not p or await estado_post(c, p):
+                    continue
+                await generar_imagen(c, fresca, p, extra)
+                await guardar_post(c, fresca, p)
+        yield url
 
-        return await trabajando(c, "Generando las imágenes…", f"Tarda alrededor de {len(pendientes) * 20} segundos.", todas,
-                          url, segundos=len(pendientes) * 20)
+    return await trabajando(c, "Generando las imágenes…", f"Tarda alrededor de {len(pendientes) * 20} segundos.", todas,
+                            url, segundos=len(pendientes) * 20)
 
-    if que == "aprobar_todas":
-        if f.get("confirmado") != "1" and await pendientes_de_confirmar(c, camp):
-            return await pagina_campana(c, camp, confirmar="aprobar_todas")
-        n = 0
-        with usar(c):
-            for p in camp["posts"]:
-                post = await estado_post(c, p)
-                if post and post["status"] == "borrador" and post["publish_at"] > time.time() + 60:
-                    await c.store.set_post(post["id"], "programada", only_if="borrador")
-                    if not p.get("editado"):
-                        await recordar(c, p, "aprobo")
-                    n += 1
-        return await pagina_campana(c, camp, f"Listo: {n} post{'s' if n != 1 else ''} programado{'s' if n != 1 else ''}."
-                                    if n else "No había posts con imagen por aprobar (o su día ya pasó).")
 
-    p = buscar_post(camp, f.get("k", ""))
-    if not p:
-        return await pagina_campana(c, camp, "Ese post ya no está en la campaña.")
-    k = str(p["k"])
-    post = await estado_post(c, p)
-    if post and post["status"] in BLOQUEADOS:
-        return await pagina_campana(c, camp, "Ese post ya se publicó.", sel=k)
+async def _aprobar_todas(c: Cuenta, camp: dict, f: dict):
+    if f.get("confirmado") != "1" and await pendientes_de_confirmar(c, camp):
+        return await pagina_campana(c, camp, confirmar="aprobar_todas")
+    n = 0
+    with usar(c):
+        for p in camp["posts"]:
+            post = await estado_post(c, p)
+            if post and post["status"] == "borrador" and post["publish_at"] > time.time() + 60:
+                await c.store.set_post(post["id"], "programada", only_if="borrador")
+                if not p.get("editado"):
+                    await recordar(c, p, "aprobo")
+                n += 1
+    return await pagina_campana(c, camp, f"Listo: {n} post{'s' if n != 1 else ''} programado{'s' if n != 1 else ''}."
+                                if n else "No había posts con imagen por aprobar (o su día ya pasó).")
 
-    # Lo que cambió en el panel lateral se guarda antes de cualquier acción.
+
+ACCIONES_CAMPANA = {"proponer": _proponer, "borrar": _borrar, "editar": _editar, "mover": _mover,
+                    "generar_todas": _generar_todas, "aprobar_todas": _aprobar_todas}
+
+
+async def guardar_cambios_del_post(c: Cuenta, camp: dict, p: dict, post: dict | None, f: dict) -> str:
+    """Pasa al post lo que cambió en el panel lateral (hora, textos, prompt, marca, formato, regla y día) y lo
+    guarda. Devuelve el aviso de mover el día ("" si nada que avisar). Levanta Rechazo si falta algo."""
     hora = f.get("hora", "")
     if HORA.match(hora):
         p["hora"] = hora
@@ -2703,7 +2710,7 @@ async def accion(request: Request, c: marco.Formulario, cid: str):
         antes = (p.get("regla") or {}).get("clave", "")
         clave = limpiar_clave(f.get("clave", ""))
         if f.get("regla_activa") == "1" and not clave:
-            return await pagina_campana(c, camp, "Escribe la palabra que van a comentar (por ejemplo, PRECIOS).", sel=k)
+            raise Rechazo("Escribe la palabra que van a comentar (por ejemplo, PRECIOS).")
         p["regla"] = {"activa": f.get("regla_activa") == "1", "clave": clave, "respuesta": RESPUESTA_REGLA,
                       "dm": f.get("dm", "").strip()[:1000], "clave_antes": antes}
     with usar(c):
@@ -2712,79 +2719,128 @@ async def accion(request: Request, c: marco.Formulario, cid: str):
         if f.get("regla_en_form") == "1":
             await regla_al_post(c, p)
         await guardar(c, camp)
+    return aviso
 
-    if que == "verificado":
-        p["verificado"] = True
+
+async def _verificado(c: Cuenta, camp: dict, p: dict, post: dict | None, f: dict, subida):
+    p["verificado"] = True
+    with usar(c):
+        await guardar(c, camp)
+    return await pagina_campana(c, camp, "Listo: este post ya quedó revisado.", sel=str(p["k"]))
+
+
+async def _subir(c: Cuenta, camp: dict, p: dict, post: dict | None, f: dict, subida):
+    k = str(p["k"])
+    if not getattr(subida, "filename", ""):
+        return await pagina_campana(c, camp, "Elige primero la foto que quieres subir.", sel=k)
+    from .contenido import MAX_FOTO_BYTES
+    data = await subida.read(MAX_FOTO_BYTES + 1)
+    if len(data) > MAX_FOTO_BYTES:
+        return await pagina_campana(c, camp, "Esa foto pesa más de 10 MB; sube una más ligera.", sel=k)
+    try:
+        await subir_imagen(c, camp, p, data)
+    except imagenes.ErrorImagen as e:
+        return await pagina_campana(c, camp, str(e), sel=k)
+    with usar(c):
+        await guardar(c, camp)
+    return RedirectResponse(con_desde(f"{url_de(camp)}?post={k}#detalle"), status_code=303)
+
+
+async def _otra(c: Cuenta, camp: dict, p: dict, post: dict | None, f: dict, subida):
+    k, url = str(p["k"]), url_de(camp)
+    if not await ia_restantes(c):
+        return await pagina_campana(c, camp, "Por hoy ya no quedan ideas nuevas; mañana puedes pedir más.", sel=k)
+
+    async def otra():
         with usar(c):
-            await guardar(c, camp)
-        return await pagina_campana(c, camp, "Listo: este post ya quedó revisado.", sel=k)
+            await usar_ia(c)
+            await recordar(c, p, "rechazo")
+            await otra_idea(c, camp, p)
+            if camp.get("brief"):
+                await prompts_de(c, camp, [p])
+            await guardar_post(c, camp, p)
+        yield con_desde(f"{url}?post={k}#detalle")
 
-    if que == "subir":
-        if not getattr(subida, "filename", ""):
-            return await pagina_campana(c, camp, "Elige primero la foto que quieres subir.", sel=k)
-        from .contenido import MAX_FOTO_BYTES
-        data = await subida.read(MAX_FOTO_BYTES + 1)
-        if len(data) > MAX_FOTO_BYTES:
-            return await pagina_campana(c, camp, "Esa foto pesa más de 10 MB; sube una más ligera.", sel=k)
-        try:
-            await subir_imagen(c, camp, p, data)
-        except imagenes.ErrorImagen as e:
-            return await pagina_campana(c, camp, str(e), sel=k)
+    return await trabajando(c, "Pensando otra idea…", "Tarda unos segundos.", otra, url, segundos=10)
+
+
+async def _prompt(c: Cuenta, camp: dict, p: dict, post: dict | None, f: dict, subida):
+    if not camp.get("brief"):
+        return None
+    k, url = str(p["k"]), url_de(camp)
+
+    async def escribir_prompt():
         with usar(c):
-            await guardar(c, camp)
-        return RedirectResponse(con_desde(f"{url}?post={k}#detalle"), status_code=303)
+            p.pop("prompt", None)
+            await prompt_de(c, camp, p, await marca_de(c))
+            await guardar_post(c, camp, p)
+        yield con_desde(f"{url}?post={k}#detalle")
 
-    if que == "otra":
-        if not await ia_restantes(c):
-            return await pagina_campana(c, camp, "Por hoy ya no quedan ideas nuevas; mañana puedes pedir más.", sel=k)
+    return await trabajando(c, "Escribiendo el prompt…", "Tarda unos segundos.", escribir_prompt, url, segundos=10)
 
-        async def otra():
-            with usar(c):
-                await usar_ia(c)
-                await recordar(c, p, "rechazo")
-                await otra_idea(c, camp, p)
-                if camp.get("brief"):
-                    await prompts_de(c, camp, [p])
-                await guardar_post(c, camp, p)
-            yield con_desde(f"{url}?post={k}#detalle")
 
-        return await trabajando(c, "Pensando otra idea…", "Tarda unos segundos.", otra, url, segundos=10)
+async def _generar(c: Cuenta, camp: dict, p: dict, post: dict | None, f: dict, subida):
+    k, url = str(p["k"]), url_de(camp)
+    extra = f.get("extra") == "1"
+    if costo(p) and await falta_cupo(c, extra) == "extra":
+        return await pagina_campana(c, camp, confirmar="generar", k=k)
 
-    if que == "prompt" and camp.get("brief"):
-        async def escribir_prompt():
-            with usar(c):
-                p.pop("prompt", None)
-                await prompt_de(c, camp, p, await marca_de(c))
-                await guardar_post(c, camp, p)
-            yield con_desde(f"{url}?post={k}#detalle")
-
-        return await trabajando(c, "Escribiendo el prompt…", "Tarda unos segundos.", escribir_prompt, url, segundos=10)
-
-    if que == "generar":
-        extra = f.get("extra") == "1"
-        if costo(p) and await falta_cupo(c, extra) == "extra":
-            return await pagina_campana(c, camp, confirmar="generar", k=k)
-
-        async def una():
-            with usar(c):
-                await generar_imagen(c, camp, p, extra)
-                await guardar_post(c, camp, p)
-            yield con_desde(f"{url}?post={k}#detalle")
-
-        return await trabajando(c, "Generando la imagen…" if costo(p) else "Armando la pieza…",
-                          "Tarda alrededor de medio minuto." if costo(p) else "Tarda unos segundos.", una, url,
-                          segundos=30 if costo(p) else 8)
-
-    if que == "aprobar":
+    async def una():
         with usar(c):
-            post = await estado_post(c, p)
-            if not post or post["status"] != "borrador":
-                return await pagina_campana(c, camp, "Ese post no está en borrador.", sel=k)
-            if post["publish_at"] <= time.time() + 60:
-                return await pagina_campana(c, camp, "Su día ya pasó: elige otro día u hora y guarda.", sel=k)
-            await c.store.set_post(post["id"], "programada", only_if="borrador")
-            if not p.get("editado"):
-                await recordar(c, p, "aprobo")
-            return await pagina_campana(c, camp, f"Listo: sale el {cuando(post['publish_at'])}.", sel=k)
+            await generar_imagen(c, camp, p, extra)
+            await guardar_post(c, camp, p)
+        yield con_desde(f"{url}?post={k}#detalle")
 
+    return await trabajando(c, "Generando la imagen…" if costo(p) else "Armando la pieza…",
+                            "Tarda alrededor de medio minuto." if costo(p) else "Tarda unos segundos.", una, url,
+                            segundos=30 if costo(p) else 8)
+
+
+async def _aprobar(c: Cuenta, camp: dict, p: dict, post: dict | None, f: dict, subida):
+    k = str(p["k"])
+    with usar(c):
+        post = await estado_post(c, p)
+        if not post or post["status"] != "borrador":
+            return await pagina_campana(c, camp, "Ese post no está en borrador.", sel=k)
+        if post["publish_at"] <= time.time() + 60:
+            return await pagina_campana(c, camp, "Su día ya pasó: elige otro día u hora y guarda.", sel=k)
+        await c.store.set_post(post["id"], "programada", only_if="borrador")
+        if not p.get("editado"):
+            await recordar(c, p, "aprobo")
+        return await pagina_campana(c, camp, f"Listo: sale el {cuando(post['publish_at'])}.", sel=k)
+
+
+ACCIONES_POST = {"verificado": _verificado, "subir": _subir, "otra": _otra, "prompt": _prompt, "generar": _generar,
+                 "aprobar": _aprobar}
+
+
+@router.post("/campanas/{cid}")
+async def accion(request: Request, c: marco.Formulario, cid: str):
+    if c.imagenes_mes <= 0:
+        return sin_plan()
+    datos = await request.form()  # el editor del post es multipart: puede traer su imagen ("Subir imagen")
+    subida = datos.get("imagen")
+    f = {k: v for k, v in datos.items() if isinstance(v, str)}
+    que = f.get("accion", "")
+    tomar_desde(f.get("desde"))
+    if not (camp := await leer(c, cid)) or not camp.get("posts"):
+        return RedirectResponse(BASE, status_code=303)
+    if hacer := ACCIONES_CAMPANA.get(que):
+        return await hacer(c, camp, f)
+
+    # Lo demás es sobre un post: primero se guarda lo que cambió en el panel lateral, luego la acción.
+    p = buscar_post(camp, f.get("k", ""))
+    if not p:
+        return await pagina_campana(c, camp, "Ese post ya no está en la campaña.")
+    k = str(p["k"])
+    post = await estado_post(c, p)
+    if post and post["status"] in BLOQUEADOS:
+        return await pagina_campana(c, camp, "Ese post ya se publicó.", sel=k)
+    try:
+        aviso = await guardar_cambios_del_post(c, camp, p, post, f)
+    except Rechazo as e:
+        return await pagina_campana(c, camp, str(e), sel=k)
+    if hacer := ACCIONES_POST.get(que):
+        if (respuesta := await hacer(c, camp, p, post, f, subida)) is not None:
+            return respuesta
     return await pagina_campana(c, camp, aviso or "Guardado.", sel=k)

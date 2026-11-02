@@ -959,3 +959,19 @@ def test_la_imagen_lleva_sus_elementos_clave_y_el_texto_del_post():
     bloque = campanas.bloque_imagen({}, {}, p)
     assert "Elementos clave: Un celular" in bloque and "texto que se publica: Las mismas tres dudas" in bloque
     assert "sin personas" in campanas.SISTEMA_PROMPTS and "Prueba de 3 segundos" in brief.SISTEMA_PLAN
+
+
+def test_acciones_de_campana_en_tabla():
+    """Cada acción del POST de una campaña es una función chica en su tabla, con la misma firma."""
+    import inspect
+
+    from igbot import campanas
+
+    assert set(campanas.ACCIONES_CAMPANA) == {"proponer", "borrar", "editar", "mover", "generar_todas", "aprobar_todas"}
+    assert set(campanas.ACCIONES_POST) == {"verificado", "subir", "otra", "prompt", "generar", "aprobar"}
+    for fn in campanas.ACCIONES_CAMPANA.values():
+        assert inspect.iscoroutinefunction(fn) and list(inspect.signature(fn).parameters) == ["c", "camp", "f"]
+    for fn in campanas.ACCIONES_POST.values():
+        assert inspect.iscoroutinefunction(fn)
+        assert list(inspect.signature(fn).parameters) == ["c", "camp", "p", "post", "f", "subida"]
+    assert not set(campanas.ACCIONES_CAMPANA) & set(campanas.ACCIONES_POST)
