@@ -4,3 +4,4 @@ __pycache__/
 data/
 # Tokens de cada cliente: nunca al repo (los escribe el panel al dar de alta).
 clientes/*/.env
+capturas/
