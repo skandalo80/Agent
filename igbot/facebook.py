@@ -22,7 +22,7 @@ import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from . import conectar, config, marco, pagina_fb
+from . import conectar, config, marco, oauth, pagina_fb
 from .cuenta import Cuenta, usar
 from .pagina_fb import FB_GRAPH
 
@@ -56,17 +56,14 @@ def redirect_uri() -> str:
 
 
 def _dialogo(solo_ig: bool = False) -> RedirectResponse:
-    state = conectar.nuevo_state()
+    state = oauth.nuevo_state("facebook")  # sin cuenta: también sirve para entrar, sin sesión todavía
     config_id = config.FB_CONFIG_ID_IG if solo_ig and config.FB_CONFIG_ID_IG else config.FB_CONFIG_ID
     url = f"https://www.facebook.com/{config.API_VERSION}/dialog/oauth?" + urlencode({
         "client_id": config.FB_APP_ID, "redirect_uri": redirect_uri(), "state": state,
         "response_type": "code",
         # Login de Facebook para empresas: la "configuración" de Meta dice qué permisos pide; sin ella, la lista.
         **({"config_id": config_id} if config_id else {"scope": SCOPES})})
-    r = RedirectResponse(url, status_code=303)
-    r.set_cookie(STATE_COOKIE, state, max_age=TTL, path="/panel/facebook", secure=True, httponly=True,
-                 samesite="lax")
-    return r
+    return oauth.ir(url, STATE_COOKIE, "/panel/facebook", state)
 
 
 @router.get("/entrar")
@@ -204,9 +201,7 @@ def _ig(p: dict) -> dict:
 
 
 def _volver(aviso: str) -> RedirectResponse:
-    r = RedirectResponse(f"/panel/facebook?aviso={aviso}", status_code=303)
-    r.delete_cookie(STATE_COOKIE, path="/panel/facebook")
-    return r
+    return oauth.volver(f"/panel/facebook?aviso={aviso}", STATE_COOKIE, "/panel/facebook")
 
 
 def _sin_sesion(titulo: str, texto: str) -> HTMLResponse:
@@ -225,7 +220,9 @@ async def callback(request: Request):
     if p.get("error") or not p.get("code"):
         log.info("Login de Facebook cancelado: %s", p.get("error_reason") or p.get("error"))
         return _volver("cancelada") if sesion else RedirectResponse("/panel", status_code=303)
-    if not (enabled() and conectar.state_valido(p.get("state", ""), request.cookies.get(STATE_COOKIE))):
+    # Facebook vuelve en otro navegador en el celular: basta la firma fresca. Se gasta en la base principal.
+    if not (enabled() and await oauth.gastable(p.get("state", ""), request.cookies.get(STATE_COOKIE), "facebook",
+                                              store=conectar.store, sin_cookie=True)):
         log.warning("Vuelta de Facebook con state inválido")
         return _volver("fallo") if sesion else RedirectResponse("/panel", status_code=303)
     try:

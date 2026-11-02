@@ -18,7 +18,6 @@ import hmac
 import json
 import logging
 import re
-import secrets
 import time
 from urllib.parse import urlencode
 
@@ -26,7 +25,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
 
-from . import config, marco
+from . import config, marco, oauth
 from .cuenta import Cuenta, usar
 
 log = logging.getLogger("igbot.cobros")
@@ -36,7 +35,6 @@ publico = APIRouter(prefix="/cobros")
 cuentas = lambda: []  # noqa: E731 — lo pone app.py: todas las cuentas, para los avisos de pago
 
 STATE_COOKIE = "cobros_state"
-STATE_TTL = 900
 MAX_CANTIDAD = 20
 # Monedas que Stripe cobra sin centavos.
 SIN_CENTAVOS = {"bif", "clp", "djf", "gnf", "jpy", "kmf", "krw", "mga", "pyg", "rwf", "ugx", "vnd", "vuv", "xaf",
@@ -79,28 +77,8 @@ def cliente() -> httpx.AsyncClient:
     return _Cliente(timeout=20, transport=_transporte)
 
 
-def _firmar(texto: str) -> str:
-    return hmac.new(config.SESSION_SECRET.encode(), f"cobros:{texto}".encode(), hashlib.sha256).hexdigest()
-
-
-def nuevo_state(c: Cuenta, prov: str) -> str:
-    base = f"{prov}.{c.slug or '-'}.{int(time.time())}.{secrets.token_urlsafe(12)}"
-    return f"{base}.{_firmar(base)[:32]}"
-
-
-def state_valido(state: str, cookie: str | None, c: Cuenta, prov: str) -> bool:
-    partes = state.split(".")
-    if len(partes) != 5 or not cookie or not secrets.compare_digest(cookie, state):
-        return False
-    p, slug, ts, nonce, firma = partes
-    return (p == prov and slug == (c.slug or "-") and ts.isdigit() and 0 <= time.time() - int(ts) < STATE_TTL
-            and secrets.compare_digest(firma, _firmar(f"{p}.{slug}.{ts}.{nonce}")[:32]))
-
-
 def _volver(aviso: str) -> RedirectResponse:
-    r = RedirectResponse(f"/panel/conexion?aviso={aviso}", status_code=303)
-    r.delete_cookie(STATE_COOKIE, path="/panel/cobros")
-    return r
+    return oauth.volver(f"/panel/conexion?aviso={aviso}", STATE_COOKIE, "/panel/cobros")
 
 
 # --- conectar ---
@@ -109,7 +87,7 @@ def _volver(aviso: str) -> RedirectResponse:
 async def conectar(c: marco.Formulario, prov: str):
     if not enabled(prov):
         return RedirectResponse("/panel/conexion", status_code=303)
-    state = nuevo_state(c, prov)
+    state = oauth.nuevo_state(prov, c)
     if prov == "mercadopago":
         url = "https://auth.mercadopago.com/authorization?" + urlencode({
             "client_id": config.MP_CLIENT_ID, "response_type": "code", "platform_id": "mp", "state": state,
@@ -118,10 +96,7 @@ async def conectar(c: marco.Formulario, prov: str):
         url = "https://connect.stripe.com/oauth/authorize?" + urlencode({
             "response_type": "code", "client_id": config.STRIPE_CLIENT_ID, "scope": "read_write", "state": state,
             "redirect_uri": redirect_uri(prov)})
-    r = RedirectResponse(url, status_code=303)
-    r.set_cookie(STATE_COOKIE, state, max_age=STATE_TTL, path="/panel/cobros", secure=True, httponly=True,
-                 samesite="lax")
-    return r
+    return oauth.ir(url, STATE_COOKIE, "/panel/cobros", state)
 
 
 async def _token_mercadopago(datos: dict) -> dict:
@@ -141,7 +116,7 @@ async def callback(request: Request, c: marco.Sesion, prov: str):
     q = request.query_params
     if not q.get("code"):
         return _volver("cancelado")
-    if not (enabled(prov) and state_valido(q.get("state", ""), request.cookies.get(STATE_COOKIE), c, prov)):
+    if not (enabled(prov) and await oauth.gastable(q.get("state", ""), request.cookies.get(STATE_COOKIE), prov, c)):
         log.warning("Vuelta de %s con state inválido", prov)
         return _volver("fallo")
     try:

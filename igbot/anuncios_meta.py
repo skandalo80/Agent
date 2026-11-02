@@ -23,7 +23,7 @@ import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
-from . import conectar, config, marco
+from . import config, marco, oauth
 from .cuenta import Cuenta
 from .pagina_fb import FB_GRAPH
 
@@ -80,20 +80,17 @@ def por_vencer(datos: dict) -> bool:
 
 # --- conectar (login de Facebook, solo lectura de anuncios) ---
 
-def _dialogo() -> RedirectResponse:
-    state = conectar.nuevo_state()
+def _dialogo(c: Cuenta) -> RedirectResponse:
+    state = oauth.nuevo_state("anuncios", c)
     url = f"https://www.facebook.com/{config.API_VERSION}/dialog/oauth?" + urlencode({
         "client_id": config.FB_APP_ID, "redirect_uri": redirect_uri(), "state": state, "response_type": "code",
         **({"config_id": config.FB_ADS_CONFIG_ID} if config.FB_ADS_CONFIG_ID else {"scope": SCOPES})})
-    r = RedirectResponse(url, status_code=303)
-    r.set_cookie(STATE_COOKIE, state, max_age=TTL, path="/panel/anuncios", secure=True, httponly=True,
-                 samesite="lax")
-    return r
+    return oauth.ir(url, STATE_COOKIE, "/panel/anuncios", state)
 
 
 @router.post("/conectar")
 async def conectar_cuenta(c: marco.Formulario):
-    return _dialogo() if enabled() else RedirectResponse("/panel/anuncios", status_code=303)
+    return _dialogo(c) if enabled() else RedirectResponse("/panel/anuncios", status_code=303)
 
 
 def _check(r: httpx.Response) -> None:
@@ -126,9 +123,7 @@ async def cuentas_del_codigo(code: str) -> tuple[dict, list[dict]]:
 
 
 def _volver(aviso: str) -> RedirectResponse:
-    r = RedirectResponse(f"/panel/anuncios?aviso={aviso}", status_code=303)
-    r.delete_cookie(STATE_COOKIE, path="/panel/anuncios")
-    return r
+    return oauth.volver(f"/panel/anuncios?aviso={aviso}", STATE_COOKIE, "/panel/anuncios")
 
 
 async def _guardar_cuenta(c: Cuenta, token: dict, cuenta: dict) -> None:
@@ -144,7 +139,9 @@ async def callback(request: Request, c: marco.Sesion):
     p = request.query_params
     if p.get("error") or not p.get("code"):
         return _volver("cancelada")
-    if not (enabled() and conectar.state_valido(p.get("state", ""), request.cookies.get(STATE_COOKIE))):
+    # Meta puede volver en otro navegador (el celular): basta la firma fresca de esta cuenta.
+    if not (enabled() and await oauth.gastable(p.get("state", ""), request.cookies.get(STATE_COOKIE), "anuncios", c,
+                                              sin_cookie=True)):
         log.warning("Vuelta de Meta (anuncios) con state inválido")
         return _volver("fallo")
     try:

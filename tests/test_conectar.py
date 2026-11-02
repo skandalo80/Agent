@@ -128,8 +128,9 @@ def test_oauth_vuelve_en_otro_navegador(monkeypatch):
         assert r.headers["location"] == "https://skandar.online/conectado"
 
         # Uno firmado hace más de 15 minutos ya no sirve.
-        viejo = f"{int(time.time()) - 1000}.xyz"
-        r = otro.get(f"/conectar/callback?code=abc&state={viejo}.{conectar.firmar(viejo)}",
+        from igbot import oauth
+        viejo = f"instagram.-.{int(time.time()) - 1000}.xyz"
+        r = otro.get(f"/conectar/callback?code=abc&state={viejo}.{oauth.firmar(viejo)}",
                      follow_redirects=False)
         assert r.headers["location"].endswith("/conectar-error")
 

@@ -20,11 +20,8 @@ kv "google_calendar": {"email", "refresh_token", "permisos", "fecha", "tipo" (pr
 "minutos", "revocado"}.
 """
 import base64
-import hashlib
-import hmac
 import json
 import logging
-import secrets
 import time
 from datetime import datetime
 from html import escape
@@ -34,7 +31,7 @@ import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
-from . import config, marco
+from . import config, marco, oauth
 from .cuenta import Cuenta
 from .google import Google
 
@@ -50,7 +47,6 @@ AUTORIZAR = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN = "https://oauth2.googleapis.com/token"
 REVOCAR = "https://oauth2.googleapis.com/revoke"
 STATE_COOKIE = "google_state"
-STATE_TTL = 900
 TIPOS = {"presencial": "En tu negocio", "video": "Videollamada (Google Meet)"}
 MINUTOS = (15, 30, 45, 60, 90)
 _transporte: httpx.AsyncBaseTransport | None = None  # las pruebas ponen uno falso
@@ -130,24 +126,6 @@ def prompt(con: dict) -> str:
 
 
 # --- conectar (OAuth de Google) ---
-
-def _firmar(texto: str) -> str:
-    return hmac.new(config.GOOGLE_WEB_CLIENT_SECRET.encode(), texto.encode(), hashlib.sha256).hexdigest()
-
-
-def nuevo_state(c: Cuenta) -> str:
-    base = f"{c.slug or '-'}.{int(time.time())}.{secrets.token_urlsafe(12)}"
-    return f"{base}.{_firmar(base)[:32]}"
-
-
-def state_valido(state: str, cookie: str | None, c: Cuenta) -> bool:
-    partes = state.split(".")
-    if len(partes) != 4 or not cookie or not secrets.compare_digest(cookie, state):
-        return False
-    slug, ts, nonce, firma = partes
-    return (slug == (c.slug or "-") and ts.isdigit() and 0 <= time.time() - int(ts) < STATE_TTL
-            and secrets.compare_digest(firma, _firmar(f"{slug}.{ts}.{nonce}")[:32]))
-
 
 _Cliente = httpx.AsyncClient  # el de verdad, aunque las pruebas de otras partes cambien httpx.AsyncClient
 
@@ -254,15 +232,12 @@ async def pagina(c: Cuenta, aviso: str = ""):
 async def conectar(c: marco.Formulario):
     if not enabled():
         return RedirectResponse("/panel/google", status_code=303)
-    state = nuevo_state(c)
+    state = oauth.nuevo_state("google", c)
     url = AUTORIZAR + "?" + urlencode({
         "client_id": config.GOOGLE_WEB_CLIENT_ID, "redirect_uri": redirect_uri(), "response_type": "code",
         "scope": SCOPES, "access_type": "offline", "prompt": "consent select_account",
         "include_granted_scopes": "true", "state": state})
-    r = RedirectResponse(url, status_code=303)
-    r.set_cookie(STATE_COOKIE, state, max_age=STATE_TTL, path="/panel/google", secure=True, httponly=True,
-                 samesite="lax")
-    return r
+    return oauth.ir(url, STATE_COOKIE, "/panel/google", state)
 
 
 @router.get("/callback")
@@ -275,7 +250,7 @@ async def callback(request: Request):
     p = dict(request.query_params)
     if not p.get("code"):
         return _volver("cancelado")
-    if not (enabled() and state_valido(p.get("state", ""), request.cookies.get(STATE_COOKIE), c)):
+    if not (enabled() and await oauth.gastable(p.get("state", ""), request.cookies.get(STATE_COOKIE), "google", c)):
         log.warning("Vuelta de Google con state inválido")
         return _volver("fallo")
     try:
@@ -298,9 +273,7 @@ async def callback(request: Request):
 
 
 def _volver(aviso: str) -> RedirectResponse:
-    r = RedirectResponse(f"/panel/google?aviso={aviso}", status_code=303)
-    r.delete_cookie(STATE_COOKIE, path="/panel/google")
-    return r
+    return oauth.volver(f"/panel/google?aviso={aviso}", STATE_COOKIE, "/panel/google")
 
 
 @router.post("/guardar")
