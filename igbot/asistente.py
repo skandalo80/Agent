@@ -10,8 +10,7 @@ Cada paso guarda solo lo suyo en kv "perfil" y vuelve a escribir el prompt (pane
 Lo que el dueño escribe a mano pasa por panel.revisar_instrucciones; elegir de una lista no.
 Las reglas base (prompts/base.md) siguen al final de todo prompt, como antes.
 Sin JavaScript: radios y casillas con CSS (:has) y un POST por paso.
-La cuenta principal se configura igual; su prompt va aparte del repo (Cuenta.prompt_destino) y
-POST /panel/guardar con accion=restaurar la regresa a prompts/system.md (ya sin botón en el panel).
+La cuenta principal se configura igual; su prompt va aparte del repo (Cuenta.prompt_destino).
 """
 import json
 import logging

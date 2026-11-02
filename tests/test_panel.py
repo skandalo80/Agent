@@ -225,8 +225,6 @@ def test_cliente_se_conecta_configura_y_enciende(monkeypatch, tmp_path):
 
 def test_la_cuenta_principal_se_configura_igual_y_guarda_aparte(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
-    Path("prompts").mkdir()
-    Path("prompts/system.md").write_text("PROMPT DEL VENDEDOR")
     setup(monkeypatch)
     monkeypatch.setattr(bot, "cuentas", list(bot.cuentas))
     monkeypatch.setattr(bot.principal, "ig_account_id", "1784")  # la que conecta es la principal
@@ -251,14 +249,11 @@ def test_la_cuenta_principal_se_configura_igual_y_guarda_aparte(monkeypatch, tmp
         assert '<div class="inbox" id="chats" data-vivo="/panel/vivo?' in r.text
         r = client.get("/panel/asistente/configura?paso=resumen")
         assert "instrucciones del servidor" not in r.text and "Volver a las del servidor" not in r.text
-        # Lo que guarda va aparte (fuera de git) y manda sobre el del repo hasta que lo restaure.
+        # Lo que guarda va aparte, fuera de git (no hay prompt del repo para la principal).
         client.post("/panel/asistente/paso", headers=ORIGEN, data={"paso": "personalidad", "personalidad": "premium"})
-        assert Path("prompts/system.md").read_text() == "PROMPT DEL VENDEDOR"
+        assert bot.principal.ruta_prompt() == bot.principal.prompt_editado()
         assert "Elegante y premium" in bot.principal.ruta_prompt().read_text()
         assert "Volver a las del servidor" not in client.get("/panel/asistente/configura?paso=resumen").text
-        r = client.post("/panel/guardar", headers=ORIGEN, data={"accion": "restaurar"})  # sigue sin botón
-        assert "vuelve a usar las instrucciones del servidor" in r.text
-        assert bot.principal.ruta_prompt() == Path("prompts/system.md")
 
 
 def test_probar_mi_asistente(monkeypatch, tmp_path):

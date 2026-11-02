@@ -98,8 +98,8 @@ class Cuenta:
     fuera_horario: str = ""  # mensaje fijo fuera de horario; vacío = decir cuándo le contestan
 
     def ruta_prompt(self) -> Path:
-        """Las instrucciones vigentes. La principal usa prompts/system.md (del repo) salvo que
-        se hayan editado en el panel: esas van junto a su base (data/system.md), fuera de git."""
+        """Las instrucciones vigentes: las que arma el panel con los datos de la cuenta. La principal las
+        guarda junto a su base (data/system.md), fuera de git. Si aún no existen, agent.SIN_INSTRUCCIONES."""
         if not self.slug and (editado := self.prompt_editado()).is_file():
             return editado
         return Path(self.prompt_path)
@@ -128,7 +128,7 @@ class Cuenta:
             # Si se deja vacío, se pregunta a la API al arrancar.
             ig_account_id=get("IG_ACCOUNT_ID"),
             db_path=get("DB_PATH", f"{data_dir}/bot.db"),
-            prompt_path=get("PROMPT_PATH", f"{client_dir}/system.md" if slug else "prompts/system.md"),
+            prompt_path=get("PROMPT_PATH", f"{client_dir}/system.md" if slug else f"{data_dir}/system.md"),
             # Paquetes y precios de las cotizaciones (si no existe, no hay cotizaciones).
             catalog_path=get("CATALOG_PATH", f"{client_dir}/catalogo.yaml" if slug else "negocio/catalogo.yaml"),
             quotes_dir=get("QUOTES_DIR", f"{data_dir}/cotizaciones"),
