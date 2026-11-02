@@ -308,8 +308,18 @@ footer a:hover { color: var(--tinta); }
   .tarjeta:hover, .funcion:hover, .plan:hover { transform: none; }
   footer .contenedor { flex-direction: column; align-items: flex-start; }
 }
+/* Celular: la barra cabe entera en 390 px (marca, menú, Entrar y Escríbenos) y todo lo que se toca mide 44 px de alto. */
+@media (max-width: 800px) {
+  header .contenedor { gap: 10px; }
+  .marca img { height: 26px; }
+  .nav-acciones { gap: 8px; }
+  .menu-boton { width: 44px; height: 44px; }
+  .boton, .boton.chico { min-height: 44px; }
+  .boton.chico { padding: 10px 14px; }
+  .pastilla { min-height: 44px; display: inline-flex; align-items: center; }
+}
 @media (max-width: 420px) {
-  .nav-acciones { gap: 12px; }
+  .nav-acciones .entrar { font-size: 13px; }
 }
 
 /* Blog */
