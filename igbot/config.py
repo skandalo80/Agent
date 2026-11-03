@@ -78,6 +78,13 @@ FONDO_A_LA_VEZ = int(os.getenv("FONDO_A_LA_VEZ", "5"))
 FONDO_TOPE_SEG = float(os.getenv("FONDO_TOPE_SEG", "900"))
 # Historial que se guarda por cuenta (mensajes, eventos y comentarios), en días; 0 = para siempre.
 RETENCION_DIAS = int(os.getenv("RETENCION_DIAS", "365"))
+# Seguimiento dentro de 24 h (Configura tu asistente > Reglas y límites): cada cuánto se buscan chats callados,
+# en qué horas del negocio se puede escribir (de DESDE a HASTA, para no mandar mensajes de madrugada) y cuántos
+# seguimientos manda una cuenta como mucho en cada vuelta.
+SEGUIMIENTO_CADA_SEG = float(os.getenv("SEGUIMIENTO_CADA_SEG", "300"))
+SEGUIMIENTO_DESDE = int(os.getenv("SEGUIMIENTO_DESDE", "9"))
+SEGUIMIENTO_HASTA = int(os.getenv("SEGUIMIENTO_HASTA", "21"))
+SEGUIMIENTO_POR_VUELTA = int(os.getenv("SEGUIMIENTO_POR_VUELTA", "20"))
 
 # --- Google (opcional: sin esto el bot no agenda ni manda correos) ---
 # Credenciales OAuth de tu cuenta de Gmail; ver "Agenda y correo" en el README.
