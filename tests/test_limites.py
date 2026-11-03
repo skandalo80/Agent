@@ -153,3 +153,38 @@ def test_al_terminar_la_pausa_el_asistente_retoma_lo_que_quedo_sin_contestar(mon
         await store.close()
 
     asyncio.run(main())
+
+
+def test_presupuesto_de_contenido_del_mes(monkeypatch):
+    """Lo que se gasta en contenido suma al mes; al llegar al tope no se empieza nada nuevo que cueste."""
+    monkeypatch.setattr(cuenta(), "contenido_usd_mes", 1.0)
+    monkeypatch.setattr(limites.config, "IMAGE_COST_USD", 0.05)
+
+    async def main():
+        store = await new_store(monkeypatch)
+        assert await limites.presupuesto_restante(store) == 1.0
+        assert await limites.imagenes_restantes(store) == 20  # sin imágenes aún: al costo fijo
+        with limites.rubro(limites.ATENCION):
+            await limites.add_cost(0.5)  # contestar DMs no gasta el presupuesto de contenido
+        await limites.add_cost(0.2)  # el texto de una campaña
+        await limites.add_cost(0.1, limites.CONTENIDO, imagen=True)
+        await limites.add_cost(0.3, limites.CONTENIDO, imagen=True)
+        assert round(await limites.gasto_contenido_mes(store), 6) == 0.6
+        assert await limites.imagenes_restantes(store) == 2  # US$0.40 a US$0.20 por imagen
+        assert not await limites.sin_presupuesto(store)
+        await limites.add_cost(0.5)
+        assert await limites.sin_presupuesto(store) and await limites.imagenes_restantes(store) == 0
+        # Sin tope en su plan: nunca se agota.
+        monkeypatch.setattr(cuenta(), "contenido_usd_mes", 0)
+        assert await limites.presupuesto_restante(store) is None and not await limites.sin_presupuesto(store)
+        await store.close()
+
+    asyncio.run(main())
+
+
+def test_el_plan_community_trae_10_dolares_de_contenido():
+    from igbot.cuenta import Cuenta
+    env = {"IG_ACCESS_TOKEN": "t", "PLAN": "community"}
+    assert Cuenta.desde_env("x", env).contenido_usd_mes == 10
+    assert Cuenta.desde_env("x", {**env, "CONTENT_BUDGET_USD_MONTH": "25"}).contenido_usd_mes == 25
+    assert Cuenta.desde_env("x", {"IG_ACCESS_TOKEN": "t"}).contenido_usd_mes == 0

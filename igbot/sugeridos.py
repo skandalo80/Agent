@@ -15,7 +15,7 @@ import re
 import time
 from datetime import datetime
 
-from . import campanas, config, empresa, informe, tools
+from . import campanas, config, empresa, informe, limites, tools
 from .cuenta import Cuenta, usar
 
 log = logging.getLogger("igbot.sugeridos")
@@ -131,6 +131,8 @@ async def tick(c: Cuenta) -> None:
     with usar(c):
         ahora = tools.now()
         if ahora.isoweekday() != DIA or ahora.hour < HORA or await c.store.get(CLAVE_INTENTO) == semana(ahora):
+            return
+        if await limites.sin_presupuesto(c.store):  # sin presupuesto de contenido, esta semana no hay sugeridos
             return
         await c.store.set(CLAVE_INTENTO, semana(ahora))  # antes de llamar a Claude: una vez por semana
         if await generar(c):

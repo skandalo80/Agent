@@ -325,7 +325,7 @@ def test_cupo_extra_y_sin_plan(cliente, monkeypatch):
     monkeypatch.setattr(c, "imagenes_mes", 1)
     client.post("/panel/contenido/campanas", headers=ORIGEN, data=datos_campana(f_texto="", f_foto=""))
     r = client.post(url(client, c), headers=ORIGEN, data={"accion": "generar_todas"})
-    assert "Ya usaste las imágenes de tu plan" in r.text  # 3 fotos no caben en 1: confirma antes
+    assert "Ya usaste el contenido incluido en tu plan" in r.text  # 3 fotos no caben en 1: confirma antes
     r = client.post("/panel/contenido/campanas", headers=ORIGEN, data=datos_campana(f_titular="", f_texto="",
                                                                                      f_foto=""))
     assert "Elige al menos un formato." in r.text

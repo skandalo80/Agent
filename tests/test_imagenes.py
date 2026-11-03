@@ -119,8 +119,13 @@ def test_si_falla_la_imagen_no_gasta_cupo(monkeypatch, tmp_path):
     asyncio.run(main())
 
 
-def gemini_que_responde(monkeypatch, status, cuerpo):
-    pedidos = []
+def gemini_que_responde(monkeypatch, status, cuerpo, gastos=None):
+    pedidos, gastos = [], [] if gastos is None else gastos
+
+    async def gasto(usd, rubro="", imagen=False):  # lo que anotaría al gasto de la cuenta
+        gastos.append((usd, rubro))
+
+    monkeypatch.setattr(imagenes.limites, "add_cost", gasto)
 
     def responder(request):
         pedidos.append(request)
@@ -141,8 +146,13 @@ def test_gemini_devuelve_la_imagen(monkeypatch):
     assert "gemini-3.1-flash-image:generateContent" in str(pedidos[0].url)
 
 
-def openai_que_responde(monkeypatch, status, cuerpo):
-    pedidos = []
+def openai_que_responde(monkeypatch, status, cuerpo, gastos=None):
+    pedidos, gastos = [], [] if gastos is None else gastos
+
+    async def gasto(usd, rubro="", imagen=False):  # lo que anotaría al gasto de la cuenta
+        gastos.append((usd, rubro))
+
+    monkeypatch.setattr(imagenes.limites, "add_cost", gasto)
 
     def responder(request):
         pedidos.append(request)
@@ -316,3 +326,52 @@ def test_los_disenos_de_la_ia_dejan_libre_la_esquina_del_logo():
     for prompt in (imagenes.prompt_libre, imagenes.prompt_infografia, imagenes.prompt_anuncio):
         assert imagenes.ESQUINA_LOGO in prompt("Una taza", TEXTO, con) and imagenes.ESQUINA_LOGO not in prompt("Una taza", TEXTO)
     assert imagenes.ESQUINA_LOGO not in imagenes.prompt_final("Una taza", "editorial")
+
+
+def test_el_costo_de_openai_sale_del_usage(monkeypatch):
+    monkeypatch.setattr(imagenes.config, "OPENAI_IMAGE_USD_TEXTO", 5)
+    monkeypatch.setattr(imagenes.config, "OPENAI_IMAGE_USD_FOTOS", 8)
+    monkeypatch.setattr(imagenes.config, "OPENAI_IMAGE_USD_SALIDA", 30)
+    uso = {"input_tokens": 1500, "output_tokens": 2000,
+           "input_tokens_details": {"text_tokens": 500, "image_tokens": 1000}}
+    assert imagenes.costo_openai(uso) == pytest.approx((500 * 5 + 1000 * 8 + 2000 * 30) / 1e6)
+    # Sin desglose, todo lo que entró cuenta como texto.
+    assert imagenes.costo_openai({"input_tokens": 100, "output_tokens": 10}) == pytest.approx((100 * 5 + 10 * 30) / 1e6)
+    assert imagenes.costo_openai(None) is None and imagenes.costo_openai({}) is None
+
+
+def test_cada_imagen_anota_lo_que_costo_de_verdad(monkeypatch):
+    gastos = []
+    monkeypatch.setattr(imagenes.config, "IMAGE_COST_USD", 0.05)
+    b64 = base64.b64encode(foto()).decode()
+
+    def generar(cuerpo):
+        with monkeypatch.context() as m:
+            ia, _ = openai_que_responde(m, 200, cuerpo, gastos)
+            return asyncio.run(ia.generar("idea"))
+
+    generar({"data": [{"b64_json": b64}], "usage": {
+        "input_tokens": 200, "output_tokens": 4000, "input_tokens_details": {"text_tokens": 200, "image_tokens": 0}}})
+    assert gastos[-1] == (pytest.approx((200 * imagenes.config.OPENAI_IMAGE_USD_TEXTO
+                                         + 4000 * imagenes.config.OPENAI_IMAGE_USD_SALIDA) / 1e6), "contenido")
+    # Sin `usage`, el costo fijo; si no entrega imagen ni dice que cobró, no se anota nada.
+    generar({"data": [{"b64_json": b64}]})
+    assert gastos[-1] == (0.05, "contenido")
+    with pytest.raises(imagenes.ErrorImagen):
+        generar({"data": []})
+    assert len(gastos) == 2
+
+
+def test_sin_presupuesto_de_contenido_solo_sale_la_extra(monkeypatch, tmp_path):
+    monkeypatch.setattr(cuenta(), "contenido_usd_mes", 1.0)
+
+    async def main():
+        store = await nueva_base(monkeypatch, tmp_path, 40)
+        assert await imagenes.reservar(store) == "incluida"
+        await imagenes.limites.add_cost(1.0)
+        with pytest.raises(imagenes.SinCupo, match="presupuesto de contenido"):
+            await imagenes.reservar(store)
+        assert await imagenes.reservar(store, permitir_extra=True) == "extra"  # la paga el cliente
+        assert await imagenes.usadas(store) == (1, 1)
+
+    asyncio.run(main())

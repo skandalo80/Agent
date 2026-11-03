@@ -1165,6 +1165,8 @@ PASOS_RAPIDA = ("Leyendo tu empresa y tu marca…", "Generando opciones de campa
 
 async def crear_brief(c: Cuenta, b: dict, datos: dict):
     """Las tres ideas de campaña con su brief (una llamada a Claude, cuenta como una propuesta del día)."""
+    if await campanas.sin_presupuesto(c):
+        return await pagina(c, RESUMEN, limites.SIN_PRESUPUESTO, b)
     if not await campanas.ia_restantes(c):
         return await pagina(c, RESUMEN, "Por hoy ya no quedan propuestas; mañana puedes pedir más.", b)
     with usar(c):
@@ -1271,6 +1273,8 @@ async def crear_rapida(request: Request, c: marco.Formulario):
         hoy = tools.now().date()
     if date.fromisoformat(b["inicio"]) < hoy:
         return await pagina_rapida(c, "La campaña no puede empezar en un día que ya pasó.", b)
+    if await campanas.sin_presupuesto(c):
+        return await pagina_rapida(c, limites.SIN_PRESUPUESTO, b)
     if await campanas.ia_restantes(c) < 2:  # dos propuestas del día: el brief y los posts
         return await pagina_rapida(c, "Por hoy ya no quedan propuestas; mañana puedes pedir más.", b)
     datos = await a_campana(c, b)

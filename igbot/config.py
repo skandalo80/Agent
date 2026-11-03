@@ -146,8 +146,13 @@ OPCIONES_ANUNCIO = max(1, min(int(os.getenv("OPCIONES_ANUNCIO", "3")), 4))
 # Clave de la API de Gemini (aistudio.google.com/apikey; cuenta de prepago). Solo con IMAGE_PROVIDER=gemini.
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_IMAGE_MODEL = os.getenv("GEMINI_IMAGE_MODEL", "gemini-3.1-flash-lite-image")
-# Lo que cuesta cada imagen, para el gasto diario de la cuenta (DAILY_BUDGET_USD).
+# Lo que cuesta cada imagen cuando el proveedor no dice cuánto gastó (Gemini, o OpenAI sin `usage`).
 IMAGE_COST_USD = float(os.getenv("IMAGE_COST_USD", "0.05"))
+# Tarifas de GPT Image en US$ por millón de tokens (platform.openai.com/docs/pricing): con ellas y el `usage` que
+# devuelve cada imagen se anota lo que costó de verdad. Texto del prompt, fotos de referencia y la imagen que sale.
+OPENAI_IMAGE_USD_TEXTO = float(os.getenv("OPENAI_IMAGE_USD_TEXTO", "5"))
+OPENAI_IMAGE_USD_FOTOS = float(os.getenv("OPENAI_IMAGE_USD_FOTOS", "8"))
+OPENAI_IMAGE_USD_SALIDA = float(os.getenv("OPENAI_IMAGE_USD_SALIDA", "30"))
 # Lo que se le cobra al cliente por imagen pasado su cupo del mes (solo se muestra).
 EXTRA_IMAGE_USD = os.getenv("EXTRA_IMAGE_USD", "0.25")
 # Quién escribe los posts del panel (título, texto, palabra clave): mejor redacción que Haiku.

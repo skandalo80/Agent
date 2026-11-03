@@ -508,6 +508,12 @@ async def ia_restantes(c: Cuenta) -> int:
     return max(0, IA_POR_DIA - int(await c.store.get(clave) or 0))
 
 
+async def sin_presupuesto(c: Cuenta) -> bool:
+    """True si la cuenta ya gastó su presupuesto de contenido del mes (limites.SIN_PRESUPUESTO)."""
+    with usar(c):
+        return await limites.sin_presupuesto(c.store)
+
+
 async def usar_ia(c: Cuenta) -> None:
     with usar(c):
         clave = f"campana_ia:{tools.now():%Y-%m-%d}"
@@ -2070,7 +2076,11 @@ async def barra(c: Cuenta, camp: dict) -> str:
     aprobados = sum(1 for e in estados if e and e["status"] not in ("borrador",))
     with usar(c):
         incluidas, extra = await imagenes.usadas(c.store)
+        quedan = await limites.imagenes_restantes(c.store)
     gasto = f"usa {usa}" if usa else "no usa imágenes"
+    # Si el presupuesto de contenido alcanza para menos que el cupo, se dice cuántas le quedan de verdad.
+    alcanza = (f" · te alcanza para {'unas ' if quedan else ''}{quedan or 'ninguna'} más"
+               if quedan is not None and quedan < c.imagenes_mes - incluidas else "")
     historias = sum(1 for p in posts if es_historia(p))
     cuenta = cuantos(len(posts) - historias, "post") + (f" y {cuantos(historias, 'historia')}" if historias else "")
     botones = ((f'<button class="boton chico" name="accion" value="generar_todas">Generar las {sin} que faltan · {gasto}'
@@ -2081,7 +2091,7 @@ async def barra(c: Cuenta, camp: dict) -> str:
                   f' con imagen</button>' if borradores else ""))
     return (f'<form method="post" action="{url_de(camp)}" class="barra-cam">'
             f"<p><b>{cuenta}</b> · {len(posts) - sin} con imagen · {aprobados} aprobado{'s' if aprobados != 1 else ''} · tu plan:"
-            f" {incluidas + extra} de {c.imagenes_mes} imágenes este mes</p>"
+            f" {incluidas + extra} de {c.imagenes_mes} imágenes este mes{alcanza}</p>"
             f'<div class="acciones">{botones}</div></form>')
 
 
@@ -2454,7 +2464,7 @@ def tarjeta_confirmar(camp: dict, pendientes: list[dict]) -> str:
 
 def tarjeta_extra(accion: str, k: str, destino: str) -> str:
     return (f'<form method="post" action="{destino}" class="tarjeta extra">'
-            "<h2>Ya usaste las imágenes de tu plan este mes</h2>"
+            "<h2>Ya usaste el contenido incluido en tu plan este mes</h2>"
             f'<p class="ayuda">Las que generes ahora son extra, a US${config.EXTRA_IMAGE_USD} cada una, y se suman a tu'
             " próxima mensualidad.</p>"
             f'<input type="hidden" name="k" value="{escape(k)}"><input type="hidden" name="extra" value="1">'
@@ -2636,6 +2646,8 @@ async def armar(c: Cuenta, datos: dict, camp: dict, borrador: bool = False):
             return await de_vuelta("Todavía no hay resultados suficientes para repetir lo que funcionó.",
                                    {**datos, "modo": "explorar"})
         fotos = len(fotos_marca(c, await marca_de(c)))
+    if await sin_presupuesto(c):
+        return await de_vuelta(limites.SIN_PRESUPUESTO, datos)
     if not await ia_restantes(c):
         return await de_vuelta("Por hoy ya no quedan propuestas; mañana puedes pedir más.", datos)
     fijos = [p for p in camp.get("posts", []) if p.get("post_id")]
@@ -2742,7 +2754,7 @@ async def _generar_todas(c: Cuenta, camp: dict, f: dict):
     extra = f.get("extra") == "1"
     with usar(c):
         incluidas, _ = await imagenes.usadas(c.store)
-    if incluidas + sum(costo(p) for p in pendientes) > c.imagenes_mes and not extra:
+    if (incluidas + sum(costo(p) for p in pendientes) > c.imagenes_mes or await sin_presupuesto(c)) and not extra:
         return await pagina_campana(c, camp, confirmar="generar_todas")
 
     async def todas():
@@ -2854,6 +2866,8 @@ async def _subir(c: Cuenta, camp: dict, p: dict, post: dict | None, f: dict, sub
 
 async def _otra(c: Cuenta, camp: dict, p: dict, post: dict | None, f: dict, subida):
     k, url = str(p["k"]), url_de(camp)
+    if await sin_presupuesto(c):
+        return await pagina_campana(c, camp, limites.SIN_PRESUPUESTO, sel=k)
     if not await ia_restantes(c):
         return await pagina_campana(c, camp, "Por hoy ya no quedan ideas nuevas; mañana puedes pedir más.", sel=k)
 

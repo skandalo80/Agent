@@ -45,7 +45,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from PIL import Image, ImageOps
 
-from . import config, fechas, imagenes, informe, marco, panel, posicionamiento, tools
+from . import config, fechas, imagenes, informe, limites, marco, panel, posicionamiento, tools
 from .admin import PANEL, parse_when
 from .comentarios import Rule, shortcode
 from .estilos import (ESTILO_INICIAL, ESTILOS, LOGO_INICIAL, LOGO_PRESENCIA, MAX_ESTILOS, USO_COLOR, VIEJOS_ESTILOS,
@@ -507,7 +507,8 @@ async def falta_cupo(c: Cuenta, extra: bool) -> str:
         return "plan"
     with usar(c):  # el mes es el de la zona horaria de la cuenta
         incluidas, _ = await imagenes.usadas(c.store)
-    return "extra" if incluidas >= c.imagenes_mes and not extra else ""
+        agotado = await limites.sin_presupuesto(c.store)
+    return "extra" if (incluidas >= c.imagenes_mes or agotado) and not extra else ""
 
 
 def texto_imagen(p: dict, usuario: str) -> imagenes.Texto:
@@ -747,7 +748,7 @@ async def pagina_insights(c: Cuenta, media_id: str) -> HTMLResponse:
 def tarjeta_extra(c: Cuenta, accion: str) -> str:
     """Se acabó el cupo: el cliente confirma que quiere pagar la imagen extra."""
     return ('<div class="tarjeta extra">'
-            f"<h2>Ya usaste las {c.imagenes_mes} imágenes de tu plan este mes</h2>"
+            "<h2>Ya usaste el contenido incluido en tu plan este mes</h2>"
             f'<p class="ayuda">Puedes seguir generando. Cada imagen extra cuesta US${config.EXTRA_IMAGE_USD}'
             f" y se suma a tu próxima mensualidad. El día 1 se renueva tu cupo.</p>"
             f'<div class="acciones"><button class="boton" name="accion" value="{accion}" formnovalidate>'
