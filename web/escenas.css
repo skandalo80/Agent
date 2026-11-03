@@ -1,6 +1,7 @@
 /* Escenas de la portada y de "Un día con Skandar" (index.html). Cada escena es un celular, un post o una pantalla del panel
    que se reproduce solo cuando entra en pantalla y vuelve a empezar en bucle (sitio.js pone .corre y la quita al terminar).
-   Cada pieza lleva --t (cuándo aparece) y, si aplica, --d (cuánto dura) en su atributo style.
+   Cada pieza lleva data-t (cuándo aparece) y, si aplica, data-d (cuánto dura), data-te y data-ancho; sitio.js
+   los pasa a --t/--d/--te/--ancho (la CSP de la web bloquea style="" en el HTML).
    Sin JavaScript o con "reducir movimiento" (html sin .anima) la escena se ve terminada y quieta. */
 :root {
   --esc-curva: cubic-bezier(.22, .61, .36, 1);
