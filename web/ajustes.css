@@ -21,3 +21,11 @@
 @media (max-width: 560px) {
   :root { --caja-pad: 1.25rem; }
 }
+
+/* Comparativo de planes (/planes) */
+:root {
+  --comp-col-plan: 72px;        /* ancho de cada columna de plan en celular */
+  --comp-col-plan-grande: 200px; /* ancho de cada columna de plan en escritorio */
+  --comp-fila-pad: 12px;        /* relleno vertical de cada fila */
+  --comp-check: 22px;           /* tamaño del círculo con la palomita */
+}
