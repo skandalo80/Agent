@@ -20,14 +20,16 @@ import os
 import re
 import secrets
 import time
+from datetime import datetime
 from html import escape
 from pathlib import Path
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse
 
-from . import config, conversaciones, marco
+from . import config, conversaciones, fechas, marco
 from .cuenta import Cuenta, usar
+from .resultados import csv_de
 
 log = logging.getLogger("igbot.panel")
 
@@ -185,7 +187,7 @@ def caja(nombre: str, etiqueta: str, ayuda: str, valor: str, filas: int = 2) -> 
 
 
 async def panel_de(c: Cuenta, aviso: str = "", ver: str = "", vista: str = "", abrir: bool = False,
-                   buscar: str = "", hoja: int = 1, chat: str = "", n: int = 0) -> HTMLResponse:
+                   buscar: str = "", hoja: int = 1, chat: str = "", n: int = 0, etapa: str = "") -> HTMLResponse:
     """Tu asistente. Tres vistas, cada una con su dirección: las conversaciones (/panel/asistente),
     "configura" (los pasos de asistente.py, /panel/asistente/configura) y "conexion". `aviso` sale arriba."""
     if not vista and abrir:
@@ -213,7 +215,7 @@ async def panel_de(c: Cuenta, aviso: str = "", ver: str = "", vista: str = "", a
                   + ("" if c.en_revision or await marco.activo(c) else
                      '<div class="aviso">Tu asistente está en pausa: no contesta ningún chat.'
                      ' <a class="enlace" href="/panel/asistente/configura?paso=resumen">Encenderlo</a></div>')
-                  + await conversaciones.bandeja(c, ver, buscar, hoja, chat, n))
+                  + await conversaciones.bandeja(c, ver, buscar, hoja, chat, n, etapa))
     return marco.pagina(
         # Conexión es de tu cuenta (está en el menú de perfil), no de una sección.
         await marco.menu_de(c, "cuenta" if vista == "conexion" else "asistente", sub=vista or "chats", luces={"conexion": estado_conexion})
@@ -351,7 +353,7 @@ async def ver_asistente(request: Request, c: marco.Sesion):
     hoja = int(q["p"]) if q.get("p", "").isdigit() else 1
     n = int(q["n"]) if q.get("n", "").isdigit() else 0
     return await panel_de(c, ver=q.get("ver", ""), vista=vista, abrir=q.get("abrir") == "1",
-                          buscar=q.get("q", ""), hoja=hoja, chat=q.get("chat", "")[:64], n=n)
+                          buscar=q.get("q", ""), hoja=hoja, chat=q.get("chat", "")[:64], n=n, etapa=q.get("etapa", ""))
 
 
 @router.get("/conexion")
@@ -388,7 +390,7 @@ def _bandeja_de(f: dict) -> dict:
     """La bandeja a la que se vuelve después de un botón del chat: su filtro, búsqueda, página y chat."""
     hoja = f.get("p", "")
     return {"ver": f.get("ver", ""), "buscar": f.get("q", ""), "hoja": int(hoja) if hoja.isdigit() else 1,
-            "chat": f.get("chat", "")[:64]}
+            "chat": f.get("chat", "")[:64], "etapa": f.get("etapa", "")}
 
 
 @router.post("/pausas")
@@ -497,6 +499,49 @@ async def marcar_venta(request: Request, c: marco.Formulario):
     avisar(c, usuario_chat, "venta", cantidad, moneda, f"manual:{externo}")
     return await panel_de(c, "Venta guardada." + (" Ya cuenta para el anuncio que trajo este chat." if anuncio else ""),
                           **bandeja)
+
+
+@router.post("/etapa")
+async def cambiar_etapa(request: Request, c: marco.Formulario):
+    """La etapa del contacto, elegida a mano en el chat (Nuevo, Interesado, Cotizó, Agendó cita, Compró o
+    No compró). Después sigue avanzando sola con lo que anota el asistente."""
+    f = await marco.form(request)
+    # "nueva" es la etapa elegida; "etapa" es la del filtro de la bandeja, para volver a ella.
+    usuario_chat, elegida = f.get("usuario", ""), f.get("nueva", "")
+    bandeja = _bandeja_de(f) | {"chat": usuario_chat}
+    if usuario_chat.startswith("admin:") or not await c.store.has_chat(usuario_chat):
+        return await panel_de(c, "No encontramos ese chat.", **(bandeja | {"chat": ""}))
+    if elegida not in conversaciones.NOMBRES_ETAPA:
+        return await panel_de(c, "Elige una etapa de la lista.", **bandeja)
+    await c.store.set_etapa(usuario_chat, elegida)
+    c.store.avisar()  # los paneles abiertos ven la etapa nueva
+    log.info("@%s cambió la etapa de %s desde el panel (%s)", await marco.usuario(c), usuario_chat, elegida)
+    return await panel_de(c, f"Listo: la etapa quedó en «{conversaciones.NOMBRES_ETAPA[elegida]}».", **bandeja)
+
+
+@router.get("/contactos.csv")
+async def contactos_csv(request: Request, c: marco.Sesion):
+    """Tus contactos en CSV (Excel, Google Sheets o tu CRM): cada persona que te escribió con su etapa, sus
+    fechas, el anuncio por el que llegó, lo que compró y los datos que dejó. Con ?etapa=, solo esa etapa."""
+    etapa = conversaciones.etapa_valida(request.query_params.get("etapa", ""))
+    zona = fechas.zona(c)
+
+    def fecha(t: float) -> str:
+        return datetime.fromtimestamp(t, zona).strftime("%Y-%m-%d %H:%M") if t else ""
+    filas = [[(x["usuario"] or "").lstrip("@"), x["user_id"], conversaciones.NOMBRES_ETAPA[x["etapa"]],
+              fecha(x["primero"]), fecha(x["ultimo"]), x["mensajes"], x["anuncio"], x["compras"],
+              round(x["monto"], 2) if x["compras"] else "", x["moneda"],
+              "; ".join(f"{k}: {v}" for k, v in x["datos"].items())]
+             for x in await c.store.contactos(etapa)]
+    log.info("@%s descargó %d contactos (%s)", await marco.usuario(c), len(filas), etapa or "todas las etapas")
+    datos = csv_de(filas, COLUMNAS_CONTACTOS)
+    nombre = f"contactos-{etapa or 'todos'}-{datetime.now(zona):%Y-%m-%d}.csv"
+    return Response(datos, media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="{nombre}"', "Cache-Control": "no-store"})
+
+
+COLUMNAS_CONTACTOS = ["Usuario de Instagram", "Id", "Etapa", "Primer mensaje", "Último mensaje", "Mensajes que mandó",
+                      "Llegó por el anuncio", "Compras", "Monto", "Moneda", "Datos que dejó"]
 
 
 # --- probar el asistente antes de encenderlo ---

@@ -76,7 +76,7 @@ SECCIONES = [
     ("anuncios", "Resultados de tus anuncios", "/panel/resultados?ver=anuncios", "chats, citas y ventas por anuncio", False),
     ("comentarios", "Resultados de tus comentarios", "/panel/resultados?ver=comentarios",
      "cuántos comentarios llegaron y cuántos contestó el asistente, de qué tipo, posts y palabras clave", True),
-    ("conversaciones", "Conversaciones", "/panel/asistente", "los chats en vivo, tomar un chat, Marcar venta", False),
+    ("conversaciones", "Conversaciones", "/panel/asistente", "los chats en vivo, tomar un chat, etapa de cada contacto, Marcar venta, descargar contactos", False),
     ("probar", "Probar tu asistente", "/panel/probar#ultimo", "chat de prueba con su asistente", False),
     ("campanas", "Campañas", "/panel/contenido/campanas", "sus campañas", True),
     ("nueva_campana", "Crear campaña", "/panel/contenido/campanas/nueva", "empezar una campaña nueva", True),
