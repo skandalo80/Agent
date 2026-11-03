@@ -42,7 +42,8 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from PIL import Image
 
-from . import brief, config, empresa, fechas, imagenes, informe, limites, marco, metricas, openai_texto, semana, tools
+from . import (brief, config, empresa, fechas, imagenes, informe, limites, marco, metricas, openai_texto, recetas,
+               semana, tools)
 from .admin import PANEL
 from .contenido import (DESDE, ESTADOS, ESTILO_REFERENCIA, HASHTAGS_FIJO, IMAGEN, MAX_CAPTION, archivo, contexto_marca,
                         cuando, estilo_foto, limitar_hashtags, regla_hashtags,
@@ -1508,7 +1509,7 @@ Reglas:
 - Si el post trae "escena", ese encuadre y esa luz son obligatorios. Si trae "producto", el producto real es el protagonista.
 - El estilo es un tratamiento de luz, color, textura y composición, nunca objetos de arcilla, cristal, neón u otro material dentro de la escena (salvo en los anuncios, donde el estilo sí aporta sus recursos de diseño).
 - Si la "pieza" es un diseño estilo infografía, el prompt describe la pieza gráfica terminada: la jerarquía, dónde va cada uno de sus "textos del diseño" (cítalos tal cual, en español y entre comillas, sin agregar otros), los íconos o gráficos simples que los acompañan, los bloques de color de la marca y la foto o ilustración que la completa. Si es una imagen sin texto, ni una letra, número o logo dentro. Fotografía realista y creíble salvo que el formato o el plan pidan ilustración o gráfico.
-- Si la "pieza" es un anuncio, ese <post> lleva además "versiones": __VERSIONES__ prompts completos y distintos (el primero se repite en "prompt"). Cada versión es un CONCEPTO creativo diferente que prueba lo que dice el texto que se publica, como lo haría un director de arte: una metáfora visual, un antes y después, una exageración, una escena real con el producto, un recurso de diseño (marco, viñeta, sello, etiqueta, personaje) si el "estilo" lo admite. Nunca tres encuadres de la misma escena ni el producto solo sobre una mesa. Cada versión, de 60 a 110 palabras, en este orden: el concepto en una frase; la escena con el producto real de "producto" tal cual es (o su resultado si es un servicio; si es software, la pantalla real de sus fotos, nunca una interfaz inventada); una sola perspectiva; la luz; los objetos concretos, pocos; sus "textos del diseño" (tal cual, entre comillas) y cómo van tratados (el titular grande y con carácter; la línea chica puede ir en una píldora, un sello o una etiqueta si el estilo lo pide); los colores de la marca con intención; lo que se evita, solo lo que venga del plan visual o del brief. El "estilo" manda sobre los recursos visuales: con Pop gráfico, Retro moderno o Claymorfismo caben formas, marcos, stickers, texturas y personajes; con Lujo sobrio o Minimalista, aire y pocas cosas. Prohibidas las frases genéricas ("limpio y premium", "elegante y moderno") y las listas de adjetivos.
+- Si la "pieza" es un anuncio, ese <post> lleva además "versiones": __VERSIONES__ prompts completos y distintos (el primero se repite en "prompt"). Cada versión es un CONCEPTO creativo diferente que prueba lo que dice el texto que se publica, como lo haría un director de arte: una metáfora visual, un antes y después, una exageración, una escena real con el producto, un recurso de diseño (marco, viñeta, sello, etiqueta, personaje) si el "estilo" lo admite. Nunca tres encuadres de la misma escena ni el producto solo sobre una mesa. Si el <post> trae "recetas", cada versión sigue su receta en ese orden (la 1 la primera, la 2 la segunda...): la receta dice la composición, el tratamiento del texto y el recurso visual; el producto, los textos y los datos son los reales del post. Si no trae recetas, inventa tú el concepto. Cada versión, de 60 a 110 palabras, en este orden: el concepto en una frase; la escena con el producto real de "producto" tal cual es (o su resultado si es un servicio; si es software, la pantalla real de sus fotos, nunca una interfaz inventada); una sola perspectiva; la luz; los objetos concretos, pocos; sus "textos del diseño" (tal cual, entre comillas) y cómo van tratados (el titular grande y con carácter; la línea chica puede ir en una píldora, un sello o una etiqueta si el estilo lo pide); los colores de la marca con intención; lo que se evita, solo lo que venga del plan visual o del brief. El "estilo" manda sobre los recursos visuales: con Pop gráfico, Retro moderno o Claymorfismo caben formas, marcos, stickers, texturas y personajes; con Lujo sobrio o Minimalista, aire y pocas cosas. Prohibidas las frases genéricas ("limpio y premium", "elegante y moderno") y las listas de adjetivos.
 - Elementos clave: si el plan visual trae "Elementos clave", el prompt empieza por ellos, explícitos (qué son, cuántos, cómo se ven y dónde van); nunca se omiten, se simplifican ni se cambian por otra cosa.
 - Personas: si el plan visual no pide personas (en protagonista, acción o escenario), el prompt dice claramente "sin personas, sin caras ni manos".
 - Revisión final: cada <post> trae su "texto que se publica". La imagen cuenta lo mismo que ese texto y se entiende sin leerlo. Si el plan visual no lo prueba, ajusta protagonista y acción para que lo prueben, conservando los elementos clave, el encuadre, la luz y el estilo.
@@ -1609,8 +1610,10 @@ def idea_editada(p: dict) -> bool:
     return bool(p.get("idea_original")) and p.get("idea") != p["idea_original"]
 
 
-def bloque_imagen(camp: dict, marca: dict, p: dict) -> str:
-    """Un post para el prompt de las imágenes: su formato, su plan visual, su estilo y su color."""
+def bloque_imagen(camp: dict, marca: dict, p: dict, tipo_receta: str = "") -> str:
+    """Un post para el prompt de las imágenes: su formato, su plan visual, su estilo y su color. En un anuncio sin
+    fotos de referencia de la campaña, además sus recetas (una por versión, según `tipo_receta` y los estilos de
+    Tu marca); con referencias, el estilo de las fotos manda y no hay recetas."""
     formato = FORMATOS[formato_de(p)]
     foto = (p.get("plan") or {}).get("foto") or {}
     estilo, color = elegido(estilos_marca(camp, marca), foto.get("estilo", "")), elegido(colores_marca(marca),
@@ -1622,7 +1625,7 @@ def bloque_imagen(camp: dict, marca: dict, p: dict) -> str:
               f"escena: {escape(p['escena'])}" if p.get("escena") else "",
               f"producto: {escape(camp['producto'])}" if camp.get("producto") and camp.get("producto_id") and not giro
               and p.get("ve") in ("productos", None, "") else "",
-              *textos_del_diseno(p),
+              *textos_del_diseno(p), recetas_texto(camp, marca, p, tipo_receta),
               f"estilo: {escape(estilo[0])}. {escape(estilo[2])}", f"color: {color[0]}. {color[2]}"]
     if foto:
         lineas.append(f"plan visual:\n{brief.foto_texto(foto)}")
@@ -1634,6 +1637,18 @@ def bloque_imagen(camp: dict, marca: dict, p: dict) -> str:
     if foto and idea_editada(p):
         lineas.append(f"idea del dueño (manda): {escape(p['idea'])}")
     return f'<post n="{p["k"]}">\n' + "\n".join(x for x in lineas if x) + "\n</post>"
+
+
+def recetas_texto(camp: dict, marca: dict, p: dict, tipo_receta: str) -> str:
+    """La línea de recetas de un anuncio (config.OPCIONES_ANUNCIO, una por versión), o nada: solo cuando la campaña no
+    trae fotos de referencia ni su ADN, y distintas en cada post de la campaña (`saltar` = su número)."""
+    if not (tipo_receta and formato_de(p) == "anuncio" and ia_completa(p)) or camp.get("referencias") \
+            or camp.get("adn_visual") or config.OPCIONES_ANUNCIO < 2:
+        return ""
+    elegidas = recetas.para(tipo_receta, estilos_de(marca), config.OPCIONES_ANUNCIO,
+                            semilla=int(camp.get("semilla") or camp.get("creada", 0)), saltar=int(p.get("k") or 0))
+    return "recetas (una por versión, en este orden): " + " ".join(f"{i}) {escape(texto)}"
+                                                                   for i, (_, texto) in enumerate(elegidas, 1))
 
 
 def textos_del_diseno(p: dict) -> list[str]:
@@ -1675,6 +1690,9 @@ async def prompts_de(c: Cuenta, camp: dict, posts: list[dict], marca: dict | Non
     marca = marca or await marca_de(c)
     todos = {q["k"]: q for q in camp.get("posts", [])} | {q["k"]: q for q in posts}
     fotos = [q for q in todos.values() if con_foto(q)]
+    tipo_receta = ""
+    if camp.get("producto_id") and any(formato_de(p) == "anuncio" for p in pendientes):  # anuncios: sus recetas
+        tipo_receta = recetas.tipo_de(await empresa.producto(c, camp["producto_id"]), empresa.nombre_giro(await empresa.de(c)))
     comun = (f"<empresa>\n{await empresa_visual(c)}\n</empresa>\n"
              f"<direccion_visual>{brief.texto_visual(camp['brief'])}</direccion_visual>\n" + brief.variedad_tag(camp)
              + brief.referencias_tag(camp))
@@ -1683,7 +1701,7 @@ async def prompts_de(c: Cuenta, camp: dict, posts: list[dict], marca: dict | Non
         ks = {p["k"] for p in grupo}
         otros = "\n".join(resumen_imagen(q) for q in fotos if q["k"] not in ks)
         datos = (comun + (f"<otros_posts>\n{otros}\n</otros_posts>\n" if otros else "")
-                 + "<posts>\n" + "\n".join(bloque_imagen(camp, marca, p) for p in grupo) + "\n</posts>")
+                 + "<posts>\n" + "\n".join(bloque_imagen(camp, marca, p, tipo_receta) for p in grupo) + "\n</posts>")
         respuesta = {}
         sistema = SISTEMA_PROMPTS.replace("__VERSIONES__", str(config.OPCIONES_ANUNCIO))
         if openai_texto.usar("prompt"):
