@@ -23,6 +23,12 @@ def no_instagram_on_startup(monkeypatch):
 
         monkeypatch.setattr(bot.instagram, "subscribe", nothing)
         monkeypatch.setattr(bot.instagram, "set_ice_breakers", nothing)
+        monkeypatch.setattr(bot.instagram, "delete_ice_breakers", nothing)
+
+        async def ninguno():
+            return []
+
+        monkeypatch.setattr(bot.instagram, "ice_breakers", ninguno)
         monkeypatch.setattr(bot, "fondo", lambda: [])
 
 

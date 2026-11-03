@@ -1,6 +1,6 @@
 """La cuenta de Instagram que se está atendiendo.
 
-Todo lo que puede cambiar de un negocio a otro (token, prompt, catálogo,
+Todo lo que puede cambiar de un negocio a otro (token, prompt,
 horario, límites, a quién avisar) vive en una Cuenta, y el código lo lee con
 cuenta().<dato>. Lo que es igual para todas (llaves de Meta, de Claude y de
 Google, la dirección pública del bot) se queda en config.
@@ -47,7 +47,6 @@ class Cuenta:
     ig_account_id: str
     db_path: str
     prompt_path: str
-    catalog_path: str
     quotes_dir: str
     hide_spam: bool
     admin_ig_ids: set[str]
@@ -124,8 +123,6 @@ class Cuenta:
             ig_account_id=get("IG_ACCOUNT_ID"),
             db_path=get("DB_PATH", f"{data_dir}/bot.db"),
             prompt_path=get("PROMPT_PATH", f"{client_dir}/system.md" if slug else f"{data_dir}/system.md"),
-            # Paquetes y precios de las cotizaciones (si no existe, no hay cotizaciones).
-            catalog_path=get("CATALOG_PATH", f"{client_dir}/catalogo.yaml" if slug else "negocio/catalogo.yaml"),
             quotes_dir=get("QUOTES_DIR", f"{data_dir}/cotizaciones"),
             # Ocultar comentarios que son spam en todas las publicaciones.
             hide_spam=_bool(get("HIDE_SPAM")),
@@ -184,7 +181,7 @@ class Cuenta:
 
 
 # Lo que incluye cada plan (PLAN= en el .env de la cuenta; los mismos números que
-# negocio/catalogo.yaml). Cualquier valor escrito en el .env gana sobre esto, para
+# la web y los productos de la cuenta principal en su Tu empresa). Cualquier valor escrito en el .env gana sobre esto, para
 # darle a un cliente algo distinto a su plan.
 PLANES = {
     "basico": {"IMAGES_PER_MONTH": "0", "MESSAGES_PER_MONTH": "1500", "POSTS_PER_MONTH": "0"},  # Asistente virtual

@@ -1,4 +1,4 @@
-"""Cotizaciones, pasar a humano y pausa cuando contesta el dueño."""
+"""Pasar a humano y pausa cuando contesta el dueño (las cotizaciones, en test_cotizacion.py)."""
 import hashlib
 import hmac
 import json
@@ -9,47 +9,14 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from igbot.cuenta import cuenta  # noqa: E402
 import app as bot  # noqa: E402
-from igbot import catalog, config, tools  # noqa: E402
+from igbot import config, tools  # noqa: E402
 from igbot.store import Store  # noqa: E402
-from test_tools import NOW, FakeGoogle, run, text  # noqa: E402
+from test_tools import NOW, FakeGoogle, run  # noqa: E402
 
 
-class FakeInstagram:
-    def __init__(self):
-        self.files = []
-
-    async def send_file(self, user_id, url):
-        self.files.append((user_id, url))
-
-
-def test_precios_salen_del_catalogo():
-    q = catalog.quote("community", "anual", 2)
-    # Sin instalación ni mes gratis: el primer pago ya es el servicio,
-    # 10 mensualidades de 79 + 2 bloques x 15 x 10 meses
-    assert q.primer_pago == q.recurrente == 790 + 300
-    assert not any("Instalación" in c for c, _ in q.lineas)
-    assert "Después: US$1,090 + IVA al año" in q.texto()
-    q = catalog.quote("basico")
-    assert (q.primer_pago, q.recurrente) == (49, 49)
-    # También por nombre
-    assert catalog.quote("Community Manager").paquete == "community"
-    assert catalog.quote("Asistente virtual").paquete == "basico"
-    with pytest.raises(ValueError):
-        catalog.quote("pro_crm")  # ya no existe
-    with pytest.raises(ValueError):
-        catalog.quote("community", "semanal")
-    with pytest.raises(ValueError):
-        catalog.quote("community", "mensual", 99)
-
-
-def test_el_prompt_lleva_el_catalogo(monkeypatch):
+def test_el_prompt_ya_no_trae_un_catalogo_de_archivo():
     prompt = bot.agent.system_prompt()
-    assert "US$79 + IVA al mes" in prompt and "sin costo de instalación" in prompt and "antro, bar o restaurante:" in prompt
-    assert "Pro CRM" not in prompt and "Primer mes gratis" not in prompt
-    assert "nortex" not in prompt.lower()  # el vendedor no manda a nadie a la cuenta de Nortex
-    cat = {**catalog.load(), "demo": {"giros": {"gimnasio": "horarios y membresías"}}}
-    monkeypatch.setattr(catalog, "load", lambda: cat)
-    assert "gimnasio: horarios y membresías" in bot.agent.system_prompt()
+    assert "<catalogo>" not in prompt and "nortex" not in prompt.lower()
 
 
 @pytest.fixture
@@ -65,62 +32,11 @@ def sales(monkeypatch, tmp_path):
         store = Store(":memory:")
         await store.open()
         await store.add_incoming("ana", "m1", "mi correo es ana@mail.com")
-        google, ig, state = FakeGoogle(), FakeInstagram(), {}
-        all_tools = tools.quote_tools(store, google, ig, "ana", state) + tools.human_tools(
-            store, google, "ana", state
-        )
-        return store, google, ig, state, {t.name: t.handler for t in all_tools}
+        google, state = FakeGoogle(), {}
+        all_tools = tools.human_tools(store, google, "ana", state)
+        return store, google, None, state, {t.name: t.handler for t in all_tools}
 
     return make
-
-
-def test_cotizacion_por_correo_y_dm(sales, tmp_path):
-    async def main():
-        store, google, ig, state, t = await sales()
-        args = {"paquete": "community", "pago": "mensual", "bloques_extra": 0, "nombre": "Ana", "empresa": "",
-                "canal": "ambos"}
-
-        r = await t["enviar_cotizacion"]({**args, "email": "otra@mail.com"})
-        assert r.get("is_error") and not google.sent  # correo que no escribió
-
-        r = await t["enviar_cotizacion"]({**args, "email": "ana@mail.com"})
-        assert "COT-0001" in text(r) and "Primer pago: US$79 + IVA" in text(r)
-        assert google.sent == [("yo@gmail.com", "ana@mail.com", "copia@gmail.com", google.sent[0][3])]
-        name, pdf = google.attachments[0]
-        assert name == "Cotizacion-COT-0001.pdf" and pdf.startswith(b"%PDF")
-        user, url = ig.files[0]
-        token = url.rsplit("/", 1)[1].removesuffix(".pdf")
-        assert user == "ana" and (tmp_path / f"{token}.pdf").read_bytes() == pdf
-        assert state["acted"]
-        await store.close()
-        return token
-
-    token = run(main())
-    with TestClient(bot.app) as client:
-        assert client.get(f"/cotizaciones/{token}.pdf").content.startswith(b"%PDF")
-        assert client.get("/cotizaciones/no-existe-este-archivo-xx.pdf").status_code == 404
-        assert client.get("/cotizaciones/..%2F..%2Fbot.pdf").status_code == 404
-
-
-def test_cotizacion_solo_por_el_chat_sin_correo(sales, tmp_path):
-    async def main():
-        store, google, ig, state, t = await sales()
-        args = {"paquete": "basico", "pago": "anual", "bloques_extra": 0, "nombre": "", "empresa": ""}
-
-        r = await t["enviar_cotizacion"]({**args, "canal": "correo", "email": ""})
-        assert r.get("is_error") and "correo" in text(r)  # por correo sin correo: lo pide
-        r = await t["enviar_cotizacion"]({**args, "canal": "whatsapp", "email": ""})
-        assert r.get("is_error")
-
-        r = await t["enviar_cotizacion"]({**args, "canal": "chat", "email": ""})
-        assert "COT-0001" in text(r) and "por este chat" in text(r)
-        assert not google.sent and len(ig.files) == 1
-        token = ig.files[0][1].rsplit("/", 1)[1].removesuffix(".pdf")
-        assert (tmp_path / f"{token}.pdf").read_bytes().startswith(b"%PDF")
-        assert state["acted"]
-        await store.close()
-
-    run(main())
 
 
 def test_pasar_a_humano_pausa_y_avisa(sales):

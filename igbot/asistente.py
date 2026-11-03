@@ -19,7 +19,7 @@ from html import escape
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from . import ajustes, botones, catalogo_chat, empresa, marco, panel, resultados, seguimiento
+from . import ajustes, botones, catalogo_chat, cotizacion, empresa, marco, panel, resultados, seguimiento
 from .cuenta import Cuenta
 
 log = logging.getLogger("igbot.asistente")
@@ -343,7 +343,7 @@ def _escribe(perfil: dict) -> str:
             + muestra + _pie("escribe"))
 
 
-def _reglas(perfil: dict, preguntas: list[str]) -> str:
+def _reglas(perfil: dict, preguntas: list[str], cotizables: int) -> str:
     activas = reglas_de(perfil)
     filas = ('<div class="as-fila"><span><b>Nunca inventa datos <em>Siempre activa</em></b>'
              "<small>Si no sabe un precio o un dato, lo dice y ofrece pasar con una persona.</small></span>"
@@ -362,7 +362,8 @@ def _reglas(perfil: dict, preguntas: list[str]) -> str:
             # Las instrucciones libres de antes no se pierden: aquí siguen.
             + _opcional("instrucciones", "Algo más que deba saber", "",
                         "Ej. Saluda por su nombre y siempre invita a visitar la tienda.", extra, panel.MAX_INSTRUCCIONES)
-            + "</div>" + _productos_en_chat(perfil) + _botones_inicio(preguntas) + seguimiento.campos(perfil)
+            + "</div>" + _productos_en_chat(perfil) + cotizacion.campos(perfil, cotizables)
+            + _botones_inicio(preguntas) + seguimiento.campos(perfil)
             + _pie("reglas"))
 
 
@@ -475,7 +476,7 @@ async def _resumen(c: Cuenta, perfil: dict) -> str:
             + caja("Reglas y límites", "reglas",
                    ["Nunca inventa datos"] + [t for k, t, *_ in REGLAS if activas[k]]
                    + [f"No debe: {perfil['no_hacer'][:80]}" if perfil.get("no_hacer") else ""]
-                   + [_resumen_productos(perfil), _resumen_botones(await botones.de(c.store) or []),
+                   + [_resumen_productos(perfil), cotizacion.resumen(perfil), _resumen_botones(await botones.de(c.store) or []),
                       seguimiento.resumen(perfil)])
             + caja("Tu equipo", "equipo", [
                 "Pasa a tu equipo: " + ", ".join(t.lower() for k, t, *_ in CASOS if pases(perfil)[k]["on"])
@@ -504,7 +505,8 @@ async def pagina(c: Cuenta, paso: str = "", aviso: str = "", nota: str = "", per
     elif paso == "escribe":
         cuerpo = _escribe(perfil)
     elif paso == "reglas":
-        cuerpo = _reglas(perfil, await botones.de(c.store) or [])
+        cuerpo = _reglas(perfil, await botones.de(c.store) or [],
+                         len(cotizacion.cotizables(await empresa.productos(c))))
     elif paso == "equipo":
         cuerpo = _equipo(c, perfil)
     else:
@@ -516,7 +518,7 @@ async def pagina(c: Cuenta, paso: str = "", aviso: str = "", nota: str = "", per
                   "Siguiente</button>"
                   f'<input type="hidden" name="paso" value="{paso}">{cuerpo}</form>')
     return marco.pagina(
-        f"<style>{ESTILO}{seguimiento.ESTILO}</style>"
+        f"<style>{ESTILO}{seguimiento.ESTILO}{cotizacion.ESTILO}</style>"
         + await marco.menu_de(c, "asistente", sub="configura")
         + marco.encabezado("Tu asistente · Configura")
         + '<main class="as-main"><div class="contenedor">'
@@ -567,6 +569,8 @@ async def guardar(request: Request, c: marco.Formulario):
         datos["reglas"] = {k: f.get(f"r_{k}") == "1" for k, *_ in REGLAS}
         if f.get("cc") == "1":
             datos["catalogo_chat"] = {k: f.get(f"cc_{k}") == "1" for k, *_ in catalogo_chat.OPCIONES}
+        if f.get("q") == "1":
+            datos["cotizacion"] = cotizacion.del_form(f)
         datos["no_hacer"] = _texto(f, "no_hacer", MAX_TEXTO)
         datos["instrucciones"] = _texto(f, "instrucciones", panel.MAX_INSTRUCCIONES)
         datos["seguimiento"] = seguimiento.del_form(f)

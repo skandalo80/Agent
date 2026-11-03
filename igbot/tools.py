@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 
 from claude_agent_sdk import create_sdk_mcp_server, tool
 
-from . import catalog, config, conversiones_meta, fechas
+from . import config, conversiones_meta, fechas
 from .cuenta import cuenta
 from .google import Google
 from .instagram import Instagram
@@ -255,9 +255,6 @@ def workspace_tools(
     return [ver_disponibilidad, agendar_reunion, mis_reuniones, cancelar_reunion] + ([enviar_correo] if correo else [])
 
 
-QUOTE_ARGS = {"paquete": str, "pago": str, "bloques_extra": int}
-
-
 def quote_url(token: str) -> str:
     """Link público del PDF; lo sirve cualquier proceso (todas las cuentas comparten data/)."""
     slug = f"{cuenta().slug}/" if cuenta().slug else ""
@@ -314,73 +311,6 @@ async def deliver_quote(
         except Exception:
             log.exception("No se pudo mandar el PDF por DM a %s", user_id)
     return " y ".join(sent)
-
-
-def quote_tools(
-    store: Store, google: Google, instagram: Instagram | None, user_id: str, state: dict | None = None
-) -> list:
-    state = state if state is not None else {}
-
-    @tool(
-        "cotizar",
-        "Calcula el precio exacto de un paquete del catálogo para mostrárselo a la persona. paquete:"
-        " la clave del catálogo; pago: 'mensual' o 'anual'; bloques_extra: bloques de respuestas"
-        " extra (0 si no pidió más). Usa SIEMPRE esto para dar precios; nunca hagas cuentas tú.",
-        QUOTE_ARGS,
-    )
-    async def cotizar(args):
-        try:
-            q = catalog.quote(args["paquete"], args["pago"], int(args["bloques_extra"]))
-        except ValueError as e:
-            return error(str(e))
-        return ok(q.texto())
-
-    @tool(
-        "enviar_cotizacion",
-        "Genera la cotización formal en PDF (con folio) y se la manda a la persona por este DM,"
-        " por correo (con copia al dueño) o por ambos, según lo que ella eligió. Antes confirma"
-        " con ella el paquete y la forma de pago. " + CANAL_DOC + " nombre y empresa son"
-        " opcionales (cadena vacía si no los dio).",
-        {**QUOTE_ARGS, "canal": str, "email": str, "nombre": str, "empresa": str},
-    )
-    async def enviar_cotizacion(args):
-        canal, email = args.get("canal", "").strip().lower(), args.get("email", "").strip()
-        if problem := await check_quote_delivery(store, instagram, user_id, canal, email):
-            return error(problem)
-        try:
-            q = catalog.quote(args["paquete"], args["pago"], int(args["bloques_extra"]))
-        except ValueError as e:
-            return error(str(e))
-
-        nombre, empresa = args["nombre"].strip()[:80], args["empresa"].strip()[:80]
-        token = secrets.token_urlsafe(16)
-        number = await store.add_quote(user_id, token, q.paquete, q.pago, q.bloques_extra, q.primer_pago, email)
-        folio = f"COT-{number:04d}"
-        data = catalog.pdf(q, folio, nombre, empresa, email, now().date())
-        folder = Path(cuenta().quotes_dir)
-        folder.mkdir(parents=True, exist_ok=True)
-        (folder / f"{token}.pdf").write_bytes(data)
-
-        neg = catalog.load()["negocio"]
-        subject = f"Cotización {folio} · {neg['nombre']}"
-        body = (
-            f"Hola{' ' + nombre if nombre else ''}:\n\n"
-            f"Te comparto la cotización {folio} que platicamos por Instagram (va en el PDF adjunto).\n\n"
-            f"{q.texto()}\n\n"
-            f"Es válida por {catalog.load()['vigencia_dias']} días. Si tienes dudas, contesta este"
-            f" correo o escríbenos a {neg['instagram']}.\n\nSaludos,\n{neg['nombre']}"
-        )
-        sent = await deliver_quote(
-            store, google, instagram, user_id, canal, email, folio, token, data, subject, body,
-            cuenta().mail_from_name,
-        )
-        if not sent:
-            return error("No se pudo mandar la cotización en este momento. Ofrece intentarlo en un rato.")
-        state["acted"] = True
-        await store.avanzar_etapa(user_id, "cotizo")  # su etapa en Conversaciones
-        return ok(f"Cotización {folio} enviada {sent}.\n{q.texto()}")
-
-    return [cotizar, enviar_cotizacion]
 
 
 # Por qué el asistente pasa un chat a una persona: sale como etiqueta en Conversaciones.
@@ -535,7 +465,5 @@ def build(
     if google and cuenta().google_tools:
         if not agenda:
             tools += workspace_tools(store, google, user_id, state)
-        if catalog.available():
-            tools += quote_tools(store, google, instagram, user_id, state)
     server = create_sdk_mcp_server("bot", tools=tools)
     return server, [f"mcp__bot__{t.name}" for t in tools]

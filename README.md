@@ -22,9 +22,8 @@ Instagram → Caddy (HTTPS) → POST /webhook (app.py, puerto 8001)
 | `igbot/store.py` | Toda la memoria en SQLite (`data/bot.db`). Es el único archivo a cambiar si algún día se pasa a Postgres |
 | `igbot/agent.py` | Arma el contexto y llama a Claude |
 | `igbot/tools.py` | Herramientas del agente y sus reglas: `recordar`, `olvidar`, `ver_disponibilidad`, `agendar_reunion`, `mis_reuniones`, `cancelar_reunion`, `enviar_correo`, `cotizar`, `enviar_cotizacion`, `pasar_a_humano`, `pregunta_sin_dato`, y en la tienda `ver_productos`, `ver_existencias`, `cotizar_pedido` |
-| `igbot/catalog.py` | Lee el catálogo, calcula las cotizaciones y arma el PDF |
+| `igbot/cotizacion.py` | Cotización en PDF con los productos de Tu empresa (se enciende en el panel) |
 | `igbot/pdf_marca.py` | Diseño de los PDFs de cotización (Inter, negro y grafito, un acento en `negocio.color_acento`); las fuentes están en `fonts/` |
-| `negocio/catalogo.yaml` | Paquetes, precios y condiciones. Edítalo y reinicia para cambiar precios |
 | `igbot/google.py` | Llamadas a Google Calendar y Gmail |
 | `igbot/instagram.py` | Envía DMs (parte los de más de 1000 caracteres) y renueva el token cada semana |
 | `clientes/<nombre>/` | `.env` y prompt generado de cada cliente (no se suben a GitHub) |
@@ -37,7 +36,7 @@ Instagram → Caddy (HTTPS) → POST /webhook (app.py, puerto 8001)
 - Solo agenda dentro del horario de atención, con anticipación mínima, en huecos libres y con un máximo de reuniones por persona.
 - Solo puede ver y cancelar las reuniones que agendó esa misma persona. De tu calendario solo ve libre/ocupado, nunca el contenido de tus eventos.
 - Máximo de correos por persona al día (las cotizaciones cuentan como correo).
-- Los precios los calcula el código desde `negocio/catalogo.yaml`; Claude solo elige paquete y opciones. Los PDFs se sirven con un nombre aleatorio que no se puede adivinar.
+- Los precios de las cotizaciones los calcula el código con los productos de Tu empresa; Claude solo elige productos y cantidades. Los PDFs se sirven con un nombre aleatorio que no se puede adivinar.
 
 **Si se reinicia.** Los DMs sin contestar quedan como pendientes en la base y se contestan al arrancar. Si Meta reenvía un DM, se ignora (se reconoce por su id).
 
@@ -93,7 +92,7 @@ sudo systemctl restart igbot
 
 ## Varias cuentas de Instagram
 
-Un solo proceso (`igbot`, puerto 8001) atiende todas las cuentas sobre el mismo código. La principal (@skandar.online, el vendedor) usa el `.env`; cada cliente tiene su carpeta `clientes/<nombre>/` (prompt `system.md`, `catalogo.yaml` opcional y `.env` con su token) y sus datos en `data/<nombre>/`. Las cuentas de clientes que se atienden se listan en el `.env` principal:
+Un solo proceso (`igbot`, puerto 8001) atiende todas las cuentas sobre el mismo código. La principal (@skandar.online, el vendedor) usa el `.env`; cada cliente tiene su carpeta `clientes/<nombre>/` (su `.env` con el token y el `system.md` que genera el panel) y sus datos en `data/<nombre>/`. Las cuentas de clientes que se atienden se listan en el `.env` principal:
 
 ```
 CUENTAS=cafelunar,otra_cuenta
