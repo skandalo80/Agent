@@ -253,7 +253,8 @@ def prompt_infografia(idea: str, texto: "Texto", marca: "Marca | None" = None, h
 
 def prompt_anuncio(idea: str, texto: "Texto", marca: "Marca | None" = None, historia: bool = False,
                    con_producto: bool = False) -> str:
-    """Campañas de producto: un anuncio limpio, de marca premium (una sola idea, mucho aire, el producto real)."""
+    """Campañas de producto: un anuncio con una idea creativa (la dirección de arte manda, incluidos los recursos
+    visuales que pida el estilo de la marca) y el producto real tal cual."""
     m = marca or Marca()
     lineas = [f'- Headline (largest, the only big text): "{texto.titulo}"'] if texto.titulo else []
     if texto.subtitulo:
@@ -262,23 +263,21 @@ def prompt_anuncio(idea: str, texto: "Texto", marca: "Marca | None" = None, hist
     recorte = (f"{RECORTE_HISTORIA} Keep all text inside the central area." if historia
                else f"{RECORTE} Keep all text inside the central 4:5 area.")
     producto = ("The product in the reference photos is the hero: reproduce it exactly as it is (shape, colors,"
-                " label, proportions), photographed for real, never redrawn or replaced by a similar one.\n"
+                " label, screen, proportions), photographed for real, never redrawn or replaced by a similar one.\n"
                 if con_producto else "")
     return (
-        f"Design a clean, premium advertising {que}, the kind a top brand would publish: one single message,"
-        " readable in two seconds, not an infographic and not a busy flyer.\n"
+        f"Design a finished advertising {que} built on one creative idea, the kind an art director would sign:"
+        " one message, understood in two seconds, with character.\n"
         f"{recorte}\n{producto}\n"
-        f"Art direction: {idea.strip()}\n\n"
-        "Layout rules: a clear grid, generous empty space (about a third of the canvas left calm and empty),"
-        " one focal point, aligned text, nothing crowded. No icons, no badges, no bursts, no splashes, no flying"
-        " objects, no extra decorations.\n"
+        f"Art direction (follow it literally, including the visual devices it names such as frames, stickers,"
+        f" labels, characters or textures; add nothing it does not call for): {idea.strip()}\n\n"
+        "Layout: one focal point, clear hierarchy, aligned text, breathing room around the message.\n"
         "Write exactly these texts in the design, in Spanish, spelled exactly as given (keep every accent and"
         " punctuation mark), and no other words, letters or numbers:\n" + "\n".join(lineas) + "\n\n"
-        f"Typography: elegant editorial headline in the spirit of the {m.fuente} typeface, strong size contrast"
+        f"Typography: a headline with character in the spirit of the {m.fuente} typeface, strong size contrast"
         " between the headline and the small line.\n"
-        f"Brand colors, used with restraint (at most two plus neutrals): main {m.principal}, accent {m.acento},"
-        f" background {m.fondo}.\n"
-        "Realistic, believable photography with soft, natural light. No logos, watermarks or fake buttons." + _esquina(m)
+        f"Brand colors, used with intent: main {m.principal}, accent {m.acento}, background {m.fondo}.\n"
+        "No logos, watermarks or fake buttons." + _esquina(m)
     )
 
 

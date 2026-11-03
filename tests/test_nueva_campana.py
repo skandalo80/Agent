@@ -1043,13 +1043,14 @@ def test_campana_de_producto_con_anuncios(cliente, monkeypatch):
     client.portal.call(c.store.set, "campanas", json.dumps([camp]))
     client.post(campanas.url_de(camp), headers=ORIGEN, data={"accion": "generar", "k": str(p["k"])})
     prompt, fotos = proveedor.llamadas[-1]
-    assert "clean, premium advertising" in prompt and "infographic-style" not in prompt and "No icons" in prompt
+    assert "built on one creative idea" in prompt and "infographic-style" not in prompt and "No icons" not in prompt
     assert f'Headline (largest, the only big text): "{p["titulo"]}"' in prompt
     assert "reproduce it exactly" in prompt and len(fotos) == 1 and proveedor.fiel
-    # Como Holo: de cada anuncio salen 3 versiones con composiciones distintas; la primera queda en el post, las
-    # tres se ven en la ventana y solo una cuenta en el cupo.
+    assert "Brand visual style: " in prompt  # el estilo de Tu marca manda sobre los recursos visuales
+    # Como Holo: de cada anuncio salen 3 versiones; sin conceptos de Claude (el dueño escribió el prompt), son
+    # composiciones distintas del mismo prompt. La primera queda en el post, las tres se ven y solo una cuenta.
     ultimos = [l[0] for l in proveedor.llamadas[-3:]]
-    assert all("clean, premium advertising" in x for x in ultimos) and len({x for x in ultimos}) == 3
+    assert all("built on one creative idea" in x for x in ultimos) and len({x for x in ultimos}) == 3
     assert any("front view" in x for x in ultimos) and any("close-up" in x for x in ultimos)
     camp = leer(client, c)
     p = camp["posts"][0]
@@ -1072,6 +1073,22 @@ def test_campana_de_producto_con_anuncios(cliente, monkeypatch):
         assert client.portal.call(imagenes.usadas, c.store) == (1, 0)
     r = client.post(campanas.url_de(camp), headers=ORIGEN, data={"accion": "elegir:999", "k": str(p["k"])})
     assert "Esa versión ya no está." in r.text
+    # Con los conceptos que escribió Claude (p["versiones"]), cada versión es su propio prompt, sin ángulos.
+    camp = leer(client, c)
+    p = camp["posts"][0]
+    p["versiones"] = ["Concepto A: el latte como amanecer", "Concepto B: antes y después del café",
+                      "Concepto C: el vaso dentro de un marco retro"]
+    p["prompt"] = p["versiones"][0]
+    client.portal.call(c.store.set, "campanas", json.dumps([camp]))
+    client.post(campanas.url_de(camp), headers=ORIGEN, data={"accion": "generar", "k": str(p["k"])})
+    ultimos = [l[0] for l in proveedor.llamadas[-3:]]
+    assert {re.search(r"Concepto [ABC]", x).group() for x in ultimos} == {"Concepto A", "Concepto B", "Concepto C"}
+    assert not any("front view" in x for x in ultimos) and all("reproduce it exactly" in x for x in ultimos)
+    # Si el dueño edita el prompt, sus palabras mandan y las versiones vuelven a ser ángulos.
+    client.post(campanas.url_de(camp), headers=ORIGEN, data={"accion": "generar", "k": str(p["k"]),
+                                                               "prompt": "Mi propio prompt"})
+    ultimos = [l[0] for l in proveedor.llamadas[-3:]]
+    assert all("Mi propio prompt" in x for x in ultimos) and any("front view" in x for x in ultimos)
     # Si solo sale una versión (las otras fallan), no hay opciones y el post tiene su imagen.
     antes = len(proveedor.llamadas)
 
@@ -1086,8 +1103,8 @@ def test_campana_de_producto_con_anuncios(cliente, monkeypatch):
     assert len(proveedor.llamadas) == antes + 3
     p = leer(client, c)["posts"][0]
     assert "opciones" not in p and client.portal.call(c.store.post, p["post_id"])["media_ids"]
-    with usar(c):  # volver a generar cuenta una imagen más, como siempre; las que fallaron no
-        assert client.portal.call(imagenes.usadas, c.store) == (2, 0)
+    with usar(c):  # volver a generar cuenta una imagen más cada vez, como siempre; las que fallaron no
+        assert client.portal.call(imagenes.usadas, c.store) == (4, 0)
 
 
 def test_el_anuncio_no_entra_en_las_campanas_de_contenido():
@@ -1675,3 +1692,33 @@ def test_fechas_comerciales_e_inventario_de_shopify_en_la_campana(cliente, monke
     client.portal.call(c.store.set, tienda_shopify.CLAVE, "")
     assert client.portal.call(tienda_shopify.inventario_de, c, "Latte") == ""
     assert client.portal.call(tienda_shopify.mas_vendidos, c, [otro, PRODUCTO]) == ["p1", "p2"]
+
+
+def test_los_prompts_del_anuncio_traen_sus_versiones(cliente, monkeypatch):
+    """prompts_de guarda los conceptos de Claude en p["versiones"] (el primero es el prompt) solo en los anuncios,
+    y el sistema le dice cuántas versiones escribir."""
+    client, c, *_ = cliente
+    import app as bot
+    sistemas = []
+
+    async def fake(prompt, system, mcp=None, allowed=(), max_turns=5, model=None):
+        sistemas.append(system)
+        return json.dumps({"prompts": [{"n": 1, "prompt": "Concepto A", "versiones": ["Concepto A", "Concepto B",
+                                                                                       "Concepto C", "Concepto D"]},
+                                       {"n": 2, "prompt": "Foto normal", "versiones": ["Foto normal", "Otra"]}]})
+
+    monkeypatch.setattr(bot.agent, "run_claude", fake)
+    monkeypatch.setattr(campanas.config, "OPCIONES_ANUNCIO", 3)
+    foto = {"funcion": "f", "protagonista": "p", "escenario": "e", "accion": "a", "encuadre": "x", "luz": "l",
+            "estilo": "Minimalista", "color": "Sutil"}
+    camp = {"id": 1, "brief": {"titulo": "B", "direccion_visual": "luz suave"}, "producto": "Latte", "producto_id": "p1",
+            "posts": [{"k": 1, "formato": "anuncio", "tipo": "producto", "idea": "i1", "titulo": "T", "subtitulo": "",
+                       "caption": "c", "dia": "2099-01-05", "hora": "09:00", "plan": {"foto": foto}},
+                      {"k": 2, "formato": "foto", "tipo": "producto", "idea": "i2", "titulo": "T2", "caption": "c",
+                       "dia": "2099-01-06", "hora": "09:00", "plan": {"foto": foto}}]}
+    with usar(c):
+        client.portal.call(campanas.prompts_de, c, camp, camp["posts"], {})
+    a, b = camp["posts"]
+    assert a["prompt"] == "Concepto A" and a["versiones"] == ["Concepto A", "Concepto B", "Concepto C"]
+    assert b["prompt"] == "Foto normal" and "versiones" not in b
+    assert '"versiones": 3 prompts completos' in sistemas[-1] and "__VERSIONES__" not in sistemas[-1]
