@@ -19,7 +19,7 @@ from html import escape
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from . import ajustes, empresa, marco, panel, seguimiento
+from . import ajustes, catalogo_chat, empresa, marco, panel, seguimiento
 from .cuenta import Cuenta
 
 log = logging.getLogger("igbot.asistente")
@@ -362,7 +362,25 @@ def _reglas(perfil: dict) -> str:
             # Las instrucciones libres de antes no se pierden: aquí siguen.
             + _opcional("instrucciones", "Algo más que deba saber", "",
                         "Ej. Saluda por su nombre y siempre invita a visitar la tienda.", extra, panel.MAX_INSTRUCCIONES)
-            + "</div>" + seguimiento.campos(perfil) + _pie("reglas"))
+            + "</div>" + _productos_en_chat(perfil) + seguimiento.campos(perfil) + _pie("reglas"))
+
+
+def _productos_en_chat(perfil: dict) -> str:
+    """Las tarjetas de productos en el chat (catalogo_chat): qué se muestra y qué botones llevan."""
+    activas = catalogo_chat.opciones_de(perfil)
+    filas = "".join(f'<label class="as-fila"><span><b>{titulo}</b><small>{ayuda}</small></span>'
+                    f'<input type="checkbox" class="as-sw" name="cc_{k}" value="1"{" checked" if activas[k] else ""}>'
+                    "</label>" for k, titulo, ayuda in catalogo_chat.OPCIONES)
+    return ('<div class="as-caja"><input type="hidden" name="cc" value="1">'
+            f'<h3 class="as-pases-t">Tus productos en el chat</h3>{filas}</div>')
+
+
+def _resumen_productos(perfil: dict) -> str:
+    o = catalogo_chat.opciones_de(perfil)
+    if not o["tarjetas"]:
+        return "No muestra tus productos en tarjetas"
+    botones = [n for k, n in (("tienda", "Ver en la tienda"), ("quiero", "Lo quiero"), ("fotos", "Ver más fotos")) if o[k]]
+    return "Muestra tus productos en tarjetas" + (f" con {', '.join(botones)}" if botones else "")
 
 
 def _tabla_pases(perfil: dict, pie: str = "") -> str:
@@ -439,8 +457,8 @@ async def _resumen(c: Cuenta, perfil: dict) -> str:
                 f"Tu toque: {perfil['toque'][:80]}" if perfil.get("toque") else ""])
             + caja("Reglas y límites", "reglas",
                    ["Nunca inventa datos"] + [t for k, t, *_ in REGLAS if activas[k]]
-                   + [f"No debe: {perfil['no_hacer'][:80]}" if perfil.get("no_hacer") else "",
-                      seguimiento.resumen(perfil)])
+                   + [f"No debe: {perfil['no_hacer'][:80]}" if perfil.get("no_hacer") else ""]
+                   + [_resumen_productos(perfil), seguimiento.resumen(perfil)])
             + caja("Tu equipo", "equipo", [
                 "Pasa a tu equipo: " + ", ".join(t.lower() for k, t, *_ in CASOS if pases(perfil)[k]["on"])
                 if any(x["on"] for x in pases(perfil).values()) else "No pasa conversaciones a tu equipo",
@@ -528,6 +546,8 @@ async def guardar(request: Request, c: marco.Formulario):
                 datos[campo] = f[campo]
     elif paso == "reglas":
         datos["reglas"] = {k: f.get(f"r_{k}") == "1" for k, *_ in REGLAS}
+        if f.get("cc") == "1":
+            datos["catalogo_chat"] = {k: f.get(f"cc_{k}") == "1" for k, *_ in catalogo_chat.OPCIONES}
         datos["no_hacer"] = _texto(f, "no_hacer", MAX_TEXTO)
         datos["instrucciones"] = _texto(f, "instrucciones", panel.MAX_INSTRUCCIONES)
         datos["seguimiento"] = seguimiento.del_form(f)

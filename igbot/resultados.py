@@ -13,6 +13,8 @@ o 30 días:
   spam ocultado, menciones, de qué tipo son (los de Configura tus interacciones), por día,
   los posts con más comentarios y las palabras clave más usadas. Para la foto y el texto de
   esos posts sí se llama a Instagram (guardado POST_INFO_SEGUNDOS).
+- Ventas por post (todos los planes): las ventas de chats contadas al post o historia por el que llegó ese
+  chat (comentario contestado por DM o respuesta a historia; tabla origenes_chat), con el camino que siguieron.
 
 Solo lee lo que ya está en la base de la cuenta: no llama a Instagram ni a
 Claude. Los números se guardan CACHE_SEGUNDOS en memoria para que recargar la
@@ -400,7 +402,7 @@ def titulo_periodo(ini: date, fin: date) -> str:
 
 
 VISTAS = {"instagram": "Instagram", "conversaciones": "Conversaciones", "comentarios": "Comentarios",
-          "anuncios": "Anuncios"}
+          "ventas": "Ventas por post", "anuncios": "Anuncios"}
 
 
 def vistas_de(c: Cuenta) -> dict[str, str]:
@@ -501,6 +503,8 @@ async def barra(c: Cuenta, rango: str, fin: date, hoy: date, vista: str, cada: s
            if vista == "anuncios" else
            '<span><i class="punto"></i>Comentarios: se actualizan cada 10 minutos</span>'
            if vista == "comentarios" else
+           '<span><i class="punto"></i>Ventas: pedidos de tu tienda, pagos con link y las que marcaste</span>'
+           if vista == "ventas" else
            '<span><i class="punto"></i>Mensajes: se actualizan cada 10 minutos</span>')
         + ("" if vista not in VISTAS_PDF else descargas(rango, fin, hoy, vista, cada)) + "</div></div>"
     )
@@ -843,6 +847,105 @@ async def anuncios_html(c: Cuenta, ini: date, fin: date) -> str:
     return aviso + kpis + tabla
 
 
+# --- Ventas por post: cuánto vendió cada post o historia y por qué camino llegaron ---
+
+MAX_POSTS_VENTAS = 10
+
+
+def camino(tipo: str, detalle: str) -> str:
+    """Cómo llegó el chat desde la publicación, en palabras del dueño."""
+    if tipo == "historia":
+        return "respuesta a tu historia"
+    clave = detalle.split("; ")[0].strip()
+    return f"comentario «{escape(clave)}» → DM" if clave else "comentario → DM"
+
+
+async def datos_publicacion(c: Cuenta, media_id: str, tipo: str) -> dict:
+    """Foto, título, fecha, tipo, enlace y alcance de un post o historia. Las historias dejan de estar en la API a
+    las 24 h: entonces sale lo que guardamos al publicarla (si la publicó la plataforma)."""
+    x = await info_post(c, media_id)
+    propio = await c.store.post_de_instagram(media_id) if not x.get("caption") else None
+    cuando = None
+    if x.get("fecha"):
+        try:
+            cuando = datetime.fromisoformat(x["fecha"].replace("+0000", "+00:00")).astimezone(fechas.zona(c))
+        except ValueError:
+            pass
+    elif propio:
+        cuando = fechas.en_zona(c, propio["publish_at"] or propio["created_at"])
+    texto = (x.get("caption") or (propio or {}).get("caption") or "").strip().split("\n")[0]
+    insights = await c.store.insights_post(media_id)
+    nombre = "Historia" if tipo == "historia" else "Reel" if x.get("tipo") == "REELS" else "Post"
+    return {"nombre": nombre, "titulo": texto[:60] + ("…" if len(texto) > 60 else ""), "fecha": cuando,
+            "imagen": x.get("imagen", ""), "enlace": x.get("permalink") or (propio or {}).get("permalink", ""),
+            "alcance": ((insights or (None, 0))[0] or {}).get("reach", 0)}
+
+
+def publicaciones(n: int) -> str:
+    return f"{n} publicación" if n == 1 else f"{n} publicaciones"
+
+
+def tarjeta_ventas(x: dict, p: dict, tope: tuple[float, int]) -> str:
+    """Una publicación: foto, qué es, cuánto vendió, por qué camino y su barra contra la que más vendió (por monto;
+    por número de ventas si ninguna trae monto)."""
+    foto = (f'<img src="{escape(p["imagen"])}" alt="" loading="lazy" referrerpolicy="no-referrer">'
+            if p["imagen"] else "")
+    if p["enlace"].startswith("https://"):
+        foto = f'<a href="{escape(p["enlace"])}" rel="noopener" title="Ver en Instagram">{foto}</a>'
+    linea = " · ".join(v for v in (f'{p["fecha"]:%d/%m}' if p["fecha"] else "",
+                                   f'{p["alcance"]:,} de alcance' if p["alcance"] else "") if v)
+    caminos = " · ".join(f"{camino(t, d)} ({n})" for (t, d), n in x["caminos"].most_common())
+    ancho = max((x["monto"] / tope[0] if tope[0] else x["ventas"] / tope[1]) * 100, 2)
+    titulo = f'{p["nombre"]}' + (f' · {escape(p["titulo"])}' if p["titulo"] else "")
+    return (f'<article class="tarjeta vp"><div class="vp-cab"><div class="vp-foto">{foto}</div>'
+            f'<div class="vp-que"><h3>{titulo}</h3><small>{linea}</small></div>'
+            f'<div class="vp-monto"><b>{dinero(x["monto"], x["moneda"]) if x["monto"] else x["ventas"]}</b>'
+            f'<small>{plural(x["ventas"], "venta")}</small></div></div>'
+            f'<p class="vp-por">Llegaron por: {caminos}</p>'
+            f'<div class="vp-barra"><i style="width:{ancho:.0f}%"></i></div></article>')
+
+
+async def ventas_html(c: Cuenta, ini: date, fin: date) -> str:
+    """Resultados > Ventas por post: las ventas de chats (pedidos de la tienda con el código del chat, pagos con link
+    y las marcadas a mano) contadas a la publicación por la que llegó ese chat: un comentario que tu asistente
+    contestó por DM o una respuesta a tu historia (la última en VENTAS_POST_DIAS antes de la venta)."""
+    desde = fechas.inicio_del_dia(c, ini)
+    hasta = fechas.inicio_del_dia(c, fin) + config.DIA
+    filas, todas = await c.store.ventas_por_publicacion(desde, hasta, config.VENTAS_POST_DIAS * config.DIA)
+    regla = (f"Cada venta de un chat se cuenta a la última publicación por la que llegó en los {config.VENTAS_POST_DIAS}"
+             " días antes de comprar: un comentario que tu asistente contestó por DM o una respuesta a tu historia."
+             " Suma los pedidos de tu tienda, los pagos con link y las ventas que marcas en Conversaciones.")
+    if not filas:
+        return ('<div class="tarjeta"><h2>Aún no hay ventas que vengan de un post en este periodo</h2>'
+                f'<p class="ayuda">{regla}</p><div class="acciones">'
+                '<a class="boton" href="/panel/interacciones">Configura tus interacciones</a></div></div>')
+    por: dict[str, dict] = {}
+    for f in filas:
+        x = por.setdefault(f["media_id"], {"tipo": f["tipo"], "ventas": 0, "monto": 0.0, "moneda": "",
+                                           "caminos": Counter()})
+        x["ventas"] += 1
+        x["monto"] += f["monto"]
+        x["moneda"] = x["moneda"] or f["moneda"]
+        x["caminos"][(f["tipo"], f["detalle"])] += 1
+    orden = sorted(por.items(), key=lambda kv: (kv[1]["monto"], kv[1]["ventas"]), reverse=True)
+    monto = sum(x["monto"] for x in por.values())
+    moneda = next((x["moneda"] for _, x in orden if x["moneda"]), "")
+    pct = round(len(filas) / todas["ventas"] * 100) if todas["ventas"] else 0
+    kpis = ('<div class="hoy kpis res-kpis">'
+            + kpi("Vendido desde tu contenido", dinero(monto, moneda))
+            + kpi("Ventas", f"{len(filas):,}", f"de {publicaciones(len(por))}")
+            + kpi("De tus ventas por chat", f"{pct}%", f'{len(filas)} de {todas["ventas"]}')
+            + "</div>")
+    tope = (max(x["monto"] for _, x in orden), max(x["ventas"] for _, x in orden))
+    tarjetas = []
+    for media_id, x in orden[:MAX_POSTS_VENTAS]:
+        tarjetas.append(tarjeta_ventas(x, await datos_publicacion(c, media_id, x["tipo"]), tope))
+    resto = len(orden) - MAX_POSTS_VENTAS
+    mas = (f'<p class="ayuda">Y {publicaciones(resto)} más con'
+           " ventas en este periodo.</p>" if resto > 0 else "")
+    return kpis + f'<div class="vp-lista">{"".join(tarjetas)}</div>{mas}<p class="ayuda">{regla}</p>'
+
+
 async def picos_de(c: Cuenta, d: dict) -> dict[date, str]:
     """{día: texto del post que salió ese día}, para explicar el pico de vistas."""
     zona = fechas.zona(c)
@@ -860,6 +963,8 @@ async def pagina(c: Cuenta, rango: str, fin: date | None = None, vista: str = "i
     cada = metricas.leer_cada(cada, int(rango))
     if vista == "anuncios":
         cuerpo = await anuncios_html(c, fin - timedelta(days=int(rango) - 1), fin)
+    elif vista == "ventas":
+        cuerpo = await ventas_html(c, fin - timedelta(days=int(rango) - 1), fin)
     elif vista == "comentarios":
         cuerpo = await comentarios_html(c, rango, fin)
     elif vista == "conversaciones":
