@@ -31,7 +31,7 @@ from fastapi import APIRouter
 from fastapi.responses import HTMLResponse, Response
 
 from . import anuncios_meta, config, fechas, marco, metricas
-from .comentarios import SPAM
+from .comentarios import SPAM, motivo_oculto
 from .cuenta import Cuenta
 
 router = APIRouter(prefix="/panel/resultados")
@@ -151,7 +151,7 @@ async def calcular(c: Cuenta, rango: str, fin: date | None = None) -> dict:
     }
     if c.imagenes_mes > 0:
         comentarios = await store.week_comments(since, until)
-        normales = [x for x in comentarios if x[0] != SPAM]
+        normales = [x for x in comentarios if not motivo_oculto(x[0])]
         datos.update(
             comentarios=len(normales),
             spam=len(comentarios) - len(normales),
@@ -595,7 +595,8 @@ def conversaciones_html(c: Cuenta, d: dict, cada: str = "dia") -> str:
 # Los tipos de Configura tus interacciones (interacciones.CASOS), con nombre corto para la gráfica.
 TIPOS_COMENTARIO = {
     "elogio": "Elogio", "pregunta": "Pregunta", "compra": "Quiere comprar", "queja": "Queja o crítica",
-    "etiqueta": "Etiqueta a un amigo", "emojis": "Solo emojis", "otro": "Otro",
+    "etiqueta": "Etiqueta a un amigo", "emojis": "Solo emojis", "ataque": "Insulto o ataque",
+    "otro": "Otro",
 }
 MENCION = "mencion"  # interacciones.mencion las guarda en comments con este user_id
 MAX_POSTS_COMENTARIOS = 5
@@ -617,7 +618,7 @@ async def numeros_comentarios(c: Cuenta, rango: str, fin: date) -> dict:
     filas = await c.store.comments_between(inicio.timestamp(), (inicio + timedelta(days=dias)).timestamp())
     menciones = [f for f in filas if f[0] == MENCION]
     todos = [f for f in filas if f[0] != MENCION]
-    normales = [f for f in todos if f[2] != SPAM]
+    normales = [f for f in todos if not motivo_oculto(f[2])]
     por_dia = [0] * dias
     tipos: dict[str, list[int]] = {}
     for _, _, matched, dm, publica, t in normales:
@@ -734,7 +735,7 @@ async def comentarios_html(c: Cuenta, rango: str, fin: date) -> str:
         + kpi("Contestados", f"{pct}%", f'{d["contestados"]} de {d["comentarios"]} por tu asistente')
         + kpi("Respuestas públicas", f'{d["publicas"]:,}', "en los comentarios")
         + kpi("Mensajes directos", f'{d["dms"]:,}', "enviados por un comentario")
-        + (kpi("Spam ocultado", f'{d["spam"]:,}') if d["spam"] else "")
+        + (kpi("Ocultados", f'{d["spam"]:,}', "spam e insultos") if d["spam"] else "")
         + (kpi("Menciones", f'{d["menciones"]:,}', "contestadas en su post") if d["menciones"] else "")
         + "</div>"
     )

@@ -119,6 +119,9 @@ class Pagina:
     async def hide_comment(self, comment_id: str) -> None:
         await self._graph("POST", comment_id, is_hidden="true")
 
+    async def show_comment(self, comment_id: str) -> None:
+        await self._graph("POST", comment_id, is_hidden="false")
+
     # --- avisos y publicar ---
 
     async def suscribir(self) -> None:

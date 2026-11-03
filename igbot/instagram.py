@@ -151,6 +151,10 @@ class Instagram:
     async def hide_comment(self, comment_id: str) -> None:
         await self._graph("POST", comment_id, hide="true")
 
+    async def show_comment(self, comment_id: str) -> None:
+        """Vuelve a mostrar un comentario que se ocultó."""
+        await self._graph("POST", comment_id, hide="false")
+
     async def set_ice_breakers(self, questions: list[str]) -> None:
         """Botones de inicio: preguntas que salen al abrir un chat nuevo (máximo 4)."""
         r = await self.http.post(

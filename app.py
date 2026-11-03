@@ -32,7 +32,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from igbot import (acceso, adjuntos, admin, agenda_google, agent, ajustes, anuncios_meta, asistente, botones, campanas,
                    catalogo_chat, cobros, comentarios, comprimir, conectar, config, contenido, conversaciones, empresa,
                    errores, facebook, historias, inicio, interacciones, lentitud, limites, marca, marco, metricas,
-                   nueva_campana, panel, reporte, resultados, salud, seguimiento,
+                   nueva_campana, ocultos, panel, reporte, resultados, salud, seguimiento,
                    semana, skandi, sugeridos, tienda_shopify, unavez)
 from igbot.cuenta import Cuenta, cargar, cuenta, de_carpeta, usar
 from igbot.dispatcher import Dispatcher
@@ -242,6 +242,10 @@ async def reporte_semanal(c: Cuenta) -> None:
         await reporte.tick(c.store, c.instagram, google)
 
 
+async def aviso_de_ocultos(c: Cuenta) -> None:
+    await ocultos.tick(c, google)  # el correo del día con los comentarios que se ocultaron
+
+
 async def sugeridos_del_lunes(c: Cuenta) -> None:
     await sugeridos.tick(c)  # más opciones de Objetivo y Mensaje para Crear campaña
 
@@ -311,6 +315,7 @@ def fondo() -> list[asyncio.Task]:
         asyncio.create_task(cada_cuenta(publicar, 30)),
         asyncio.create_task(cada_cuenta(reporte_semanal, 600)),
         asyncio.create_task(cada_cuenta(sugeridos_del_lunes, 600)),
+        asyncio.create_task(cada_cuenta(aviso_de_ocultos, 600)),
         asyncio.create_task(cada_cuenta(metricas_del_dia, 600)),
         asyncio.create_task(cada_cuenta(seguir, config.SEGUIMIENTO_CADA_SEG)),
         asyncio.create_task(cada_cuenta(limpiar, 86400)),
@@ -396,6 +401,7 @@ if not config.CLIENTE:
     app.include_router(ajustes.router)
     app.include_router(asistente.router)
     app.include_router(interacciones.router)
+    app.include_router(ocultos.router)
     app.include_router(contenido.router)
     app.include_router(empresa.router)
     app.include_router(marca.router)
