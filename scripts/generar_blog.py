@@ -33,7 +33,7 @@ GIROS = RAIZ / "giros"
 PAGINAS = RAIZ / "paginas"
 WEB = RAIZ / "web"
 SITIO = "https://skandar.online"
-CSS_VERSION = "2026-11-02a"
+CSS_VERSION = "2026-11-03b"
 
 # Orden en el índice: el primero es el destacado.
 ORDEN = [
@@ -184,6 +184,7 @@ PIE = """</main>
     <div class="pie-enlaces">
       <a href="/blog/">Blog</a>
       <a href="/para/">Por giro</a>
+      <a href="/planes">Compara los planes</a>
       <a href="/que-es-skandar">Qué es Skandar</a>
       <a href="/privacidad">Aviso de privacidad</a>
       <a href="/terminos">Términos</a>
@@ -378,6 +379,7 @@ PLANES = f"""  <section class="banda centro" id="planes">
         </article>
       </div>
       <p class="nota">Se paga mes a mes y puedes cancelar cuando quieras. Precios en dólares estadounidenses, más IVA.</p>
+      <p class="comparar"><a href="/planes">Compara todo lo que incluye cada plan</a></p>
     </div>
   </section>
 """
@@ -637,6 +639,7 @@ def llms_txt(todos, giros, paginas):
         "## Sobre Skandar",
         "",
         f"- [Inicio]({SITIO}/): qué hace la plataforma, planes y preguntas frecuentes.",
+        f"- [Compara los planes]({SITIO}/planes): tabla con todo lo que incluye cada plan, función por función.",
     ]
     filas += [f"- [{p['titulo']}]({SITIO}/{p['slug']}): {p['descripcion']}" for p in paginas]
     filas += ["", "## Por giro", ""]
@@ -647,7 +650,7 @@ def llms_txt(todos, giros, paginas):
 
 
 def sitemap(todos, giros, paginas):
-    urls = [("/", "2026-10-26"), ("/privacidad", "2026-10-28"), ("/terminos", "2026-10-28"),
+    urls = [("/", "2026-10-26"), ("/planes", "2026-11-03"), ("/privacidad", "2026-10-28"), ("/terminos", "2026-10-28"),
             ("/blog/", max(a.get("modificado", a["fecha"]) for a in todos))]
     urls += [(f"/blog/{a['slug']}", a.get("modificado", a["fecha"])) for a in todos]
     urls += [(f"/{p['slug']}", "2026-10-28") for p in paginas]

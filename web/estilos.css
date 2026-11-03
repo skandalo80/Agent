@@ -1,7 +1,7 @@
 /* Tamaños, rellenos y esquinas de la web: en ajustes.css. */
-@import url("ajustes.css?v=2026-10-28f");
+@import url("ajustes.css?v=2026-11-03a");
 @import url("animaciones.css?v=2026-10-31a");
-@import url("escenas.css?v=2026-11-01i");
+@import url("escenas.css?v=2026-11-03a");
 :root {
   /* Grafito mate: fondo grafito, naranja para botones y números, lima solo en detalles chicos. */
   --grafito: #18191C;
@@ -436,3 +436,56 @@ h1, h2, .articulo-tarjeta .portadilla span { font-weight: var(--peso-titulo); }
 .tarjeta h3, .funcion h3, .plan h3, .paso h3, .articulo-tarjeta h3 { font-size: var(--t-tarjeta); font-weight: var(--peso-tarjeta); letter-spacing: -.2px; line-height: 1.3; }
 .tarjeta p, .funcion p, .paso p, .plan .resumen, .articulo-tarjeta p { font-size: var(--t-texto-tarjeta); line-height: 1.65; color: var(--tenue); }
 .tarjetas, .articulos { gap: var(--hueco); }
+
+/* Compara los planes (/planes): tabla con una fila por función y una columna por plan. */
+.comparativo-seccion { padding-top: 40px; }
+.comparativo { width: 100%; border-collapse: collapse; text-align: left; font-size: 15px; }
+.comparativo thead th {
+  position: sticky; top: 72px; z-index: 2; vertical-align: bottom; padding: 14px 10px 16px;
+  background: var(--fondo); border-bottom: 2px solid var(--linea); text-align: center;
+}
+.comparativo thead th.celda-vacia { text-align: left; }
+.comparativo thead th.destacado .plan-nombre { color: var(--naranja); }
+.plan-nombre { display: block; font-size: 15px; font-weight: 800; letter-spacing: -.2px; line-height: 1.3; }
+.plan-precio { display: block; font-size: 22px; font-weight: 800; letter-spacing: -.8px; line-height: 1.2; margin: 6px 0 12px; font-variant-numeric: tabular-nums; }
+.plan-precio small { display: block; font-size: 12px; font-weight: 500; color: var(--tenue); letter-spacing: 0; }
+.comparativo thead .boton { width: 100%; min-height: 44px; }
+.comparativo tbody th, .comparativo tbody td { padding: var(--comp-fila-pad) 10px; border-bottom: 1px solid var(--linea); vertical-align: middle; }
+.comparativo tbody th { font-weight: 500; color: var(--texto); line-height: 1.5; padding-left: 0; }
+.comparativo tbody td { text-align: center; width: var(--comp-col-plan); }
+.comparativo tr.grupo th { padding: 34px 0 10px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; color: var(--naranja); border-bottom: 1px solid var(--linea); }
+.comparativo td.si svg {
+  width: var(--comp-check); height: var(--comp-check); border-radius: 50%; padding: 4px; background: var(--naranja);
+  fill: none; stroke: var(--grafito); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; vertical-align: middle;
+}
+.comparativo td.no { color: var(--tenue); font-size: 18px; }
+.comparativo td.dato { font-weight: 700; font-variant-numeric: tabular-nums; font-size: 14px; line-height: 1.35; }
+.comparativo tfoot td { padding: 22px 10px 0; text-align: center; vertical-align: top; }
+.comparativo tfoot .boton { width: 100%; min-height: 44px; }
+.comparativo + .nota { margin-top: 26px; margin-left: 0; text-align: left; }
+.vis-oculto { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (min-width: 801px) {
+  .comparativo tbody td, .comparativo tfoot td { width: var(--comp-col-plan-grande); }
+  .comparativo tfoot { display: none; }
+  .comparativo thead th { padding: 18px 24px 20px; }
+  .comparativo thead .boton { width: auto; min-width: 150px; }
+  .plan-nombre { font-size: 18px; white-space: nowrap; }
+  .plan-precio { font-size: 30px; }
+}
+@media (max-width: 800px) {
+  /* En celular la cabecera fija lleva solo nombre y precio; los botones van al final de la tabla (tfoot). */
+  .comparativo thead th { top: 64px; padding: 10px 4px 10px; }
+  .comparativo thead .boton { display: none; }
+  .plan-nombre { font-size: 13px; }
+  .plan-precio { font-size: 18px; margin: 4px 0 0; }
+  .plan-precio small { font-size: 11px; }
+  .comparativo tfoot td { padding: 18px 4px 0; }
+  .comparativo tfoot .boton.chico { padding: 10px 6px; font-size: 13px; }
+  .comparativo tbody th { font-size: 14px; padding-right: 6px; }
+  .comparativo tbody td { padding-left: 4px; padding-right: 4px; }
+  .comparativo td.dato { font-size: 12px; }
+  .comparativo-seccion { padding-top: 28px; }
+}
+.comparar { margin-top: 18px; font-size: 14px; }
+.comparar a { color: var(--naranja); font-weight: 700; }
+.comparar a:hover { text-decoration: underline; }
