@@ -19,7 +19,7 @@ from html import escape
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from . import ajustes, catalogo_chat, empresa, marco, panel
+from . import ajustes, catalogo_chat, empresa, marco, panel, seguimiento
 from .cuenta import Cuenta
 
 log = logging.getLogger("igbot.asistente")
@@ -362,7 +362,7 @@ def _reglas(perfil: dict) -> str:
             # Las instrucciones libres de antes no se pierden: aquí siguen.
             + _opcional("instrucciones", "Algo más que deba saber", "",
                         "Ej. Saluda por su nombre y siempre invita a visitar la tienda.", extra, panel.MAX_INSTRUCCIONES)
-            + "</div>" + _productos_en_chat(perfil) + _pie("reglas"))
+            + "</div>" + _productos_en_chat(perfil) + seguimiento.campos(perfil) + _pie("reglas"))
 
 
 def _productos_en_chat(perfil: dict) -> str:
@@ -458,7 +458,7 @@ async def _resumen(c: Cuenta, perfil: dict) -> str:
             + caja("Reglas y límites", "reglas",
                    ["Nunca inventa datos"] + [t for k, t, *_ in REGLAS if activas[k]]
                    + [f"No debe: {perfil['no_hacer'][:80]}" if perfil.get("no_hacer") else ""]
-                   + [_resumen_productos(perfil)])
+                   + [_resumen_productos(perfil), seguimiento.resumen(perfil)])
             + caja("Tu equipo", "equipo", [
                 "Pasa a tu equipo: " + ", ".join(t.lower() for k, t, *_ in CASOS if pases(perfil)[k]["on"])
                 if any(x["on"] for x in pases(perfil).values()) else "No pasa conversaciones a tu equipo",
@@ -497,7 +497,7 @@ async def pagina(c: Cuenta, paso: str = "", aviso: str = "", nota: str = "", per
                   "Siguiente</button>"
                   f'<input type="hidden" name="paso" value="{paso}">{cuerpo}</form>')
     return marco.pagina(
-        f"<style>{ESTILO}</style>"
+        f"<style>{ESTILO}{seguimiento.ESTILO}</style>"
         + await marco.menu_de(c, "asistente", sub="configura")
         + marco.encabezado("Tu asistente · Configura")
         + '<main class="as-main"><div class="contenedor">'
@@ -550,6 +550,10 @@ async def guardar(request: Request, c: marco.Formulario):
             datos["catalogo_chat"] = {k: f.get(f"cc_{k}") == "1" for k, *_ in catalogo_chat.OPCIONES}
         datos["no_hacer"] = _texto(f, "no_hacer", MAX_TEXTO)
         datos["instrucciones"] = _texto(f, "instrucciones", panel.MAX_INSTRUCCIONES)
+        datos["seguimiento"] = seguimiento.del_form(f)
+        if datos["seguimiento"]["on"] and datos["seguimiento"]["modo"] == "fijo" and not datos["seguimiento"]["msg"]:
+            return await pagina(c, paso, nota="Escribe el mensaje de seguimiento o elige que lo escriba tu asistente.",
+                                perfil=datos)
     elif paso == "equipo":
         datos["pases"] = {k: {"on": f.get(f"p_{k}") == "1", "modo": f.get(f"m_{k}") if f.get(f"m_{k}") in MODOS else "ia",
                               "msg": f.get(f"msg_{k}", "").strip()[:MAX_TEXTO],

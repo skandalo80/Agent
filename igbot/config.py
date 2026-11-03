@@ -81,6 +81,13 @@ RETENCION_DIAS = int(os.getenv("RETENCION_DIAS", "365"))
 # Ventas por post: una venta de un chat se le cuenta al post o la historia por la que llegó ese chat si fue en
 # estos días antes de la venta (la última publicación que tocó antes de comprar).
 VENTAS_POST_DIAS = int(os.getenv("VENTAS_POST_DIAS", "30"))
+# Seguimiento dentro de 24 h (Configura tu asistente > Reglas y límites): cada cuánto se buscan chats callados,
+# en qué horas del negocio se puede escribir (de DESDE a HASTA, para no mandar mensajes de madrugada) y cuántos
+# seguimientos manda una cuenta como mucho en cada vuelta.
+SEGUIMIENTO_CADA_SEG = float(os.getenv("SEGUIMIENTO_CADA_SEG", "300"))
+SEGUIMIENTO_DESDE = int(os.getenv("SEGUIMIENTO_DESDE", "9"))
+SEGUIMIENTO_HASTA = int(os.getenv("SEGUIMIENTO_HASTA", "21"))
+SEGUIMIENTO_POR_VUELTA = int(os.getenv("SEGUIMIENTO_POR_VUELTA", "20"))
 
 # --- Google (opcional: sin esto el bot no agenda ni manda correos) ---
 # Credenciales OAuth de tu cuenta de Gmail; ver "Agenda y correo" en el README.

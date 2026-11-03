@@ -32,7 +32,8 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from igbot import (acceso, adjuntos, admin, agenda_google, agent, ajustes, anuncios_meta, asistente, botones, campanas,
                    catalogo_chat, cobros, comentarios, comprimir, conectar, config, contenido, conversaciones, empresa,
                    errores, facebook, historias, inicio, interacciones, lentitud, limites, marca, marco, metricas,
-                   nueva_campana, panel, reporte, resultados, salud, semana, skandi, sugeridos, tienda_shopify, unavez)
+                   nueva_campana, panel, reporte, resultados, salud, seguimiento,
+                   semana, skandi, sugeridos, tienda_shopify, unavez)
 from igbot.cuenta import Cuenta, cargar, cuenta, de_carpeta, usar
 from igbot.dispatcher import Dispatcher
 from igbot.google import Google
@@ -249,6 +250,10 @@ async def metricas_del_dia(c: Cuenta) -> None:
     await metricas.tick(c)  # seguidores, alcance y vistas de cada día, para Resultados
 
 
+async def seguir(c: Cuenta) -> None:
+    await seguimiento.tick(c)  # un recordatorio a quien dejó de contestar, antes de que cierre la ventana de 24 h
+
+
 async def limpiar(c: Cuenta) -> None:
     """Una vez al día: borra el historial de más de RETENCION_DIAS y compacta la base."""
     borrado = await c.store.purgar(config.RETENCION_DIAS)
@@ -307,6 +312,7 @@ def fondo() -> list[asyncio.Task]:
         asyncio.create_task(cada_cuenta(reporte_semanal, 600)),
         asyncio.create_task(cada_cuenta(sugeridos_del_lunes, 600)),
         asyncio.create_task(cada_cuenta(metricas_del_dia, 600)),
+        asyncio.create_task(cada_cuenta(seguir, config.SEGUIMIENTO_CADA_SEG)),
         asyncio.create_task(cada_cuenta(limpiar, 86400)),
         asyncio.create_task(lentitud.vigilar_bucle()),
         asyncio.create_task(salud.vigilar()),

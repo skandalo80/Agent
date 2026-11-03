@@ -768,6 +768,22 @@ class Store:
         await self.db.commit()
         return cur.rowcount
 
+    async def callados(self, desde: float, hasta: float, limite: int) -> list[tuple[str, float, str]]:
+        """Chats donde el asistente contestó y el cliente ya no escribió (para el seguimiento dentro de 24 h):
+        el último mensaje es del asistente (sin mid: no lo escribió el dueño) y es de antes de `hasta`, y el
+        último del cliente es de después de `desde`. Cada fila: (usuario, hora del último mensaje del cliente,
+        texto del último del asistente). Del más viejo al más nuevo: primero los que están por cerrar su ventana."""
+        cur = await self.db.execute(
+            "SELECT user_id, t, texto FROM (SELECT m.user_id, m.text AS texto, m.created_at AS dicho,"
+            " (SELECT MAX(x.created_at) FROM messages x WHERE x.user_id = m.user_id AND x.role = 'user') AS t"
+            " FROM messages m WHERE m.id IN (SELECT MAX(id) FROM messages WHERE created_at >= ?"
+            " AND user_id NOT LIKE 'admin:%' GROUP BY user_id)"
+            " AND m.role = 'assistant' AND m.mid IS NULL AND m.status = 'done')"
+            " WHERE t >= ? AND dicho <= ? ORDER BY t LIMIT ?",
+            (desde, desde, hasta, limite),
+        )
+        return list(await cur.fetchall())
+
     async def unpause(self, user_id: str) -> None:
         await self.db.execute("DELETE FROM paused WHERE user_id = ?", (user_id,))
         await self.db.commit()
