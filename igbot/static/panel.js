@@ -577,3 +577,11 @@ document.addEventListener("click", (e) => {
     else item.querySelectorAll("input, textarea").forEach((campo) => { campo.value = ""; });
   }
 });
+
+// Pestañas que se deslizan de lado en celular (Resultados): la elegida queda a la vista al cargar la página.
+document.querySelectorAll(".res-vista").forEach((riel) => {
+  const on = riel.querySelector(".on");
+  if (!on) return;
+  const r = riel.getBoundingClientRect(), o = on.getBoundingClientRect();
+  if (o.right > r.right) riel.scrollLeft += o.right - r.right + (r.width - o.width) / 2;
+});

@@ -194,7 +194,7 @@ def test_la_limpieza_borra_el_historial_viejo_y_deja_el_reciente():
         return borrado, quedan[0]
 
     borrado, eventos = asyncio.run(main())
-    assert borrado == {"sent": 1, "messages": 1, "events": 0, "comments": 0, "etapas": 0}
+    assert borrado == {"sent": 1, "messages": 1, "events": 0, "comments": 0, "origenes_chat": 0, "etapas": 0}
     assert eventos == 1
 
 

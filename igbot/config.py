@@ -78,6 +78,9 @@ FONDO_A_LA_VEZ = int(os.getenv("FONDO_A_LA_VEZ", "5"))
 FONDO_TOPE_SEG = float(os.getenv("FONDO_TOPE_SEG", "900"))
 # Historial que se guarda por cuenta (mensajes, eventos y comentarios), en días; 0 = para siempre.
 RETENCION_DIAS = int(os.getenv("RETENCION_DIAS", "365"))
+# Ventas por post: una venta de un chat se le cuenta al post o la historia por la que llegó ese chat si fue en
+# estos días antes de la venta (la última publicación que tocó antes de comprar).
+VENTAS_POST_DIAS = int(os.getenv("VENTAS_POST_DIAS", "30"))
 
 # --- Google (opcional: sin esto el bot no agenda ni manda correos) ---
 # Credenciales OAuth de tu cuenta de Gmail; ver "Agenda y correo" en el README.
