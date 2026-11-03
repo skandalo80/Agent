@@ -1075,8 +1075,6 @@ h1,h2,h3{text-wrap:balance}
 .met-graf.barras .mh::before{display:none}
 /* Inicio (igbot/inicio.py): saludo, Te falta, los números de hoy, chats que te esperan, próximas publicaciones y
    tu plan. Tamaños en ajustes.css (--ini-*). */
-.ini-cab{margin:0 0 1.25rem}.ini-hola{font-size:var(--ini-saludo);font-weight:var(--peso-titulo);color:var(--negro)}
-.ini-botones{display:flex;gap:.6rem;flex-wrap:wrap}
 .ini-falta{margin-bottom:1.75rem}.ini-gris{color:var(--gris);font-size:.88rem}
 .ini-pasos{display:grid;grid-template-columns:repeat(auto-fit,minmax(16rem,1fr));gap:var(--hueco);margin-top:.5rem}
 .ini-paso{display:flex;gap:.8rem;align-items:center;background:var(--caja-fondo);border:1px solid var(--linea-oscura);border-radius:1rem;padding:1rem 1.1rem;color:var(--negro);text-decoration:none}
