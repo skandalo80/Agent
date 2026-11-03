@@ -19,7 +19,7 @@ from zoneinfo import ZoneInfo
 
 from . import config, fechas, marco
 from .cuenta import Cuenta, usar
-from .store import MANUAL
+from .store import ETAPAS, MANUAL
 
 POR_HOJA = 10
 # Mensajes del chat abierto que se cargan de una vez ("Ver mensajes anteriores" suma otros tantos).
@@ -53,12 +53,22 @@ MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "
 MESES_LARGOS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre",
                 "octubre", "noviembre", "diciembre"]
 
+# Cómo se llama cada etapa del contacto (store.ETAPAS) en el panel y en el CSV de contactos.
+NOMBRES_ETAPA = {"nuevo": "Nuevo", "interesado": "Interesado", "cotizo": "Cotizó", "cita": "Agendó cita",
+                 "compro": "Compró", "perdido": "No compró"}
+assert set(NOMBRES_ETAPA) == set(ETAPAS)
+
+
+def etapa_valida(etapa: str) -> str:
+    return etapa if etapa in ETAPAS else ""
+
+
 CSS = (Path(__file__).resolve().parent / "static" / "css" / "conversaciones.css").read_text(encoding="utf-8")
 
 
-def enlace(ver: str, buscar: str = "", hoja: int = 1, chat: str = "", n: int = 0) -> str:
-    """Dirección de la bandeja con su filtro, búsqueda, página y chat abierto."""
-    q = urlencode({k: v for k, v in (("ver", ver), ("q", buscar), ("p", hoja if hoja > 1 else ""),
+def enlace(ver: str, buscar: str = "", hoja: int = 1, chat: str = "", n: int = 0, etapa: str = "") -> str:
+    """Dirección de la bandeja con su filtro, búsqueda, etapa, página y chat abierto."""
+    q = urlencode({k: v for k, v in (("ver", ver), ("q", buscar), ("etapa", etapa), ("p", hoja if hoja > 1 else ""),
                                      ("chat", chat), ("n", n or "")) if v})
     return "/panel/asistente" + ("?" + q if q else "") + "#chats"
 
@@ -85,17 +95,19 @@ def _dia(d: datetime, ahora: datetime) -> str:
     return f"{d.day} de {MESES_LARGOS[d.month - 1]}" + (f" de {d.year}" if d.year != ahora.year else "")
 
 
-def _ocultos(ver: str, buscar: str, hoja: int, chat: str = "") -> str:
+def _ocultos(ver: str, buscar: str, hoja: int, chat: str = "", etapa: str = "") -> str:
     """Campos para volver a la misma bandeja después de un botón."""
     return "".join(f'<input type="hidden" name="{k}" value="{escape(str(v))}">'
-                   for k, v in (("ver", ver), ("q", buscar), ("p", hoja if hoja > 1 else ""), ("chat", chat)) if v)
+                   for k, v in (("ver", ver), ("q", buscar), ("etapa", etapa), ("p", hoja if hoja > 1 else ""),
+                                ("chat", chat)) if v)
 
 
-async def bandeja(c: Cuenta, ver: str = "", buscar: str = "", hoja: int = 1, chat: str = "", n: int = 0) -> str:
+async def bandeja(c: Cuenta, ver: str = "", buscar: str = "", hoja: int = 1, chat: str = "", n: int = 0,
+                  etapa: str = "") -> str:
     """La bandeja completa. Con JS, panel.js abre /panel/vivo (data-vivo) y cambia la lista y el
     chat abierto cuando llega algo, sin recargar."""
-    p = await partes(c, ver, buscar, hoja, chat, n)
-    vivo = enlace(p["ver"], p["buscar"], p["hoja"], p["chat"], n).replace("/panel/asistente", "/panel/vivo", 1)
+    p = await partes(c, ver, buscar, hoja, chat, n, etapa)
+    vivo = enlace(p["ver"], p["buscar"], p["hoja"], p["chat"], n, p["etapa"]).replace("/panel/asistente", "/panel/vivo", 1)
     vivo = vivo.split("#")[0] + ("&" if "?" in vivo else "?") + f"v={c.store.cambios}"
     hilo = p["hilo"] or ('<div class="hilo"><p class="elige">Elige una conversación de la lista para verla y'
                          " contestar.</p></div>")
@@ -103,27 +115,30 @@ async def bandeja(c: Cuenta, ver: str = "", buscar: str = "", hoja: int = 1, cha
             f'<div class="lista">{p["busqueda"]}<div class="lista-vivo">{p["lista"]}</div></div>{hilo}</div>')
 
 
-async def partes(c: Cuenta, ver: str = "", buscar: str = "", hoja: int = 1, chat: str = "", n: int = 0) -> dict:
-    """Las piezas de la bandeja: el buscador, la lista (pestañas, chats y páginas) y el chat abierto
-    ("" si no hay o no es de esta cuenta). También el filtro, la página y el chat que quedaron."""
+async def partes(c: Cuenta, ver: str = "", buscar: str = "", hoja: int = 1, chat: str = "", n: int = 0,
+                 etapa: str = "") -> dict:
+    """Las piezas de la bandeja: el buscador (con el filtro de etapa y la descarga de contactos), la lista
+    (pestañas, chats y páginas) y el chat abierto ("" si no hay o no es de esta cuenta). También el filtro,
+    la etapa, la página y el chat que quedaron."""
     import asyncio
 
     ahora = time.time()
     zona = fechas.zona(c)
     hoy = datetime.fromtimestamp(ahora, zona)
     buscar = buscar.strip()[:60]
+    etapa = etapa_valida(etapa)
     # Quién pidió una persona: el asistente lo pasó contigo (pasar_a_humano) durante su pausa actual.
     humano_desde = ahora - c.human_pause_hours * config.HORA - 60
 
     from .limites import LIMIT_NOTICE
     from .tools import RAZONES
 
-    async def pagina(filtro: str, n_: int, buscar_: str = buscar, limite: int = POR_HOJA):
+    async def pagina(filtro: str, n_: int, buscar_: str = buscar, limite: int = POR_HOJA, etapa_: str = etapa):
         return await c.store.chats_page(ahora, ahora - VENTANA, humano_desde, ahora - SIN_RESPUESTA, LIMIT_NOTICE,
-                                        filtro, buscar_.lstrip("@"), limite, (n_ - 1) * limite)
+                                        filtro, buscar_.lstrip("@"), limite, (n_ - 1) * limite, etapa_)
     if ver not in FILTROS:
         # Sin filtro (o un enlace viejo): lo que espera tu respuesta; si no hay nada, lo del asistente.
-        _, cuantos, _ = await pagina("nuevos", 1, "", 1)
+        _, cuantos, _ = await pagina("nuevos", 1, "", 1, "")
         ver = primero(cuantos, "tu" if cuantos["nuevos"] or cuantos["sin"] else "bot")
     filas, cuantos, encontrados = await pagina(ver, max(1, hoja))
     total = max(1, -(-encontrados // POR_HOJA))
@@ -139,6 +154,7 @@ async def partes(c: Cuenta, ver: str = "", buscar: str = "", hoja: int = 1, chat
     anuncios = await c.store.anuncios_de([f[0] for f in filas])
     # Lo que el asistente no supo contestar y te avisó (pregunta_sin_dato): él sigue con el chat.
     sin_dato = await c.store.sin_dato(ahora - VENTANA)
+    etapas = await c.store.etapas_de([f[0] for f in filas])
 
     conv = []
     for (u, t, rol, texto, hasta, est, paso), nombre in zip(filas, nombres):
@@ -165,10 +181,12 @@ async def partes(c: Cuenta, ver: str = "", buscar: str = "", hoja: int = 1, chat
             etiqueta, quien = "", "Asistente"
         if u in anuncios:
             etiqueta = '<span class="razon anuncio">Anuncio</span>' + etiqueta
+        if etapas.get(u, "nuevo") != "nuevo":
+            etiqueta = f'<span class="razon etapa">{NOMBRES_ETAPA[etapas[u]]}</span>' + etiqueta
         aviso = est in ("nuevo", "tu_sin", "revisar") or (est == "asistente" and u in sin_dato)
         conv.append(
             f'<a class="conv{" sin" if aviso else ""}{" on" if u == chat else ""}"'
-            f' href="{escape(enlace(ver, buscar, hoja, u))}"' + (' aria-current="true"' if u == chat else "") + ">"
+            f' href="{escape(enlace(ver, buscar, hoja, u, etapa=etapa))}"' + (' aria-current="true"' if u == chat else "") + ">"
             + ('<span class="punto-sin"></span>' if aviso else "")
             + f'<span class="avatar">{escape(nombre[1:2].upper() or "?")}</span><span class="txt">'
             f'<span class="arriba"><b>{escape(nombre)}</b><small>{_hora(t, zona, hoy) if t else ""}</small></span>'
@@ -180,11 +198,11 @@ async def partes(c: Cuenta, ver: str = "", buscar: str = "", hoja: int = 1, chat
     sin_contestar = len(set(sin_dato) - activos)
     numero = {"tu": pendientes, "bot": sin_contestar}
     lados = "".join(
-        f'<a href="{escape(enlace(primero(cuantos, k), buscar))}"' + (' class="on" aria-current="true"' if k == lado else "")
+        f'<a href="{escape(enlace(primero(cuantos, k), buscar, etapa=etapa))}"' + (' class="on" aria-current="true"' if k == lado else "")
         + f">{nombre}" + (f"<b>{numero[k]}</b>" if numero[k] else "") + "</a>"
         for k, nombre in (("tu", "Tú"), ("bot", "Tu asistente")))
     pestanas = "".join(
-        f'<a href="{escape(enlace(k, buscar))}"' + (' class="on" aria-current="page"' if k == ver else "") + ">"
+        f'<a href="{escape(enlace(k, buscar, etapa=etapa))}"' + (' class="on" aria-current="page"' if k == ver else "") + ">"
         f'{nombre}<b class="{"" if cuantos[k] and k in AVISAN else "gris"}">{cuantos[k]}</b></a>'
         for k, nombre in FILTROS.items() if LADO[k] == lado)
     vacio = {"nuevos": "Ninguno: el asistente no te ha pasado chats nuevos.",
@@ -192,27 +210,39 @@ async def partes(c: Cuenta, ver: str = "", buscar: str = "", hoja: int = 1, chat
              "tuyas": "Ninguno: tu asistente está atendiendo todos tus chats.",
              "curso": "Nadie ha escrito en las últimas 24 horas.",
              "bot": "Aún no te escribe nadie. Aquí vas a ver tus chats en cuanto lleguen."}[ver]
+    if etapa:
+        vacio = f"Ningún chat de esta pestaña está en la etapa «{NOMBRES_ETAPA[etapa]}»."
     if buscar:
-        vacio = f"No encontramos chats con «{escape(buscar)}»."
+        vacio = f"No encontramos chats con «{escape(buscar)}»" + (f" en la etapa «{NOMBRES_ETAPA[etapa]}»." if etapa else ".")
+    # La etapa es un select (plegado por sí mismo en el celular): panel.js manda el formulario al cambiarlo y,
+    # sin JS, se aplica con Enter o el botón Buscar. La descarga lleva la etapa elegida.
+    opciones = '<option value="">Todas las etapas</option>' + "".join(
+        f'<option value="{k}"{" selected" if k == etapa else ""}>{nombre}</option>' for k, nombre in NOMBRES_ETAPA.items())
+    csv = "/panel/contactos.csv" + (f"?etapa={etapa}" if etapa else "")
     busqueda = ('<form method="get" action="/panel/asistente#chats" class="buscar" role="search" data-vivo>'
                 + _ocultos(ver, "", 1, chat)
                 + f'<input type="search" name="q" value="{escape(buscar)}" placeholder="Buscar un cliente o un mensaje"'
                 ' aria-label="Buscar un cliente o un mensaje" maxlength="60" autocomplete="off">'
+                f'<div class="etapa-fila"><select name="etapa" aria-label="Etapa del contacto"'
+                f'{" class=on" if etapa else ""}>{opciones}</select>'
+                f'<a class="enlace" href="{csv}" download>Descargar CSV</a></div>'
                 '<button>Buscar</button></form>')
     cuantos_txt = (f'<p class="cuantos">{encontrados} {"chat" if encontrados == 1 else "chats"}'
-                   + (f" · página {hoja} de {total}" if total > 1 else "") + "</p>") if buscar and encontrados else ""
+                   + (f" · página {hoja} de {total}" if total > 1 else "") + "</p>") if (buscar or etapa) and encontrados else ""
     lista = (f'<nav class="lados" aria-label="Quién atiende">{lados}</nav>'
              f'<nav class="filtros-chat" aria-label="Filtros">{pestanas}</nav>{cuantos_txt}'
              + ("".join(conv) or f'<p class="vacio">{vacio}</p>')
-             + marco.paginas(hoja, total, lambda x: enlace(ver, buscar, x, chat)))
-    hilo = await _hilo(c, chat, ver, buscar, hoja, n, ahora, zona, hoy, humano_desde, sin_dato.get(chat, [])) if chat else ""
+             + marco.paginas(hoja, total, lambda x: enlace(ver, buscar, x, chat, etapa=etapa)))
+    hilo = await _hilo(c, chat, ver, buscar, hoja, n, ahora, zona, hoy, humano_desde, sin_dato.get(chat, []),
+                       etapa) if chat else ""
     return {"busqueda": busqueda, "lista": lista, "hilo": hilo, "ver": ver, "buscar": buscar, "hoja": hoja,
-            "chat": chat if hilo else "", "pendientes": pendientes}
+            "chat": chat if hilo else "", "pendientes": pendientes, "etapa": etapa}
 
 
-async def _vendido(c: Cuenta, ocultos: str, ventas: list[dict]) -> str:
-    """"Marcar venta": para lo que se cobra fuera de Skandar (en persona, por transferencia). Cuenta en
-    Resultados > Anuncios como venta del anuncio que trajo este chat; las marcadas aquí se pueden quitar."""
+async def _vendido(c: Cuenta, ocultos: str, ventas: list[dict], etapa: str) -> str:
+    """El botón con la etapa del contacto (abre sin JS, con <details>): cambiar la etapa a mano y "Marcar venta",
+    para lo que se cobra fuera de Skandar (en persona, por transferencia). La venta cuenta en Resultados >
+    Anuncios para el anuncio que trajo este chat y pasa el contacto a Compró; las marcadas aquí se quitan."""
     from .empresa import MONEDAS, productos
     from .tienda_shopify import monto
     moneda = next((p["moneda"] for p in await productos(c) if p.get("moneda") in MONEDAS), MONEDAS[0])
@@ -223,7 +253,15 @@ async def _vendido(c: Cuenta, ocultos: str, ventas: list[dict]) -> str:
         f'<span>Vendido {monto(v["monto"], v["moneda"])}</span>'
         '<button name="accion" value="quitar" class="enlace">Quitar</button></form>'
         for v in ventas if v["origen"] == "manual")
-    return ('<details class="venta-chat"><summary>Marcar venta</summary><div class="caja">' + marcadas
+    botones = "".join(
+        f'<button name="nueva" value="{k}" aria-pressed="{"true" if k == etapa else "false"}">{nombre}</button>'
+        for k, nombre in NOMBRES_ETAPA.items())
+    return ('<details class="venta-chat"><summary>'
+            f'Etapa: {NOMBRES_ETAPA[etapa]}</summary><div class="caja">'
+            f'<form method="post" action="/panel/etapa#chats" class="etapas">{ocultos}'
+            f'<span class="titulo">Etapa del contacto</span><div class="opciones">{botones}</div>'
+            "<small>Avanza sola cuando tu asistente anota una cotización, agenda una cita o se registra una venta.</small>"
+            '</form><span class="titulo">Marcar venta</span>' + marcadas
             + f'<form method="post" action="/panel/venta#chats">{ocultos}'
             '<label for="venta-monto">¿Por cuánto le vendiste?</label><div class="fila">'
             '<input id="venta-monto" name="monto" type="number" min="1" step="0.01" required inputmode="decimal">'
@@ -233,7 +271,7 @@ async def _vendido(c: Cuenta, ocultos: str, ventas: list[dict]) -> str:
 
 
 async def _hilo(c: Cuenta, u: str, ver: str, buscar: str, hoja: int, n: int, ahora: float, zona: ZoneInfo,
-                hoy: datetime, humano_desde: float, preguntas: list[tuple[str, float]] = ()) -> str:
+                hoy: datetime, humano_desde: float, preguntas: list[tuple[str, float]] = (), etapa: str = "") -> str:
     """El chat abierto. Vacío si ese chat no es de esta cuenta."""
     hasta = await c.store.paused_until(u)
     en_pausa = hasta > ahora
@@ -249,7 +287,7 @@ async def _hilo(c: Cuenta, u: str, ver: str, buscar: str, hoja: int, n: int, aho
     if en_pausa:
         pidio = ([d for x, d, _ in await c.store.events("humano", humano_desde, ahora + 1) if x == u] or [None])[-1]
     horas = max(1, round((hasta - ahora) / config.HORA))
-    ocultos = _ocultos(ver, buscar, hoja, u) + f'<input type="hidden" name="usuario" value="{escape(u)}">'
+    ocultos = _ocultos(ver, buscar, hoja, u, etapa) + f'<input type="hidden" name="usuario" value="{escape(u)}">'
 
     sub = (f"Último mensaje {fechas.hace(ultimo_cliente)}" if ultimo_cliente else "Aún no te escribe")
     if anuncio := (await c.store.anuncios_de([u])).get(u):
@@ -268,7 +306,7 @@ async def _hilo(c: Cuenta, u: str, ver: str, buscar: str, hoja: int, n: int, aho
         + ("" if en_pausa else " disabled") + ">Asistente</button>"
         + f'<button name="accion" value="tomar" aria-pressed="{"true" if en_pausa else "false"}"'
         + (" disabled" if en_pausa else "") + ">Tú</button></form>")
-    vendido = await _vendido(c, ocultos, ventas)
+    vendido = await _vendido(c, ocultos, ventas, (await c.store.etapas_de([u]))[u])
     extender = (f'<form method="post" action="/panel/pausas#chats">{ocultos}'
                 f'<button name="accion" value="extender">Darte {c.human_pause_hours:g} h más</button></form>')
     if pidio is not None:
@@ -297,7 +335,7 @@ async def _hilo(c: Cuenta, u: str, ver: str, buscar: str, hoja: int, n: int, aho
 
     burbujas, dia_antes = [], None
     if hay_mas and n < MAX_MENSAJES:
-        burbujas.append(f'<p class="anteriores"><a class="enlace" href="{escape(enlace(ver, buscar, hoja, u, n + POR_TANDA))}">'
+        burbujas.append(f'<p class="anteriores"><a class="enlace" href="{escape(enlace(ver, buscar, hoja, u, n + POR_TANDA, etapa))}">'
                         "Ver mensajes anteriores</a></p>")
     for rol, texto, t in mensajes:
         d = datetime.fromtimestamp(t, zona)
@@ -343,7 +381,7 @@ async def _hilo(c: Cuenta, u: str, ver: str, buscar: str, hoja: int, n: int, aho
         plazo = "los 7 días" if config.HUMAN_AGENT_TAG else "las 24 horas"
         responder = (f'<p class="responder cerrado">Instagram solo deja contestar dentro de {plazo} desde el último'
                      " mensaje del cliente. Cuando te vuelva a escribir, puedes contestarle desde aquí.</p>")
-    return (f'<div class="hilo"><a class="volver enlace" href="{escape(enlace(ver, buscar, hoja))}">‹ Tus chats</a>'
+    return (f'<div class="hilo"><a class="volver enlace" href="{escape(enlace(ver, buscar, hoja, etapa=etapa))}">‹ Tus chats</a>'
             f'<div class="cab"><span class="avatar">{escape(nombre[1:2].upper() or "?")}</span>'
             f'<div class="nom"><b>{escape(nombre)}</b><small>{sub}</small></div>{vendido}{interruptor}</div>'
             f'{alerta}<div class="mensajes"><div>{"".join(burbujas)}</div></div>{responder}</div>')

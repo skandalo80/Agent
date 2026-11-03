@@ -1007,15 +1007,24 @@ async def ver(c: marco.Sesion, dias: str = "7", fin: str = "", ver: str = "insta
 
 # --- descargas: PDF y CSV, del periodo (día por día) o por publicación ---
 
+def _celda(v):
+    """Un texto que empieza con = + - @ (o tabulador) Excel lo ejecuta como fórmula: se le antepone un
+    apóstrofo (OWASP, inyección en CSV). Los números van tal cual."""
+    if v is None:
+        return ""
+    return "'" + v if isinstance(v, str) and v[:1] in ("=", "+", "-", "@", "\t", "\r") else v
+
+
 def csv_de(filas: list[list], columnas: list[str]) -> bytes:
-    """CSV con BOM para que Excel lo abra con acentos; los números sin separador de miles."""
+    """CSV con BOM para que Excel lo abra con acentos; los números sin separador de miles. Los textos ajenos
+    (mensajes, datos que dejó una persona, títulos de posts) no pueden colarse como fórmula."""
     import csv
     import io
     salida = io.StringIO()
     w = csv.writer(salida)
     w.writerow(columnas)
     for fila in filas:
-        w.writerow(["" if v is None else v for v in fila])
+        w.writerow([_celda(v) for v in fila])
     return ("\ufeff" + salida.getvalue()).encode("utf-8")
 
 

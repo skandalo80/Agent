@@ -345,6 +345,11 @@ document.querySelectorAll("form[data-marca]").forEach((form) => {
   });
 });
 
+// Conversaciones: la etapa se aplica al elegirla (sin JS, con Enter en el buscador).
+document.querySelectorAll("form[data-vivo] select").forEach((s) => {
+  s.addEventListener("change", () => s.form.submit());
+});
+
 // Calendario: los filtros se aplican al cambiarlos (sin JS, con el botón Filtrar).
 document.querySelectorAll(".cal-filtros select").forEach((s) => {
   s.addEventListener("change", () => s.form.submit());
@@ -395,7 +400,9 @@ document.querySelectorAll(".inbox[data-vivo]").forEach((inbox) => {
     const foco = caja && document.activeElement === caja;
     const desde = caja ? caja.selectionStart : 0;
     const hasta = caja ? caja.selectionEnd : 0;
+    const abierta = hilo.querySelector("details.venta-chat[open]");  // Etapa y Marcar venta sigue abierta
     hilo.outerHTML = p.hilo;
+    if (abierta) { const d = inbox.querySelector(".hilo details.venta-chat"); if (d) d.open = true; }
     const nueva = inbox.querySelector(".hilo textarea");
     if (nueva && texto) nueva.value = texto;
     if (nueva && foco) { nueva.focus(); nueva.setSelectionRange(desde, hasta); }
