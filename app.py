@@ -210,7 +210,7 @@ async def arrancar(c: Cuenta) -> None:
         except Exception:
             log.exception("No se pudo suscribir la cuenta %s a los avisos", nombre(c))
         await conectar_pagina(c)
-        await botones.sync(c.store, c.instagram)
+        await botones.sync(c)
         await dispatchers[c.slug].resume_pending()
         if await empresa.revision_pendiente(c):  # guardó su perfil de empresa justo antes de reiniciar
             empresa.programar_revision(c, ya=True)

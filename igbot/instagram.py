@@ -168,6 +168,27 @@ class Instagram:
         if r.is_error:
             raise RuntimeError(f"Instagram respondió {r.status_code}: {r.text[:300]}")
 
+    async def ice_breakers(self) -> list[str]:
+        """Las preguntas de los botones de inicio que Instagram tiene puestas ahora."""
+        r = await self.http.get(
+            api("me/messenger_profile"),
+            params={"platform": "instagram", "fields": "ice_breakers"},
+            headers={"Authorization": f"Bearer {await self.token()}"},
+        )
+        r.raise_for_status()
+        return [a.get("question", "") for d in r.json().get("data") or [] for ib in d.get("ice_breakers") or []
+                for a in ib.get("call_to_actions") or []]
+
+    async def delete_ice_breakers(self) -> None:
+        """Quita los botones de inicio."""
+        r = await self.http.request(
+            "DELETE", api("me/messenger_profile"),
+            headers={"Authorization": f"Bearer {await self.token()}"},
+            json={"platform": "instagram", "fields": ["ice_breakers"]},
+        )
+        if r.is_error:
+            raise RuntimeError(f"Instagram respondió {r.status_code}: {r.text[:300]}")
+
     async def permalink(self, media_id: str) -> str:
         key = f"permalink:{media_id}"
         if cached := await self.store.get(key):

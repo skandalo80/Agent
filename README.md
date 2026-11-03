@@ -163,7 +163,7 @@ En la app de Meta → *API de Instagram con inicio de sesión de Instagram* → 
 
 ## Botones de inicio
 
-Las preguntas que Instagram muestra cuando alguien abre un chat nuevo con la cuenta (máximo 4, de hasta 80 caracteres) viven en `negocio/botones.yaml` (vendedor) y `clientes/<cuenta>/botones.yaml`. Al reiniciar, el bot se las manda a Instagram si cambiaron. Cuando alguien toca una, el bot la contesta como cualquier mensaje.
+Las preguntas que Instagram muestra cuando alguien abre un chat nuevo con la cuenta (máximo 4, de hasta 80 caracteres) se escriben en el panel (Configura tu asistente > Reglas y límites) y se guardan en la base de la cuenta. Se mandan a Instagram al guardar y al arrancar, solo si cambiaron; si se borran todas, se quitan. Cuando alguien toca una, el bot la contesta como cualquier mensaje.
 
 Para que lleguen los toques, en la app de Meta → *Webhooks* suscribe también el campo `messaging_postbacks`.
 

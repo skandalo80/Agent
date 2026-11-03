@@ -53,6 +53,9 @@ class FakeInstagram:
     async def set_ice_breakers(self, questions):
         pass
 
+    async def ice_breakers(self):
+        return []
+
     async def close(self):
         pass
 

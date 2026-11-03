@@ -50,7 +50,6 @@ class Cuenta:
     catalog_path: str
     quotes_dir: str
     hide_spam: bool
-    buttons_path: str
     admin_ig_ids: set[str]
     media_slug: str
     media_dir: str
@@ -130,8 +129,6 @@ class Cuenta:
             quotes_dir=get("QUOTES_DIR", f"{data_dir}/cotizaciones"),
             # Ocultar comentarios que son spam en todas las publicaciones.
             hide_spam=_bool(get("HIDE_SPAM")),
-            # Botones de inicio (preguntas que salen al abrir un chat nuevo).
-            buttons_path=get("BUTTONS_PATH", f"{client_dir}/botones.yaml" if slug else "negocio/botones.yaml"),
             # Ids de Instagram de quienes, al escribirle al bot, hablan con el
             # asistente interno (publicar, reactivar chats). Cambian en cada cuenta.
             admin_ig_ids=_ids(get("ADMIN_IG_IDS")),

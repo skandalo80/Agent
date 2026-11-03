@@ -19,7 +19,7 @@ from html import escape
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from . import ajustes, catalogo_chat, empresa, marco, panel, seguimiento
+from . import ajustes, botones, catalogo_chat, empresa, marco, panel, seguimiento
 from .cuenta import Cuenta
 
 log = logging.getLogger("igbot.asistente")
@@ -343,7 +343,7 @@ def _escribe(perfil: dict) -> str:
             + muestra + _pie("escribe"))
 
 
-def _reglas(perfil: dict) -> str:
+def _reglas(perfil: dict, preguntas: list[str]) -> str:
     activas = reglas_de(perfil)
     filas = ('<div class="as-fila"><span><b>Nunca inventa datos <em>Siempre activa</em></b>'
              "<small>Si no sabe un precio o un dato, lo dice y ofrece pasar con una persona.</small></span>"
@@ -362,7 +362,20 @@ def _reglas(perfil: dict) -> str:
             # Las instrucciones libres de antes no se pierden: aquí siguen.
             + _opcional("instrucciones", "Algo más que deba saber", "",
                         "Ej. Saluda por su nombre y siempre invita a visitar la tienda.", extra, panel.MAX_INSTRUCCIONES)
-            + "</div>" + _productos_en_chat(perfil) + seguimiento.campos(perfil) + _pie("reglas"))
+            + "</div>" + _productos_en_chat(perfil) + _botones_inicio(preguntas) + seguimiento.campos(perfil)
+            + _pie("reglas"))
+
+
+def _botones_inicio(preguntas: list[str]) -> str:
+    """Las preguntas que Instagram muestra al abrir un chat nuevo (botones.py); al tocar una, el asistente contesta."""
+    ejemplos = ("Ej. ¿Cuánto cuesta?", "Ej. ¿Dónde están?", "Ej. ¿Hacen envíos?", "Ej. Quiero agendar")
+    campos = "".join(
+        f'<input type="text" name="b_{i}" maxlength="{botones.MAX_CARACTERES}" aria-label="Botón {i}"'
+        f' placeholder="{ejemplos[i - 1]}" value="{escape(preguntas[i - 1] if i <= len(preguntas) else "")}">'
+        for i in range(1, botones.MAX_BOTONES + 1))
+    return ('<div class="as-caja"><input type="hidden" name="bi" value="1">'
+            '<h3 class="as-pases-t">Botones al abrir un chat nuevo</h3>'
+            f'<div class="as-botones">{campos}</div></div>')
 
 
 def _productos_en_chat(perfil: dict) -> str:
@@ -381,6 +394,10 @@ def _resumen_productos(perfil: dict) -> str:
         return "No muestra tus productos en tarjetas"
     botones = [n for k, n in (("tienda", "Ver en la tienda"), ("quiero", "Lo quiero"), ("fotos", "Ver más fotos")) if o[k]]
     return "Muestra tus productos en tarjetas" + (f" con {', '.join(botones)}" if botones else "")
+
+
+def _resumen_botones(preguntas: list[str]) -> str:
+    return f"Botones al abrir un chat: {', '.join(preguntas)}" if preguntas else "Sin botones al abrir un chat"
 
 
 def _tabla_pases(perfil: dict, pie: str = "") -> str:
@@ -458,7 +475,8 @@ async def _resumen(c: Cuenta, perfil: dict) -> str:
             + caja("Reglas y límites", "reglas",
                    ["Nunca inventa datos"] + [t for k, t, *_ in REGLAS if activas[k]]
                    + [f"No debe: {perfil['no_hacer'][:80]}" if perfil.get("no_hacer") else ""]
-                   + [_resumen_productos(perfil), seguimiento.resumen(perfil)])
+                   + [_resumen_productos(perfil), _resumen_botones(await botones.de(c.store) or []),
+                      seguimiento.resumen(perfil)])
             + caja("Tu equipo", "equipo", [
                 "Pasa a tu equipo: " + ", ".join(t.lower() for k, t, *_ in CASOS if pases(perfil)[k]["on"])
                 if any(x["on"] for x in pases(perfil).values()) else "No pasa conversaciones a tu equipo",
@@ -485,7 +503,7 @@ async def pagina(c: Cuenta, paso: str = "", aviso: str = "", nota: str = "", per
     elif paso == "escribe":
         cuerpo = _escribe(perfil)
     elif paso == "reglas":
-        cuerpo = _reglas(perfil)
+        cuerpo = _reglas(perfil, await botones.de(c.store) or [])
     elif paso == "equipo":
         cuerpo = _equipo(c, perfil)
     else:
@@ -554,6 +572,7 @@ async def guardar(request: Request, c: marco.Formulario):
         if datos["seguimiento"]["on"] and datos["seguimiento"]["modo"] == "fijo" and not datos["seguimiento"]["msg"]:
             return await pagina(c, paso, nota="Escribe el mensaje de seguimiento o elige que lo escriba tu asistente.",
                                 perfil=datos)
+        preguntas = botones.limpiar(f.get(f"b_{i}", "") for i in range(1, botones.MAX_BOTONES + 1))
     elif paso == "equipo":
         datos["pases"] = {k: {"on": f.get(f"p_{k}") == "1", "modo": f.get(f"m_{k}") if f.get(f"m_{k}") in MODOS else "ia",
                               "msg": f.get(f"msg_{k}", "").strip()[:MAX_TEXTO],
@@ -571,8 +590,9 @@ async def guardar(request: Request, c: marco.Formulario):
         log.warning("@%s: no se guardó %s: %s", nombre, paso, motivo)
         return await pagina(c, paso, nota=f"No se guardó: {motivo} Corrígelo y vuelve a intentar.", perfil=datos)
     if paso == "equipo":
-        from . import ajustes
         await ajustes.guardar_del_form(c, await request.form())
+    if paso == "reglas" and f.get("bi") == "1":
+        await botones.guardar(c, preguntas)
     await c.store.set("perfil", json.dumps(datos, ensure_ascii=False))
     c.prompt_destino().parent.mkdir(parents=True, exist_ok=True)
     c.prompt_destino().write_text(prompt, encoding="utf-8")
@@ -643,6 +663,9 @@ fieldset.as-caja legend{float:left;width:100%;padding:0;font-weight:600;font-siz
 .as-nom{display:block;font-size:1.05rem;margin-bottom:.35rem;padding-right:2rem}
 .as-para{display:block;font-size:.86rem;color:#E4E4E2;line-height:1.5;margin-bottom:.6rem}
 .as-toque{margin-top:1.25rem}
+/* Botones al abrir un chat: dos columnas en escritorio, una en celular. */
+.as-botones{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem;margin-top:.9rem}
+@media(max-width:560px){.as-botones{grid-template-columns:1fr}}
 .as-opc{font-weight:400;color:var(--gris)}
 .as-opt+.as-opt{margin-top:.9rem;padding-top:.9rem;border-top:1px solid var(--linea-oscura)}
 .as-optc{display:flex;gap:.7rem;align-items:center;margin:0;cursor:pointer;font-weight:400}
