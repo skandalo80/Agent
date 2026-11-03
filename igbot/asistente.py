@@ -19,7 +19,7 @@ from html import escape
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from . import ajustes, botones, catalogo_chat, empresa, marco, panel, seguimiento
+from . import ajustes, botones, catalogo_chat, empresa, marco, panel, resultados, seguimiento
 from .cuenta import Cuenta
 
 log = logging.getLogger("igbot.asistente")
@@ -480,6 +480,7 @@ async def _resumen(c: Cuenta, perfil: dict) -> str:
             + caja("Tu equipo", "equipo", [
                 "Pasa a tu equipo: " + ", ".join(t.lower() for k, t, *_ in CASOS if pases(perfil)[k]["on"])
                 if any(x["on"] for x in pases(perfil).values()) else "No pasa conversaciones a tu equipo",
+                f"Atiende tu equipo: {resultados.dias_de_horario(c)}",
                 f"Cuando contestas tú, se calla {c.human_pause_hours:g} h",
                 f"Te avisa por correo a {c.owner_email}" if c.aviso_correo and c.owner_email else "Sin avisos"])
             + caja("Lo que sabe de tu negocio", "empresa", negocio)
@@ -574,6 +575,8 @@ async def guardar(request: Request, c: marco.Formulario):
                                 perfil=datos)
         preguntas = botones.limpiar(f.get(f"b_{i}", "") for i in range(1, botones.MAX_BOTONES + 1))
     elif paso == "equipo":
+        if error := ajustes.horario_error(f, [str(d) for d in (await request.form()).getlist("dias")]):
+            return await pagina(c, paso, nota=error, perfil=datos)
         datos["pases"] = {k: {"on": f.get(f"p_{k}") == "1", "modo": f.get(f"m_{k}") if f.get(f"m_{k}") in MODOS else "ia",
                               "msg": f.get(f"msg_{k}", "").strip()[:MAX_TEXTO],
                               **({"texto": f.get("t_otro", "").strip()[:MAX_TEXTO]} if k == "otro" else {})}
@@ -664,6 +667,8 @@ fieldset.as-caja legend{float:left;width:100%;padding:0;font-weight:600;font-siz
 .as-para{display:block;font-size:.86rem;color:#E4E4E2;line-height:1.5;margin-bottom:.6rem}
 .as-toque{margin-top:1.25rem}
 /* Botones al abrir un chat: dos columnas en escritorio, una en celular. */
+.as-main .horario{display:flex;flex-wrap:wrap;gap:.75rem;margin-top:.75rem}
+.as-main .horario label{display:flex;align-items:center;gap:.5rem;margin:0;font-weight:500}
 .as-botones{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem;margin-top:.9rem}
 @media(max-width:560px){.as-botones{grid-template-columns:1fr}}
 .as-opc{font-weight:400;color:var(--gris)}

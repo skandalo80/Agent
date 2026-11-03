@@ -78,6 +78,38 @@ def aviso_correo(c: Cuenta) -> str:
             ' placeholder="tu@correo.com"></div>')
 
 
+DIAS = ("Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom")
+
+
+def horario_campos(c: Cuenta) -> str:
+    """Días y horas en que atiende tu equipo (casillas y dos horas; del_form las lee)."""
+    desde, hasta = c.business_hours.split("-")
+    dias = "".join(f'<label><input type="checkbox" name="dias" value="{i}"'
+                   f'{" checked" if i in c.business_days else ""}> {d}</label>' for i, d in enumerate(DIAS, 1))
+    return ('<div class="sub"><label>Horario de atención de tu equipo</label>'
+            f'<div class="chips">{dias}</div>'
+            '<div class="horario"><label>Desde <input type="time" name="desde" aria-label="Desde" step="900"'
+            f' value="{escape(desde.strip())}" required></label>'
+            f'<label>Hasta <input type="time" name="hasta" aria-label="Hasta" step="900" value="{escape(hasta.strip())}" required>'
+            "</label></div>"
+            '<p class="ayuda">Tu asistente solo ofrece citas en este horario y, fuera de él, avisa cuándo le contesta'
+            " una persona.</p></div>")
+
+
+def horario_error(f: dict, dias: list[str]) -> str:
+    """Lo que está mal en el horario que llegó del formulario ("" si está bien o no venía)."""
+    if "desde" not in f and "hasta" not in f:
+        return ""
+    if not any(d in "1234567" and len(d) == 1 for d in dias):
+        return "Elige al menos un día de atención."
+    desde, hasta = f.get("desde", ""), f.get("hasta", "")
+    if not (HORA.match(desde) and HORA.match(hasta)):
+        return "Escribe la hora de inicio y la de cierre de tu horario."
+    if desde >= hasta:
+        return "La hora de cierre debe ser después de la de inicio."
+    return ""
+
+
 def campos(c: Cuenta, avisos: bool = True) -> str:
     """Pausa, horario de atención de una persona y avisos (también el paso Tu equipo de asistente.py)."""
     pausas = "".join(
@@ -89,8 +121,8 @@ def campos(c: Cuenta, avisos: bool = True) -> str:
         f'<div class="chips">{pausas}</div>'
         '<p class="ayuda">Pasado ese tiempo vuelve a contestar solo. Siempre puedes reactivarlo antes desde'
         " Conversaciones recientes.</p>"
-        # El horario de atención ya no se pide aquí: sin días ni horas en el formulario, del_form deja los guardados
-        # (los usan las citas, Resultados y el "fuera de horario").
+        # El horario de atención: lo usan las citas, Resultados y el "fuera de horario".
+        + horario_campos(c) +
         '<div class="sub"><label>Fuera del horario de atención, si piden hablar con una persona</label>'
         '<div class="opciones">'
         f'<label class="opcion"><input type="radio" name="fuera" value="avisar"{"" if fijo else " checked"}>'
