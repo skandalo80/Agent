@@ -9,7 +9,7 @@ from PIL import Image  # noqa: E402
 from test_campanas import BASE, LUNES, claude_de_campana, leer, listo  # noqa: E402
 from test_contenido import ORIGEN, cliente  # noqa: E402
 
-from igbot import brief, campanas, contenido, imagenes, nueva_campana  # noqa: E402
+from igbot import brief, campanas, contenido, imagenes, limites, nueva_campana  # noqa: E402
 from igbot.cuenta import usar  # noqa: E402
 from test_imagenes import foto  # noqa: E402
 
@@ -1041,6 +1041,14 @@ def test_campana_de_producto_con_anuncios(cliente, monkeypatch):
     p = camp["posts"][0]
     p["prompt"], p["idea_base"] = "The pumpkin latte on a calm cream background", p["idea"]
     client.portal.call(c.store.set, "campanas", json.dumps([camp]))
+    original = proveedor.generar
+
+    async def con_costo(prompt, fotos=(), fiel=False):  # como OpenAI: cada imagen anota lo que costó
+        hecha = await original(prompt, fotos, fiel)
+        await imagenes.anotar_costo(0.1, "falso")
+        return hecha
+
+    monkeypatch.setattr(proveedor, "generar", con_costo)
     client.post(campanas.url_de(camp), headers=ORIGEN, data={"accion": "generar", "k": str(p["k"])})
     prompt, fotos = proveedor.llamadas[-1]
     assert "built on one creative idea" in prompt and "infographic-style" not in prompt and "No icons" not in prompt
@@ -1059,6 +1067,9 @@ def test_campana_de_producto_con_anuncios(cliente, monkeypatch):
     assert post["media_ids"] == [p["opciones"][0]["media_id"]]
     with usar(c):
         assert client.portal.call(imagenes.usadas, c.store) == (1, 0)
+        # Al presupuesto de contenido van las tres: todas se generaron y se pagaron.
+        assert client.portal.call(limites._imagenes_del_mes, c.store) == (3, 0.3)
+        assert round(client.portal.call(limites.gasto_contenido_mes, c.store), 6) == 0.3
     r = client.get(f"{campanas.url_de(camp)}?post={p['k']}")
     assert r.text.count('class="opcion-img') == 3 and 'class="opcion-img on"' in r.text
     assert f'value="elegir:{p["opciones"][1]["media_id"]}"' in r.text and "↻ Otras versiones" in r.text
@@ -1725,7 +1736,6 @@ def test_los_prompts_del_anuncio_traen_sus_versiones(cliente, monkeypatch):
 
 
 def test_sin_presupuesto_de_contenido_no_se_crea_el_brief(cliente, monkeypatch):
-    from igbot import limites
     client, c, *_ = cliente
     monkeypatch.setattr(c, "imagenes_mes", 4)
     monkeypatch.setattr(c, "contenido_usd_mes", 1.0)
