@@ -59,6 +59,9 @@ def test_respuesta_a_una_historia_nuestra(cliente):
 
     recibir(client, c, {"mid": "m1", "text": "¿Cuándo es?", "reply_to": {"story": {"id": "1802", "url": "https://x"}}})
     assert esperar(client, c) == ["[respondió a tu historia «Taller de barismo el sábado 15»] ¿Cuándo es?"]
+    # Para Ventas por post: el chat de ana llegó por esa historia.
+    cur = client.portal.call(c.store.db.execute, "SELECT user_id, tipo, media_id FROM origenes_chat")
+    assert client.portal.call(cur.fetchall) == [("ana", "historia", "1802")]
     extra = contexto(client, c)
     assert "Respondió a tu historia" in extra and "Título: Taller de barismo el sábado 15" in extra
     assert "Cata de café" not in extra and "Lo que se ve: Una taza humeante" in extra

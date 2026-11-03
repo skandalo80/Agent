@@ -220,6 +220,20 @@ CREATE TABLE IF NOT EXISTS ventas (
 );
 CREATE INDEX IF NOT EXISTS ventas_user ON ventas (user_id);
 
+-- De qué post o historia llegó cada chat: comentó y le mandamos DM (tipo 'comentario', detalle = la palabra
+-- clave) o respondió a una historia (tipo 'historia'). Una fila por persona, tipo y publicación; si vuelve por la
+-- misma, se actualiza la hora. Las ventas de su chat se le cuentan a la última antes de la venta.
+CREATE TABLE IF NOT EXISTS origenes_chat (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    TEXT NOT NULL,
+    tipo       TEXT NOT NULL,              -- 'comentario' | 'historia'
+    media_id   TEXT NOT NULL,              -- id de Instagram del post o la historia
+    detalle    TEXT NOT NULL DEFAULT '',
+    created_at REAL NOT NULL,
+    UNIQUE (user_id, tipo, media_id)
+);
+CREATE INDEX IF NOT EXISTS origenes_user ON origenes_chat (user_id, created_at);
+
 -- El código corto de cada chat que va en los enlaces a la tienda (?sk=...), para saber de qué chat
 -- vino un pedido.
 CREATE TABLE IF NOT EXISTS codigos_chat (
@@ -292,7 +306,7 @@ class Store:
     # --- mantenimiento (una vez al día por cuenta) ---
 
     async def purgar(self, dias: int, ahora: float | None = None) -> dict[str, int]:
-        """Borra lo de más de `dias` días: mensajes, eventos y comentarios (con 0 no borra nada). Los ids
+        """Borra lo de más de `dias` días: mensajes, eventos, comentarios y de qué post llegó cada chat (con 0 no borra nada). Los ids
         de mensajes enviados (`sent`) solo sirven para reconocer el eco de Meta: duran una semana."""
         ahora = ahora or time.time()
         borrado: dict[str, int] = {}
@@ -300,7 +314,7 @@ class Store:
         borrado["sent"] = cur.rowcount
         if dias > 0:
             limite = ahora - dias * config.DIA
-            for tabla in ("messages", "events", "comments"):
+            for tabla in ("messages", "events", "comments", "origenes_chat"):
                 cur = await self.db.execute(f"DELETE FROM {tabla} WHERE created_at < ?", (limite,))
                 borrado[tabla] = cur.rowcount
         await self.db.commit()
@@ -409,6 +423,22 @@ class Store:
             "UPDATE comments SET matched = ?, dm_sent = ?, replied = ? WHERE comment_id = ?",
             (matched, int(dm_sent), int(replied), comment_id),
         )
+        if dm_sent:  # el chat que abrió este DM llegó por esa publicación (para Ventas por post)
+            cur = await self.db.execute("SELECT user_id, media_id FROM comments WHERE comment_id = ?", (comment_id,))
+            if (row := await cur.fetchone()) and row[1]:
+                await self._origen(row[0], "comentario", row[1], "" if matched.startswith("tipo: ") else matched)
+        await self.db.commit()
+
+    async def _origen(self, user_id: str, tipo: str, media_id: str, detalle: str) -> None:
+        await self.db.execute(
+            "INSERT INTO origenes_chat (user_id, tipo, media_id, detalle, created_at) VALUES (?, ?, ?, ?, ?)"
+            " ON CONFLICT (user_id, tipo, media_id) DO UPDATE SET detalle = excluded.detalle,"
+            " created_at = excluded.created_at",
+            (user_id, tipo, media_id, detalle, time.time()))
+
+    async def guardar_origen(self, user_id: str, tipo: str, media_id: str, detalle: str = "") -> None:
+        """El chat de `user_id` llegó por esta publicación ('comentario' o 'historia')."""
+        await self._origen(user_id, tipo, media_id, detalle)
         await self.db.commit()
 
     async def ocultos(self, marcas: list[str], limite: int, desde: int = 0) -> list[tuple]:
@@ -1163,6 +1193,23 @@ class Store:
                                  desde, hasta))[0]
         return {"cotizaciones": cotizaciones, "citas": citas, "equipo": equipo, "ventas": n,
                 "compradores": compradores, "monto": float(monto or 0), "moneda": moneda or ""}
+
+    async def ventas_por_publicacion(self, desde: float, hasta: float, ventana: float) -> tuple[list[dict], dict]:
+        """Las ventas de chats del periodo, cada una contada a la última publicación (post o historia) por la que
+        llegó ese chat en los `ventana` segundos antes de la venta. ([{media_id, tipo, detalle, monto, moneda}],
+        {"ventas", "monto", "moneda"} de todas las ventas de chats del periodo, vengan o no de una publicación)."""
+        cur = await self.db.execute(
+            "SELECT o.media_id, o.tipo, o.detalle, v.monto, v.moneda FROM ventas v JOIN origenes_chat o ON o.id = ("
+            " SELECT id FROM origenes_chat WHERE user_id = v.user_id AND created_at <= v.created_at"
+            " AND created_at >= v.created_at - ? ORDER BY created_at DESC LIMIT 1)"
+            " WHERE v.user_id != '' AND v.created_at >= ? AND v.created_at < ?", (ventana, desde, hasta))
+        filas = [{"media_id": m, "tipo": t, "detalle": d, "monto": float(mo or 0), "moneda": mon or ""}
+                 for m, t, d, mo, mon in await cur.fetchall()]
+        cur = await self.db.execute(
+            "SELECT COUNT(*), COALESCE(SUM(monto), 0), MAX(moneda) FROM ventas"
+            " WHERE user_id != '' AND created_at >= ? AND created_at < ?", (desde, hasta))
+        n, monto, moneda = await cur.fetchone()
+        return filas, {"ventas": n, "monto": float(monto or 0), "moneda": moneda or ""}
 
     async def codigo_chat(self, user_id: str) -> str:
         """El código de este chat para los enlaces a la tienda (se crea la primera vez)."""

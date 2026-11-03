@@ -29,10 +29,11 @@ from fastapi.exception_handlers import http_exception_handler
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 
-from igbot import (acceso, adjuntos, admin, agenda_google, agent, ajustes, anuncios_meta, asistente, botones, campanas, cobros,
-                   comentarios, comprimir, conectar, config, contenido, conversaciones, empresa, errores, facebook, historias, inicio,
-                   interacciones, lentitud, limites, marca, marco, metricas, nueva_campana, ocultos, panel, reporte, resultados, salud, semana,
-                   skandi, sugeridos, tienda_shopify)
+from igbot import (acceso, adjuntos, admin, agenda_google, agent, ajustes, anuncios_meta, asistente, botones, campanas,
+                   catalogo_chat, cobros, comentarios, comprimir, conectar, config, contenido, conversaciones, empresa,
+                   errores, facebook, historias, inicio, interacciones, lentitud, limites, marca, marco, metricas,
+                   nueva_campana, ocultos, panel, reporte, resultados, salud, semana, skandi, sugeridos, tienda_shopify,
+                   unavez)
 from igbot.cuenta import Cuenta, cargar, cuenta, de_carpeta, usar
 from igbot.dispatcher import Dispatcher
 from igbot.google import Google
@@ -107,6 +108,13 @@ async def _handle(user_id: str, rows: list[tuple[int, str]]) -> None:
         text = await tienda_shopify.etiquetar(cuenta(), user_id, text)
     if text:  # vacío: lo pasó a tu equipo con "Sin mensaje"
         await instagram.send_text(admin.real_id(user_id), text)
+    if not is_admin and (elegido := catalogo_chat.tomar(cuenta(), user_id)):
+        # Las tarjetas de productos que eligió el asistente van después del texto; si fallan, el texto ya salió.
+        try:
+            if linea := await catalogo_chat.enviar(cuenta(), instagram, user_id, admin.real_id(user_id), elegido):
+                text = f"{text}\n{linea}".strip()
+        except Exception:
+            log.exception("No se pudieron mandar las tarjetas de productos a %s", user_id)
     await store.mark_answered(user_id, [i for i, _ in rows], text)
     try:
         await agent.summarize_if_needed(store, user_id)
@@ -674,6 +682,23 @@ async def entrar_adjuntos(c: Cuenta, user_id: str, message: dict) -> None:
             dispatchers[c.slug].notify(user_id)
 
 
+async def mas_fotos(c: Cuenta, user_id: str, mid: str, id_producto: str) -> None:
+    """Tocaron "Ver más fotos" en una tarjeta: se mandan las fotos sin llamar a Claude y queda en el historial. Si
+    no hay más fotos o ya pasó su tope, entra como mensaje y lo atiende el asistente."""
+    with usar(c):
+        if not await unavez.gastar(c.store, f"boton:{mid}", config.DIA):
+            return  # Meta reenvió el aviso
+        try:
+            linea = await catalogo_chat.mas_fotos(c, c.instagram, user_id, user_id, id_producto)
+        except Exception:
+            log.exception("No se pudieron mandar las fotos del producto a %s", user_id)
+            linea = ""
+        if linea:
+            await c.store.add_bot_message(user_id, linea)
+        elif await c.store.add_incoming(user_id, mid, await catalogo_chat.texto_fotos(c, id_producto)):
+            dispatchers[c.slug].notify(user_id)
+
+
 async def receive_entry(c: Cuenta, entry: dict) -> None:
     """Un aviso de una cuenta. Corre dentro de usar(c): lo que se lance aquí es de esa cuenta."""
     store, instagram = c.store, c.instagram
@@ -699,6 +724,14 @@ async def receive_entry(c: Cuenta, entry: dict) -> None:
             # Tocaron un botón de inicio: se contesta como si hubiera escrito la pregunta.
             message = {"mid": postback.get("mid") or f"pb-{event.get('timestamp')}",
                        "text": postback.get("title", "")}
+            if boton := catalogo_chat.de_boton(postback.get("payload", "")):
+                # Un botón de las tarjetas de productos: "Lo quiero" entra con el nombre del producto;
+                # "Ver más fotos" se contesta aquí mismo, sin Claude.
+                accion, id_producto = boton
+                if accion == catalogo_chat.FOTOS:
+                    in_background(mas_fotos(c, event["sender"]["id"], message["mid"], id_producto))
+                    continue
+                message["text"] = await catalogo_chat.texto_quiero(c, id_producto)
         ref = (message or {}).get("referral") or event.get("referral") or {}
         if (ref.get("source") or "").upper() == "ADS" and ref.get("ad_id") and not admin.is_admin(
                 event.get("sender", {}).get("id", "")):
@@ -717,6 +750,8 @@ async def receive_entry(c: Cuenta, entry: dict) -> None:
             continue
         user_id = event["sender"]["id"]
         log.info("DM de %s (%s)", user_id, nombre(c))
+        if (historia := (message.get("reply_to") or {}).get("story") or {}).get("id") and not admin.is_admin(user_id):
+            await store.guardar_origen(user_id, "historia", str(historia["id"]))  # para Ventas por post
         text = message_text(message)
         # Primero lo que eligió el dueño en Configura tus interacciones (con el texto tal cual llegó, para
         # distinguir un emoji de un mensaje); si toca "La IA contesta", sigue el camino de siempre con el

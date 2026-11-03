@@ -13,7 +13,7 @@ from pathlib import Path
 
 import anthropic
 
-from . import agenda_google, catalog, cobros, config, limites, tienda, tienda_shopify, tools
+from . import agenda_google, catalog, catalogo_chat, cobros, config, limites, tienda, tienda_shopify, tools
 from .cuenta import cuenta
 from .google import Google
 from .instagram import Instagram
@@ -198,6 +198,10 @@ async def reply(
     # Con Mercado Pago o Stripe conectado, cobra por el chat con links de pago.
     if await cobros.conectado(cuenta()):
         extra += cobros.herramientas(cuenta(), user_id)
+    # Con productos en Tu empresa, los muestra en tarjetas que se deslizan, con foto, precio y botones.
+    catalogo_chat.descartar(cuenta(), user_id)  # lo de una versión anterior de esta respuesta no se manda
+    if await catalogo_chat.con_productos(cuenta()):
+        extra += catalogo_chat.herramientas(cuenta(), user_id)
     # Con su Google Calendar conectado, agenda citas en el calendario del negocio.
     agenda, cal = await agenda_google.calendario(cuenta())
     if agenda:

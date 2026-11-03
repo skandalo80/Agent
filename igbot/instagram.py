@@ -104,6 +104,23 @@ class Instagram:
     async def send_image(self, recipient_id: str, url: str) -> None:
         await self._send(recipient_id, {"attachment": {"type": "image", "payload": {"url": url}}})
 
+    async def send_cards(self, recipient_id: str, tarjetas: list[dict], rapidas: list[str] | None = None) -> None:
+        """Tarjetas que se deslizan de lado (plantilla genérica: hasta 10, cada una con hasta 3 botones) y, abajo,
+        hasta 3 respuestas rápidas. Si Instagram no acepta las respuestas rápidas junto a las tarjetas, se mandan
+        las tarjetas solas: las respuestas rápidas son un extra, las tarjetas no."""
+        mensaje: dict = {"attachment": {"type": "template", "payload": {
+            "template_type": "generic", "elements": tarjetas[:10]}}}
+        if rapidas:
+            try:
+                await self._send(recipient_id, {**mensaje, "quick_replies": [
+                    {"content_type": "text", "title": t, "payload": t} for t in rapidas]})
+                return
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code != 400:
+                    raise
+                log.warning("Instagram no aceptó respuestas rápidas con las tarjetas; van solas")
+        await self._send(recipient_id, mensaje)
+
     async def private_reply(self, comment_id: str, text: str) -> None:
         """DM a quien comentó (Instagram permite uno por comentario, dentro de 7 días)."""
         await self._send_to({"comment_id": comment_id}, {"text": split_text(text)[0]})
