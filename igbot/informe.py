@@ -829,7 +829,7 @@ def _resultados_pdf(c: Cuenta, titulo: str, d: dict, m: dict, cuenta: str, vista
         if "comentarios" in d:
             doc.seccion("De comentario a mensaje", [])
             doc.datos([("Comentarios", cifra(d["comentarios"])), ("DMs por comentario", cifra(d["dms"])),
-                       ("Respuestas públicas", cifra(d["publicas"])), ("Spam ocultado", cifra(d["spam"]))])
+                       ("Respuestas públicas", cifra(d["publicas"])), ("Comentarios ocultos", cifra(d["spam"]))])
         e = d.get("embudo") or {}
         if any(e.get(k) for k in ("cotizaciones", "citas", "ventas", "equipo")):
             doc.seccion("Lo que dejaron", [x for x in (

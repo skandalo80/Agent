@@ -226,7 +226,7 @@ def test_pestana_comentarios(cliente, monkeypatch):
     html = client.get("/panel/resultados?ver=comentarios").text
     assert 'class="on">Comentarios' in html and "Descargar" not in html
     assert "75%" in html and "3 de 4 por tu asistente" in html  # el spam y la mención no cuentan
-    assert "Spam ocultado" in html and "Menciones" in html
+    assert "Ocultados" in html and "Menciones" in html
     assert "Elogio" in html and "Pregunta" in html and "Palabra clave" in html and "1 contestado" in html
     assert "Pan de muerto" in html and "https://www.instagram.com/p/Y/" in html and "3</b><small>comentarios" in html
     assert "PRECIO · 1" in html and "Comentarios recibidos" in html

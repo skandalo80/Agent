@@ -411,6 +411,28 @@ class Store:
         )
         await self.db.commit()
 
+    async def ocultos(self, marcas: list[str], limite: int, desde: int = 0) -> list[tuple]:
+        """(comment_id, user_id, media_id, text, matched, created_at) de los comentarios ocultos (`marcas` de matched),
+        lo más reciente primero."""
+        signos = ",".join("?" * len(marcas))
+        cur = await self.db.execute(
+            f"SELECT comment_id, user_id, media_id, text, matched, created_at FROM comments WHERE matched IN ({signos})"
+            " ORDER BY created_at DESC LIMIT ? OFFSET ?", (*marcas, limite, desde))
+        return list(await cur.fetchall())
+
+    async def cuantos_ocultos(self, marcas: list[str], since: float = 0, until: float = 9e18) -> dict[str, int]:
+        """Cuántos comentarios ocultos hay por marca en el periodo."""
+        signos = ",".join("?" * len(marcas))
+        cur = await self.db.execute(
+            f"SELECT matched, COUNT(*) FROM comments WHERE matched IN ({signos}) AND created_at >= ? AND created_at < ?"
+            " GROUP BY matched", (*marcas, since, until))
+        return {m: n for m, n in await cur.fetchall()}
+
+    async def comentario(self, comment_id: str) -> tuple[str, str] | None:
+        """(user_id, matched) de un comentario que ya atendimos, o None."""
+        cur = await self.db.execute("SELECT user_id, matched FROM comments WHERE comment_id = ?", (comment_id,))
+        return await cur.fetchone()
+
     async def mark_failed(self, ids: list[int]) -> None:
         """Saca de la cola DMs que no se pudieron contestar tras varios intentos."""
         marks = ",".join("?" * len(ids))

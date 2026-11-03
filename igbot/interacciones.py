@@ -1,9 +1,11 @@
 """Configura tus interacciones: qué contesta el asistente fuera de los DMs normales, paso a paso.
 
 1 Comentarios: una tabla con una fila por tipo de comentario (solo emojis, elogio, pregunta, quiere comprar,
-  etiqueta a un amigo, queja, otro) y dos columnas, "en comentarios" y "por DM", cada una con interruptor y
+  etiqueta a un amigo, queja, insulto, otro) y dos columnas, "en comentarios" y "por DM", cada una con interruptor y
   La IA contesta / Predeterminada. En comentarios la predeterminada es una lista que se turna (Instagram puede
-  tomar como spam la misma frase repetida); por DM es un solo mensaje. Abajo, ocultar spam.
+  tomar como spam la misma frase repetida); por DM es un solo mensaje. Abajo, ocultar spam y ocultar
+  insultos (cada uno con su interruptor; lo oculto se ve y se vuelve a mostrar en ocultos.py). Si los insultos se
+  dejan visibles, la fila "Un insulto o ataque" (apagada de inicio) decide si se contesta.
 2 Menciones: cuando te mencionan en su historia (llega como DM: se contesta por DM) o en su post o comentario
   (se contesta en su post con POST /{ig_id}/mentions; ahí no se puede mandar DM ni comentar fotos donde te etiquetan).
 3 Respuestas a tus historias: una reacción con emoji o un mensaje sobre tu historia (llegan como DM).
@@ -11,7 +13,7 @@
 5 Resumen: lo de cada paso con Editar, el tope de respuestas al día y encender o pausar todo.
 
 Todo en kv "interacciones": {"comentarios": {...}, "menciones": {...}, "historias": {...}, "claves": [...],
-"spam": bool, "tope": int, "activo": bool, "pasos": [...]}. Solo con contenido en el plan (Community Manager).
+"spam": bool, "ofensas": bool, "aviso_ocultos": bool, "tope": int, "activo": bool, "pasos": [...]}. Solo con contenido en el plan (Community Manager).
 La tabla de comentarios actúa cuando el cliente ya la guardó una vez (antes, todo sigue como siempre); en
 historias y menciones por DM, "La IA contesta" es el asistente de siempre, así que lo que propone la tabla es lo
 de antes. Las palabras clave van primero (comentarios.handle).
@@ -53,6 +55,9 @@ CASOS = [
      {"pub": (True, "ia"), "dm": (False, "ia")}),
     ("queja", "Una queja o crítica", "“Nunca llegó mi pedido”", "una queja, un reclamo o una crítica al negocio",
      {"pub": (True, "ia"), "dm": (False, "ia")}),
+    ("ataque", "Un insulto o ataque", "Burlas, groserías, “son unos rateros”",
+     "un insulto, una burla o una agresión sin un reclamo concreto (un reclamo por un pedido o el servicio es queja)",
+     {"pub": (False, "ia"), "dm": (False, "ia")}),
     ("otro", "Otro comentario", "Lo que no entra arriba", "cualquier otra cosa", {"pub": (False, "ia"), "dm": (False, "ia")}),
 ]
 TIPOS = [k for k, *_ in CASOS]
@@ -134,6 +139,16 @@ def reglas(datos: dict, seccion: str = "comentarios") -> dict[str, dict]:
 
 def ocultar_spam(c: Cuenta, datos: dict) -> bool:
     return bool(datos.get("spam", c.hide_spam))
+
+
+def ocultar_ofensas(c: Cuenta, datos: dict) -> bool:
+    """Antes los insultos iban dentro del spam: sin guardar este interruptor, sigue lo del spam."""
+    return bool(datos.get("ofensas", ocultar_spam(c, datos)))
+
+
+def aviso_ocultos(datos: dict) -> bool:
+    """El correo del día con lo que se ocultó (ocultos.py). Encendido de inicio."""
+    return datos.get("aviso_ocultos", True) is not False
 
 
 def activo(datos: dict) -> bool:
@@ -417,11 +432,21 @@ def tabla(datos: dict, seccion: str = "comentarios") -> str:
             f'{cab}<span></span></div>{filas}</div>')
 
 
+def _interruptor(nombre: str, titulo: str, texto: str, on: bool) -> str:
+    return (f'<label class="as-fila"><span><b>{titulo}</b><small>{texto}</small></span><input type="checkbox"'
+            f' class="as-sw" name="{nombre}" value="1"{" checked" if on else ""}></label>')
+
+
 def spam(c: Cuenta, datos: dict) -> str:
     return ('<div class="as-caja">'
-            '<label class="as-fila"><span><b>Ocultar comentarios de spam</b><small>Publicidad de otros, estafas y ofensas'
-            ' se ocultan solos.</small></span><input type="checkbox" class="as-sw" name="spam" value="1"'
-            f'{" checked" if ocultar_spam(c, datos) else ""}></label>'
+            + _interruptor("spam", "Ocultar spam", "Publicidad de otros, estafas, cripto y ofertas de seguidores.",
+                           ocultar_spam(c, datos))
+            + _interruptor("ofensas", "Ocultar insultos y ataques", "Groserías, burlas y acoso. Las quejas con un"
+                           " reclamo concreto no se ocultan, aunque sean duras.", ocultar_ofensas(c, datos))
+            + _interruptor("aviso_ocultos", "Avisarme por correo", "Un correo al día, solo si ocultamos algo, con el"
+                           " enlace para revisarlo.", aviso_ocultos(datos))
+            + '<p class="it-clave"><a href="/panel/interacciones/ocultos">Ver comentarios ocultos</a>. Puedes volver a'
+            ' mostrar cualquiera.</p>'
             '<p class="it-clave"><b>Las palabras clave van primero.</b> Si un comentario trae una palabra clave (las de'
             f' cada post o las <a href="{_href("claves")}">generales</a>), se manda su DM en vez de usar esta tabla.</p></div>')
 
@@ -472,6 +497,7 @@ async def paso_resumen(c: Cuenta, datos: dict) -> str:
     comentarios = (resumen("comentarios") if "comentarios" in datos else ["Aún no la guardas: los comentarios siguen"
                                                                           " solo con palabras clave"])
     comentarios.append("Oculta el spam" if ocultar_spam(c, datos) else "No oculta el spam")
+    comentarios.append("Oculta insultos y ataques" if ocultar_ofensas(c, datos) else "No oculta insultos")
     n = len(claves(datos))
     chips = "".join(f'<label><input type="radio" name="tope" value="{t}"{" checked" if t == tope(c, datos) else ""}>'
                     f"{t}</label>" for t in TOPES)
@@ -587,6 +613,8 @@ async def guardar(request: Request, c: marco.Formulario):
         datos[paso] = _de_tabla(f, paso)
         if paso == "comentarios":
             datos["spam"] = f.get("spam") == "1"
+            datos["ofensas"] = f.get("ofensas") == "1"
+            datos["aviso_ocultos"] = f.get("aviso_ocultos") == "1"
     elif paso == "claves":
         filas = zip(f.getlist("cl_palabras"), f.getlist("cl_dm"), f.getlist("cl_publica"))
         datos["claves"] = [{"palabras": ", ".join(p.strip() for p in str(pal).split(",") if p.strip())[:80],
