@@ -587,8 +587,13 @@ async def usadas(store: Store) -> tuple[int, int]:
             int(await store.get(f"imagenes_extra:{_mes()}") or 0))
 
 
+# Leer el contador y escribirlo son dos pasos: varias piezas a la vez (las versiones de un anuncio) se pisaban.
+_cupo = asyncio.Lock()
+
+
 async def _sumar(store: Store, clave: str, n: int) -> None:
-    await store.set(clave, str(max(0, int(await store.get(clave) or 0) + n)))
+    async with _cupo:
+        await store.set(clave, str(max(0, int(await store.get(clave) or 0) + n)))
 
 
 async def reservar(store: Store, permitir_extra: bool = False) -> str:
@@ -596,14 +601,17 @@ async def reservar(store: Store, permitir_extra: bool = False) -> str:
     cupo = cuenta().imagenes_mes
     if cupo <= 0:
         raise SinCupo("Tu plan no incluye generación de contenido.")
-    incluidas, _ = await usadas(store)
-    if incluidas < cupo:
-        await _sumar(store, f"imagenes:{_mes()}", 1)
-        return "incluida"
-    if not permitir_extra:
-        raise SinCupo(f"Ya usaste las {cupo} imágenes de tu plan este mes.")
-    await _sumar(store, f"imagenes_extra:{_mes()}", 1)
-    return "extra"
+    async with _cupo:
+        incluidas, _ = await usadas(store)
+        if incluidas < cupo:
+            clave = f"imagenes:{_mes()}"
+            await store.set(clave, str(int(await store.get(clave) or 0) + 1))
+            return "incluida"
+        if not permitir_extra:
+            raise SinCupo(f"Ya usaste las {cupo} imágenes de tu plan este mes.")
+        clave = f"imagenes_extra:{_mes()}"
+        await store.set(clave, str(int(await store.get(clave) or 0) + 1))
+        return "extra"
 
 
 async def devolver(store: Store, tipo: str) -> None:

@@ -26,6 +26,7 @@ pasadas se descarga el reporte (informe.py). Contenido › Calendario muestra el
 cada campaña y una miniatura de cada post (mes()).
 Lo que escribe el cliente son datos, no instrucciones: va entre etiquetas.
 """
+import asyncio
 import json
 from collections import Counter
 import logging
@@ -1217,6 +1218,7 @@ async def generar_imagen(c: Cuenta, camp: dict, p: dict, extra: bool) -> int:
             camp.get("brief") and ia_completa(p) and formato in CON_TEXTO) else plantilla_de(marca)
         pieza_ = pieza_de(camp, p, plantilla)
         historia = es_historia(p)
+        p.pop("opciones", None)  # imagen nueva: las versiones de la anterior ya no valen
         if camp.get("brief") and ia_completa(p):  # la IA genera la pieza completa: sin plantilla ni fotos viejas
             hecha = await pieza_con_ia(c, camp, p, marca, pieza_, usuario, extra)
         elif formato == "texto":
@@ -1309,9 +1311,9 @@ async def pieza_con_ia(c: Cuenta, camp: dict, p: dict, marca: dict, pieza_: dict
         if ancla and len(estilo) >= 1:
             idea += f"\n{ANCLA}"
         t = texto_imagen(pieza_, usuario)
-        return await pieza_revisada(c, p, [t.titulo, t.subtitulo], lambda: imagenes.crear_pieza(
-            c.store, PANEL, idea, imagenes.LIBRE, t, producto + estilo, permitir_extra=extra, marca=k,
-            historia=es_historia(p), anuncio=True, con_producto=bool(producto)))
+        return await opciones_anuncio(c, p, [t.titulo, t.subtitulo], lambda angulo: imagenes.crear_pieza(
+            c.store, PANEL, f"{idea}\n{angulo}" if angulo else idea, imagenes.LIBRE, t, producto + estilo,
+            permitir_extra=extra, marca=k, historia=es_historia(p), anuncio=True, con_producto=bool(producto)))
     if p.get("ve") == "productos" or (not p.get("ve") and camp.get("producto_id")):
         tokens = (await fotos_producto(c, camp))[:2] or (
             marca.get("fotos", []) if camp.get("variedad") == "reconocible" and not estilo else [])
@@ -1340,6 +1342,16 @@ async def pieza_con_ia(c: Cuenta, camp: dict, p: dict, marca: dict, pieza_: dict
         plan_b=plan_b_de(c, p, marca, k, idea, t, referencias, extra, con_producto))
 
 
+# Las versiones de un anuncio (config.OPCIONES_ANUNCIO): el mismo prompt con una composición distinta cada una, para
+# que el cliente elija entre opciones de verdad diferentes y no tres casi iguales.
+ANGULOS_ANUNCIO = (
+    "Composition of this version: the product centered on a clean studio surface, front view, nothing else around it.",
+    "Composition of this version: the product in its real context of use, slightly off-center, a wider shot with"
+    " a few real objects of that place.",
+    "Composition of this version: a close-up of the product's most distinctive detail, shallow depth of field,"
+    " the rest softly out of focus.",
+    "Composition of this version: the product seen from above (flat lay) on a plain surface, aligned to a grid.",
+)
 ANCLA = ("The very first reference image is another post of this same campaign: match its light, color palette,"
          " treatment, framing and mood so closely that the two read as one set, without repeating its subject or text.")
 
@@ -1429,6 +1441,40 @@ async def pieza_revisada(c: Cuenta, p: dict, textos: list[str], crear, plan_b=No
     return otra
 
 
+async def opciones_anuncio(c: Cuenta, p: dict, textos: list[str], crear) -> dict:
+    """Las versiones de un anuncio (config.OPCIONES_ANUNCIO), cada una con su composición (ANGULOS_ANUNCIO) y
+    revisada como cualquier pieza; se generan a la vez. La primera que salió queda como imagen del post y las demás
+    en p["opciones"] para que el cliente elija: solo la elegida cuenta en el cupo (las otras se devuelven; su costo
+    ya quedó en el presupuesto diario). Si solo sale una, no hay opciones. Si no sale ninguna, el primer error."""
+    n = config.OPCIONES_ANUNCIO
+    if n <= 1:
+        return await pieza_revisada(c, p, textos, lambda: crear(""))
+
+    async def una(angulo: str) -> tuple[dict, str]:
+        copia = dict(p)  # cada versión anota su propia revisión de textos
+        hecha = await pieza_revisada(c, copia, textos, lambda: crear(angulo))
+        return hecha, copia.get("revisar_imagen", "")
+
+    salidas = await asyncio.gather(*(una(a) for a in ANGULOS_ANUNCIO[:n]), return_exceptions=True)
+    buenas = [s for s in salidas if not isinstance(s, BaseException)]
+    if not buenas:
+        raise next(s for s in salidas if isinstance(s, BaseException))
+    for s in salidas:
+        if isinstance(s, BaseException) and not isinstance(s, imagenes.ErrorImagen):
+            log.warning("Una versión del anuncio no salió: %s", s)
+    for hecha, _ in buenas[1:]:
+        await imagenes.devolver(c.store, hecha["tipo"])  # al cupo solo va la elegida
+    p["opciones"] = [{"media_id": h["media_id"], "token": h["token"], "revisar": motivo} for h, motivo in buenas]
+    if len(p["opciones"]) < 2:
+        p.pop("opciones", None)
+    elegida, motivo = buenas[0]
+    if motivo:
+        p["revisar_imagen"] = motivo
+    else:
+        p.pop("revisar_imagen", None)
+    return elegida
+
+
 async def descartar(c: Cuenta, hecha: dict, motivo: str) -> None:
     """Una pieza que no sirvió: su imagen vuelve al cupo del cliente y queda registrada."""
     await imagenes.devolver(c.store, hecha["tipo"])
@@ -1445,7 +1491,7 @@ Reglas:
 - Si el post trae "escena", ese encuadre y esa luz son obligatorios. Si trae "producto", el producto real es el protagonista.
 - El estilo es un tratamiento de luz, color, textura y composición, nunca objetos de arcilla, cristal, neón u otro material dentro de la escena.
 - Si la "pieza" es un diseño estilo infografía, el prompt describe la pieza gráfica terminada: la jerarquía, dónde va cada uno de sus "textos del diseño" (cítalos tal cual, en español y entre comillas, sin agregar otros), los íconos o gráficos simples que los acompañan, los bloques de color de la marca y la foto o ilustración que la completa. Si es una imagen sin texto, ni una letra, número o logo dentro. Fotografía realista y creíble salvo que el formato o el plan pidan ilustración o gráfico.
-- Si la "pieza" es un anuncio limpio, el prompt describe una pieza publicitaria de marca premium: el producto real de "producto" como protagonista (o su resultado, si es un servicio), una sola idea, un tercio del lienzo vacío y en calma, sus "textos del diseño" (tal cual, entre comillas) con un titular grande y una línea chica, a lo más dos colores de la marca, y nada de íconos, sellos, explosiones, salpicaduras ni objetos volando.
+- Si la "pieza" es un anuncio limpio, el prompt es más corto, de 60 a 100 palabras, y sigue este orden fijo: la escena (el momento que se ve, no solo el objeto, con el producto real de "producto" como protagonista, o su resultado si es un servicio); la perspectiva (una sola: frontal de estudio, a la altura de la mesa, cenital, por encima del hombro); de tres a cinco adjetivos de estética; la luz; los objetos concretos que acompañan, pocos; sus "textos del diseño" (tal cual, entre comillas), un titular grande y una línea chica, con un tercio del lienzo vacío y en calma; a lo más dos colores de la marca; y lo que se evita, solo lo que venga del plan visual o del brief. Un prompt largo mete ruido: nada de listas de adjetivos ni de conceptos abstractos, y nada de íconos, sellos, explosiones, salpicaduras ni objetos volando.
 - Elementos clave: si el plan visual trae "Elementos clave", el prompt empieza por ellos, explícitos (qué son, cuántos, cómo se ven y dónde van); nunca se omiten, se simplifican ni se cambian por otra cosa.
 - Personas: si el plan visual no pide personas (en protagonista, acción o escenario), el prompt dice claramente "sin personas, sin caras ni manos".
 - Revisión final: cada <post> trae su "texto que se publica". La imagen cuenta lo mismo que ese texto y se entiende sin leerlo. Si el plan visual no lo prueba, ajusta protagonista y acción para que lo prueben, conservando los elementos clave, el encuadre, la luz y el estilo.
@@ -1704,6 +1750,7 @@ async def subir_imagen(c: Cuenta, camp: dict, p: dict, data: bytes) -> int:
                                                 kit_de(c, marca, p), historia=es_historia(p))
         except (OSError, ValueError, Image.UnidentifiedImageError):
             raise imagenes.ErrorImagen("No pudimos leer esa imagen. Sube una foto JPG o PNG.")
+        p.pop("opciones", None)  # su propia foto: las versiones generadas ya no valen
         post_id = await poner_pieza(c, p, hecha, pieza_)
         log.info("@%s: campaña, post %s con imagen subida %s", usuario, post_id, hecha["media_id"])
     return post_id
@@ -1796,6 +1843,20 @@ def se_prueba(camp: dict) -> str:
             + "</p>")
 
 
+def opciones_html(c: Cuenta, p: dict, actual: int) -> str:
+    """Las versiones del anuncio bajo la imagen: la que está en el post en naranja; tocar otra la elige."""
+    opciones = [o for o in p.get("opciones") or [] if archivo(c, o["token"]).is_file()]
+    if len(opciones) < 2:
+        return ""
+    return ('<div class="opciones-img">' + "".join(
+        f'<button class="opcion-img{" on" if o["media_id"] == actual else ""}" name="accion"'
+        f' value="elegir:{o["media_id"]}" aria-label="Versión {i}"'
+        f'{" aria-current=true" if o["media_id"] == actual else ""}>'
+        f'<img src="{url_imagen(c, o["token"])}" alt="Versión {i}"></button>'
+        for i, o in enumerate(opciones, 1))
+        + '</div><p class="ayuda chica">Toca la versión que quieras publicar.</p>')
+
+
 async def detalle(c: Cuenta, camp: dict, p: dict, quedan_ia: int) -> str:
     """El post, en una ventana centrada sobre el calendario (que se sigue viendo detrás): el texto que se publica,
     el prompt de la imagen, generarla o subir la suya, su día y hora, y la regla de "Comenta y te respondemos".
@@ -1803,7 +1864,9 @@ async def detalle(c: Cuenta, camp: dict, p: dict, quedan_ia: int) -> str:
     post = await estado_post(c, p)
     fija = post and post["status"] in BLOQUEADOS
     usa = costo(p)
-    gasto = f"usa {usa} de tu cupo" if usa else "no usa tu cupo"
+    versiones = config.OPCIONES_ANUNCIO if formato_de(p) == "anuncio" and camp.get("brief") else 1
+    gasto = (f"hace {versiones} versiones y eliges una: usa {usa} de tu cupo" if usa and versiones > 1 else
+             f"usa {usa} de tu cupo" if usa else "no usa tu cupo")
     dias = sorted(set(visibles(camp)) | set(rango(camp)) | {p["dia"]})
     opciones = "".join(f'<option value="{d}"{" selected" if d == p["dia"] else ""}>{fechas.larga(d)}</option>' for d in dias)
     formato = formato_de(p)
@@ -1818,6 +1881,8 @@ async def detalle(c: Cuenta, camp: dict, p: dict, quedan_ia: int) -> str:
         if p.get("revisar_imagen"):  # la revisión con visión encontró texto mal escrito dos veces seguidas
             imagen += ('<p class="verificar">Revisa el texto de la imagen antes de aprobar: '
                        f'{escape(p["revisar_imagen"])}. Si no se lee bien, vuelve a generarla.</p>')
+        if not fija and media:
+            imagen += opciones_html(c, p, post["media_ids"][0])
     else:
         imagen = (f'<div class="img-modal vacia{historia}">Aún sin imagen<small>Genérala con el prompt o sube la tuya'
                   + (" (vertical, 9:16)" if historia else "") + "</small></div>")
@@ -1826,7 +1891,8 @@ async def detalle(c: Cuenta, camp: dict, p: dict, quedan_ia: int) -> str:
         botones_img = ""
     else:
         # "Otra imagen" es un reintento junto a la imagen, para no confundirse con Aprobar (PR #84).
-        generar = ("↻ Volver a generar imagen" if post else "Generar imagen")
+        generar = (("↻ Otras versiones" if post else f"Generar {versiones} versiones") if versiones > 1 else
+                   "↻ Volver a generar imagen" if post else "Generar imagen")
         botones_img = (
             '<div class="botones-img">'
             f'<button class="boton{" secundario" if post else ""}" name="accion" value="generar">{generar}</button>'
@@ -2791,9 +2857,12 @@ async def _generar(c: Cuenta, camp: dict, p: dict, post: dict | None, f: dict, s
             await guardar_post(c, camp, p)
         yield con_desde(f"{url}?post={k}#detalle")
 
-    return await trabajando(c, "Generando la imagen…" if costo(p) else "Armando la pieza…",
-                            "Tarda alrededor de medio minuto." if costo(p) else "Tarda unos segundos.", una, url,
-                            segundos=30 if costo(p) else 8)
+    versiones = config.OPCIONES_ANUNCIO if formato_de(p) == "anuncio" and camp.get("brief") else 1
+    return await trabajando(c, ("Generando las versiones…" if versiones > 1 else "Generando la imagen…") if costo(p)
+                            else "Armando la pieza…",
+                            ("Tarda alrededor de un minuto." if versiones > 1 else "Tarda alrededor de medio minuto.")
+                            if costo(p) else "Tarda unos segundos.", una, url,
+                            segundos=(30 if versiones == 1 else 30 + 15 * versiones) if costo(p) else 8)
 
 
 async def _aprobar(c: Cuenta, camp: dict, p: dict, post: dict | None, f: dict, subida):
@@ -2810,8 +2879,26 @@ async def _aprobar(c: Cuenta, camp: dict, p: dict, post: dict | None, f: dict, s
         return await pagina_campana(c, camp, f"Listo: sale el {cuando(post['publish_at'])}.", sel=k)
 
 
+async def _elegir(c: Cuenta, camp: dict, p: dict, post: dict | None, f: dict, subida):
+    """Una de las versiones del anuncio pasa a ser la imagen del post (sin generar nada ni tocar el cupo)."""
+    k = str(p["k"])
+    elegida = next((o for o in p.get("opciones") or [] if str(o["media_id"]) == f.get("opcion", "")), None)
+    if not elegida or not post or post["status"] not in ("borrador", "programada"):
+        return await pagina_campana(c, camp, "Esa versión ya no está.", sel=k)
+    with usar(c):
+        await c.store.update_post(post["id"], media_ids=[elegida["media_id"]])
+        if post["status"] == "programada":  # imagen distinta: se revisa de nuevo
+            await c.store.set_post(post["id"], "borrador", only_if="programada")
+        if elegida.get("revisar"):
+            p["revisar_imagen"] = elegida["revisar"]
+        else:
+            p.pop("revisar_imagen", None)
+        await guardar_post(c, camp, p)
+    return RedirectResponse(con_desde(f"{url_de(camp)}?post={k}#detalle"), status_code=303)
+
+
 ACCIONES_POST = {"verificado": _verificado, "subir": _subir, "otra": _otra, "prompt": _prompt, "generar": _generar,
-                 "aprobar": _aprobar}
+                 "aprobar": _aprobar, "elegir": _elegir}
 
 
 @router.post("/campanas/{cid}")
@@ -2821,7 +2908,7 @@ async def accion(request: Request, c: marco.Formulario, cid: str):
     datos = await request.form()  # el editor del post es multipart: puede traer su imagen ("Subir imagen")
     subida = datos.get("imagen")
     f = {k: v for k, v in datos.items() if isinstance(v, str)}
-    que = f.get("accion", "")
+    que, _, f["opcion"] = f.get("accion", "").partition(":")  # "elegir:<media_id>": la versión elegida
     tomar_desde(f.get("desde"))
     if not (camp := await leer(c, cid)) or not camp.get("posts"):
         return RedirectResponse(BASE, status_code=303)
