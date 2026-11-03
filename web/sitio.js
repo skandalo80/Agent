@@ -172,42 +172,52 @@ document.querySelectorAll('.filtros [data-filtro]').forEach(function (b) {
 
   // Escenas de la portada y de "Un día con Skandar" (estilos en escenas.css): cada una corre cuando se ve
   // y vuelve a empezar al terminar su ciclo (data-ciclo, en ms); fuera de pantalla se detiene y se reinicia.
-  var seg = function (el, prop) { return (parseFloat(el.style.getPropertyValue(prop)) || 0) * 1000; };
+  var seg = function (el, prop) {
+    var v = el.style.getPropertyValue(prop) || getComputedStyle(el).getPropertyValue(prop);
+    return (parseFloat(v) || 0) * 1000;
+  };
 
   document.querySelectorAll('.escena[data-ciclo]').forEach(function (escena) {
     var ciclo = parseInt(escena.dataset.ciclo, 10) || 12000;
     var tel = escena.querySelector('.tel');
 
     // Teléfono = conversación en vivo: cada mensaje llega abajo y empuja a los de arriba (ventana de alto fijo).
+    // Va por requestAnimationFrame con el reloj real, no con setTimeout: si el navegador frena los
+    // temporizadores (batería baja, pestaña al fondo), al volver no salen todos los mensajes de golpe.
     if (tel) {
-      var pasos = Array.prototype.slice.call(escena.querySelectorAll('.anim'));
-      var relojes = [];
-      var limpiar = function () {
-        relojes.forEach(clearTimeout); relojes = [];
-        pasos.forEach(function (p) { p.classList.remove('puesto', 'yendo'); p.hidden = true; });
+      var pasos = Array.prototype.slice.call(escena.querySelectorAll('.anim')).map(function (p) {
+        var t = seg(p, '--t');
+        var tecla = p.classList.contains('tecla');
+        return { el: p, desde: t, hasta: tecla ? t + (seg(p, '--d') || 1300) : Infinity, fin: tecla ? t : t + 300 };
+      });
+      var largo = pasos.reduce(function (m, p) { return Math.max(m, p.fin); }, 0) + 2200;
+      var inicio = null, cuadro = null, visible = false;
+      var mostrar = function (p, si) {
+        if (si === !p.el.hidden) return;
+        p.el.hidden = !si;
+        p.el.classList.toggle('puesto', si);
       };
-      var correr = function () {
-        limpiar();
-        var fin = 0;
-        pasos.forEach(function (p) {
-          var t = seg(p, '--t');
-          relojes.push(setTimeout(function () {
-            p.hidden = false; p.classList.add('puesto');
-            if (p.classList.contains('tecla')) {
-              var d = seg(p, '--d') || 1300;
-              relojes.push(setTimeout(function () { p.hidden = true; p.classList.remove('puesto'); }, d));
-            }
-          }, t));
-          var hasta = t + (p.classList.contains('tecla') ? 0 : 300);
-          if (hasta > fin) fin = hasta;
-        });
-        relojes.push(setTimeout(correr, fin + 2200));
+      var pintar = function (ahora) {
+        if (inicio === null || ahora - inicio > largo) {
+          inicio = ahora;
+          pasos.forEach(function (p) { mostrar(p, false); });
+        }
+        var e = ahora - inicio;
+        pasos.forEach(function (p) { mostrar(p, e >= p.desde && e < p.hasta); });
+        cuadro = requestAnimationFrame(pintar);
       };
+      var parar = function () {
+        if (cuadro) cancelAnimationFrame(cuadro);
+        cuadro = null; inicio = null;
+        pasos.forEach(function (p) { mostrar(p, false); });
+      };
+      var arrancar = function () { if (!cuadro && visible && !document.hidden) cuadro = requestAnimationFrame(pintar); };
       var vigiaTel = new IntersectionObserver(function (entradas) {
-        if (entradas[0].isIntersecting) { if (!relojes.length) correr(); }
-        else { limpiar(); }
+        visible = entradas[0].isIntersecting;
+        if (visible) arrancar(); else parar();
       }, { threshold: 0.3 });
-      pasos.forEach(function (p) { p.hidden = true; });
+      document.addEventListener('visibilitychange', function () { if (document.hidden) parar(); else arrancar(); });
+      pasos.forEach(function (p) { p.el.hidden = true; });
       vigiaTel.observe(escena);
       return;
     }
