@@ -172,25 +172,56 @@ document.querySelectorAll('.filtros [data-filtro]').forEach(function (b) {
 
   // Escenas de la portada y de "Un día con Skandar" (estilos en escenas.css): cada una corre cuando se ve
   // y vuelve a empezar al terminar su ciclo (data-ciclo, en ms); fuera de pantalla se detiene y se reinicia.
+  var seg = function (el, prop) { return (parseFloat(el.style.getPropertyValue(prop)) || 0) * 1000; };
+
   document.querySelectorAll('.escena[data-ciclo]').forEach(function (escena) {
     var ciclo = parseInt(escena.dataset.ciclo, 10) || 12000;
+    var tel = escena.querySelector('.tel');
+
+    // Teléfono = conversación en vivo: cada mensaje llega abajo y empuja a los de arriba (ventana de alto fijo).
+    if (tel) {
+      var pasos = Array.prototype.slice.call(escena.querySelectorAll('.anim'));
+      var relojes = [];
+      var limpiar = function () {
+        relojes.forEach(clearTimeout); relojes = [];
+        pasos.forEach(function (p) { p.classList.remove('puesto', 'yendo'); p.hidden = true; });
+      };
+      var correr = function () {
+        limpiar();
+        var fin = 0;
+        pasos.forEach(function (p) {
+          var t = seg(p, '--t');
+          relojes.push(setTimeout(function () {
+            p.hidden = false; p.classList.add('puesto');
+            if (p.classList.contains('tecla')) {
+              var d = seg(p, '--d') || 1300;
+              relojes.push(setTimeout(function () { p.hidden = true; p.classList.remove('puesto'); }, d));
+            }
+          }, t));
+          var hasta = t + (p.classList.contains('tecla') ? 0 : 300);
+          if (hasta > fin) fin = hasta;
+        });
+        relojes.push(setTimeout(correr, fin + 2200));
+      };
+      var vigiaTel = new IntersectionObserver(function (entradas) {
+        if (entradas[0].isIntersecting) { if (!relojes.length) correr(); }
+        else { limpiar(); }
+      }, { threshold: 0.3 });
+      pasos.forEach(function (p) { p.hidden = true; });
+      vigiaTel.observe(escena);
+      return;
+    }
+
+    // Resto de escenas (panel, post, calendario): animación por CSS con .corre.
     var reloj = null;
-    // Los puntitos de "escribiendo" no ocupan lugar: se dibujan sobre el sitio donde va a entrar la respuesta.
-    var acomodarTeclas = function () {
-      escena.querySelectorAll('.tecla').forEach(function (t) {
-        var sig = t.nextElementSibling;
-        if (sig) t.style.setProperty('--arriba', sig.offsetTop + 'px');
-      });
-    };
-    var correr = function () {
-      acomodarTeclas();
+    var correrCss = function () {
       escena.classList.remove('corre');
       void escena.offsetWidth; // reinicia las animaciones
       escena.classList.add('corre');
-      reloj = setTimeout(correr, ciclo + 1800);
+      reloj = setTimeout(correrCss, ciclo + 1800);
     };
     var vigiaEscena = new IntersectionObserver(function (entradas) {
-      if (entradas[0].isIntersecting) { if (!reloj) correr(); }
+      if (entradas[0].isIntersecting) { if (!reloj) correrCss(); }
       else { clearTimeout(reloj); reloj = null; escena.classList.remove('corre'); }
     }, { threshold: 0.35 });
     vigiaEscena.observe(escena);
