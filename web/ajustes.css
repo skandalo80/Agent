@@ -12,11 +12,16 @@
   --peso-tarjeta: 700;         /* grosor del título de tarjeta */
   --peso-ante: 700;            /* grosor del antetítulo */
   --espaciado-ante: .12em;     /* separación entre letras del antetítulo */
+  --interlineado: 1.7;         /* interlineado de párrafos y bajadas (en celular baja a --interlineado-movil) */
+  --interlineado-movil: 1.5;
 
   /* Espacios y bordes */
   --caja-pad: 1.5rem;          /* relleno de cada tarjeta: más grande = el texto más lejos del borde */
   --hueco: 1rem;               /* espacio entre tarjetas */
   --caja-radio: 1.25rem;       /* redondeo de las esquinas de las tarjetas */
+}
+@media (max-width: 800px) {
+  :root { --interlineado: var(--interlineado-movil); }
 }
 @media (max-width: 560px) {
   :root { --caja-pad: 1.25rem; }
