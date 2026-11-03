@@ -8,10 +8,12 @@ aquí van los topes que no dependen de Claude:
 
 El gasto se anota en dos rubros: `atencion` (lo que contesta a personas) y `contenido` (campañas,
 posts, imágenes, informes). El presupuesto diario solo cuenta el de atención, para que generar una
-campaña nunca deje mudo al asistente; el contenido ya tiene su tope de imágenes por mes. Lo que no
+campaña nunca deje mudo al asistente; el contenido tiene su propio presupuesto del mes (contenido_usd_mes, por
+plan) además del cupo de imágenes. Lo que no
 diga en qué rubro va cae en contenido (así un olvido nunca calla al asistente). Los días son de la
 zona horaria del negocio. Los administradores no tienen tope.
 """
+import asyncio
 import contextvars
 import logging
 
@@ -81,6 +83,11 @@ def _cost_key(rubro: str = "") -> str:
     return f"gasto:{rubro}:{dia}" if rubro else f"gasto:{dia}"
 
 
+def _clave_mes() -> str:
+    """Lo gastado en contenido en el mes (de la zona de la cuenta): contra contenido_usd_mes."""
+    return f"gasto_mes:{CONTENIDO}:{tools.now():%Y-%m}"
+
+
 async def replies_today(db: Store, user_id: str) -> int:
     return await db.bot_replies_since(user_id, today_start())
 
@@ -97,15 +104,68 @@ TOPE_GENERACIONES = ("Ya pediste muchas propuestas en la última hora. Espera un
                      " generaste sigue aquí.")
 
 
-async def add_cost(usd: float, rubro: str = "") -> None:
-    """Suma al gasto del día de la cuenta actual, al total y al rubro (el que se pasa o el del contexto).
+async def add_cost(usd: float, rubro: str = "", imagen: bool = False) -> None:
+    """Suma al gasto del día de la cuenta actual, al total y al rubro (el que se pasa o el del contexto); el de
+    contenido, también al del mes. Una `imagen` además cuenta para su costo promedio (imagenes_restantes).
     Sin base (pruebas sueltas) no se anota."""
     store = cuenta().store
     if store is None or not usd:
         return
-    for key in (_cost_key(), _cost_key(rubro or _rubro.get())):
-        spent = float(await store.get(key) or 0) + usd
-        await store.set(key, f"{spent:.6f}")
+    rubro = rubro or _rubro.get()
+    claves = (_cost_key(), _cost_key(rubro)) + ((_clave_mes(),) if rubro == CONTENIDO else ())
+    async with _sumando:
+        for key in claves:
+            spent = float(await store.get(key) or 0) + usd
+            await store.set(key, f"{spent:.6f}")
+        if imagen:
+            n, total = await _imagenes_del_mes(store)
+            await store.set(_clave_imagenes(), f"{n + 1} {total + usd:.6f}")
+
+
+def _clave_imagenes() -> str:
+    return f"gasto_mes:imagenes:{tools.now():%Y-%m}"
+
+
+async def _imagenes_del_mes(store: Store) -> tuple[int, float]:
+    """(imágenes generadas este mes, lo que costaron), contando versiones y reintentos."""
+    n, _, total = (await store.get(_clave_imagenes()) or "0 0").partition(" ")
+    return int(n), float(total or 0)
+
+
+# Leer y escribir el gasto son dos pasos: las versiones de un anuncio terminan a la vez y se pisaban.
+_sumando = asyncio.Lock()
+
+
+SIN_PRESUPUESTO = ("Ya usaste el presupuesto de contenido de tu plan este mes. Se renueva el día 1; si necesitas"
+                   " más antes, escríbenos.")
+
+
+async def gasto_contenido_mes(store: Store) -> float:
+    return float(await store.get(_clave_mes()) or 0)
+
+
+async def presupuesto_restante(store: Store) -> float | None:
+    """US$ que le quedan a la cuenta este mes para crear contenido; None si su plan no tiene tope."""
+    tope = cuenta().contenido_usd_mes
+    if tope <= 0:
+        return None
+    return max(0.0, tope - await gasto_contenido_mes(store))
+
+
+async def imagenes_restantes(store: Store) -> int | None:
+    """Más o menos cuántas imágenes le alcanzan todavía con el presupuesto del mes, al costo promedio de las que
+    ya generó (o IMAGE_COST_USD si aún no hay); None si su plan no tiene tope."""
+    restante = await presupuesto_restante(store)
+    if restante is None:
+        return None
+    n, total = await _imagenes_del_mes(store)
+    promedio = total / n if n else config.IMAGE_COST_USD
+    return int(round(restante / promedio, 6)) if promedio > 0 else 0  # sin que 1.0 / 0.05 dé 19
+
+
+async def sin_presupuesto(store: Store) -> bool:
+    """True si la cuenta ya gastó su presupuesto de contenido del mes: no se empieza nada nuevo que cueste."""
+    return await presupuesto_restante(store) == 0
 
 
 async def spent_today(db: Store, rubro: str = "") -> float:

@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter
 
-from . import config, conversaciones, fechas, marco, metricas
+from . import config, conversaciones, fechas, limites, marco, metricas
 from .cuenta import Cuenta, usar
 
 router = APIRouter(prefix="/panel/inicio")
@@ -167,10 +167,15 @@ async def proximas(c: Cuenta, ahora: float) -> str:
     return f'<section class="met-c ini-posts">{cab}{"".join(filas)}</section>'
 
 
-def _uso(nombre: str, usado: int, cupo: int) -> str:
+def _uso(nombre: str, usado: float, cupo: float, cifra: str = "") -> str:
     pct = min(100, round(100 * usado / cupo)) if cupo else 0
-    return (f'<div class="ini-uso"><div><span>{nombre}</span><b>{usado:,} <small>de {cupo:,}</small></b></div>'
+    cifra = cifra or f"{usado:,} <small>de {cupo:,}</small>"
+    return (f'<div class="ini-uso"><div><span>{nombre}</span><b>{cifra}</b></div>'
             f'<span class="ini-barra"><span style="width:{pct}%"></span></span></div>')
+
+
+def cuantas(n: int) -> str:
+    return "ninguna imagen" if not n else f"{n} imagen" if n == 1 else f"{n} imágenes"
 
 
 async def tu_plan(c: Cuenta, hoy_: date, zona: ZoneInfo) -> str:
@@ -183,8 +188,15 @@ async def tu_plan(c: Cuenta, hoy_: date, zona: ZoneInfo) -> str:
     if c.imagenes_mes > 0:
         if c.posts_mes:
             usos.append(_uso("Posts", await c.store.posts_count(("publicada", "programada"), inicio_mes), c.posts_mes))
-        incluidas, _ = await imagenes.usadas(c.store)
+        with usar(c):
+            incluidas, _ = await imagenes.usadas(c.store)
+            gastado, quedan = await limites.gasto_contenido_mes(c.store), await limites.imagenes_restantes(c.store)
         usos.append(_uso("Imágenes", incluidas, c.imagenes_mes))
+        if quedan is not None:  # el presupuesto de contenido del mes, en lo que le alcanza (nunca en dólares)
+            quedan = min(quedan, max(0, c.imagenes_mes - incluidas))
+            pct = min(100, round(100 * gastado / c.contenido_usd_mes))
+            usos.append(_uso("Presupuesto", gastado, c.contenido_usd_mes,
+                             f"{pct} % <small>· {'unas ' if quedan else ''}{cuantas(quedan)} más</small>"))
     if not usos:
         return ""
     plan = "Community Manager" if c.imagenes_mes > 0 else "Asistente virtual"

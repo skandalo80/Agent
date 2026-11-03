@@ -77,6 +77,7 @@ class Cuenta:
     imagenes_mes: int
     mensajes_mes: int = 0
     posts_mes: int = 0
+    contenido_usd_mes: float = 0.0
     max_comments_per_day: int = 300
     en_revision: bool = False
     # "facebook" si se conectó con el login de Facebook (su token es el de su página; ver instagram.py).
@@ -170,6 +171,9 @@ class Cuenta:
             # Solo se muestran en el panel: pasarse no corta nada, se ve como extra.
             mensajes_mes=int(get("MESSAGES_PER_MONTH", "0")),
             posts_mes=int(get("POSTS_PER_MONTH", "0")),
+            # Lo que la cuenta puede gastar al mes en Claude y OpenAI para crear contenido (campañas, posts,
+            # imágenes, sugeridos), en US$ (0 = sin tope). Al llegar, solo salen imágenes extra que el cliente paga.
+            contenido_usd_mes=float(get("CONTENT_BUDGET_USD_MONTH", "0")),
             # Comentarios al día que Claude revisa (spam y variantes de las palabras clave).
             # Pasando de aquí solo cuentan las palabras clave escritas tal cual.
             max_comments_per_day=int(get("MAX_COMMENTS_PER_DAY", "300")),
@@ -185,7 +189,8 @@ class Cuenta:
 # darle a un cliente algo distinto a su plan.
 PLANES = {
     "basico": {"IMAGES_PER_MONTH": "0", "MESSAGES_PER_MONTH": "1500", "POSTS_PER_MONTH": "0"},  # Asistente virtual
-    "community": {"IMAGES_PER_MONTH": "40", "MESSAGES_PER_MONTH": "2500", "POSTS_PER_MONTH": "12"},
+    "community": {"IMAGES_PER_MONTH": "40", "MESSAGES_PER_MONTH": "2500", "POSTS_PER_MONTH": "12",
+                  "CONTENT_BUDGET_USD_MONTH": "10"},
 }
 PLANES["pro_crm"] = PLANES["community"]  # el Pro CRM ya no se vende: las cuentas que lo tengan quedan como Community
 
