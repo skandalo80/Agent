@@ -253,7 +253,7 @@ async def atender(c: Cuenta, comment_id: str, author: str, text: str, store, ins
     if not disponible(c) or "comentarios" not in datos or parent or not activo(datos):
         return False
     todas = reglas(datos)
-    if await store.dms_por_comentario(author, time.time() - DIAS_ENTRE_DMS * 86400):
+    if await store.dms_por_comentario(author, time.time() - DIAS_ENTRE_DMS * config.DIA):
         for r in todas.values():  # ya le llegó un DM por otro comentario hace poco: solo se contesta en público
             r["dm"]["on"] = False
     tipo = tipo_sin_claude(text)
