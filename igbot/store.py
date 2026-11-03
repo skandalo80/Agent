@@ -241,11 +241,44 @@ CREATE TABLE IF NOT EXISTS codigos_chat (
     user_id TEXT NOT NULL UNIQUE
 );
 
+-- La etapa de cada contacto, para Conversaciones (filtro y CSV de contactos). Avanza sola con lo que anota el
+-- asistente o con una venta (nunca retrocede sola) y el dueño la cambia a mano. Sin fila = "nuevo". No se
+-- borra con los eventos (90 días): se va con el contacto, cuando ya no le quedan mensajes (Store.purgar).
+CREATE TABLE IF NOT EXISTS etapas (
+    user_id    TEXT PRIMARY KEY,
+    etapa      TEXT NOT NULL,              -- ETAPAS: nuevo | interesado | cotizo | cita | compro | perdido
+    manual     INTEGER NOT NULL DEFAULT 0, -- 1 si la puso el dueño
+    updated_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS etapas_etapa ON etapas (etapa);
+
 CREATE TABLE IF NOT EXISTS kv (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
 """
+
+
+# Las etapas de un contacto, de menor a mayor. Las que avanzan solas son interesado (pidió visita o dejó sus
+# datos), cotizo (pidió cotización o el asistente le cotizó un pedido), cita (agendó) y compro (pagó o se marcó
+# una venta); "perdido" (No compró) y "nuevo" solo las pone el dueño, y pesan 0: si esa persona vuelve a
+# avanzar, la etapa avanza.
+ETAPAS = ("nuevo", "interesado", "cotizo", "cita", "compro", "perdido")
+_RANGO = {"interesado": 1, "cotizo": 2, "cita": 3, "compro": 4}
+
+
+def _rango_sql(columna: str) -> str:
+    """El rango de una etapa en SQL (solo con nombres de columna internos)."""
+    return f"CASE {columna} " + " ".join(f"WHEN '{e}' THEN {n}" for e, n in _RANGO.items()) + " ELSE 0 END"
+
+
+def etapa_de_evento(kind: str, detail: dict) -> str:
+    """La etapa a la que lleva un evento de la conversación ("" si no mueve la etapa)."""
+    if kind == "cita":
+        return "cita"
+    if kind == "cotizacion" or (kind == "interes" and detail.get("tipo") == "cotizacion"):
+        return "cotizo"
+    return "interesado" if kind == "interes" else ""
 
 
 class Store:
@@ -298,6 +331,7 @@ class Store:
         if "ig_id" not in {row[1] for row in await cur.fetchall()}:
             await self.db.execute("ALTER TABLE posts ADD COLUMN ig_id TEXT NOT NULL DEFAULT ''")
         await self.db.commit()
+        await self._etapas_iniciales()
 
     async def close(self) -> None:
         if self.db:
@@ -317,6 +351,10 @@ class Store:
             for tabla in ("messages", "events", "comments", "origenes_chat"):
                 cur = await self.db.execute(f"DELETE FROM {tabla} WHERE created_at < ?", (limite,))
                 borrado[tabla] = cur.rowcount
+            # La etapa se va con el contacto: cuando ya no le queda ningún mensaje.
+            cur = await self.db.execute(
+                "DELETE FROM etapas WHERE updated_at < ? AND user_id NOT IN (SELECT user_id FROM messages)", (limite,))
+            borrado["etapas"] = cur.rowcount
         await self.db.commit()
         return borrado
 
@@ -670,14 +708,18 @@ class Store:
 
     async def chats_page(self, now: float, curso_desde: float, humano_desde: float, revisar_antes: float,
                          aviso_limite: str, ver: str, buscar: str, limit: int,
-                         offset: int) -> tuple[list[tuple], dict[str, int], int]:
+                         offset: int, etapa: str = "") -> tuple[list[tuple], dict[str, int], int]:
         """Una página de chats con clientes, filtrada (FILTROS_CHATS) y buscada en la base: solo se
         cargan los `limit` que se ven. Cada fila: (usuario, hora, rol y texto del último mensaje,
         pausa hasta, estado, cuándo te lo pasó el asistente). También da cuántos hay por pestaña (sin
-        la búsqueda) y cuántos cumplen filtro y búsqueda, para las páginas."""
+        la búsqueda) y cuántos cumplen filtro y búsqueda, para las páginas. Con `etapa`, solo los contactos
+        en esa etapa (como la búsqueda, no cambia los números de las pestañas)."""
         base, args = self._chats(now, humano_desde, revisar_antes, aviso_limite)
         args |= {"curso": curso_desde, "limit": limit, "offset": offset}
         donde = self.FILTROS_CHATS[ver]
+        if etapa:
+            args["etapa"] = etapa
+            donde += " AND COALESCE((SELECT e.etapa FROM etapas e WHERE e.user_id = c.user_id), 'nuevo') = :etapa"
         if buscar:
             # En el @usuario ya conocido o en cualquier mensaje del chat.
             args["b"] = "%" + buscar.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
@@ -747,6 +789,22 @@ class Store:
         )
         await self.db.commit()
         return cur.rowcount
+
+    async def callados(self, desde: float, hasta: float, limite: int) -> list[tuple[str, float, str]]:
+        """Chats donde el asistente contestó y el cliente ya no escribió (para el seguimiento dentro de 24 h):
+        el último mensaje es del asistente (sin mid: no lo escribió el dueño) y es de antes de `hasta`, y el
+        último del cliente es de después de `desde`. Cada fila: (usuario, hora del último mensaje del cliente,
+        texto del último del asistente). Del más viejo al más nuevo: primero los que están por cerrar su ventana."""
+        cur = await self.db.execute(
+            "SELECT user_id, t, texto FROM (SELECT m.user_id, m.text AS texto, m.created_at AS dicho,"
+            " (SELECT MAX(x.created_at) FROM messages x WHERE x.user_id = m.user_id AND x.role = 'user') AS t"
+            " FROM messages m WHERE m.id IN (SELECT MAX(id) FROM messages WHERE created_at >= ?"
+            " AND user_id NOT LIKE 'admin:%' GROUP BY user_id)"
+            " AND m.role = 'assistant' AND m.mid IS NULL AND m.status = 'done')"
+            " WHERE t >= ? AND dicho <= ? ORDER BY t LIMIT ?",
+            (desde, desde, hasta, limite),
+        )
+        return list(await cur.fetchall())
 
     async def unpause(self, user_id: str) -> None:
         await self.db.execute("DELETE FROM paused WHERE user_id = ?", (user_id,))
@@ -860,6 +918,8 @@ class Store:
     # --- reporte semanal ---
 
     async def add_event(self, user_id: str, kind: str, detail: dict) -> None:
+        if etapa := etapa_de_evento(kind, detail):
+            await self._avanzar(user_id, etapa, time.time())
         await self.db.execute(
             "INSERT INTO events (user_id, kind, detail, created_at) VALUES (?, ?, ?, ?)",
             (user_id, kind, json.dumps(detail, ensure_ascii=False), time.time()),
@@ -1194,6 +1254,87 @@ class Store:
         return {"cotizaciones": cotizaciones, "citas": citas, "equipo": equipo, "ventas": n,
                 "compradores": compradores, "monto": float(monto or 0), "moneda": moneda or ""}
 
+    # --- etapas de cada contacto (Conversaciones) ---
+
+    async def _avanzar(self, user_id: str, etapa: str, t: float) -> None:
+        """Sube la etapa del contacto a `etapa` si va más adelante que la que tiene (sin commit). Una etapa
+        puesta a mano también se sube: si el dueño lo marcó "No compró" y luego compra, queda "Compró"."""
+        if not user_id or user_id.startswith("admin:"):
+            return
+        await self.db.execute(
+            "INSERT INTO etapas (user_id, etapa, manual, updated_at) VALUES (?, ?, 0, ?)"
+            " ON CONFLICT (user_id) DO UPDATE SET etapa = excluded.etapa, manual = 0, updated_at = excluded.updated_at"
+            f" WHERE {_rango_sql('etapas.etapa')} < {_rango_sql('excluded.etapa')}",
+            (user_id, etapa, t))
+
+    async def _desde_eventos(self, user_id: str | None = None) -> None:
+        """La etapa que dicen los eventos y ventas guardados, de un contacto o de todos (sin commit)."""
+        filtro, args = (" AND user_id = ?", (user_id,)) if user_id else ("", ())
+        cur = await self.db.execute(
+            "SELECT user_id, kind, json_extract(detail, '$.tipo'), created_at FROM events"
+            f" WHERE kind IN ('interes', 'cotizacion', 'cita'){filtro} ORDER BY id", args)
+        for u, kind, tipo, t in await cur.fetchall():
+            await self._avanzar(u, etapa_de_evento(kind, {"tipo": tipo}), t)
+        cur = await self.db.execute(f"SELECT user_id, MAX(created_at) FROM ventas WHERE user_id != ''{filtro}"
+                                    " GROUP BY user_id", args)
+        for u, t in await cur.fetchall():
+            await self._avanzar(u, "compro", t)
+
+    async def _etapas_iniciales(self) -> None:
+        """Una sola vez por base: los contactos que ya tenían cotizaciones, citas o ventas toman su etapa."""
+        cur = await self.db.execute("SELECT 1 FROM kv WHERE key = 'etapas_iniciales'")
+        if await cur.fetchone():
+            return
+        await self._desde_eventos()
+        await self.db.execute("INSERT OR REPLACE INTO kv (key, value) VALUES ('etapas_iniciales', '1')")
+        await self.db.commit()
+
+    async def set_etapa(self, user_id: str, etapa: str) -> None:
+        """La etapa que eligió el dueño en el chat."""
+        await self.db.execute(
+            "INSERT INTO etapas (user_id, etapa, manual, updated_at) VALUES (?, ?, 1, ?)"
+            " ON CONFLICT (user_id) DO UPDATE SET etapa = excluded.etapa, manual = 1, updated_at = excluded.updated_at",
+            (user_id, etapa, time.time()))
+        await self.db.commit()
+
+    async def etapas_de(self, user_ids: list[str]) -> dict[str, str]:
+        """La etapa de cada uno ("nuevo" si no tiene)."""
+        if not user_ids:
+            return {}
+        marcas = ",".join("?" * len(user_ids))
+        cur = await self.db.execute(f"SELECT user_id, etapa FROM etapas WHERE user_id IN ({marcas})", user_ids)
+        return {u: "nuevo" for u in user_ids} | dict(await cur.fetchall())
+
+    async def contactos(self, etapa: str = "", limite: int = 10_000) -> list[dict]:
+        """Cada persona que te escribió (sin administradores), del último mensaje al primero, para el CSV de
+        contactos: su @ (si ya se conoce), etapa, primer y último mensaje, cuántos mensajes mandó, el anuncio
+        por el que llegó, lo que compró y los datos que dejó. Con `etapa`, solo los de esa etapa."""
+        filtro, args = ("", []) if not etapa else (" AND COALESCE(e.etapa, 'nuevo') = ?", [etapa])
+        cur = await self.db.execute(
+            "SELECT m.user_id, MIN(m.created_at), MAX(m.created_at), SUM(m.role = 'user'),"
+            " COALESCE(e.etapa, 'nuevo'), COALESCE((SELECT value FROM kv WHERE key = 'username:' || m.user_id), '')"
+            " FROM messages m LEFT JOIN etapas e ON e.user_id = m.user_id"
+            f" WHERE m.user_id NOT LIKE 'admin:%'{filtro}"
+            " GROUP BY m.user_id ORDER BY MAX(m.id) DESC LIMIT ?", (*args, limite))
+        filas = [{"user_id": u, "primero": a, "ultimo": b, "mensajes": n or 0, "etapa": et, "usuario": nombre,
+                  "anuncio": "", "compras": 0, "monto": 0.0, "moneda": "", "datos": {}}
+                 for u, a, b, n, et, nombre in await cur.fetchall()]
+        por_id = {f["user_id"]: f for f in filas}
+        if not por_id:
+            return filas
+        for u, anuncio in (await self.anuncios_de(list(por_id))).items():
+            por_id[u]["anuncio"] = anuncio["titulo"] or anuncio["ad_id"]
+        cur = await self.db.execute("SELECT user_id, COUNT(*), SUM(monto), MAX(moneda) FROM ventas WHERE user_id != ''"
+                                    " GROUP BY user_id")
+        for u, n, monto, moneda in await cur.fetchall():
+            if u in por_id:
+                por_id[u].update(compras=n, monto=float(monto or 0), moneda=moneda or "")
+        cur = await self.db.execute("SELECT user_id, key, value FROM facts ORDER BY key")
+        for u, k, v in await cur.fetchall():
+            if u in por_id:
+                por_id[u]["datos"][k] = v
+        return filas
+
     async def ventas_por_publicacion(self, desde: float, hasta: float, ventana: float) -> tuple[list[dict], dict]:
         """Las ventas de chats del periodo, cada una contada a la última publicación (post o historia) por la que
         llegó ese chat en los `ventana` segundos antes de la venta. ([{media_id, tipo, detalle, monto, moneda}],
@@ -1236,11 +1377,22 @@ class Store:
             "INSERT OR IGNORE INTO ventas (origen, externo, user_id, ad_id, monto, moneda, detalle, created_at)"
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (origen, externo, user_id, ad_id, monto, moneda, json.dumps(detalle, ensure_ascii=False), created_at))
+        if cur.rowcount and user_id:
+            await self._avanzar(user_id, "compro", time.time())
         await self.db.commit()
         return bool(cur.rowcount)
 
     async def borrar_venta(self, origen: str, externo: str) -> None:
-        await self.db.execute("DELETE FROM ventas WHERE origen = ? AND externo = ?", (origen, externo))
+        """Quita una venta. Si ese contacto quedó sin ventas y la etapa "Compró" la puso la venta (no el dueño),
+        vuelve a la que dicen sus eventos."""
+        cur = await self.db.execute("DELETE FROM ventas WHERE origen = ? AND externo = ? RETURNING user_id",
+                                    (origen, externo))
+        usuarios = {u for (u,) in await cur.fetchall() if u}
+        for u in usuarios:
+            cur = await self.db.execute("SELECT 1 FROM ventas WHERE user_id = ? LIMIT 1", (u,))
+            if await cur.fetchone() is None:
+                await self.db.execute("DELETE FROM etapas WHERE user_id = ? AND etapa = 'compro' AND manual = 0", (u,))
+                await self._desde_eventos(u)
         await self.db.commit()
 
     async def ventas_de(self, user_id: str) -> list[dict]:

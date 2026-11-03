@@ -776,7 +776,8 @@ async def vivo(request: Request):
                     break
                 await asyncio.sleep(0.3)  # un DM y la respuesta del bot seguidos van juntos
                 visto = c.store.cambios
-                p = await conversaciones.partes(c, q.get("ver", ""), q.get("q", ""), hoja, q.get("chat", "")[:64], n)
+                p = await conversaciones.partes(c, q.get("ver", ""), q.get("q", ""), hoja, q.get("chat", "")[:64], n,
+                                               q.get("etapa", ""))
                 yield f"id: {visto}\ndata: {json.dumps({'lista': p['lista'], 'hilo': p['hilo'], 'punto': p['pendientes'] > 0})}\n\n"
         finally:
             _vivos -= 1
