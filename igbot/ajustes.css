@@ -95,6 +95,10 @@
 
   /* Conversaciones */
   --punto-chat: .6rem;         /* punto lima de no leído en cada chat, debajo de la hora */
+
+  /* Conversaciones: etapa de cada contacto */
+  --toque: 2.75rem;            /* alto mínimo de lo que se toca en el celular (44 px) */
+  --etapa-caja: 19rem;         /* ancho de la ventanita de Etapa y Marcar venta */
 }
 @media (max-width: 900px) {
   :root { --pers-columnas: 2; }
