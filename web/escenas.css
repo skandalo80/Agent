@@ -51,6 +51,9 @@
 .tel-sistema { align-self: center; text-align: center; font-size: 10px; color: var(--tenue); padding: 0 8px; margin-bottom: 2px; }
 .tel-sistema b { color: var(--texto); font-weight: 700; }
 .bur { padding: 9px 12px; border-radius: 15px; line-height: 1.45; max-width: 86%; box-shadow: 0 2px 5px #00000022; }
+.bur[data-hora] { padding-right: 46px; position: relative; }
+.bur[data-hora]::after { content: attr(data-hora); position: absolute; right: 10px; bottom: 6px; font-size: 9.5px; font-weight: 600; color: var(--tenue); font-variant-numeric: tabular-nums; letter-spacing: .2px; }
+.bur.age[data-hora]::after { color: rgba(245, 245, 244, .55); }
 .bur.cli { background: #3A3C42; align-self: flex-start; border-bottom-left-radius: 5px; }
 .bur.age { background: rgba(255, 138, 61, .16); border: 1px solid rgba(255, 138, 61, .28); align-self: flex-end; border-bottom-right-radius: 5px; }
 .bur.tecla { align-self: flex-end; gap: 4px; padding: 11px 13px; background: rgba(255, 138, 61, .16); border: 1px solid rgba(255, 138, 61, .28); }
@@ -200,11 +203,17 @@
   .cifras { grid-template-columns: repeat(2, 1fr); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .anima .escena .msj, .anima .escena .pop { opacity: 1; animation: none; }
-  .anima .escena .tecla { display: none; }
-  .anima .escena .teclea, .anima .escena .crece { width: auto; animation: none; border-right: 0; }
-  .anima .escena .crece { width: var(--ancho, 50%); }
-  .anima .escena .elegida { border-color: var(--naranja); }
-  .anima .escena .elegida .prop-check { opacity: 1; }
-  .anima .escena .cal-dias i.con { background: var(--naranja); color: var(--grafito); }
+  /* La conversación sigue saliendo mensaje por mensaje, pero solo con fundido: nada se desplaza, crece ni rebota. */
+  .anima .escena.corre .msj, .anima .escena.corre .pop { animation-name: esc-fundido; }
+  .anima .escena.corre .elegida { animation-name: esc-fundido, esc-elige; }
+  .anima .escena.corre .elegida .prop-check { animation-name: esc-fundido; }
+  .anima .escena .tecla i { animation: none; }
+  .anima .escena .teclea { width: 100%; border-right: 0; opacity: 0; }
+  .anima .escena.corre .teclea { animation: esc-fundido .4s both; animation-delay: var(--t, 0s); }
+  .anima .escena .crece { width: var(--ancho, 50%); opacity: 0; }
+  .anima .escena.corre .crece { animation: esc-fundido .5s both; animation-delay: var(--t, 0s); }
+  .anima .escena.corre .cal-dias i.con { animation-name: esc-dia-quieto; }
+}
+@keyframes esc-fundido { from { opacity: 0; } to { opacity: 1; } }
+@keyframes esc-dia-quieto { to { background: var(--naranja); color: var(--grafito); } }
 }

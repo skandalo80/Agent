@@ -141,10 +141,14 @@ document.querySelectorAll('.filtros [data-filtro]').forEach(function (b) {
 // Animaciones (estilos en animaciones.css). Nada se mueve si el sistema pide reducir el movimiento.
 (function () {
   if (!('IntersectionObserver' in window)) return;
-  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  // Con "reducir movimiento" las escenas siguen contando la conversación (solo con fundido, ver escenas.css),
+  // pero nada se desplaza al bajar.
+  var menos = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   document.documentElement.classList.add('anima');
+  if (menos) document.documentElement.classList.add('menos-movimiento');
 
   // Aparición al bajar: lo que entra a la vez en pantalla aparece uno tras otro.
+  if (!menos) (function () {
   var bloques = document.querySelectorAll('main .antetitulo, main h1, main h2, main .bajada, main .acciones, main .micro,' +
     ' main .tarjeta, main .funcion, main .pasos > article, main .plan, main .articulo-tarjeta, main .pastilla');
   var vigia = new IntersectionObserver(function (entradas) {
@@ -164,6 +168,7 @@ document.querySelectorAll('.filtros [data-filtro]').forEach(function (b) {
     b.classList.add('revela');
     vigia.observe(b);
   });
+  })();
 
   // Escenas de la portada y de "Un día con Skandar" (estilos en escenas.css): cada una corre cuando se ve
   // y vuelve a empezar al terminar su ciclo (data-ciclo, en ms); fuera de pantalla se detiene y se reinicia.
