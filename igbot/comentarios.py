@@ -1,12 +1,7 @@
 """Comentarios en publicaciones: palabra clave -> DM privado (y respuesta pública opcional).
 
-Las reglas viven en una hoja de Google Sheets (SHEET_COMMENTS) con tres columnas,
-en este orden y con el encabezado que sea: link de la publicación, palabra clave
-(o varias separadas por comas) y mensaje a mandar por DM. Una cuarta columna
-opcional es una respuesta pública. Solo reaccionan las publicaciones que estén
-en la hoja; para darle varias palabras clave a una publicación, una fila por cada una.
-Las cuentas con contenido en su plan también tienen las de los posts que armaron
-en su panel (palabra clave, DM y respuesta pública de cada post, ver contenido.py).
+Las palabras clave se configuran en el panel: las de cada post que el cliente armó (palabra clave, DM y
+respuesta pública, ver contenido.py) y las generales de Configura tus interacciones (interacciones.py).
 
 Primero se buscan las palabras tal cual (sin importar mayúsculas ni acentos, y
 aceptando plurales); si ninguna aparece, Claude decide si el comentario se
@@ -15,13 +10,11 @@ sus DMs se juntan en uno solo, porque Instagram permite un DM por comentario.
 """
 import logging
 import re
-import time
 import unicodedata
 from dataclasses import dataclass
 
 from . import config, limites
 from .cuenta import cuenta
-from .google import Google
 from .instagram import Instagram
 from .store import Store
 
@@ -45,18 +38,6 @@ def normalize(text: str) -> str:
 def shortcode(url: str) -> str:
     m = re.search(r"instagram\.com/(?:[\w.]+/)?(?:p|reel|reels|tv)/([\w-]+)", url or "")
     return m.group(1) if m else ""
-
-
-def parse_rules(rows: list[dict]) -> list[Rule]:
-    rules = []
-    for row in rows:
-        cols = [v.strip() for v in row.values()] + ["", "", "", ""]
-        url, words, dm, public = cols[:4]
-        code = shortcode(url)
-        keywords = [k.strip() for k in words.split(",") if k.strip()]
-        if code and keywords and dm:
-            rules.append(Rule(post=code, keywords=keywords, dm=dm, public=public))
-    return rules
 
 
 def for_post(rules: list[Rule], code: str) -> list[Rule]:
@@ -106,25 +87,6 @@ def combine_dm(rules: list[Rule]) -> str:
     return "\n\n".join(parts)
 
 
-_cache: dict[str, tuple[float, list[Rule]]] = {}  # por link de la hoja (cada cuenta tiene la suya)
-
-
-async def load_rules(google: Google) -> list[Rule]:
-    url = cuenta().sheet_comments
-    hit = _cache.get(url)
-    if hit and time.time() - hit[0] < config.SHEETS_CACHE_SECONDS:
-        return hit[1]
-    from .tienda import parse_sheet
-
-    rules = parse_rules(await google.sheet_rows(*parse_sheet(url)))
-    _cache[url] = (time.time(), rules)
-    return rules
-
-
-def available() -> bool:
-    return bool(cuenta().sheet_comments)
-
-
 SPAM = "[oculto: spam]"
 OFENSA = "[oculto: ofensa]"  # insultos y ataques (Configura tus interacciones > Comentarios)
 OCULTOS = {SPAM: "spam", OFENSA: "ofensa"}  # lo que se anota en comments.matched -> el motivo
@@ -160,15 +122,15 @@ async def claude_spam(text: str) -> str:
     return next((m for m in ("spam", "ofensa") if palabra.startswith(m)), "")
 
 
-async def handle(value: dict, store: Store, instagram: Instagram, google: Google, account_id: str,
+async def handle(value: dict, store: Store, instagram: Instagram, account_id: str,
                  classify=claude_matches, spam_check=claude_spam, escribe=None) -> None:
     """Procesa un aviso de comentario del webhook (campo 'comments').
     `escribe`: quien escribe las respuestas de la tabla de interacciones (las pruebas pasan uno falso)."""
     with limites.rubro(limites.ATENCION):
-        await _handle(value, store, instagram, google, account_id, classify, spam_check, escribe)
+        await _handle(value, store, instagram, account_id, classify, spam_check, escribe)
 
 
-async def _handle(value: dict, store: Store, instagram: Instagram, google: Google, account_id: str,
+async def _handle(value: dict, store: Store, instagram: Instagram, account_id: str,
                   classify, spam_check, escribe) -> None:
     comment_id = value.get("id", "")
     author = (value.get("from") or {}).get("id", "")
@@ -187,12 +149,8 @@ async def _handle(value: dict, store: Store, instagram: Instagram, google: Googl
         return  # Meta reintentó un aviso que ya se atendió
 
     rules, code = [], ""
-    hoja = available() and google
-    if hoja or cuenta().imagenes_mes:
-        code = shortcode(await instagram.permalink(media_id))
-    if hoja:
-        rules = for_post(await load_rules(google), code)
     if cuenta().imagenes_mes:
+        code = shortcode(await instagram.permalink(media_id))
         from .contenido import reglas  # las de los posts que armó el cliente en su panel
 
         rules += for_post(await reglas(store), code)

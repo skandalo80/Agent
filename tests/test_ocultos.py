@@ -28,10 +28,9 @@ def correr(values, datos, revisa, monkeypatch):
             return []
 
         monkeypatch.setattr(cuenta(), "imagenes_mes", 40)
-        monkeypatch.setattr(comentarios, "available", lambda: False)
         monkeypatch.setattr("igbot.contenido.reglas", nada)
         for v in values:
-            await comentarios.handle(v, store, ig, "google", "negocio", classify=nada, spam_check=revisa)
+            await comentarios.handle(v, store, ig, "negocio", classify=nada, spam_check=revisa)
         filas = await store.week_comments(0, 2e9)
         await store.close()
         return ig, filas

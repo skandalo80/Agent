@@ -9,14 +9,13 @@ from dotenv import dotenv_values, load_dotenv
 # (llaves de Meta y de Claude). Sus datos quedan en data/<nombre>/.
 CLIENTE = os.getenv("CLIENTE", "")
 CLIENT_DIR = f"clientes/{CLIENTE}" if CLIENTE else ""
-# Lo que es de cada cuenta nunca se toma del .env común: si a Nortex le faltara
+# Lo que es de cada cuenta nunca se toma del .env común: si a un cliente le faltara
 # su token, contestaría como el vendedor (y con FORWARD_WEBHOOKS se reenviaría
 # los avisos a sí mismo).
 ACCOUNT_KEYS = {
     "IG_ACCESS_TOKEN", "IG_ACCOUNT_ID", "FORWARD_WEBHOOKS",
-    "DB_PATH", "PROMPT_PATH", "CATALOG_PATH", "QUOTES_DIR",
-    "SHEET_CATALOG", "SHEET_INVENTORY", "STORE_RULES_PATH", "SHEET_COMMENTS",
-    "ADMIN_IG_IDS", "REPORT_EMAIL", "BUTTONS_PATH", "HIDE_SPAM", "GOOGLE_TOOLS",
+    "DB_PATH", "PROMPT_PATH", "QUOTES_DIR",
+    "ADMIN_IG_IDS", "REPORT_EMAIL", "HIDE_SPAM", "GOOGLE_TOOLS",
     "IMAGES_PER_MONTH", "MESSAGES_PER_MONTH", "POSTS_PER_MONTH", "PLAN", "EN_REVISION", "IG_VIA",
 }
 if CLIENTE:
@@ -38,7 +37,7 @@ SESSION_SECRET = os.getenv("SESSION_SECRET", "").strip() or APP_SECRET
 GENERACIONES_HORA = int(os.getenv("GENERACIONES_HORA", "20"))
 API_VERSION = os.getenv("IG_API_VERSION", "v23.0")
 # Cuentas de clientes que atiende este mismo proceso, además de la suya:
-# nombres de carpetas de clientes/ con su .env (p. ej. CUENTAS=nortex,cafelunar).
+# nombres de carpetas de clientes/ con su .env (p. ej. CUENTAS=cafelunar,barberia).
 CUENTAS = [c.strip() for c in os.getenv("CUENTAS", "").split(",") if c.strip()]
 # Meta manda los avisos de todas las cuentas de la app al mismo webhook. El
 # proceso que los recibe se los reenvía tal cual a los de las otras cuentas
@@ -51,7 +50,6 @@ FORWARD_WEBHOOKS = [u.strip() for u in os.getenv("FORWARD_WEBHOOKS", "").split("
 # Modelo barato para reconocer variantes de las palabras clave en comentarios.
 COMMENTS_MODEL = os.getenv("COMMENTS_MODEL", "claude-haiku-5-5")
 # Segundos que se reutiliza lo leído de las hojas antes de volver a pedirlo.
-SHEETS_CACHE_SECONDS = float(os.getenv("SHEETS_CACHE_SECONDS", "300"))
 # Una cuenta que se conecta con más seguidores o publicaciones que esto no puede
 # encender su asistente sola: queda en revisión (EN_REVISION=1 en su .env).
 CUENTA_GRANDE_SEGUIDORES = int(os.getenv("CUENTA_GRANDE_SEGUIDORES", "10000"))

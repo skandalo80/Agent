@@ -6,30 +6,27 @@ from igbot import comentarios as c  # noqa: E402
 from igbot.store import Store  # noqa: E402
 
 POST = "https://www.instagram.com/p/DAbc123/?igsh=xyz"
-ROWS = [  # como llegan de la hoja: encabezados libres, en este orden
-    {"URL": POST, "Palabra": "PRECIO", "Mensaje": "Nuestros precios: ..."},
-    {"URL": POST, "Palabra": "catálogo, catalogo", "Mensaje": "Aquí el catálogo: ..."},
-    {"URL": "https://www.instagram.com/reel/RRR999/", "Palabra": "info", "Mensaje": "Info del reel"},
-    {"URL": "", "Palabra": "x", "Mensaje": "sin link, se ignora"},
+RULES = [  # las palabras clave de los posts que el cliente armó en su panel (contenido.reglas)
+    c.Rule(post="DAbc123", keywords=["PRECIO"], dm="Nuestros precios: ..."),
+    c.Rule(post="DAbc123", keywords=["catálogo", "catalogo"], dm="Aquí el catálogo: ..."),
+    c.Rule(post="RRR999", keywords=["info"], dm="Info del reel"),
 ]
 
 
-def test_lee_las_tres_columnas():
-    rules = c.parse_rules(ROWS)
-    assert [(r.post, r.keywords) for r in rules] == [
-        ("DAbc123", ["PRECIO"]), ("DAbc123", ["catálogo", "catalogo"]), ("RRR999", ["info"]),
-    ]
+def test_el_shortcode_sale_del_link():
+    assert c.shortcode(POST) == "DAbc123"
+    assert c.shortcode("https://www.instagram.com/reel/RRR999/") == "RRR999"
+    assert c.shortcode("") == ""
 
 
-def test_solo_reaccionan_las_publicaciones_de_la_hoja():
-    rules = c.parse_rules(ROWS)
-    assert len(c.for_post(rules, "DAbc123")) == 2
-    assert c.for_post(rules, "OTRA") == []
-    assert c.for_post(rules, "") == []
+def test_solo_reaccionan_las_publicaciones_con_reglas():
+    assert len(c.for_post(RULES, "DAbc123")) == 2
+    assert c.for_post(RULES, "OTRA") == []
+    assert c.for_post(RULES, "") == []
 
 
 def test_palabras_sin_importar_mayusculas_acentos_ni_plurales():
-    rules = c.for_post(c.parse_rules(ROWS), "DAbc123")
+    rules = c.for_post(RULES, "DAbc123")
     assert [r.keywords[0] for r in c.literal_matches(rules, "Precios porfa!!")] == ["PRECIO"]
     assert [r.keywords[0] for r in c.literal_matches(rules, "me pasas el CATALOGO y precio?")] == [
         "PRECIO", "catálogo"]
@@ -63,22 +60,23 @@ def run(values, classify=None, spam_check=never_spam):
         store = Store(":memory:")
         await store.open()
         ig = FakeIG()
-        rules = c.parse_rules(ROWS)
 
-        async def fake_rules(google):
-            return rules
+        async def reglas_del_panel(store):
+            return RULES
 
         async def no_claude(rules, text):
             return []
 
-        orig = c.load_rules, c.available
-        c.load_rules, c.available = fake_rules, lambda: True
+        from igbot import contenido
+
+        orig = contenido.reglas, cuenta().imagenes_mes
+        contenido.reglas, cuenta().imagenes_mes = reglas_del_panel, 40
         try:
             for v in values:
-                await c.handle(v, store, ig, "google", "negocio", classify=classify or no_claude,
+                await c.handle(v, store, ig, "negocio", classify=classify or no_claude,
                                spam_check=spam_check)
         finally:
-            c.load_rules, c.available = orig
+            contenido.reglas, cuenta().imagenes_mes = orig
         recent = await store.recent("ana", 5)
         results = await store.week_comments(0, 2e9)
         await store.close()
@@ -101,7 +99,7 @@ def test_ignora_repetidos_propios_y_otras_publicaciones():
     ig, _, _ = run([
         comment("c1", "precio"), comment("c1", "precio"),  # Meta reintenta
         comment("c2", "precio", author="negocio"),  # la propia cuenta
-        comment("c3", "precio", media="m2"),  # publicación que no está en la hoja
+        comment("c3", "precio", media="m2"),  # publicación sin palabras clave
     ])
     assert ig.dms == [("c1", "Nuestros precios: ...")]
 

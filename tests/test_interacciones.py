@@ -6,7 +6,7 @@ import os
 from igbot import comentarios, interacciones as it  # noqa: E402
 from igbot.cuenta import cuenta  # noqa: E402
 from igbot.store import Store  # noqa: E402
-from test_comentarios import ROWS, FakeIG, comment, never_spam  # noqa: E402
+from test_comentarios import RULES, FakeIG, comment, never_spam  # noqa: E402
 
 
 def tabla(**cambios) -> dict:
@@ -31,24 +31,17 @@ def run(values, datos=None, escribe=None, monkeypatch=None, imagenes=40, con_reg
         if datos is not None:
             await store.set("interacciones", json.dumps(datos))
         ig = FakeIG()
-        rules = comentarios.parse_rules(ROWS) if con_reglas else []
-
-        async def fake_rules(google):
-            return rules
-
-        async def sin_reglas_del_panel(store):
-            return []
+        async def reglas_del_panel(store):
+            return RULES if con_reglas else []
 
         async def no_claude(rules, text):
             return []
 
         monkeypatch.setattr(cuenta(), "imagenes_mes", imagenes)
-        monkeypatch.setattr(comentarios, "load_rules", fake_rules)
-        monkeypatch.setattr(comentarios, "available", lambda: con_reglas)
-        monkeypatch.setattr("igbot.contenido.reglas", sin_reglas_del_panel)
+        monkeypatch.setattr("igbot.contenido.reglas", reglas_del_panel)
         monkeypatch.setattr("igbot.marco.usuario", lambda c: asyncio.sleep(0, "cafe.lunar"))
         for v in values:
-            await comentarios.handle(v, store, ig, "google", "negocio", classify=no_claude, spam_check=never_spam,
+            await comentarios.handle(v, store, ig, "negocio", classify=no_claude, spam_check=never_spam,
                                      escribe=falso)
         resultados = await store.week_comments(0, 2e9)
         await store.close()
