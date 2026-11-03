@@ -93,11 +93,36 @@ class OpenAI:
                 raise ErrorImagen("Hay muchas imágenes en proceso; intenta de nuevo en un minuto.")
             log.error("OpenAI respondió %s: %s", r.status_code, r.text[:500])
             raise ErrorImagen("No se pudo generar la imagen; intenta de nuevo.")
-        datos = (r.json().get("data") or [{}])[0]
+        respuesta = r.json()
+        datos = (respuesta.get("data") or [{}])[0]
+        costo = costo_openai(respuesta.get("usage"))
         if datos.get("b64_json"):
+            await anotar_costo(costo, self.model, self.quality)
             return base64.b64decode(datos["b64_json"])
+        if costo:  # la cobró aunque no la entregó
+            await anotar_costo(costo, self.model, self.quality)
         log.warning("OpenAI no devolvió imagen: %s", r.text[:300])
         raise ErrorImagen("Esa idea no se pudo ilustrar; prueba con otra descripción.")
+
+
+def costo_openai(uso) -> float | None:
+    """Lo que costó una imagen de GPT Image según el `usage` de la respuesta (tokens de texto y de fotos que
+    entraron, tokens que salieron); None si no vino, para usar el costo fijo."""
+    if not isinstance(uso, dict) or not uso.get("output_tokens"):
+        return None
+    entrada = uso.get("input_tokens_details") or {}
+    fotos = entrada.get("image_tokens", 0) or 0
+    texto = entrada.get("text_tokens", (uso.get("input_tokens", 0) or 0) - fotos) or 0
+    return (texto * config.OPENAI_IMAGE_USD_TEXTO + fotos * config.OPENAI_IMAGE_USD_FOTOS
+            + uso["output_tokens"] * config.OPENAI_IMAGE_USD_SALIDA) / 1_000_000
+
+
+async def anotar_costo(usd: float | None, modelo: str, calidad: str = "") -> None:
+    """Suma la imagen al gasto de contenido de la cuenta y la deja en el registro; sin costo real, el fijo."""
+    real = usd is not None
+    usd = usd if real else config.IMAGE_COST_USD
+    log.info("Imagen (%s %s): US$%.4f%s", modelo, calidad, usd, "" if real else " (costo fijo)")
+    await limites.add_cost(usd, limites.CONTENIDO)
 
 
 class Gemini:
@@ -134,6 +159,7 @@ class Gemini:
         candidato = (datos.get("candidates") or [{}])[0]
         for parte in candidato.get("content", {}).get("parts", []):
             if "inlineData" in parte:
+                await anotar_costo(None, self.model)
                 return base64.b64decode(parte["inlineData"]["data"])
         log.warning("Gemini no devolvió imagen: %s / %s",
                     datos.get("promptFeedback"), candidato.get("finishReason"))
@@ -730,7 +756,6 @@ async def crear_pieza(store: Store, user_id: str, idea: str, plantilla: str, tex
     except Exception:
         await devolver(store, tipo)
         raise
-    await limites.add_cost(config.IMAGE_COST_USD, limites.CONTENIDO)
     hecha = await _guardar(store, user_id, final, None if plantilla == LIBRE else base,
                            f"{type(proveedor).__name__.lower()}:{getattr(proveedor, 'model', '')}")
     await store.add_event(user_id, "imagen", {"tipo": tipo, "media": hecha["media_id"], "plantilla": plantilla})
