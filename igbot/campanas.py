@@ -1796,6 +1796,46 @@ async def subir_imagen(c: Cuenta, camp: dict, p: dict, data: bytes) -> int:
     return post_id
 
 
+MAX_RETOQUE = 300  # caracteres de la instrucción de "Retocar la imagen"
+MAX_VERSIONES = 4  # versiones que se guardan bajo la imagen (las del anuncio y las anteriores a un retoque)
+
+
+def textos_de_pieza(p: dict) -> list[str]:
+    """Los textos que deben leerse en la pieza de un post (para revisarla con visión): los del diseño, o nada."""
+    if not (ia_completa(p) and formato_de(p) in CON_TEXTO):
+        return []
+    extra = [] if formato_de(p) == "anuncio" else list(((p.get("plan") or {}).get("foto") or {}).get("textos", []))
+    return [p.get("titulo", ""), p.get("subtitulo", "") if formato_de(p) in CON_SUBTITULO else "", *extra]
+
+
+async def retocar_imagen(c: Cuenta, camp: dict, p: dict, instruccion: str, extra: bool) -> int:
+    """"Retocar la imagen" en el post de la campaña: la imagen actual con el cambio que pide el dueño, sin generarla
+    desde cero (usa 1 del cupo). La anterior se queda como versión bajo la imagen para poder volver a ella; si la
+    revisión con visión ve un texto mal, lo marca en el post."""
+    with usar(c):
+        post = await estado_post(c, p)
+        media = await c.store.media(post["media_ids"][0]) if post and post["media_ids"] else None
+        if not media or not archivo(c, media[0]).is_file():
+            raise imagenes.ErrorImagen("Primero genera o sube una imagen.")
+        hecha = await imagenes.retocar(c.store, PANEL, archivo(c, media[0]).read_bytes(), instruccion, extra,
+                                       historia=es_historia(p))
+        motivo = await revisar_textos(c, hecha, textos_de_pieza(p))
+        actual = post["media_ids"][0]
+        opciones = [o for o in p.get("opciones") or [] if archivo(c, o["token"]).is_file()]
+        if not any(o["media_id"] == actual for o in opciones):
+            opciones.append({"media_id": actual, "token": media[0], "revisar": p.get("revisar_imagen", "")})
+        p["opciones"] = (opciones + [{"media_id": hecha["media_id"], "token": hecha["token"], "revisar": motivo}])[-MAX_VERSIONES:]
+        if motivo:
+            p["revisar_imagen"] = motivo
+        else:
+            p.pop("revisar_imagen", None)
+        await c.store.update_post(post["id"], media_ids=[hecha["media_id"]])
+        if post["status"] == "programada":  # imagen distinta: se revisa de nuevo
+            await c.store.set_post(post["id"], "borrador", only_if="programada")
+        log.info("@%s: campaña, post %s retocado con imagen %s", await marco.usuario(c), post["id"], hecha["media_id"])
+    return post["id"]
+
+
 # --- páginas ---
 
 def nombre_de(dim: str, k: str) -> str:
@@ -1940,6 +1980,13 @@ async def detalle(c: Cuenta, camp: dict, p: dict, quedan_ia: int) -> str:
             '<input type="file" name="imagen" accept="image/jpeg,image/png,image/webp" aria-label="Tu imagen">'
             f'<p class="ayuda chica">Generar {gasto}. Para usar tu propia foto, elígela aquí arriba y toca Subir'
             " imagen (no usa tu cupo).</p>")
+    retocar = "" if fija or not (post and media) else (
+        '<details class="prompt-img retoque"><summary>Retocar la imagen</summary><div class="campo">'
+        f'<textarea id="d-retoque" name="retoque" rows="3" maxlength="{MAX_RETOQUE}" aria-label="Qué cambiar"'
+        ' placeholder="Por ejemplo: quita el ícono flotante y haz el titular más grande."></textarea>'
+        "<small>Se cambia solo eso y lo demás se conserva; la imagen de ahora se queda como versión por si quieres"
+        " volver a ella. Usa 1 de tu cupo.</small>"
+        '<button class="boton secundario chico" name="accion" value="retocar">Retocar</button></div></details>')
     nombre_titulo = {"texto": "Frase principal", "vs": "La pregunta"}.get(formato, "Título sobre la imagen")
     titulo = ("" if post else
               f'<div class="campo"><label for="d-titulo">{"Título (solo para el calendario)" if formato in ("foto", "collage", "bento") else nombre_titulo}'
@@ -2013,7 +2060,7 @@ async def detalle(c: Cuenta, camp: dict, p: dict, quedan_ia: int) -> str:
         + (f'<p class="cli-cam">Responde a lo que te preguntan: {escape(p["responde"])}</p>' if p.get("responde") else "")
         + f'</div><div class="cierre">{ir_a_campana(url_de(camp))}'
         f'<a class="x" href="{cerrar_a(url_de(camp))}" aria-label="Cerrar">×</a></div></div>'
-        f'<div class="cuerpo"><div class="izq">{imagen}{botones_img}</div><div>{plan_de_post(p)}'
+        f'<div class="cuerpo"><div class="izq">{imagen}{botones_img}{retocar}</div><div>{plan_de_post(p)}'
         + ('<p class="ayuda">Es una historia: se ve 24 horas a pantalla completa y no lleva texto publicado. Lo que'
            " se lee va en la imagen.</p>" if historia else
            f'<div class="campo"><label for="d-caption">Texto que se publica</label><textarea id="d-caption" name="caption"'
@@ -2137,7 +2184,7 @@ def aviso_faltantes(camp: dict) -> str:
 
 
 async def pagina_campana(c: Cuenta, camp: dict, aviso: str = "", sel: str = "", confirmar: str = "", k: str = "",
-                         form: dict | None = None, volver: str = "") -> HTMLResponse:
+                         form: dict | None = None, volver: str = "", campos: dict | None = None) -> HTMLResponse:
     """Una campaña: su calendario (con la ventana del post encima si se abrió uno) y, plegado, su nombre y fechas.
     La estrategia se cambia en el asistente (Ver planificación)."""
     with usar(c):
@@ -2148,7 +2195,7 @@ async def pagina_campana(c: Cuenta, camp: dict, aviso: str = "", sel: str = "", 
     with usar(c):
         cuerpo = (tarjeta_borrar(camp, volver) if confirmar == "borrar" else
                   tarjeta_confirmar(camp, await pendientes_de_confirmar(c, camp)) if confirmar == "aprobar_todas" else
-                  tarjeta_extra(confirmar, k, url_de(camp)) if confirmar else "")
+                  tarjeta_extra(confirmar, k, url_de(camp), campos or {}) if confirmar else "")
         cuerpo += await calendario(c, camp, sel) + await barra(c, camp) + ver_brief(camp) + editar(camp)
         p = buscar_post(camp, sel) if sel else None
         modal = await detalle(c, camp, p, quedan_ia) if p else ""
@@ -2452,8 +2499,10 @@ def tarjeta_confirmar(camp: dict, pendientes: list[dict]) -> str:
             if pendientes else "")
 
 
-def tarjeta_extra(accion: str, k: str, destino: str) -> str:
-    return (f'<form method="post" action="{destino}" class="tarjeta extra">'
+def tarjeta_extra(accion: str, k: str, destino: str, campos: dict | None = None) -> str:
+    """Antes de una imagen extra: confirmar el cobro. `campos` son datos de la acción que se conservan (ocultos)."""
+    ocultos = "".join(f'<input type="hidden" name="{escape(n)}" value="{escape(v)}">' for n, v in (campos or {}).items())
+    return (f'<form method="post" action="{destino}" class="tarjeta extra">{ocultos}'
             "<h2>Ya usaste las imágenes de tu plan este mes</h2>"
             f'<p class="ayuda">Las que generes ahora son extra, a US${config.EXTRA_IMAGE_USD} cada una, y se suman a tu'
             " próxima mensualidad.</p>"
@@ -2905,6 +2954,27 @@ async def _generar(c: Cuenta, camp: dict, p: dict, post: dict | None, f: dict, s
                             segundos=(30 if versiones == 1 else 30 + 15 * versiones) if costo(p) else 8)
 
 
+async def _retocar(c: Cuenta, camp: dict, p: dict, post: dict | None, f: dict, subida):
+    """"Retocar": la imagen del post con el cambio que escribió el dueño (retocar_imagen), en segundo plano."""
+    k, url = str(p["k"]), url_de(camp)
+    instruccion = " ".join(f.get("retoque", "").split())[:MAX_RETOQUE]
+    if not instruccion:
+        return await pagina_campana(c, camp, "Escribe qué quieres cambiar en la imagen.", sel=k)
+    if not post or not post["media_ids"]:
+        return await pagina_campana(c, camp, "Primero genera o sube una imagen.", sel=k)
+    extra = f.get("extra") == "1"
+    if await falta_cupo(c, extra) == "extra":
+        return await pagina_campana(c, camp, confirmar="retocar", k=k, campos={"retoque": instruccion})
+
+    async def una():
+        with usar(c):
+            await retocar_imagen(c, camp, p, instruccion, extra)
+            await guardar_post(c, camp, p)
+        yield con_desde(f"{url}?post={k}#detalle")
+
+    return await trabajando(c, "Retocando la imagen…", "Tarda alrededor de medio minuto.", una, url, segundos=30)
+
+
 async def _aprobar(c: Cuenta, camp: dict, p: dict, post: dict | None, f: dict, subida):
     k = str(p["k"])
     with usar(c):
@@ -2938,7 +3008,7 @@ async def _elegir(c: Cuenta, camp: dict, p: dict, post: dict | None, f: dict, su
 
 
 ACCIONES_POST = {"verificado": _verificado, "subir": _subir, "otra": _otra, "prompt": _prompt, "generar": _generar,
-                 "aprobar": _aprobar, "elegir": _elegir}
+                 "aprobar": _aprobar, "elegir": _elegir, "retocar": _retocar}
 
 
 @router.post("/campanas/{cid}")

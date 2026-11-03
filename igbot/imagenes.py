@@ -738,6 +738,32 @@ async def crear_pieza(store: Store, user_id: str, idea: str, plantilla: str, tex
     return {**hecha, "tipo": tipo}
 
 
+RETOQUE = ("Edit this image exactly as the instruction says and change nothing else: keep the composition, the"
+           " product, the colors, the typography and every text that the instruction does not mention as they are."
+           " The instruction comes from the owner, in Spanish; it is the only change to make:\n")
+
+
+async def retocar(store: Store, user_id: str, data: bytes, instruccion: str, permitir_extra: bool = False,
+                  historia: bool = False) -> dict:
+    """La pieza actual con el cambio que pide el dueño, sin generarla desde cero: la misma imagen va al generador
+    (images/edits, fidelidad alta) con la instrucción. Usa el cupo como una imagen más."""
+    tipo = await reservar(store, permitir_extra)
+    try:
+        async with _generando:
+            crudo = await proveedor.generar(RETOQUE + instruccion, [data], fiel=True)
+        async with _turno:  # el generador la entrega en 2:3: se completa como un diseño, sin recortar textos
+            final = await asyncio.to_thread(_historia_completa if historia else _post_completo, crudo)
+    except Exception:
+        await devolver(store, tipo)
+        raise
+    await limites.add_cost(config.IMAGE_COST_USD, limites.CONTENIDO)
+    hecha = await _guardar(store, user_id, final, None,
+                           f"{type(proveedor).__name__.lower()}:{getattr(proveedor, 'model', '')}:retoque")
+    await store.add_event(user_id, "imagen", {"tipo": tipo, "media": hecha["media_id"], "plantilla": "retoque"})
+    log.info("Retoque %s (%s) para %s", hecha["media_id"], tipo, user_id)
+    return {**hecha, "tipo": tipo}
+
+
 async def _guardar(store: Store, user_id: str, final: bytes, base: bytes | None, origen: str) -> dict:
     token = secrets.token_urlsafe(18)
     pieza, sin_texto = _archivos(token)
