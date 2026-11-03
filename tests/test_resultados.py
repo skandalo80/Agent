@@ -246,7 +246,7 @@ def test_pagina_de_inicio(cliente, monkeypatch):
     assert client.get("/panel/inicio", follow_redirects=False).status_code == 200
     html = client.get("/panel/inicio").text.split("<main>")[1]
     # Básico: sin publicaciones, sin Crear campaña y solo el uso de mensajes.
-    assert "Te falta" in html and "Hola" in html and "Mensajes que contestó tu asistente" in html
+    assert "Te falta" in html and "Hola" not in html and "Probar tu asistente" not in html and "Mensajes que contestó tu asistente" in html
     assert "Nadie te espera" in html and "Próximas publicaciones" not in html and "Crear campaña" not in html
     assert "Tu plan · Asistente virtual" in html and ">Imágenes<" not in html
     assert "Personas que te escribieron" in html  # sin ventas todavía
@@ -268,7 +268,7 @@ def test_pagina_de_inicio(cliente, monkeypatch):
     monkeypatch.setattr(c, "posts_mes", 12)
     html = client.get("/panel/inicio").text.split("<main>")[1]
     assert "Próximas publicaciones" in html and "Mañana" in html and "Abrimos el sábado" in html
-    assert "Crear campaña" in html and ">Imágenes<" in html and ">Posts<" in html
+    assert "Crear campaña" not in html and ">Imágenes<" in html and ">Posts<" in html
     # Sin sesión, a entrar.
     client.cookies.clear()
     assert client.get("/panel/inicio", follow_redirects=False).headers["location"] == "/panel"

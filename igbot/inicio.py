@@ -1,6 +1,6 @@
 """Inicio del panel (/panel/inicio): lo de hoy de un vistazo.
 
-De arriba hacia abajo: el saludo con los botones de siempre; "Te falta" (los pasos iniciales que aún no hace,
+De arriba hacia abajo: "Te falta" (los pasos iniciales que aún no hace,
 y desaparece cuando los termina); los números de hoy; las conversaciones que te esperan; las próximas
 publicaciones (solo con contenido en el plan) y cuánto lleva del plan este mes.
 
@@ -8,7 +8,6 @@ Todo sale de lo que ya está guardado (mensajes, chats, el resumen de Instagram 
 cupos): no llama a la IA y a Instagram solo para los @usuarios que aún no conoce, igual que Conversaciones.
 """
 import asyncio
-import json
 import time
 from datetime import date, datetime, timedelta
 from html import escape
@@ -194,14 +193,6 @@ async def tu_plan(c: Cuenta, hoy_: date, zona: ZoneInfo) -> str:
             + f'<div class="ini-usos">{"".join(usos)}</div></section></div>')
 
 
-async def saludo(c: Cuenta) -> str:
-    """"Hola, " y el nombre de su empresa o, si no lo ha puesto, su @usuario."""
-    empresa = json.loads(await c.store.get("empresa") or "{}")
-    usuario = await marco.usuario(c)
-    nombre = (empresa.get("nombre") or "").strip() or (f"@{usuario}" if usuario else "")
-    return f"Hola, {escape(nombre)}" if nombre else "Hola"
-
-
 async def pagina(c: Cuenta):
     ahora = time.time()
     zona = fechas.zona(c)
@@ -210,17 +201,12 @@ async def pagina(c: Cuenta):
     from .limites import LIMIT_NOTICE
     pendientes = await c.store.pendientes_tuyos(ahora, ahora - c.human_pause_hours * config.HORA - 60,
                                                 ahora - conversaciones.SIN_RESPUESTA, LIMIT_NOTICE)
-    botones = '<a class="boton secundario chico" href="/panel/probar#ultimo">Probar tu asistente</a>'
-    if c.imagenes_mes > 0:
-        botones += '<a class="boton chico" href="/panel/contenido/campanas/nueva">Crear campaña</a>'
-    cabeza = (f'<div class="titulo-fila ini-cab"><span class="ini-hola">{await saludo(c)}</span>'
-              f'<span class="ini-botones">{botones}</span></div>')
     abajo = await te_esperan(c, ahora)
     if c.imagenes_mes > 0:
         abajo = f'<div class="met ini-dos">{abajo}{await proximas(c, ahora)}</div>'
     else:
         abajo = f'<div class="met">{abajo.replace("met-c ini-chats", "met-c ancho ini-chats", 1)}</div>'
-    cuerpo = (cabeza + te_falta(await marco.pasos_iniciales(c)) + await hoy(c, inicio_dia, pendientes)
+    cuerpo = (te_falta(await marco.pasos_iniciales(c)) + await hoy(c, inicio_dia, pendientes)
               + abajo + await tu_plan(c, hoy_.date(), zona))
     return marco.pagina(await marco.menu_de(c, "inicio")
                         + f'<main><div class="contenedor ini">{cuerpo}</div></main>')
