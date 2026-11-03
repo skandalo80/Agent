@@ -26,7 +26,7 @@ from html import escape
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
-from . import brief, campanas, empresa, fechas, limites, marco, tienda_shopify, tools
+from . import brief, campanas, config, empresa, fechas, limites, marco, tienda_shopify, tools
 from .contenido import TOKEN_FOTO, archivo, guardar_fotos, marca_de, modo_de, sin_plan, url_imagen
 from .cuenta import Cuenta, usar
 
@@ -645,7 +645,10 @@ def paso_oferta(b: dict, prods: list[dict]) -> str:
             + "</div>" + campos_promo(b) + "</div>"
             '<div class="wiz-bloque"><label class="t">¿Cuántas versiones del anuncio?</label><p class="ayuda">Cada'
             " versión es una imagen distinta del mismo anuncio y sale como un post de la campaña. Así ves cuál"
-            ' funciona mejor; las que no te gusten las borras.</p><div class="wiz-chips">'
+            " funciona mejor; las que no te gusten las borras." + (
+                f" De cada una se generan {config.OPCIONES_ANUNCIO} imágenes con composiciones distintas y eliges la"
+                " que más te guste; solo esa cuenta en tu cupo." if config.OPCIONES_ANUNCIO > 1 else "")
+            + '</p><div class="wiz-chips">'
             + "".join(chip("versiones", n, str(n), b.get("versiones", 4) == n) for n in VERSIONES) + "</div></div>"
             + '<div class="wiz-bloque">' + abre("con_texto", "Cuéntalo en tus palabras", b.get("con_texto") or b["texto"])
             + '<p class="ayuda">Un dato que no debe faltar en el anuncio (opcional).</p>'

@@ -9,7 +9,9 @@ from PIL import Image  # noqa: E402
 from test_campanas import BASE, LUNES, claude_de_campana, leer, listo  # noqa: E402
 from test_contenido import ORIGEN, cliente  # noqa: E402
 
-from igbot import brief, campanas, contenido, nueva_campana  # noqa: E402
+from igbot import brief, campanas, contenido, imagenes, nueva_campana  # noqa: E402
+from igbot.cuenta import usar  # noqa: E402
+from test_imagenes import foto  # noqa: E402
 
 assert cliente  # el fixture de test_contenido, que usan estas pruebas
 
@@ -1044,6 +1046,48 @@ def test_campana_de_producto_con_anuncios(cliente, monkeypatch):
     assert "clean, premium advertising" in prompt and "infographic-style" not in prompt and "No icons" in prompt
     assert f'Headline (largest, the only big text): "{p["titulo"]}"' in prompt
     assert "reproduce it exactly" in prompt and len(fotos) == 1 and proveedor.fiel
+    # Como Holo: de cada anuncio salen 3 versiones con composiciones distintas; la primera queda en el post, las
+    # tres se ven en la ventana y solo una cuenta en el cupo.
+    ultimos = [l[0] for l in proveedor.llamadas[-3:]]
+    assert all("clean, premium advertising" in x for x in ultimos) and len({x for x in ultimos}) == 3
+    assert any("front view" in x for x in ultimos) and any("close-up" in x for x in ultimos)
+    camp = leer(client, c)
+    p = camp["posts"][0]
+    assert len(p["opciones"]) == 3 and all(o["token"] for o in p["opciones"])
+    post = client.portal.call(c.store.post, p["post_id"])
+    assert post["media_ids"] == [p["opciones"][0]["media_id"]]
+    with usar(c):
+        assert client.portal.call(imagenes.usadas, c.store) == (1, 0)
+    r = client.get(f"{campanas.url_de(camp)}?post={p['k']}")
+    assert r.text.count('class="opcion-img') == 3 and 'class="opcion-img on"' in r.text
+    assert f'value="elegir:{p["opciones"][1]["media_id"]}"' in r.text and "↻ Otras versiones" in r.text
+    assert "hace 3 versiones y eliges una: usa 1 de tu cupo" in r.text
+    # Elegir otra: cambia la imagen del post sin generar ni gastar.
+    r = client.post(campanas.url_de(camp), headers=ORIGEN,
+                    data={"accion": f"elegir:{p['opciones'][1]['media_id']}", "k": str(p["k"])})
+    assert r.status_code == 200 and len(proveedor.llamadas) == 3
+    post = client.portal.call(c.store.post, p["post_id"])
+    assert post["media_ids"] == [p["opciones"][1]["media_id"]]
+    with usar(c):
+        assert client.portal.call(imagenes.usadas, c.store) == (1, 0)
+    r = client.post(campanas.url_de(camp), headers=ORIGEN, data={"accion": "elegir:999", "k": str(p["k"])})
+    assert "Esa versión ya no está." in r.text
+    # Si solo sale una versión (las otras fallan), no hay opciones y el post tiene su imagen.
+    antes = len(proveedor.llamadas)
+
+    async def a_veces(prompt, fotos=(), fiel=False):
+        proveedor.llamadas.append((prompt, fotos))
+        if "front view" not in prompt:
+            raise imagenes.ErrorImagen("no salió")
+        return foto()
+
+    monkeypatch.setattr(proveedor, "generar", a_veces)
+    client.post(campanas.url_de(camp), headers=ORIGEN, data={"accion": "generar", "k": str(p["k"])})
+    assert len(proveedor.llamadas) == antes + 3
+    p = leer(client, c)["posts"][0]
+    assert "opciones" not in p and client.portal.call(c.store.post, p["post_id"])["media_ids"]
+    with usar(c):  # volver a generar cuenta una imagen más, como siempre; las que fallaron no
+        assert client.portal.call(imagenes.usadas, c.store) == (2, 0)
 
 
 def test_el_anuncio_no_entra_en_las_campanas_de_contenido():

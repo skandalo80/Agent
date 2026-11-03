@@ -76,6 +76,11 @@
   /* Tabla "¿Cuándo pasar la conversación a tu equipo?": caso, interruptor, qué recibe el cliente */
   --pase-columnas: minmax(0, 1fr) 4rem minmax(0, 1.6fr);
 
+  /* Versiones de un anuncio en la ventana del post (Promocionar un producto): miniaturas para elegir una */
+  --opcion-hueco: .5rem;       /* espacio entre miniaturas */
+  --opcion-radio: .6rem;       /* redondeo de cada miniatura */
+  --opcion-borde: 2px;         /* grosor del borde naranja de la elegida */
+
   /* Página de marca en el celular: tarjetas para elegir (estilos, paletas, colores, logo) */
   --marca-columnas-cel: 2;     /* tarjetas por fila en el celular */
   --marca-hueco-cel: .6rem;    /* espacio entre ellas */
