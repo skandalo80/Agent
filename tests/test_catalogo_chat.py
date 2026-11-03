@@ -10,10 +10,13 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 import app as bot
-from igbot import catalogo_chat, config, tienda_shopify
+import test_contenido
+from igbot import catalogo_chat, config, marco, tienda_shopify
 from igbot.instagram import Instagram
 from igbot.store import Store
+from test_contenido import ORIGEN
 
+cliente = test_contenido.cliente  # un cliente conectado con su panel
 PUBLICO = "https://console.skandar.online"
 PRODUCTOS = [
     {"id": "a1", "nombre": "Bolsa tote de piel", "precio": "1,450", "moneda": "MXN", "opciones": ["Café", "Negro"],
@@ -290,3 +293,44 @@ def test_botones_de_las_tarjetas_por_el_webhook(monkeypatch, tmp_path):
         _webhook(client, {"mid": "pb3", "title": "Ver más fotos", "payload": "SK_FOTOS:c3"})
         esperar(lambda: len(calls) > 1)
         assert calls[-1] == ["Ver más fotos: Taller de piel"]
+
+
+def test_opciones_apagadas(tienda, monkeypatch):
+    c, correr, consultas = tienda
+    perfil = {"reglas": {"links": False}, "catalogo_chat": {"quiero": False, "existencias": False, "rapidas": False}}
+    correr(c.store.set("perfil", json.dumps(perfil)))
+    opc = catalogo_chat.opciones_de(perfil)
+    assert opc == {"tarjetas": True, "quiero": False, "fotos": True, "existencias": False, "rapidas": False,
+                   "tienda": False}
+    correr(catalogo_chat.elegir(c, "ana", ["Bolsa tote de piel", "Bolsa cruzada"], ["Envíos"]))
+    ig = IgFalso()
+    correr(catalogo_chat.enviar(c, ig, "ana", "ana", catalogo_chat.tomar(c, "ana")))
+    _, (tote, cruzada), rapidas = ig.tarjetas[0]
+    # Sin enlace a la tienda (regla "Comparte el link" apagada), sin "Lo quiero", sin existencias ni respuestas.
+    assert rapidas == [] and consultas == []
+    assert [b["title"] for b in tote["buttons"]] == ["Ver más fotos"] and "default_action" not in tote
+    assert tote["subtitle"] == "$1,450 MXN · Café, Negro" and "buttons" not in cruzada
+    # Sin "Ver más fotos", el botón no manda nada (lo atiende el asistente); sin tarjetas, no hay herramienta.
+    correr(c.store.set("perfil", json.dumps({"catalogo_chat": {"fotos": False, "tarjetas": False}})))
+    assert correr(catalogo_chat.mas_fotos(c, ig, "ana", "ana", "a1")) == "" and ig.fotos == []
+    assert not correr(catalogo_chat.con_productos(c))
+
+
+def test_se_configura_en_reglas_y_limites(cliente):
+    client, c, *_ = cliente
+    r = client.get("/panel/asistente/configura?paso=reglas")
+    assert "Tus productos en el chat" in r.text and 'name="cc_quiero" value="1" checked' in r.text
+    assert r.text.index('name="no_hacer"') < r.text.index("Tus productos en el chat")
+    client.post("/panel/asistente/paso", headers=ORIGEN, data={
+        "paso": "reglas", "r_links": "1", "cc": "1", "cc_tarjetas": "1", "cc_fotos": "1"})
+    perfil = client.portal.call(marco.perfil, c)
+    assert perfil["catalogo_chat"] == {"tarjetas": True, "quiero": False, "fotos": True, "existencias": False,
+                                       "rapidas": False}
+    r = client.get("/panel/asistente/configura?paso=reglas")
+    assert 'name="cc_quiero" value="1">' in r.text and 'name="cc_fotos" value="1" checked' in r.text
+    r = client.get("/panel/asistente/configura?paso=resumen")
+    assert "Muestra tus productos en tarjetas con Ver en la tienda, Ver más fotos" in r.text
+    client.post("/panel/asistente/paso", headers=ORIGEN, data={"paso": "reglas", "cc": "1"})
+    assert "No muestra tus productos en tarjetas" in client.get("/panel/asistente/configura?paso=resumen").text
+    # Sin Origin no se guarda.
+    assert client.post("/panel/asistente/paso", data={"paso": "reglas", "cc": "1"}).status_code == 403

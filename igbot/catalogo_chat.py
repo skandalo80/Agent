@@ -21,7 +21,7 @@ import re
 
 from claude_agent_sdk import tool
 
-from . import config, contenido, empresa, tienda_shopify, unavez
+from . import config, contenido, empresa, marco, tienda_shopify, unavez
 from .cuenta import Cuenta
 from .tools import ok
 
@@ -37,6 +37,29 @@ TOPE_TIENDA_SEG = 8  # lo más que esperan las tarjetas a su Shopify; después s
 POCAS = 3  # con esto o menos en existencia se dice "Quedan pocas"
 QUIERO, FOTOS = "SK_QUIERO", "SK_FOTOS"
 PAYLOAD = re.compile(rf"^({QUIERO}|{FOTOS}):([0-9a-f]{{1,16}})$")
+# Lo que el dueño prende o apaga en Configura tu asistente > Reglas y límites (kv "perfil", "catalogo_chat").
+# (clave, título, para qué sirve); todas encendidas al empezar. "Ver en la tienda" sigue a la regla "links".
+OPCIONES = [
+    ("tarjetas", "Muestra tus productos en tarjetas",
+     "Manda tus productos de Tu empresa con foto y precio, para deslizar de lado."),
+    ("quiero", "Botón Lo quiero", "Al tocarlo, tu asistente sigue la compra y manda el link de pago si lo tienes."),
+    ("fotos", "Botón Ver más fotos", "Manda las demás fotos del producto."),
+    ("existencias", "Dice si hay", "Con tu Shopify conectado: disponible, quedan pocas o agotado."),
+    ("rapidas", "Respuestas rápidas", "Hasta tres botones cortos debajo, como Envíos o Pagar aquí."),
+]
+
+
+def opciones_de(perfil: dict) -> dict[str, bool]:
+    guardadas = perfil.get("catalogo_chat") or {}
+    out = {k: bool(guardadas.get(k, True)) for k, *_ in OPCIONES}
+    out["tienda"] = bool((perfil.get("reglas") or {}).get("links", True))
+    return out
+
+
+async def opciones(c: Cuenta) -> dict[str, bool]:
+    return opciones_de(await marco.perfil(c))
+
+
 # Lo elegido en esta respuesta, por (cuenta, persona): una sola tarea por persona a la vez, así que no se cruzan.
 _pendientes: dict[tuple[str, str], dict] = {}
 
@@ -134,23 +157,24 @@ def subtitulo(p: dict, estado: str = "") -> str:
     return _corta(" · ".join(x for x in partes if x), MAX_TITULO)
 
 
-async def tarjeta(c: Cuenta, user_id: str, p: dict, en_vivo: str = "") -> dict:
-    estado = estado_de(p, en_vivo)
+async def tarjeta(c: Cuenta, user_id: str, p: dict, en_vivo: str = "", opc: dict | None = None) -> dict:
+    opc = opc or opciones_de({})
+    estado = estado_de(p, en_vivo)  # agotado: sin "Lo quiero", aunque no se diga en la tarjeta
     fotos = _fotos(c, p)
     botones = []
-    if url := _url(p.get("url")):
+    if (url := _url(p.get("url"))) and opc["tienda"]:
         url = await tienda_shopify.etiquetar(c, user_id, url)
         botones.append({"type": "web_url", "url": url, "title": "Ver en la tienda"})
-    if estado != "Agotado":
+    if opc["quiero"] and estado != "Agotado":
         botones.append({"type": "postback", "title": "Lo quiero", "payload": f"{QUIERO}:{p['id']}"})
-    if len(fotos) > 1:
+    if opc["fotos"] and len(fotos) > 1:
         botones.append({"type": "postback", "title": "Ver más fotos", "payload": f"{FOTOS}:{p['id']}"})
     t = {"title": _corta(p.get("nombre", ""), MAX_TITULO)}
-    if sub := subtitulo(p, estado):
+    if sub := subtitulo(p, estado if opc["existencias"] else ""):
         t["subtitle"] = sub
     if fotos:
         t["image_url"] = fotos[0]
-    if url:
+    if url and opc["tienda"]:
         t["default_action"] = {"type": "web_url", "url": url}
     if botones:
         t["buttons"] = botones
@@ -196,9 +220,10 @@ async def enviar(c: Cuenta, instagram, user_id: str, recipient_id: str, elegido:
     prods = [productos[i] for i in elegido.get("ids", []) if i in productos][:MAX_TARJETAS]
     if not prods:
         return ""
-    estados = await existencias(c, [p["nombre"] for p in prods])
-    tarjetas = [await tarjeta(c, user_id, p, estados.get(p["nombre"], "")) for p in prods]
-    await instagram.send_cards(recipient_id, tarjetas, elegido.get("rapidas") or [])
+    opc = await opciones(c)
+    estados = await existencias(c, [p["nombre"] for p in prods]) if opc["existencias"] else {}
+    tarjetas = [await tarjeta(c, user_id, p, estados.get(p["nombre"], ""), opc) for p in prods]
+    await instagram.send_cards(recipient_id, tarjetas, (elegido.get("rapidas") or []) if opc["rapidas"] else [])
     log.info("Tarjetas de %d producto(s) a %s", len(tarjetas), user_id)
     return "[Tarjetas: " + ", ".join(p["nombre"] for p in prods) + "]"
 
@@ -224,7 +249,9 @@ def herramientas(c: Cuenta, user_id: str) -> list:
 
 
 async def con_productos(c: Cuenta) -> bool:
-    return disponible() and any(p.get("id") for p in await empresa.productos(c))
+    """Si el asistente tiene la herramienta: hay productos, dirección pública y el dueño no apagó las tarjetas."""
+    return (disponible() and (await opciones(c))["tarjetas"]
+            and any(p.get("id") for p in await empresa.productos(c)))
 
 
 # --- botones de las tarjetas ---
@@ -246,7 +273,7 @@ async def mas_fotos(c: Cuenta, instagram, user_id: str, recipient_id: str, id_: 
     nada (no existe, no tiene más fotos o ya pasó el tope)."""
     p = await empresa.producto(c, id_)
     fotos = _fotos(c, p)[1:1 + MAX_FOTOS_EXTRA] if p else []
-    if not fotos or not await unavez.cabe(c.store, f"fotos_chat:{user_id}", FOTOS_POR_HORA, config.HORA):
+    if not fotos or not (await opciones(c))["fotos"] or not await unavez.cabe(c.store, f"fotos_chat:{user_id}", FOTOS_POR_HORA, config.HORA):
         return ""
     for url in fotos:
         await instagram.send_image(recipient_id, url)
