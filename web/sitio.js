@@ -172,10 +172,12 @@ document.querySelectorAll('.filtros [data-filtro]').forEach(function (b) {
 
   // Escenas de la portada y de "Un día con Skandar" (estilos en escenas.css): cada una corre cuando se ve
   // y vuelve a empezar al terminar su ciclo (data-ciclo, en ms); fuera de pantalla se detiene y se reinicia.
-  var seg = function (el, prop) {
-    var v = el.style.getPropertyValue(prop) || getComputedStyle(el).getPropertyValue(prop);
-    return (parseFloat(v) || 0) * 1000;
-  };
+  // Los tiempos vienen en data-t / data-d / data-te / data-ancho (no en style=""): la CSP de la web no permite
+  // estilos en línea en el HTML, pero sí fijarlos desde JS. Así los lee el CSS (var(--t)) y el reproductor.
+  document.querySelectorAll('.escena [data-t]').forEach(function (el) {
+    ['t', 'd', 'te', 'ancho'].forEach(function (k) { if (el.dataset[k]) el.style.setProperty('--' + k, el.dataset[k]); });
+  });
+  var seg = function (el, prop) { return (parseFloat(el.style.getPropertyValue(prop)) || 0) * 1000; };
 
   document.querySelectorAll('.escena[data-ciclo]').forEach(function (escena) {
     var ciclo = parseInt(escena.dataset.ciclo, 10) || 12000;
