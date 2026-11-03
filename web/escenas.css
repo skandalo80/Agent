@@ -127,7 +127,7 @@
 .caso.invertido .caso-texto { order: 2; }
 .caso-hora { font-size: var(--t-ante); font-weight: var(--peso-ante); letter-spacing: var(--espaciado-ante); text-transform: uppercase; color: var(--naranja); margin-bottom: 12px; font-variant-numeric: tabular-nums; }
 .caso-texto h3 { font-size: clamp(24px, 2.6vw, 32px); line-height: 1.15; letter-spacing: -.8px; font-weight: var(--peso-titulo); margin-bottom: 14px; }
-.caso-texto p:not(.caso-hora) { color: var(--tenue); font-size: var(--t-bajada); line-height: 1.7; max-width: 440px; }
+.caso-texto p:not(.caso-hora) { color: var(--tenue); font-size: var(--t-bajada); line-height: var(--interlineado); max-width: 440px; }
 .chip { display: inline-block; margin-top: 18px; padding: 6px 11px; border-radius: 999px; border: 1px solid #3A3C42; background: var(--tarjeta); font-size: 12px; font-weight: 700; color: var(--texto); }
 .caso-visual { display: grid; justify-items: center; }
 .caso-visual .flota.cita { right: 0; bottom: 18px; }
@@ -195,17 +195,22 @@
 .pasos-cortos { margin-top: 40px; }
 
 @media (max-width: 800px) {
-  .portada-hook .portada-rejilla { grid-template-columns: 1fr; gap: 40px; }
+  .portada-hook .portada-rejilla { grid-template-columns: 1fr; gap: 24px; }
   .visual-hook { padding: 0 0 26px; zoom: 1; }
-  .visual-hook .tel, .caso-visual .tel { translate: 0 0; width: min(var(--esc-ancho), calc(100% - 40px)); justify-self: start; }
+  .visual-hook .tel, .caso-visual .tel { translate: 0 0; width: 100%; justify-self: start; }
+  .post, .panel { width: 100%; }
+  .post-img { aspect-ratio: 16 / 9; }
   .visual-hook .flota, .caso-visual .flota.cita { right: 0; bottom: 10px; width: 176px; }
-  .con-flota .tel { padding-bottom: 112px; }
-  .casos-intro { margin-bottom: 36px; }
-  .caso { grid-template-columns: 1fr; gap: 28px; padding: 32px 0; }
+  .con-flota .tel { padding-bottom: 124px; }
+  .visual-hook { padding-bottom: 12px; }
+  .anima .tel .tel-cuerpo { height: 250px; }
+  .casos-intro { margin-bottom: 20px; }
+  .caso { grid-template-columns: 1fr; gap: 18px; padding: 22px 0; }
   .caso.invertido .caso-texto { order: 0; }
-  .caso-texto h3 { font-size: 26px; }
+  .caso-hora { margin-bottom: 6px; }
+  .caso-texto h3 { font-size: 24px; margin-bottom: 8px; }
+  .caso-texto p:not(.caso-hora) { max-width: none; }
   .caso-visual { justify-items: start; }
-  .panel { width: 100%; }
 }
 @media (max-width: 380px) {
   .cifras { grid-template-columns: repeat(2, 1fr); }
