@@ -711,6 +711,8 @@ async def receive_entry(c: Cuenta, entry: dict) -> None:
             continue
         user_id = event["sender"]["id"]
         log.info("DM de %s (%s)", user_id, nombre(c))
+        if (historia := (message.get("reply_to") or {}).get("story") or {}).get("id") and not admin.is_admin(user_id):
+            await store.guardar_origen(user_id, "historia", str(historia["id"]))  # para Ventas por post
         text = message_text(message)
         # Primero lo que eligió el dueño en Configura tus interacciones (con el texto tal cual llegó, para
         # distinguir un emoji de un mensaje); si toca "La IA contesta", sigue el camino de siempre con el
