@@ -131,7 +131,8 @@ CREATE TABLE IF NOT EXISTS posts (
 );
 
 -- Cosas que pasaron en las conversaciones, para el reporte semanal
--- ('cotizacion' con sus productos y total, 'humano' cuando se pasó a una persona, 'interes' cuando pidió
+-- ('cotizacion' con sus productos y total, 'humano' cuando se pasó a una persona, 'interesado' cuando mostró
+-- interés claro en comprar o contratar (solo mueve su etapa), 'interes' cuando pidió
 -- cotización, visita o dejó sus datos, 'cita' cuando el asistente agendó una).
 CREATE TABLE IF NOT EXISTS events (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -278,7 +279,7 @@ def etapa_de_evento(kind: str, detail: dict) -> str:
         return "cita"
     if kind == "cotizacion" or (kind == "interes" and detail.get("tipo") == "cotizacion"):
         return "cotizo"
-    return "interesado" if kind == "interes" else ""
+    return "interesado" if kind in ("interes", "interesado") else ""
 
 
 class Store:
@@ -1272,21 +1273,40 @@ class Store:
         filtro, args = (" AND user_id = ?", (user_id,)) if user_id else ("", ())
         cur = await self.db.execute(
             "SELECT user_id, kind, json_extract(detail, '$.tipo'), created_at FROM events"
-            f" WHERE kind IN ('interes', 'cotizacion', 'cita'){filtro} ORDER BY id", args)
+            f" WHERE kind IN ('interes', 'interesado', 'cotizacion', 'cita'){filtro} ORDER BY id", args)
         for u, kind, tipo, t in await cur.fetchall():
             await self._avanzar(u, etapa_de_evento(kind, {"tipo": tipo}), t)
         cur = await self.db.execute(f"SELECT user_id, MAX(created_at) FROM ventas WHERE user_id != ''{filtro}"
                                     " GROUP BY user_id", args)
         for u, t in await cur.fetchall():
             await self._avanzar(u, "compro", t)
+        await self._desde_pdf(filtro, args)
+
+    async def _desde_pdf(self, filtro: str = "", args: tuple = ()) -> None:
+        """Las cotizaciones formales en PDF del vendedor (tabla quotes) también son "Cotizó" (sin commit)."""
+        cur = await self.db.execute(f"SELECT user_id, MAX(created_at) FROM quotes WHERE user_id != ''{filtro}"
+                                    " GROUP BY user_id", args)
+        for u, t in await cur.fetchall():
+            await self._avanzar(u, "cotizo", t)
 
     async def _etapas_iniciales(self) -> None:
-        """Una sola vez por base: los contactos que ya tenían cotizaciones, citas o ventas toman su etapa."""
-        cur = await self.db.execute("SELECT 1 FROM kv WHERE key = 'etapas_iniciales'")
-        if await cur.fetchone():
+        """Una sola vez por base: los contactos que ya tenían cotizaciones, citas o ventas toman su etapa.
+        Versión 2: también las cotizaciones en PDF; a las bases que ya hicieron la 1 solo se les suma eso (volver
+        a leer los eventos subiría a quien el dueño marcó "No compró")."""
+        cur = await self.db.execute("SELECT value FROM kv WHERE key = 'etapas_iniciales'")
+        hecha = ((await cur.fetchone()) or ("",))[0]
+        if hecha == "2":
             return
-        await self._desde_eventos()
-        await self.db.execute("INSERT OR REPLACE INTO kv (key, value) VALUES ('etapas_iniciales', '1')")
+        if hecha == "1":
+            await self._desde_pdf()
+        else:
+            await self._desde_eventos()
+        await self.db.execute("INSERT OR REPLACE INTO kv (key, value) VALUES ('etapas_iniciales', '2')")
+        await self.db.commit()
+
+    async def avanzar_etapa(self, user_id: str, etapa: str) -> None:
+        """Sube la etapa de un contacto por algo que no deja evento (p. ej. una cotización en PDF)."""
+        await self._avanzar(user_id, etapa, time.time())
         await self.db.commit()
 
     async def set_etapa(self, user_id: str, etapa: str) -> None:

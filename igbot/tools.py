@@ -377,6 +377,7 @@ def quote_tools(
         if not sent:
             return error("No se pudo mandar la cotización en este momento. Ofrece intentarlo en un rato.")
         state["acted"] = True
+        await store.avanzar_etapa(user_id, "cotizo")  # su etapa en Conversaciones
         return ok(f"Cotización {folio} enviada {sent}.\n{q.texto()}")
 
     return [cotizar, enviar_cotizacion]
@@ -549,7 +550,8 @@ def store_tools(
 RAZONES = {"pide_persona": "Pidió una persona", "queja": "Queja", "molesto": "Molesto", "precio": "Negociar precio",
            "fuera_catalogo": "Fuera del catálogo", "otro": "Otro motivo"}
 # Lo que anota el asistente cuando alguien está a punto de comprar un servicio (Resultados > Anuncios).
-INTERESES = {"cotizacion": "Pidió cotización", "visita": "Pidió visita o medición", "datos": "Dejó sus datos"}
+INTERESES = {"cotizacion": "Pidió cotización", "visita": "Pidió visita o medición", "datos": "Dejó sus datos",
+             "compra": "Quiere comprar o contratar"}
 HUMANO_SCHEMA = {
     "type": "object",
     "properties": {
@@ -657,9 +659,11 @@ def human_tools(store: Store, google: Google | None, user_id: str, state: dict |
 
     @tool(
         "anotar_interes",
-        "Anota que esta persona pidió cotización o presupuesto, una visita o medición, o dejó sus datos para"
-        " que el negocio la contacte. Úsala una vez cuando pase; la persona no ve nada. No la uses si solo"
-        " preguntó un precio del catálogo.",
+        "Anota hasta dónde llegó esta persona; ella no ve nada. tipo: 'compra' cuando muestra interés claro en"
+        " comprar o contratar (dice que lo quiere, pregunta cómo comprar, pagar, apartar o empezar);"
+        " 'cotizacion' cuando pide cotización o presupuesto; 'visita' cuando pide visita o medición; 'datos'"
+        " cuando deja sus datos para que el negocio la contacte. Úsala una vez por tipo, cuando pase. No la uses"
+        " si solo saludó o preguntó un precio del catálogo.",
         {"type": "object", "properties": {
             "tipo": {"type": "string", "enum": list(INTERESES)},
             "detalle": {"type": "string", "description": "Una línea: qué servicio y lo que ya se sabe."}},
@@ -667,7 +671,12 @@ def human_tools(store: Store, google: Google | None, user_id: str, state: dict |
     )
     async def anotar_interes(args):
         tipo = args.get("tipo") if args.get("tipo") in INTERESES else "cotizacion"
-        await store.add_event(user_id, "interes", {"tipo": tipo, "detalle": str(args.get("detalle") or "")[:300]})
+        detalle = str(args.get("detalle") or "")[:300]
+        if tipo == "compra":
+            # Solo mueve su etapa a Interesado: no es cotización en Resultados ni prospecto para Meta.
+            await store.add_event(user_id, "interesado", {"detalle": detalle})
+            return ok("Anotado.")
+        await store.add_event(user_id, "interes", {"tipo": tipo, "detalle": detalle})
         conversiones_meta.avisar(cuenta(), user_id, "interes")
         return ok("Anotado.")
 
