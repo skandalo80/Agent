@@ -57,7 +57,7 @@ def campos(perfil: dict, cotizables: int) -> str:
     falta = ("" if cotizables else '<p class="aviso">Aún no tienes productos con precio fijo en Tu empresa. Agrégalos en'
              ' <a href="/panel/empresa?paso=3">Productos y servicios</a> para poder cotizar.</p>')
     return ('<div class="as-caja as-cot"><input type="hidden" name="q" value="1">'
-            '<label class="as-fila"><span><b>Manda cotizaciones en PDF</b><small>Con los productos y precios de Tu'
+            '<h3 class="as-pases-t">Cotizaciones</h3><label class="as-fila"><span><b>Manda cotizaciones en PDF</b><small>Con los productos y precios de Tu'
             " empresa; tu asistente nunca calcula un precio por su cuenta.</small></span>"
             f'<input type="checkbox" class="as-sw" name="q_on" value="1"{" checked" if a["on"] else ""}'
             ' aria-label="Manda cotizaciones en PDF"></label>'
