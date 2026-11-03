@@ -122,7 +122,7 @@ def test_si_falla_la_imagen_no_gasta_cupo(monkeypatch, tmp_path):
 def gemini_que_responde(monkeypatch, status, cuerpo, gastos=None):
     pedidos, gastos = [], [] if gastos is None else gastos
 
-    async def gasto(usd, rubro=""):  # lo que anotaría al gasto de la cuenta
+    async def gasto(usd, rubro="", imagen=False):  # lo que anotaría al gasto de la cuenta
         gastos.append((usd, rubro))
 
     monkeypatch.setattr(imagenes.limites, "add_cost", gasto)
@@ -149,7 +149,7 @@ def test_gemini_devuelve_la_imagen(monkeypatch):
 def openai_que_responde(monkeypatch, status, cuerpo, gastos=None):
     pedidos, gastos = [], [] if gastos is None else gastos
 
-    async def gasto(usd, rubro=""):  # lo que anotaría al gasto de la cuenta
+    async def gasto(usd, rubro="", imagen=False):  # lo que anotaría al gasto de la cuenta
         gastos.append((usd, rubro))
 
     monkeypatch.setattr(imagenes.limites, "add_cost", gasto)
@@ -360,3 +360,18 @@ def test_cada_imagen_anota_lo_que_costo_de_verdad(monkeypatch):
     with pytest.raises(imagenes.ErrorImagen):
         generar({"data": []})
     assert len(gastos) == 2
+
+
+def test_sin_presupuesto_de_contenido_solo_sale_la_extra(monkeypatch, tmp_path):
+    monkeypatch.setattr(cuenta(), "contenido_usd_mes", 1.0)
+
+    async def main():
+        store = await nueva_base(monkeypatch, tmp_path, 40)
+        assert await imagenes.reservar(store) == "incluida"
+        await imagenes.limites.add_cost(1.0)
+        with pytest.raises(imagenes.SinCupo, match="presupuesto de contenido"):
+            await imagenes.reservar(store)
+        assert await imagenes.reservar(store, permitir_extra=True) == "extra"  # la paga el cliente
+        assert await imagenes.usadas(store) == (1, 1)
+
+    asyncio.run(main())

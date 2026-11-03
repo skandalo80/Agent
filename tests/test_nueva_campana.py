@@ -1722,3 +1722,21 @@ def test_los_prompts_del_anuncio_traen_sus_versiones(cliente, monkeypatch):
     assert a["prompt"] == "Concepto A" and a["versiones"] == ["Concepto A", "Concepto B", "Concepto C"]
     assert b["prompt"] == "Foto normal" and "versiones" not in b
     assert '"versiones": 3 prompts completos' in sistemas[-1] and "__VERSIONES__" not in sistemas[-1]
+
+
+def test_sin_presupuesto_de_contenido_no_se_crea_el_brief(cliente, monkeypatch):
+    from igbot import limites
+    client, c, *_ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 4)
+    monkeypatch.setattr(c, "contenido_usd_mes", 1.0)
+    llamadas = []
+    import app as bot
+    monkeypatch.setattr(bot.agent, "run_claude", claude_de_campana(llamadas))
+    listo(client, c)
+    client.portal.call(c.store.set, "productos", json.dumps([PRODUCTO]))
+    llenar(client)
+    with usar(c):
+        client.portal.call(c.store.set, limites._clave_mes(), "1.0")
+    r = client.post(URL, headers=ORIGEN, data={"paso": "8", "accion": "brief"})
+    assert "Ya usaste el presupuesto de contenido" in r.text and not llamadas
+    assert client.portal.call(contenido.falta_cupo, c, False) == "extra"  # una imagen más solo pagándola

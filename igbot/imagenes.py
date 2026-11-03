@@ -122,7 +122,7 @@ async def anotar_costo(usd: float | None, modelo: str, calidad: str = "") -> Non
     real = usd is not None
     usd = usd if real else config.IMAGE_COST_USD
     log.info("Imagen (%s %s): US$%.4f%s", modelo, calidad, usd, "" if real else " (costo fijo)")
-    await limites.add_cost(usd, limites.CONTENIDO)
+    await limites.add_cost(usd, limites.CONTENIDO, imagen=True)
 
 
 class Gemini:
@@ -622,13 +622,18 @@ async def _sumar(store: Store, clave: str, n: int) -> None:
 
 
 async def reservar(store: Store, permitir_extra: bool = False) -> str:
-    """Aparta una imagen del mes: 'incluida' o 'extra' (si el cliente aceptó pagarla)."""
+    """Aparta una imagen del mes: 'incluida' o 'extra' (si el cliente aceptó pagarla, o si ya no le queda
+    presupuesto de contenido)."""
     cupo = cuenta().imagenes_mes
     if cupo <= 0:
         raise SinCupo("Tu plan no incluye generación de contenido.")
+    # Con el presupuesto de contenido del mes agotado solo sale una imagen extra, que el cliente paga aparte.
+    agotado = await limites.sin_presupuesto(store)
+    if agotado and not permitir_extra:
+        raise SinCupo(limites.SIN_PRESUPUESTO)
     async with _cupo:
         incluidas, _ = await usadas(store)
-        if incluidas < cupo:
+        if incluidas < cupo and not agotado:
             clave = f"imagenes:{_mes()}"
             await store.set(clave, str(int(await store.get(clave) or 0) + 1))
             return "incluida"

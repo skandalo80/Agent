@@ -86,8 +86,10 @@ no se ignora en silencio.
   revisan con visión y se reintentan. Nunca recortar una imagen con texto: rellenar. Leer el JSON del modelo
   con la función compartida, no con una expresión regular copiada.
 - Cada llamada que cuesta dinero pasa por un tope: presupuesto diario separado para atención y contenido
-  (`limites`), `GENERACIONES_HORA` por cuenta, cupos del plan. Si el bot no puede contestar, se avisa al
-  dueño y se retoma (`retomar`), nunca silencio.
+  (`limites`), presupuesto mensual de contenido por plan (`contenido_usd_mes`, Community US$10: Claude y OpenAI
+  juntos, cada imagen con su costo real del `usage`), `GENERACIONES_HORA` por cuenta, cupos del plan. Lo nuevo
+  que genere contenido revisa `limites.sin_presupuesto` antes de llamar. Si el bot no puede contestar, se avisa
+  al dueño y se retoma (`retomar`), nunca silencio.
 - Memoria por persona: datos guardados + resumen + últimos `HISTORY_WINDOW` mensajes. El costo por respuesta
   no debe crecer con el largo de la conversación.
 
