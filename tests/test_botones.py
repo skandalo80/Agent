@@ -17,7 +17,7 @@ class FakeIG:
 
 
 def test_los_botones_de_cada_cuenta_son_validos():
-    for path in ("negocio/botones.yaml", "clientes/nortex/botones.yaml"):
+    for path in ("negocio/botones.yaml",):
         assert 1 <= len(botones.load(path)) <= 4
 
 

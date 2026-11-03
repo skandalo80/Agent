@@ -1,6 +1,6 @@
 """La cuenta de Instagram que se está atendiendo.
 
-Todo lo que puede cambiar de un negocio a otro (token, prompt, catálogo, hojas,
+Todo lo que puede cambiar de un negocio a otro (token, prompt, catálogo,
 horario, límites, a quién avisar) vive en una Cuenta, y el código lo lee con
 cuenta().<dato>. Lo que es igual para todas (llaves de Meta, de Claude y de
 Google, la dirección pública del bot) se queda en config.
@@ -49,10 +49,6 @@ class Cuenta:
     prompt_path: str
     catalog_path: str
     quotes_dir: str
-    sheet_catalog: str
-    sheet_inventory: str
-    store_rules_path: str
-    sheet_comments: str
     hide_spam: bool
     buttons_path: str
     admin_ig_ids: set[str]
@@ -132,13 +128,6 @@ class Cuenta:
             # Paquetes y precios de las cotizaciones (si no existe, no hay cotizaciones).
             catalog_path=get("CATALOG_PATH", f"{client_dir}/catalogo.yaml" if slug else "negocio/catalogo.yaml"),
             quotes_dir=get("QUOTES_DIR", f"{data_dir}/cotizaciones"),
-            # Tienda de productos: catálogo y existencias en Google Sheets (el link
-            # de cada hoja, con su #gid=) y las reglas de precios por cantidad en YAML.
-            sheet_catalog=get("SHEET_CATALOG"),
-            sheet_inventory=get("SHEET_INVENTORY"),
-            store_rules_path=get("STORE_RULES_PATH", f"{client_dir}/reglas.yaml" if slug else "negocio/reglas.yaml"),
-            # Reglas de comentarios (palabra clave -> DM): link de la pestaña de la hoja.
-            sheet_comments=get("SHEET_COMMENTS"),
             # Ocultar comentarios que son spam en todas las publicaciones.
             hide_spam=_bool(get("HIDE_SPAM")),
             # Botones de inicio (preguntas que salen al abrir un chat nuevo).

@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 
 from claude_agent_sdk import create_sdk_mcp_server, tool
 
-from . import catalog, config, conversiones_meta, fechas, tienda
+from . import catalog, config, conversiones_meta, fechas
 from .cuenta import cuenta
 from .google import Google
 from .instagram import Instagram
@@ -383,169 +383,6 @@ def quote_tools(
     return [cotizar, enviar_cotizacion]
 
 
-ORDER_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "items": {
-            "type": "array",
-            "description": "Una línea por producto y talla.",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "sku": {"type": "string"},
-                    "talla": {"type": "string"},
-                    "cantidad": {"type": "integer"},
-                    "personalizacion": {"type": "string", "enum": list(tienda.TECNICAS)},
-                    "ubicaciones_extra": {"type": "integer", "description": "0 si solo lleva el logo principal"},
-                },
-                "required": ["sku", "talla", "cantidad", "personalizacion", "ubicaciones_extra"],
-            },
-        },
-        "logos": {"type": "integer", "description": "Diseños de logo distintos (1 si no dijo)"},
-    },
-    "required": ["items", "logos"],
-}
-
-
-SEND_ORDER_SCHEMA = {
-    "type": "object",
-    "properties": {
-        **ORDER_SCHEMA["properties"],
-        "canal": {"type": "string", "enum": list(CANALES),
-                  "description": "Por dónde la quiere: solo este chat, correo o ambos."},
-        "email": {"type": "string",
-                  "description": "El correo que la persona escribió en el chat, o cadena vacía si la quiere solo por aquí."},
-        "nombre": {"type": "string", "description": "Su nombre, o cadena vacía."},
-        "empresa": {"type": "string", "description": "Su empresa, o cadena vacía."},
-    },
-    "required": ORDER_SCHEMA["required"] + ["canal", "email", "nombre", "empresa"],
-}
-
-
-def store_tools(
-    google: Google, store: Store | None = None, user_id: str = "",
-    instagram: Instagram | None = None, state: dict | None = None,
-) -> list:
-    """Catálogo, existencias y cotización de la tienda (hojas de Google)."""
-    state = state if state is not None else {}
-
-    async def load(what):
-        try:
-            return await what(google), None
-        except Exception:
-            log.exception("No se pudieron leer las hojas de la tienda")
-            return None, error(
-                "No se pudo consultar el catálogo en este momento. Di que lo confirmas en un rato"
-                " u ofrece pasar con una persona."
-            )
-
-    @tool(
-        "ver_productos",
-        "Lista los productos con material, precio por pieza en cada rango, mínimo y si se pueden"
-        " personalizar. tipo: filtro opcional (p. ej. 'polo', 'hoodie', 'gorra'; cadena vacía = todos).",
-        {"tipo": str},
-    )
-    async def ver_productos(args):
-        catalogo, err = await load(tienda.products)
-        return err or ok(tienda.catalog_text(catalogo, tienda.rules(), args.get("tipo", "")))
-
-    @tool(
-        "ver_existencias",
-        "Tallas y piezas disponibles de un producto (por SKU).",
-        {"sku": str},
-    )
-    async def ver_existencias(args):
-        existencias, err = await load(tienda.stock)
-        if err:
-            return err
-        tallas = existencias.get(args["sku"].strip().upper())
-        if not tallas:
-            return error("No hay existencias registradas de ese SKU; revisa con ver_productos.")
-        return ok(", ".join(f"{t}: {n} disponibles" for t, n in tallas.items()))
-
-    @tool(
-        "cotizar_pedido",
-        "Calcula el precio exacto de un pedido (prendas, personalización, IVA, total y tiempo de"
-        " entrega) con los precios por volumen. Usa SIEMPRE esto para dar precios o totales.",
-        ORDER_SCHEMA,
-    )
-    async def cotizar_pedido(args):
-        catalogo, err = await load(tienda.products)
-        if err:
-            return err
-        existencias, err = await load(tienda.stock)
-        if err:
-            return err
-        try:
-            order = tienda.quote(args.get("items", []), args.get("logos", 1), catalogo, existencias, tienda.rules())
-        except (ValueError, KeyError, TypeError) as e:
-            return error(str(e))
-        await log_quote(order, catalogo, args)
-        return ok(order.texto())
-
-    async def log_quote(order, catalogo, args):
-        if store:  # para el reporte semanal
-            productos = [
-                {"producto": catalogo[str(i["sku"]).strip().upper()]["Name_ES"], "cantidad": int(i["cantidad"])}
-                for i in args.get("items", [])
-            ]
-            await store.add_event(user_id, "cotizacion", {"total": order.total, "productos": productos})
-
-    @tool(
-        "enviar_cotizacion_pedido",
-        "Genera la cotización formal del pedido en PDF (con folio) y se la manda a la persona por"
-        " este DM, por correo (con copia al negocio) o por ambos, según lo que ella eligió. Antes"
-        " confirma con ella el pedido exacto (prendas, tallas, cantidades, personalización).",
-        SEND_ORDER_SCHEMA,
-    )
-    async def enviar_cotizacion_pedido(args):
-        canal, email = args.get("canal", "").strip().lower(), args.get("email", "").strip()
-        if problem := await check_quote_delivery(store, instagram, user_id, canal, email):
-            return error(problem)
-        catalogo, err = await load(tienda.products)
-        if err:
-            return err
-        existencias, err = await load(tienda.stock)
-        if err:
-            return err
-        try:
-            order = tienda.quote(args.get("items", []), args.get("logos", 1), catalogo, existencias, tienda.rules())
-        except (ValueError, KeyError, TypeError) as e:
-            return error(str(e))
-
-        nombre, empresa = args.get("nombre", "").strip()[:80], args.get("empresa", "").strip()[:80]
-        token = secrets.token_urlsafe(16)
-        number = await store.add_quote(user_id, token, "pedido", "", 0, order.total, email)
-        folio = f"COT-{number:04d}"
-        data = tienda.pdf(order, folio, nombre, empresa, email, now().date())
-        folder = Path(cuenta().quotes_dir)
-        folder.mkdir(parents=True, exist_ok=True)
-        (folder / f"{token}.pdf").write_bytes(data)
-
-        reglas = tienda.rules()
-        neg = reglas["negocio"]
-        subject = f"Cotización {folio} · {neg['nombre']}"
-        body = (
-            f"Hola{' ' + nombre if nombre else ''}:\n\n"
-            f"Te comparto la cotización {folio} que platicamos por Instagram (va en el PDF adjunto).\n\n"
-            f"{order.texto()}\n\n"
-            f"Es válida por {reglas['vigencia_dias']} días. Para confirmar el pedido o cualquier duda,"
-            f" contesta este correo o escríbenos a {neg['instagram']}.\n\nSaludos,\n{neg['nombre']}"
-        )
-        sent = await deliver_quote(
-            store, google, instagram, user_id, canal, email, folio, token, data, subject, body,
-            cuenta().mail_from_name or neg["nombre"],
-        )
-        if not sent:
-            return error("No se pudo mandar la cotización en este momento. Ofrece intentarlo en un rato.")
-        await log_quote(order, catalogo, args)
-        state["acted"] = True
-        return ok(f"Cotización {folio} enviada {sent}.\n{order.texto()}")
-
-    tools = [ver_productos, ver_existencias, cotizar_pedido]
-    return tools + [enviar_cotizacion_pedido] if store else tools
-
-
 # Por qué el asistente pasa un chat a una persona: sale como etiqueta en Conversaciones.
 RAZONES = {"pide_persona": "Pidió una persona", "queja": "Queja", "molesto": "Molesto", "precio": "Negociar precio",
            "fuera_catalogo": "Fuera del catálogo", "otro": "Otro motivo"}
@@ -700,7 +537,5 @@ def build(
             tools += workspace_tools(store, google, user_id, state)
         if catalog.available():
             tools += quote_tools(store, google, instagram, user_id, state)
-        if tienda.available():
-            tools += store_tools(google, store, user_id, instagram, state)
     server = create_sdk_mcp_server("bot", tools=tools)
     return server, [f"mcp__bot__{t.name}" for t in tools]

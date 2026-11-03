@@ -17,7 +17,6 @@ from .google import Google
 from .comentarios import motivo_oculto
 from .instagram import Instagram
 from .store import Store
-from .tienda import money
 from .tools import now, tz
 
 log = logging.getLogger("igbot.reporte")
@@ -50,6 +49,10 @@ async def topics(store: Store, since: float, until: float, periodo: str = "una s
     except Exception:
         log.exception("No se pudo resumir los temas de la semana")
         return ""
+
+
+def money(amount: float) -> str:
+    return f"${amount:,.2f}"
 
 
 def last_per_user(events: list[tuple[str, dict, float]]) -> dict[str, dict]:

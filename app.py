@@ -196,7 +196,7 @@ async def arrancar(c: Cuenta) -> None:
         await marco.cargar_version(c)  # la versión de sus sesiones del panel
         # Mensajes, toques a los botones de inicio y, si hay reglas, comentarios.
         fields = "messages,messaging_postbacks"
-        if google and comentarios.available() or c.hide_spam or c.imagenes_mes:
+        if c.hide_spam or c.imagenes_mes:
             fields += ",comments"
         try:
             if interacciones.disponible(c):  # menciones en posts y comentarios de otras cuentas
@@ -595,7 +595,7 @@ async def handle_comment(value: dict, de_pagina: bool = False) -> None:
     # Los de la página de Facebook siguen las mismas reglas, pero se contestan por la página.
     canal, propia = (c.instagram.pagina, de_facebook(c.fb_page_id)) if de_pagina else (c.instagram, c.ig_account_id)
     try:
-        await comentarios.handle(value, c.store, canal, google, propia)
+        await comentarios.handle(value, c.store, canal, propia)
     except Exception:
         log.exception("Falló el comentario %s", value.get("id"))
 
@@ -719,10 +719,10 @@ async def receive_entry(c: Cuenta, entry: dict) -> None:
             continue
         value = change.get("value") or {}
         log.info("Comentario %s de %s", value.get("id"), (value.get("from") or {}).get("username"))
-        if google and comentarios.available() or c.hide_spam or c.imagenes_mes:
+        if c.hide_spam or c.imagenes_mes:
             in_background(handle_comment(value, de_pagina=bool(value.pop("pagina", False))))
         else:
-            log.info("Comentarios sin configurar (falta SHEET_COMMENTS o Google); se ignora")
+            log.info("Comentarios sin configurar en el panel; se ignora")
     for event in entry.get("messaging", []):
         message = event.get("message")
         if postback := event.get("postback"):

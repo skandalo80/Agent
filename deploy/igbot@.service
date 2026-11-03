@@ -1,4 +1,4 @@
-# Una cuenta extra de Instagram (p. ej. igbot@nortex). Lee clientes/<nombre>/.env,
+# Una cuenta extra de Instagram (p. ej. igbot@cafelunar). Lee clientes/<nombre>/.env,
 # que debe tener PORT (8002, 8003...); lo común sale del .env principal.
 [Unit]
 Description=IG Bot webhook (%i)

@@ -22,13 +22,12 @@ Instagram → Caddy (HTTPS) → POST /webhook (app.py, puerto 8001)
 | `igbot/store.py` | Toda la memoria en SQLite (`data/bot.db`). Es el único archivo a cambiar si algún día se pasa a Postgres |
 | `igbot/agent.py` | Arma el contexto y llama a Claude |
 | `igbot/tools.py` | Herramientas del agente y sus reglas: `recordar`, `olvidar`, `ver_disponibilidad`, `agendar_reunion`, `mis_reuniones`, `cancelar_reunion`, `enviar_correo`, `cotizar`, `enviar_cotizacion`, `pasar_a_humano`, `pregunta_sin_dato`, y en la tienda `ver_productos`, `ver_existencias`, `cotizar_pedido` |
-| `igbot/tienda.py` | Tienda de Nortex: lee catálogo y existencias de Google Sheets y cotiza pedidos por volumen |
 | `igbot/catalog.py` | Lee el catálogo, calcula las cotizaciones y arma el PDF |
 | `igbot/pdf_marca.py` | Diseño de los PDFs de cotización (Inter, negro y grafito, un acento en `negocio.color_acento`); las fuentes están en `fonts/` |
 | `negocio/catalogo.yaml` | Paquetes, precios y condiciones. Edítalo y reinicia para cambiar precios |
-| `igbot/google.py` | Llamadas a Google Calendar, Gmail y Sheets (solo lectura) |
+| `igbot/google.py` | Llamadas a Google Calendar y Gmail |
 | `igbot/instagram.py` | Envía DMs (parte los de más de 1000 caracteres) y renueva el token cada semana |
-| `clientes/<nombre>/` | Prompt, reglas y `.env` de otra cuenta de Instagram (hoy: `nortex`) |
+| `clientes/<nombre>/` | `.env` y prompt generado de cada cliente (no se suben a GitHub) |
 | `data/system.md` | Instrucciones de la cuenta principal, armadas por el panel con sus datos (fuera de git). El catálogo se le agrega solo |
 
 **Memoria.** Cada persona tiene su historial completo, un resumen de lo viejo y "datos guardados" que el agente anota con `recordar`. En cada respuesta Claude ve: datos + resumen + los últimos `HISTORY_WINDOW` mensajes (20). Cuando sobran 10 mensajes viejos se condensan en el resumen, así el costo por respuesta no crece.
@@ -127,13 +126,6 @@ Si un cliente aún corre como proceso aparte (`igbot@<nombre>`, de antes de este
 
 **Modelo por cuenta.** Cada cuenta puede usar otro modelo con `CLAUDE_MODEL` en su `clientes/<nombre>/.env`. Para un cliente del paquete Básico (solo contesta con la información del negocio) usa el más barato: `CLAUDE_MODEL=claude-haiku-5-5`.
 
-**Catálogo y existencias de Nortex (Google Sheets).** Los productos, precios por pieza y existencias se leen de las hojas `SHEET_CATALOG` y `SHEET_INVENTORY` (en `clientes/nortex/.env`, ya vienen en el ejemplo) y se guardan 5 minutos en memoria, así que un cambio en la hoja se nota en unos minutos sin reiniciar. Las reglas que no están en las hojas (rangos por volumen, bordado y estampado, IVA, entregas y condiciones) están en `clientes/nortex/reglas.yaml`. El agente tiene `ver_productos`, `ver_existencias` y `cotizar_pedido`; las cuentas las hace `igbot/tienda.py`, contando las piezas por tipo de prenda. Con `enviar_cotizacion_pedido` manda la cotización formal en PDF (con folio y vigencia) por DM, al correo que la persona escribió (con copia a `MAIL_CC`) o por ambos, según lo que ella elija; el PDF lo sirve el proceso principal en `PUBLIC_URL/cotizaciones/nortex/...`.
-
-Para que el bot pueda leer las hojas (una sola vez):
-1. En Google Cloud, en el mismo proyecto de la agenda: *APIs y servicios* → *Biblioteca* → **Google Sheets API** → *Habilitar*. En *Pantalla de consentimiento* → *Acceso a datos* agrega el permiso `.../auth/spreadsheets.readonly`.
-2. En tu computadora vuelve a correr `python3 scripts/google_auth.py ruta/a/client_secret.json` (ahora pide también ver tus hojas) y reemplaza `GOOGLE_REFRESH_TOKEN` en `~/ig-bot/.env` con el nuevo. Las hojas deben ser de esa misma cuenta de Google o estar compartidas con ella.
-3. `sudo systemctl restart igbot`.
-
 ## Conectar clientes desde la web (skandar.online/conectar)
 
 Mientras la app de Meta no tenga App Review, solo se conectan las cuentas invitadas como **Instagram Tester**. La página `/conectar` ordena el proceso:
@@ -160,24 +152,14 @@ Una sola vez, en el panel de Meta: agrega el producto **Inicio de sesión con Fa
 
 ## Comentarios: palabra clave → DM
 
-Cuando alguien comenta una publicación con una palabra clave (p. ej. PRECIO), el bot le manda un DM privado con el mensaje que tú definas, y opcionalmente responde en público. Las reglas viven en una hoja de Google Sheets (`SHEET_COMMENTS` en el `.env` de la cuenta) con tres columnas, en este orden:
+Cuando alguien comenta una publicación con una palabra clave (p. ej. PRECIO), el bot le manda un DM privado con el mensaje que el cliente definió, y opcionalmente responde en público. Todo se configura en el panel: la palabra clave de cada post (Campañas y Calendario) y las palabras clave generales de *Configura tus interacciones*.
 
-| Link de la publicación | Palabra clave | Mensaje por DM |
-|---|---|---|
-| https://www.instagram.com/p/ABC123/ | PRECIO | Hola! Nuestros precios... |
-| https://www.instagram.com/p/ABC123/ | catálogo, catalogo | Aquí está el catálogo... |
-
-- Solo reaccionan las publicaciones que estén en la hoja. Para varias palabras en una publicación, una fila por cada una (o varias palabras separadas por comas en la misma celda).
 - No importan mayúsculas, acentos ni plurales. Si el comentario no trae la palabra exacta, Claude decide si se refiere a ella ("¿cuánto cuestan?" → PRECIO).
 - Si un comentario pide varias cosas, se manda un solo DM con todos los mensajes (Instagram permite un DM por comentario, dentro de 7 días).
-- Una cuarta columna opcional es una respuesta pública al comentario.
-- **Filtro de spam** (opcional, `HIDE_SPAM=1` en el `.env` de la cuenta): en todas las publicaciones, Claude revisa cada comentario que no trae una palabra clave y oculta el spam (publicidad ajena, "sígueme", estafas, links sospechosos, contenido sexual, insultos). Las quejas y críticas nunca se ocultan. Oculto no es borrado: lo sigue viendo quien lo escribió y tú lo puedes mostrar desde Instagram. Funciona aunque no haya hoja de reglas.
-- Los cambios en la hoja se notan en unos 5 minutos, sin reiniciar. Los comentarios quedan en la tabla `comments` (para el reporte semanal).
+- Ocultar spam e insultos también se enciende en *Configura tus interacciones* (`HIDE_SPAM=1` en el `.env` solo cambia el valor inicial). Las quejas y críticas nunca se ocultan. Oculto no es borrado.
+- Los comentarios quedan en la tabla `comments` (Resultados y reporte semanal).
 
-Para activarlo en una cuenta:
-1. En la app de Meta → *API de Instagram con inicio de sesión de Instagram*: en **Webhooks** suscribe el campo `comments`, y revisa que la app tenga el permiso `instagram_business_manage_comments` (si no lo tenía, genera de nuevo el token de esa cuenta y reemplázalo en su `.env`).
-2. Crea la hoja (de tu misma cuenta de Google) y pon su link en `SHEET_COMMENTS` del `.env` de la cuenta.
-3. Reinicia (`sudo systemctl restart igbot@nortex`). Al arrancar, el bot suscribe la cuenta a mensajes y comentarios.
+En la app de Meta → *API de Instagram con inicio de sesión de Instagram* → **Webhooks** suscribe el campo `comments` y revisa el permiso `instagram_business_manage_comments`.
 
 ## Botones de inicio
 
@@ -197,7 +179,7 @@ Las fotos se descargan al llegar (los links de Instagram caducan), se convierten
 
 Para activarlo en una cuenta:
 1. En la app de Meta, agrega el permiso `instagram_business_content_publish`, genera de nuevo el token de esa cuenta y reemplázalo en su `.env`.
-2. Escríbele cualquier cosa al bot desde tu Instagram y busca tu id en el log (`journalctl -u igbot@nortex | grep "DM de"` para Nortex, `journalctl -u igbot | grep "DM de"` para el vendedor). Ponlo en `ADMIN_IG_IDS` del `.env` de la cuenta (el id cambia en cada cuenta del negocio).
+2. Escríbele cualquier cosa al bot desde tu Instagram y busca tu id en el log (`journalctl -u igbot | grep "DM de"`). Ponlo en `ADMIN_IG_IDS` del `.env` de la cuenta (el id cambia en cada cuenta del negocio).
 3. Revisa que el `.env` principal tenga `PUBLIC_URL`, y reinicia.
 
 ## Imágenes para contenido (OpenAI)
@@ -220,7 +202,7 @@ Con `IMAGES_PER_MONTH` > 0 el panel del cliente muestra **Contenido**
 estilo de fotos, fotos de producto), crear un post a partir de un objetivo
 (Claude escribe con `CONTENT_MODEL`, OpenAI pinta), editarlo, aprobarlo y el
 calendario. Los posts aprobados los publica el bucle de publicaciones y su palabra
-clave contesta comentarios igual que la hoja de `SHEET_COMMENTS`. Pasado el cupo,
+clave contesta comentarios (ver *Comentarios*). Pasado el cupo,
 el cliente confirma la imagen extra (`EXTRA_IMAGE_USD`) y queda anotada en
 `events` ('imagen', tipo 'extra') para cobrarla. La vista previa cambia al
 momento con `igbot/static/panel.js` (único JavaScript del panel), y Publicados

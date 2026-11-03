@@ -13,7 +13,7 @@ from pathlib import Path
 
 import anthropic
 
-from . import agenda_google, catalog, catalogo_chat, cobros, config, limites, tienda, tienda_shopify, tools
+from . import agenda_google, catalog, catalogo_chat, cobros, config, limites, tienda_shopify, tools
 from .cuenta import cuenta
 from .google import Google
 from .instagram import Instagram
@@ -171,8 +171,6 @@ def system_prompt() -> str:
     system += "\n\n" + prompt_horario(cuenta())
     if catalog.available():
         system += f"\n\n<catalogo>\n{catalog.prompt_text()}\n</catalogo>"
-    if tienda.available():
-        system += f"\n\n<tienda>\n{tienda.prompt_text()}\n</tienda>"
     return system
 
 
