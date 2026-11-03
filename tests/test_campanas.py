@@ -968,7 +968,7 @@ def test_acciones_de_campana_en_tabla():
     from igbot import campanas
 
     assert set(campanas.ACCIONES_CAMPANA) == {"proponer", "borrar", "editar", "mover", "generar_todas", "aprobar_todas"}
-    assert set(campanas.ACCIONES_POST) == {"verificado", "subir", "otra", "prompt", "generar", "aprobar", "elegir"}
+    assert set(campanas.ACCIONES_POST) == {"verificado", "subir", "otra", "prompt", "generar", "aprobar", "elegir", "retocar"}
     for fn in campanas.ACCIONES_CAMPANA.values():
         assert inspect.iscoroutinefunction(fn) and list(inspect.signature(fn).parameters) == ["c", "camp", "f"]
     for fn in campanas.ACCIONES_POST.values():

@@ -1118,6 +1118,55 @@ def test_campana_de_producto_con_anuncios(cliente, monkeypatch):
         assert client.portal.call(imagenes.usadas, c.store) == (4, 0)
 
 
+def test_retocar_la_imagen_sin_generarla_desde_cero(cliente, monkeypatch):
+    """Retocar: la imagen actual va al generador con la instrucción del dueño (fidelidad alta) y la nueva pasa al
+    post; la anterior se queda como versión para volver a ella. Usa 1 del cupo; sin instrucción no hace nada; si
+    el cupo se acabó, la tarjeta de imágenes extra conserva la instrucción."""
+    client, c, _, proveedor = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 2)
+    listo(client, c)
+    foto_plan = {"funcion": "f", "protagonista": "p", "escenario": "e", "accion": "a", "encuadre": "x", "luz": "l",
+                 "estilo": "Minimalista", "color": "Sutil"}
+    camp = {"id": 77, "nombre": "Retoques", "inicio": "2099-01-05", "semanas": 1, "brief": {"titulo": "B"},
+            "creada": 1.0, "n_posts": 1, "publicar": "lun-sab",
+            "posts": [{"k": 1, "formato": "foto", "tipo": "producto", "idea": "i1", "idea_base": "i1", "prompt": "A cup",
+                       "titulo": "T", "caption": "c", "dia": "2099-01-05", "hora": "09:00", "plan": {"foto": foto_plan}}]}
+    client.portal.call(c.store.set, "campanas", json.dumps([camp]))
+    url = campanas.url_de(camp)
+    client.post(url, headers=ORIGEN, data={"accion": "generar", "k": "1"})
+    p = leer(client, c)["posts"][0]
+    antes = client.portal.call(c.store.post, p["post_id"])["media_ids"][0]
+    r = client.get(f"{url}?post=1")
+    assert "Retocar la imagen" in r.text and 'name="retoque"' in r.text and 'value="retocar"' in r.text
+    # Sin instrucción, aviso y nada más.
+    r = client.post(url, headers=ORIGEN, data={"accion": "retocar", "k": "1", "retoque": "  "})
+    assert "Escribe qué quieres cambiar en la imagen." in r.text and len(proveedor.llamadas) == 1
+    # Con instrucción: la misma imagen al generador, fiel, y la nueva al post.
+    actual = contenido.archivo(c, client.portal.call(c.store.media, antes)[0]).read_bytes()
+    client.post(url, headers=ORIGEN, data={"accion": "retocar", "k": "1", "retoque": "Quita el ícono flotante"})
+    prompt, fotos = proveedor.llamadas[-1]
+    assert prompt.startswith(imagenes.RETOQUE) and prompt.endswith("Quita el ícono flotante")
+    assert list(fotos) == [actual] and proveedor.fiel is True
+    p = leer(client, c)["posts"][0]
+    despues = client.portal.call(c.store.post, p["post_id"])["media_ids"][0]
+    assert despues != antes and [o["media_id"] for o in p["opciones"]] == [antes, despues]
+    with usar(c):
+        assert client.portal.call(imagenes.usadas, c.store) == (2, 0)
+    r = client.get(f"{url}?post=1")
+    assert r.text.count('class="opcion-img') == 2 and f'value="elegir:{antes}"' in r.text
+    # Volver a la anterior no cuesta nada.
+    client.post(url, headers=ORIGEN, data={"accion": f"elegir:{antes}", "k": "1"})
+    assert client.portal.call(c.store.post, p["post_id"])["media_ids"] == [antes]
+    # Cupo agotado: la tarjeta de imágenes extra conserva la instrucción y la acción.
+    r = client.post(url, headers=ORIGEN, data={"accion": "retocar", "k": "1", "retoque": "Titular más grande"})
+    assert "Ya usaste el contenido incluido en tu plan este mes" in r.text and len(proveedor.llamadas) == 2
+    assert '<input type="hidden" name="retoque" value="Titular más grande">' in r.text and 'value="retocar"' in r.text
+    client.post(url, headers=ORIGEN, data={"accion": "retocar", "k": "1", "retoque": "Titular más grande", "extra": "1"})
+    assert len(proveedor.llamadas) == 3
+    with usar(c):
+        assert client.portal.call(imagenes.usadas, c.store) == (2, 1)
+
+
 def test_el_anuncio_no_entra_en_las_campanas_de_contenido():
     assert "anuncio" not in campanas.universo(0, {})["formato"] and "anuncio" not in nueva_campana.FORMATOS
 
