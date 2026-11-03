@@ -202,3 +202,50 @@ def test_una_celda_que_empieza_como_formula_no_se_ejecuta():
     from igbot.resultados import csv_de
     texto = csv_de([["=1+1", "+52", "-x", "@ana", "hola", 5, None]], list("abcdefg")).decode("utf-8")
     assert texto.splitlines()[1] == "'=1+1,'+52,'-x,'@ana,hola,5,"
+
+
+def test_interes_claro_en_comprar_lo_lleva_a_interesado_sin_contar_como_cotizacion(cuenta_de_prueba, monkeypatch):
+    """Bug del 3 nov: alguien que solo dice que lo quiere no pasaba a Interesado (solo visita o datos lo movían)."""
+    from igbot import conversiones_meta, tools as t
+    c, correr = cuenta_de_prueba
+    avisos = []
+    monkeypatch.setattr(conversiones_meta, "avisar", lambda *a, **k: avisos.append(a))
+
+    async def main():
+        s = c.store
+        await s.add_incoming("ana", "m1", "Me interesa, ¿cómo lo contrato?")
+        _, anotar, _ = t.human_tools(s, None, "ana")
+        with usar(c):
+            await anotar.handler({"tipo": "compra", "detalle": "Plan Community"})
+        return (await s.etapas_de(["ana"]))["ana"], await s.embudo(0, time.time() + 1)
+
+    etapa, embudo = correr(main())
+    assert etapa == "interesado" and embudo["cotizaciones"] == 0 and avisos == []  # ni cotización ni prospecto en Meta
+    assert "compra" in t.INTERESES
+
+
+def test_una_cotizacion_en_pdf_lleva_a_cotizo_tambien_en_bases_ya_migradas(tmp_path):
+    ruta = str(tmp_path / "bot.db")
+
+    async def main():
+        s = Store(ruta)
+        await s.open()
+        await s.add_quote("ana", "tok1", "community", "mensual", 0, 79.0, "")
+        await s.set_etapa("beto", "perdido")
+        await s.db.execute("INSERT INTO events (user_id, kind, detail, created_at) VALUES ('beto', 'cita', '{}', 1)")
+        # Como quedó una base con la versión 1 de la migración (ya desplegada).
+        await s.db.execute("DELETE FROM etapas WHERE user_id = 'ana'")
+        await s.db.execute("UPDATE kv SET value = '1' WHERE key = 'etapas_iniciales'")
+        await s.db.commit()
+        await s.close()
+        s = Store(ruta)
+        await s.open()
+        antes = await s.etapas_de(["ana", "beto"])
+        await s.avanzar_etapa("carla", "cotizo")  # la que manda enviar_cotizacion
+        despues = (await s.etapas_de(["carla"]))["carla"]
+        await s.close()
+        return antes, despues
+
+    antes, despues = asyncio.run(main())
+    # Solo se suman los PDF: a beto (No compró a mano) no lo sube su cita vieja.
+    assert antes == {"ana": "cotizo", "beto": "perdido"} and despues == "cotizo"

@@ -260,7 +260,7 @@ async def _vendido(c: Cuenta, ocultos: str, ventas: list[dict], etapa: str) -> s
             f'Etapa: {NOMBRES_ETAPA[etapa]}</summary><div class="caja">'
             f'<form method="post" action="/panel/etapa#chats" class="etapas">{ocultos}'
             f'<span class="titulo">Etapa del contacto</span><div class="opciones">{botones}</div>'
-            "<small>Avanza sola cuando tu asistente anota una cotización, agenda una cita o se registra una venta.</small>"
+            "<small>Avanza sola cuando tu asistente anota interés o una cotización, agenda una cita o se registra una venta.</small>"
             '</form><span class="titulo">Marcar venta</span>' + marcadas
             + f'<form method="post" action="/panel/venta#chats">{ocultos}'
             '<label for="venta-monto">¿Por cuánto le vendiste?</label><div class="fila">'
