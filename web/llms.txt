@@ -13,6 +13,7 @@
 ## Sobre Skandar
 
 - [Inicio](https://skandar.online/): qué hace la plataforma, planes y preguntas frecuentes.
+- [Compara los planes](https://skandar.online/planes): tabla con todo lo que incluye cada plan, función por función.
 - [Qué es Skandar](https://skandar.online/que-es-skandar): Skandar es una plataforma para que las redes sociales de un negocio trabajen: un asistente que contesta cada mensaje al instante y lo lleva a la venta, contenido de la marca para que el perfil se vea activo y la medición de qué anuncio trajo a cada cliente.
 
 ## Por giro
