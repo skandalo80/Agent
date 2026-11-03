@@ -249,3 +249,12 @@ def test_una_cotizacion_en_pdf_lleva_a_cotizo_tambien_en_bases_ya_migradas(tmp_p
     antes, despues = asyncio.run(main())
     # Solo se suman los PDF: a beto (No compró a mano) no lo sube su cita vieja.
     assert antes == {"ana": "cotizo", "beto": "perdido"} and despues == "cotizo"
+
+
+def test_las_reglas_base_piden_anotar_la_etapa_y_contestar_sin_pensar_en_voz_alta():
+    """Bug del 3 nov: pidió cotización y siguió en Nuevo, y el asistente le mandó su razonamiento
+    ("Necesito saber el plan… Pregunto una cosa.") junto con la pregunta."""
+    from pathlib import Path
+    base = (Path(__file__).resolve().parent.parent / "prompts" / "base.md").read_text(encoding="utf-8")
+    assert "`anotar_interes`" in base and "acepte que le armes una" in base
+    assert "Escribe solo el mensaje para ella" in base
