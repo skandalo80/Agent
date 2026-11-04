@@ -46,8 +46,9 @@ CASOS = [
     ("emojis", "Solo emojis", "❤️ 🔥 😍", "solo emojis o signos, sin palabras", {"pub": (True, "ia"), "dm": (False, "ia")}),
     ("elogio", "Un elogio", "“Me encanta”, “qué cool”", "un elogio, un halago o una reacción positiva sin pregunta",
      {"pub": (True, "ia"), "dm": (False, "ia")}),
-    ("pregunta", "Una pregunta", "“¿Cuánto cuesta?”, “¿hacen envíos?”",
-     "una pregunta sobre el producto, el servicio, precios, horarios, envíos o el negocio",
+    ("pregunta", "Una pregunta", "“¿Cuánto cuesta?”, “Explícame más”",
+     "una pregunta sobre el producto, el servicio, precios, horarios, envíos o el negocio, o pide información aunque"
+     " no lleve signos (“explícame más”, “info”, “me interesa”, “cómo funciona”)",
      {"pub": (True, "ia"), "dm": (True, "ia")}),
     ("compra", "Quiere comprar", "“Lo quiero”, “¿cómo lo pido?”",
      "quiere comprar, apartar, reservar o pide cómo hacer un pedido", {"pub": (True, "ia"), "dm": (True, "ia")}),
@@ -58,7 +59,8 @@ CASOS = [
     ("ataque", "Un insulto o ataque", "Burlas, groserías, “son unos rateros”",
      "un insulto, una burla o una agresión sin un reclamo concreto (un reclamo por un pedido o el servicio es queja)",
      {"pub": (False, "ia"), "dm": (False, "ia")}),
-    ("otro", "Otro comentario", "Lo que no entra arriba", "cualquier otra cosa", {"pub": (False, "ia"), "dm": (False, "ia")}),
+    ("otro", "Otro comentario", "Lo que no entra arriba",
+     "cualquier otra cosa que no pida nada al negocio (si pide algo, aunque sea vago, es pregunta)", {"pub": (False, "ia"), "dm": (False, "ia")}),
 ]
 TIPOS = [k for k, *_ in CASOS]
 # Menciones e historias: (clave, título, ejemplo, {canal: (on, modo)}); el canal que falta no se puede.
