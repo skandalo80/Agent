@@ -1,8 +1,10 @@
 """Banco de recetas de anuncio: cómo se compone un buen anuncio, escrito por nosotros (decisión del dueño,
 2026-11-03). Una receta es método, no contenido: dice composición, tratamiento del texto y recurso visual, nunca qué
 negocio es, qué vende ni qué dice. Cuando el cliente no sube un anuncio de referencia, cada versión de un anuncio
-(config.OPCIONES_ANUNCIO) sigue una receta distinta, elegida por el tipo de producto y el estilo de Tu marca.
-Nunca se usan anuncios ajenos como imagen de referencia: solo estas descripciones."""
+(config.OPCIONES_ANUNCIO) sigue una receta distinta, y cada post con plan visual de una campaña de contenido lleva
+la suya; se eligen por el tipo de producto y, según la Variedad visual de la campaña, del perfil (las que van con
+el estilo de Tu marca) o del resto del banco (PATRONES, decisión del dueño 2026-11-05). Nunca se usan anuncios
+ajenos como imagen de referencia: solo estas descripciones."""
 from __future__ import annotations
 
 import random
@@ -112,20 +114,50 @@ def tipo_de(prod: dict | None, giro: str) -> str:
     return "fisico"
 
 
-def para(tipo: str, estilos: list[str] | None, n: int, semilla: int = 0, saltar: int = 0) -> list[tuple[str, str]]:
-    """`n` recetas (clave, texto) que sirven para ese tipo de producto y esos estilos (None: cualquier estilo),
-    distintas entre sí, en un orden fijo por `semilla`; `saltar` toma las siguientes (otro post de la misma campaña,
-    otras recetas)."""
+# De dónde sale cada receta según la Variedad visual de la campaña (decisión del dueño, 2026-11-05), en ciclos de
+# tres: P = las que van con el estilo de Tu marca (el perfil), B = las demás del banco, T = cualquiera.
+PATRONES = {"reconocible": "PPP", "coherencia": "PPB", "diverso": "PBB", "experimental": "TTT"}
+MIN_PERFIL = 3  # si el perfil tiene menos recetas, se completa con las demás del banco
+
+
+def para(tipo: str, estilos: list[str] | None, n: int, semilla: int = 0, saltar: int = 0,
+         variedad: str = "coherencia") -> list[tuple[str, str]]:
+    """`n` recetas (clave, texto) que sirven para ese tipo de producto, distintas entre sí y en un orden fijo por
+    `semilla`. De dónde salen lo dice la Variedad visual (PATRONES): Consistente, siempre del perfil (las que van
+    con los `estilos` de Tu marca); Equilibrado, dos del perfil y una del resto del banco; Diverso, una del perfil y
+    dos del banco; Creativo, de todo el banco sin mirar el perfil. `estilos` None es "cualquier estilo". `saltar`
+    sigue la secuencia (otro post de la misma campaña, otras recetas); con n = 1 cada post toma la siguiente."""
     tipo = tipo if tipo in TIPOS else "fisico"
+    del_tipo = [r for r in RECETAS if tipo in r[1]]
     if estilos is None:
-        candidatas = [r for r in RECETAS if tipo in r[1]]
+        perfil = list(del_tipo)
     else:
         estilos = [e for e in estilos if e in TODOS] or ["minimalista"]
-        candidatas = [r for r in RECETAS if tipo in r[1] and any(e in r[2] for e in estilos)]
-    if len(candidatas) < n:  # pocas para ese estilo: se completan con las que sirven para cualquiera
-        candidatas += [r for r in RECETAS if tipo in r[1] and r not in candidatas]
+        perfil = [r for r in del_tipo if any(e in r[2] for e in estilos)]
     azar = random.Random(semilla)
-    azar.shuffle(candidatas)
-    inicio = (saltar * n) % max(len(candidatas), 1)
-    elegidas = (candidatas[inicio:] + candidatas[:inicio])[:n]
+    banco = [r for r in del_tipo if r not in perfil]
+    azar.shuffle(banco)
+    faltan = max(0, MIN_PERFIL - len(perfil))  # pocas para ese estilo: se completan con las demás
+    perfil, banco = perfil + banco[:faltan], banco[faltan:]
+    azar.shuffle(perfil)
+    todas = list(del_tipo)
+    azar.shuffle(todas)
+    bolsas = {"P": perfil, "B": banco or perfil, "T": todas}
+    patron = PATRONES.get(variedad, PATRONES["coherencia"])
+    usadas = {k: 0 for k in bolsas}
+    elegidas: list[tuple] = []
+    for g in range(saltar * n + n):
+        letra = patron[g % len(patron)]
+        bolsa = bolsas[letra]
+        r = bolsa[usadas[letra] % len(bolsa)]
+        usadas[letra] += 1
+        if g < saltar * n:
+            continue
+        for _ in range(len(bolsa)):  # dentro de una misma tanda no se repite ninguna
+            if r not in elegidas:
+                break
+            r = bolsa[usadas[letra] % len(bolsa)]
+            usadas[letra] += 1
+        if r not in elegidas:
+            elegidas.append(r)
     return [(r[0], r[3]) for r in elegidas]
