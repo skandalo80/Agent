@@ -38,7 +38,70 @@ def test_las_fotos_del_producto_son_solo_el_objeto():
     assert "Take only the product from those photos: not their background" in prompt
     assert "not their background" not in imagenes.prompt_anuncio("idea", imagenes.Texto("T", "S", "", "@x"))
     assert "ninguna traduce el plan visual tal cual" in campanas.SISTEMA_PROMPTS
-    assert "del plan visual se toman solo el producto, los textos, la luz y el color" in campanas.SISTEMA_PROMPTS
+    assert "del plan visual se toman solo el protagonista real" in campanas.SISTEMA_PROMPTS
+
+
+def test_las_recetas_segun_la_variedad_visual():
+    """Consistente: las tres del perfil (los estilos de Tu marca). Equilibrado: dos del perfil y una del banco.
+    Diverso: una del perfil y dos del banco. Creativo: de todo el banco. `saltar` sigue sin repetir; con n = 1
+    cada post de contenido toma la siguiente del mismo ciclo (dueño 2026-11-05)."""
+    def perfil(k):
+        return "minimalista" in next(r for r in recetas.RECETAS if r[0] == k)[2]
+
+    def claves(**kw):
+        return [k for k, _ in recetas.para("fisico", ["minimalista"], 3, semilla=5, **kw)]
+
+    for variedad, patron in (("reconocible", "PPP"), ("coherencia", "PPB"), ("diverso", "PBB")):
+        for saltar in (0, 1):
+            elegidas = claves(variedad=variedad, saltar=saltar)
+            assert len(set(elegidas)) == 3
+            assert [perfil(k) for k in elegidas] == [letra == "P" for letra in patron], (variedad, saltar)
+        assert not set(claves(variedad=variedad)) & set(claves(variedad=variedad, saltar=1))  # sigue, no repite
+    assert len(set(claves(variedad="experimental"))) == 3
+    assert claves(variedad="experimental") != claves(variedad="reconocible")
+    assert claves() == claves(variedad="coherencia")  # la de siempre
+    # n = 1 (posts de contenido): los posts 0, 1 y 2 siguen el mismo ciclo que las versiones de un anuncio.
+    uno = [recetas.para("fisico", ["minimalista"], 1, semilla=5, saltar=k, variedad="diverso")[0][0] for k in range(3)]
+    assert uno == claves(variedad="diverso")
+    # Pocas del perfil (software con lujo): se completa el perfil con el banco y sigue dando tres distintas.
+    assert len({k for k, _ in recetas.para("software", ["lujo"], 3, variedad="reconocible")}) == 3
+
+
+def test_los_posts_de_contenido_llevan_su_receta(cliente, monkeypatch):
+    """Una campaña de contenido (sin producto) también lleva receta: una por post con plan visual, ninguna en el
+    dato curioso ni en Solo texto, y ninguna con fotos de referencia."""
+    client, c, *_ = cliente
+    import app as bot
+    datos = []
+
+    async def fake(prompt, system, mcp=None, allowed=(), max_turns=5, model=None):
+        datos.append(prompt)
+        return json.dumps({"prompts": [{"n": k, "prompt": "A"} for k in (1, 2, 3, 4)]})
+
+    monkeypatch.setattr(bot.agent, "run_claude", fake)
+    foto = {"funcion": "f", "protagonista": "p", "escenario": "e", "accion": "a", "encuadre": "x", "luz": "l",
+            "estilo": "Minimalista", "color": "Sutil"}
+
+    def post(k, formato, tipo="producto"):
+        return {"k": k, "formato": formato, "tipo": tipo, "idea": "i", "titulo": "T", "subtitulo": "", "caption": "c",
+                "dia": f"2099-01-0{k}", "hora": "09:00", "plan": {"foto": foto}}
+
+    def campana():
+        return {"id": 1, "brief": {"titulo": "B", "direccion_visual": "luz"}, "semilla": 3, "variedad": "diverso",
+                "posts": [post(1, "foto"), post(2, "titular"), post(3, "foto", "dato"), post(4, "texto")]}
+
+    with usar(c):
+        camp = campana()
+        client.portal.call(campanas.prompts_de, c, camp, camp["posts"], {"estilos": ["lujo"]})
+    bloques = datos[-1].split("<post n=")
+    assert "receta: " in bloques[1] and "receta: " in bloques[2]
+    assert bloques[1].split("receta: ")[1][:40] != bloques[2].split("receta: ")[1][:40]  # distintas por post
+    assert "receta" not in bloques[3] and "receta" not in bloques[4]
+    with usar(c):
+        camp = campana() | {"adn_visual": "luz", "referencias": ["t1"]}
+        client.portal.call(campanas.prompts_de, c, camp, camp["posts"], {"estilos": ["lujo"]})
+    assert "receta" not in datos[-1]
+    assert 'Si el post trae "receta"' in campanas.SISTEMA_PROMPTS
 
 
 def test_tipo_de_producto():

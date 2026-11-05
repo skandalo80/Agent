@@ -1513,7 +1513,8 @@ SISTEMA_PROMPTS = """Eres el director de arte de una campaña de Instagram. Escr
 Cada prompt, en español (el dueño lo lee y lo edita), de 120 a 200 palabras en un solo párrafo, cubre en este orden: el sujeto principal; el escenario; la acción; la composición y el encuadre (en un diseño, dónde va cada texto); la iluminación; los colores y cuánto protagonismo tienen los de la marca (según su "color"); el tratamiento de su "estilo"; y lo que hay que evitar.
 
 Reglas:
-- Fidelidad: el prompt traduce el plan visual de su post, no inventa otra imagen. Si el post trae "idea del dueño", esa manda: cambia lo que ella cambie y conserva del plan lo que no la contradiga (encuadre, luz, formato, lo que se evita). Excepción: en un anuncio con "recetas", del plan visual se toman solo el producto, los textos, la luz y el color; la escena, la composición y los objetos los pone la receta (la utilería del plan, como velas, plantas o superficies, no es obligatoria ni se repite en las tres versiones).
+- Fidelidad: el prompt traduce el plan visual de su post, no inventa otra imagen. Si el post trae "idea del dueño", esa manda: cambia lo que ella cambie y conserva del plan lo que no la contradiga (encuadre, luz, formato, lo que se evita). Excepción: con "receta" o "recetas", del plan visual se toman solo el protagonista real (el producto, la persona, el lugar o el resultado), los elementos clave, los textos, la luz y el color; la escena, la composición y los objetos los pone la receta (la utilería del plan, como velas, plantas o superficies, no es obligatoria ni se repite en las versiones).
+- Si el post trae "receta" (una sola, en un post que no es anuncio), el prompt la sigue: donde la receta dice "producto" va el protagonista del plan visual, tal cual es; lo que dice del titular y la línea chica vale solo si la pieza lleva "textos del diseño" (en una imagen sin texto se ignora y la escena llena la imagen); si el post trae "escena", ese encuadre y esa luz se conservan dentro de la receta. La receta es la composición y el recurso visual, no un tema: el post sigue contando lo que dice su "texto que se publica".
 - Si el post trae "escena", ese encuadre y esa luz son obligatorios. Si trae "producto", el producto real es el protagonista.
 - El estilo es un tratamiento de luz, color, textura y composición, nunca objetos de arcilla, cristal, neón u otro material dentro de la escena (salvo en los anuncios, donde el estilo sí aporta sus recursos de diseño).
 - Si la "pieza" es un diseño estilo infografía, el prompt describe la pieza gráfica terminada: la jerarquía, dónde va cada uno de sus "textos del diseño" (cítalos tal cual, en español y entre comillas, sin agregar otros), los íconos o gráficos simples que los acompañan, los bloques de color de la marca y la foto o ilustración que la completa. Si es una imagen sin texto, ni una letra, número o logo dentro. Fotografía realista y creíble salvo que el formato o el plan pidan ilustración o gráfico.
@@ -1619,9 +1620,9 @@ def idea_editada(p: dict) -> bool:
 
 
 def bloque_imagen(camp: dict, marca: dict, p: dict, tipo_receta: str = "") -> str:
-    """Un post para el prompt de las imágenes: su formato, su plan visual, su estilo y su color. En un anuncio sin
-    fotos de referencia de la campaña, además sus recetas (una por versión, según `tipo_receta`, de todo el
-    banco); con referencias, el estilo de las fotos manda y no hay recetas."""
+    """Un post para el prompt de las imágenes: su formato, su plan visual, su estilo y su color. Sin fotos de
+    referencia de la campaña, además su receta (una por post; en un anuncio, una por versión), según `tipo_receta`
+    y la Variedad visual; con referencias, el estilo de las fotos manda y no hay recetas."""
     formato = FORMATOS[formato_de(p)]
     foto = (p.get("plan") or {}).get("foto") or {}
     estilo, color = elegido(estilos_marca(camp, marca), foto.get("estilo", "")), elegido(colores_marca(marca),
@@ -1647,17 +1648,25 @@ def bloque_imagen(camp: dict, marca: dict, p: dict, tipo_receta: str = "") -> st
     return f'<post n="{p["k"]}">\n' + "\n".join(x for x in lineas if x) + "\n</post>"
 
 
+SIN_RECETA = ("texto",)  # formatos sin receta: el diseño de solo texto no tiene escena
+
+
 def recetas_texto(camp: dict, marca: dict, p: dict, tipo_receta: str) -> str:
-    """La línea de recetas de un anuncio (config.OPCIONES_ANUNCIO, una por versión), o nada: solo cuando la campaña no
-    trae fotos de referencia ni su ADN, y distintas en cada post de la campaña (`saltar` = su número). Salen de todo
-    el banco (decisión del dueño, 2026-11-05): el estilo de Tu marca decide el tratamiento, no qué recetas caben."""
-    if not (tipo_receta and formato_de(p) == "anuncio" and ia_completa(p)) or camp.get("referencias") \
-            or camp.get("adn_visual") or config.OPCIONES_ANUNCIO < 2:
+    """La línea de recetas del post, o nada. En un anuncio son config.OPCIONES_ANUNCIO (una por versión); en los
+    demás posts con plan visual, una ("receta"). Solo cuando la campaña no trae fotos de referencia ni su ADN, y
+    distintas en cada post de la campaña (`saltar` = su número). De dónde salen lo decide la Variedad visual de la
+    campaña con los estilos de Tu marca (recetas.para, decisión del dueño 2026-11-05)."""
+    anuncio = formato_de(p) == "anuncio"
+    if not (tipo_receta and ia_completa(p)) or camp.get("referencias") or camp.get("adn_visual") \
+            or p.get("tipo") in DEL_GIRO or formato_de(p) in SIN_RECETA or (anuncio and config.OPCIONES_ANUNCIO < 2):
         return ""
-    elegidas = recetas.para(tipo_receta, None, config.OPCIONES_ANUNCIO,
-                            semilla=int(camp.get("semilla") or camp.get("creada", 0)), saltar=int(p.get("k") or 0))
-    return "recetas (una por versión, en este orden): " + " ".join(f"{i}) {escape(texto)}"
-                                                                   for i, (_, texto) in enumerate(elegidas, 1))
+    elegidas = recetas.para(tipo_receta, estilos_de(marca) or None, config.OPCIONES_ANUNCIO if anuncio else 1,
+                            semilla=int(camp.get("semilla") or camp.get("creada", 0)), saltar=int(p.get("k") or 0),
+                            variedad=camp.get("variedad") or "coherencia")
+    if anuncio:
+        return "recetas (una por versión, en este orden): " + " ".join(f"{i}) {escape(texto)}"
+                                                                       for i, (_, texto) in enumerate(elegidas, 1))
+    return f"receta: {escape(elegidas[0][1])}" if elegidas else ""
 
 
 def textos_del_diseno(p: dict) -> list[str]:
@@ -1700,8 +1709,9 @@ async def prompts_de(c: Cuenta, camp: dict, posts: list[dict], marca: dict | Non
     todos = {q["k"]: q for q in camp.get("posts", [])} | {q["k"]: q for q in posts}
     fotos = [q for q in todos.values() if con_foto(q)]
     tipo_receta = ""
-    if camp.get("producto_id") and any(formato_de(p) == "anuncio" for p in pendientes):  # anuncios: sus recetas
-        tipo_receta = recetas.tipo_de(await empresa.producto(c, camp["producto_id"]), empresa.nombre_giro(await empresa.de(c)))
+    if any(ia_completa(p) for p in pendientes):  # posts con plan visual: sus recetas, por el producto o el giro
+        producto = await empresa.producto(c, camp["producto_id"]) if camp.get("producto_id") else None
+        tipo_receta = recetas.tipo_de(producto, empresa.nombre_giro(await empresa.de(c)))
     comun = (f"<empresa>\n{await empresa_visual(c)}\n</empresa>\n"
              f"<direccion_visual>{brief.texto_visual(camp['brief'])}</direccion_visual>\n" + brief.variedad_tag(camp)
              + brief.referencias_tag(camp))

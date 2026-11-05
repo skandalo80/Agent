@@ -75,8 +75,10 @@ no se ignora en silencio.
   métricas. Los prompts de sistema describen el método; nunca inventan negocios, personas, lugares, precios ni
   listas propias de "evitar". La imagen debe probar el ángulo del post; el protagonista es el producto o su
   resultado. Las recetas de anuncio (`igbot/recetas.py`, decisión del dueño 2026-11-03) son método: composición,
-  tratamiento del texto y recurso visual, escritas por nosotros, elegidas por tipo de producto y estilo de Tu
-  marca cuando el cliente no sube referencias; nunca anuncios ajenos como imagen de referencia del generador.
+  tratamiento del texto y recurso visual, escritas por nosotros, elegidas por tipo de producto y, según la
+  Variedad visual de la campaña (Consistente: del estilo de Tu marca; Equilibrado: 2 de 3; Diverso: 1 de 3;
+  Creativo: de todo el banco), cuando el cliente no sube referencias; una por versión en los anuncios y una por
+  post en las campañas de contenido; nunca anuncios ajenos como imagen de referencia del generador.
 - Flujo de Crear campaña FIJO: Crear campaña -> Crear el brief -> elegir 1 de 3 ideas y editarla -> Escribir
   los posts -> posts editables -> el cliente aprueba -> se generan las imágenes. Las mejoras van dentro de
   estos pasos; nunca se reordenan ni se saltan.
