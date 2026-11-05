@@ -25,6 +25,20 @@ def test_recetas_distintas_por_tipo_y_estilo():
     # pocas recetas para "software" con lujo: se completan con las que sirven para cualquier estilo
     assert len(recetas.para("software", ["lujo"], 3)) == 3
     assert recetas.para("otro", ["inventado"], 2)  # tipo y estilo desconocidos: fisico + minimalista
+    # Sin estilo (None) entran las de todo el banco para ese tipo: también las gráficas con una marca sobria.
+    todas = {k for k, _ in recetas.para("fisico", None, len(recetas.RECETAS), semilla=3)}
+    assert "sticker" in todas and "bodegon" in todas and "pantalla" not in todas
+
+
+def test_las_fotos_del_producto_son_solo_el_objeto():
+    """El generador toma de las fotos del producto el artículo, nunca su fondo, luz o utilería (dueño 2026-11-05);
+    y en un anuncio con recetas, las tres versiones siguen receta, no el plan visual."""
+    from igbot import imagenes
+    prompt = imagenes.prompt_anuncio("idea", imagenes.Texto("T", "S", "", "@x"), con_producto=True)
+    assert "Take only the product from those photos: not their background" in prompt
+    assert "not their background" not in imagenes.prompt_anuncio("idea", imagenes.Texto("T", "S", "", "@x"))
+    assert "ninguna traduce el plan visual tal cual" in campanas.SISTEMA_PROMPTS
+    assert "del plan visual se toman solo el producto, los textos, la luz y el color" in campanas.SISTEMA_PROMPTS
 
 
 def test_tipo_de_producto():

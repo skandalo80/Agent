@@ -112,12 +112,16 @@ def tipo_de(prod: dict | None, giro: str) -> str:
     return "fisico"
 
 
-def para(tipo: str, estilos: list[str], n: int, semilla: int = 0, saltar: int = 0) -> list[tuple[str, str]]:
-    """`n` recetas (clave, texto) que sirven para ese tipo de producto y esos estilos, distintas entre sí, en un
-    orden fijo por `semilla`; `saltar` toma las siguientes (otro post de la misma campaña, otras recetas)."""
+def para(tipo: str, estilos: list[str] | None, n: int, semilla: int = 0, saltar: int = 0) -> list[tuple[str, str]]:
+    """`n` recetas (clave, texto) que sirven para ese tipo de producto y esos estilos (None: cualquier estilo),
+    distintas entre sí, en un orden fijo por `semilla`; `saltar` toma las siguientes (otro post de la misma campaña,
+    otras recetas)."""
     tipo = tipo if tipo in TIPOS else "fisico"
-    estilos = [e for e in estilos if e in TODOS] or ["minimalista"]
-    candidatas = [r for r in RECETAS if tipo in r[1] and any(e in r[2] for e in estilos)]
+    if estilos is None:
+        candidatas = [r for r in RECETAS if tipo in r[1]]
+    else:
+        estilos = [e for e in estilos if e in TODOS] or ["minimalista"]
+        candidatas = [r for r in RECETAS if tipo in r[1] and any(e in r[2] for e in estilos)]
     if len(candidatas) < n:  # pocas para ese estilo: se completan con las que sirven para cualquiera
         candidatas += [r for r in RECETAS if tipo in r[1] and r not in candidatas]
     azar = random.Random(semilla)

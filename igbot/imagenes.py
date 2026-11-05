@@ -289,7 +289,9 @@ def prompt_anuncio(idea: str, texto: "Texto", marca: "Marca | None" = None, hist
     recorte = (f"{RECORTE_HISTORIA} Keep all text inside the central area." if historia
                else f"{RECORTE} Keep all text inside the central 4:5 area.")
     producto = ("The product in the reference photos is the hero: reproduce it exactly as it is (shape, colors,"
-                " label, screen, proportions), photographed for real, never redrawn or replaced by a similar one.\n"
+                " label, screen, proportions), photographed for real, never redrawn or replaced by a similar one."
+                " Take only the product from those photos: not their background, lighting, surfaces, props or"
+                " composition, which come from the art direction below.\n"
                 if con_producto else "")
     return (
         f"Design a finished advertising {que} built on one creative idea, the kind an art director would sign:"
