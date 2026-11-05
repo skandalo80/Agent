@@ -246,3 +246,30 @@ def test_la_misma_persona_sigue_en_su_hilo_y_se_le_contesta_arriba(monkeypatch):
                           monkeypatch)
     assert llamadas == ["me encanta", "¿y en talla M?"]  # el hilo de un tercero se deja en paz
     assert ig.public == [("c0", "Sí, tenemos M.")]
+
+
+def test_pedir_informacion_cuenta_como_pregunta(monkeypatch):
+    """Bug 2026-11-04: "Explícame más" se clasificó como "otro" (apagado de inicio) y quedó sin respuesta. Claude debe
+    saber que pedir información, aunque sin signos de pregunta, es una pregunta."""
+    vistos = {}
+
+    async def falso_claude(prompt, sistema, **kw):
+        vistos["sistema"] = sistema
+        return '{"tipo": "pregunta", "publica": "Te escribimos por DM.", "dm": "Hola, te cuento."}'
+
+    async def sin_tono(c):
+        return ""
+
+    async def sin_negocio(c):
+        return "Cafetería"
+
+    monkeypatch.setattr("igbot.agent.run_claude", falso_claude)
+    monkeypatch.setattr(it, "tono", sin_tono)
+    monkeypatch.setattr("igbot.empresa.texto_de", sin_negocio)
+    datos = asyncio.run(it.claude_escribe(cuenta(), "Explícame más", "cafe.lunar", True))
+    assert datos["tipo"] == "pregunta"
+    pregunta = next(linea for linea in vistos["sistema"].splitlines() if linea.strip().startswith("- pregunta:"))
+    assert "explícame más" in pregunta and "me interesa" in pregunta
+    otro = next(linea for linea in vistos["sistema"].splitlines() if linea.strip().startswith("- otro:"))
+    assert "es pregunta" in otro
+    assert dict(it.reglas({})["otro"]["pub"])["on"] is False  # "otro" sigue apagado de inicio
