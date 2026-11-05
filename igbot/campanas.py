@@ -1314,7 +1314,9 @@ async def pieza_con_ia(c: Cuenta, camp: dict, p: dict, marca: dict, pieza_: dict
         cola = ""  # las notas sobre las referencias, iguales en todas las versiones
         if producto:
             cola += (f"\nThe first {len(producto)} reference image{'s show' if len(producto) > 1 else ' shows'} the real"
-                     " product: keep it exactly as it is." + (f" The other {len(estilo)} are the visual style to follow"
+                     " product: keep the product itself exactly as it is (shape, colors, label, screen) and take nothing"
+                     " else from those photos: not their background, lighting, surfaces, props or composition. The scene"
+                     " comes only from the art direction." + (f" The other {len(estilo)} are the visual style to follow"
                                                               " (light, palette, mood), not their content." if estilo else ""))
         if ancla and len(estilo) >= 1:
             cola += f"\n{ANCLA}"
@@ -1511,11 +1513,11 @@ SISTEMA_PROMPTS = """Eres el director de arte de una campaña de Instagram. Escr
 Cada prompt, en español (el dueño lo lee y lo edita), de 120 a 200 palabras en un solo párrafo, cubre en este orden: el sujeto principal; el escenario; la acción; la composición y el encuadre (en un diseño, dónde va cada texto); la iluminación; los colores y cuánto protagonismo tienen los de la marca (según su "color"); el tratamiento de su "estilo"; y lo que hay que evitar.
 
 Reglas:
-- Fidelidad: el prompt traduce el plan visual de su post, no inventa otra imagen. Si el post trae "idea del dueño", esa manda: cambia lo que ella cambie y conserva del plan lo que no la contradiga (encuadre, luz, formato, lo que se evita).
+- Fidelidad: el prompt traduce el plan visual de su post, no inventa otra imagen. Si el post trae "idea del dueño", esa manda: cambia lo que ella cambie y conserva del plan lo que no la contradiga (encuadre, luz, formato, lo que se evita). Excepción: en un anuncio con "recetas", del plan visual se toman solo el producto, los textos, la luz y el color; la escena, la composición y los objetos los pone la receta (la utilería del plan, como velas, plantas o superficies, no es obligatoria ni se repite en las tres versiones).
 - Si el post trae "escena", ese encuadre y esa luz son obligatorios. Si trae "producto", el producto real es el protagonista.
 - El estilo es un tratamiento de luz, color, textura y composición, nunca objetos de arcilla, cristal, neón u otro material dentro de la escena (salvo en los anuncios, donde el estilo sí aporta sus recursos de diseño).
 - Si la "pieza" es un diseño estilo infografía, el prompt describe la pieza gráfica terminada: la jerarquía, dónde va cada uno de sus "textos del diseño" (cítalos tal cual, en español y entre comillas, sin agregar otros), los íconos o gráficos simples que los acompañan, los bloques de color de la marca y la foto o ilustración que la completa. Si es una imagen sin texto, ni una letra, número o logo dentro. Fotografía realista y creíble salvo que el formato o el plan pidan ilustración o gráfico.
-- Si la "pieza" es un anuncio, ese <post> lleva además "versiones": __VERSIONES__ prompts completos y distintos (el primero se repite en "prompt"). Cada versión es un CONCEPTO creativo diferente que prueba lo que dice el texto que se publica, como lo haría un director de arte: una metáfora visual, un antes y después, una exageración, una escena real con el producto, un recurso de diseño (marco, viñeta, sello, etiqueta, personaje) si el "estilo" lo admite. Nunca tres encuadres de la misma escena ni el producto solo sobre una mesa. Si el <post> trae "recetas", cada versión sigue su receta en ese orden (la 1 la primera, la 2 la segunda...): la receta dice la composición, el tratamiento del texto y el recurso visual; el producto, los textos y los datos son los reales del post. Si no trae recetas, inventa tú el concepto. Cada versión, de 60 a 110 palabras, en este orden: el concepto en una frase; la escena con el producto real de "producto" tal cual es (o su resultado si es un servicio; si es software, la pantalla real de sus fotos, nunca una interfaz inventada); una sola perspectiva; la luz; los objetos concretos, pocos; sus "textos del diseño" (tal cual, entre comillas) y cómo van tratados (el titular grande y con carácter; la línea chica puede ir en una píldora, un sello o una etiqueta si el estilo lo pide); los colores de la marca con intención; lo que se evita, solo lo que venga del plan visual o del brief. El "estilo" manda sobre los recursos visuales: con Pop gráfico, Retro moderno o Claymorfismo caben formas, marcos, stickers, texturas y personajes; con Lujo sobrio o Minimalista, aire y pocas cosas. Prohibidas las frases genéricas ("limpio y premium", "elegante y moderno") y las listas de adjetivos.
+- Si la "pieza" es un anuncio, ese <post> lleva además "versiones": __VERSIONES__ prompts completos y distintos (el primero se repite en "prompt"). Cada versión es un CONCEPTO creativo diferente que prueba lo que dice el texto que se publica, como lo haría un director de arte: una metáfora visual, un antes y después, una exageración, una escena real con el producto, un recurso de diseño (marco, viñeta, sello, etiqueta, personaje) si el "estilo" lo admite. Nunca tres encuadres de la misma escena ni el producto solo sobre una mesa. Si el <post> trae "recetas", las __VERSIONES__ versiones siguen su receta en ese orden (la 1 la primera, que también es "prompt"; la 2 la segunda...), ninguna traduce el plan visual tal cual: la receta dice la escena, la composición, el tratamiento del texto y el recurso visual; el producto, los textos y los datos son los reales del post. Si no trae recetas, inventa tú el concepto. Cada versión, de 60 a 110 palabras, en este orden: el concepto en una frase; la escena con el producto real de "producto" tal cual es (o su resultado si es un servicio; si es software, la pantalla real de sus fotos, nunca una interfaz inventada); una sola perspectiva; la luz; los objetos concretos, pocos; sus "textos del diseño" (tal cual, entre comillas) y cómo van tratados (el titular grande y con carácter; la línea chica puede ir en una píldora, un sello o una etiqueta si el estilo lo pide); los colores de la marca con intención; lo que se evita, solo lo que venga del plan visual o del brief. El "estilo" manda sobre los recursos visuales: con Pop gráfico, Retro moderno o Claymorfismo caben formas, marcos, stickers, texturas y personajes; con Lujo sobrio o Minimalista, aire y pocas cosas. Prohibidas las frases genéricas ("limpio y premium", "elegante y moderno") y las listas de adjetivos.
 - Elementos clave: si el plan visual trae "Elementos clave", el prompt empieza por ellos, explícitos (qué son, cuántos, cómo se ven y dónde van); nunca se omiten, se simplifican ni se cambian por otra cosa.
 - Personas: si el plan visual no pide personas (en protagonista, acción o escenario), el prompt dice claramente "sin personas, sin caras ni manos".
 - Revisión final: cada <post> trae su "texto que se publica". La imagen cuenta lo mismo que ese texto y se entiende sin leerlo. Si el plan visual no lo prueba, ajusta protagonista y acción para que lo prueben, conservando los elementos clave, el encuadre, la luz y el estilo.
@@ -1618,8 +1620,8 @@ def idea_editada(p: dict) -> bool:
 
 def bloque_imagen(camp: dict, marca: dict, p: dict, tipo_receta: str = "") -> str:
     """Un post para el prompt de las imágenes: su formato, su plan visual, su estilo y su color. En un anuncio sin
-    fotos de referencia de la campaña, además sus recetas (una por versión, según `tipo_receta` y los estilos de
-    Tu marca); con referencias, el estilo de las fotos manda y no hay recetas."""
+    fotos de referencia de la campaña, además sus recetas (una por versión, según `tipo_receta`, de todo el
+    banco); con referencias, el estilo de las fotos manda y no hay recetas."""
     formato = FORMATOS[formato_de(p)]
     foto = (p.get("plan") or {}).get("foto") or {}
     estilo, color = elegido(estilos_marca(camp, marca), foto.get("estilo", "")), elegido(colores_marca(marca),
@@ -1647,11 +1649,12 @@ def bloque_imagen(camp: dict, marca: dict, p: dict, tipo_receta: str = "") -> st
 
 def recetas_texto(camp: dict, marca: dict, p: dict, tipo_receta: str) -> str:
     """La línea de recetas de un anuncio (config.OPCIONES_ANUNCIO, una por versión), o nada: solo cuando la campaña no
-    trae fotos de referencia ni su ADN, y distintas en cada post de la campaña (`saltar` = su número)."""
+    trae fotos de referencia ni su ADN, y distintas en cada post de la campaña (`saltar` = su número). Salen de todo
+    el banco (decisión del dueño, 2026-11-05): el estilo de Tu marca decide el tratamiento, no qué recetas caben."""
     if not (tipo_receta and formato_de(p) == "anuncio" and ia_completa(p)) or camp.get("referencias") \
             or camp.get("adn_visual") or config.OPCIONES_ANUNCIO < 2:
         return ""
-    elegidas = recetas.para(tipo_receta, estilos_de(marca), config.OPCIONES_ANUNCIO,
+    elegidas = recetas.para(tipo_receta, None, config.OPCIONES_ANUNCIO,
                             semilla=int(camp.get("semilla") or camp.get("creada", 0)), saltar=int(p.get("k") or 0))
     return "recetas (una por versión, en este orden): " + " ".join(f"{i}) {escape(texto)}"
                                                                    for i, (_, texto) in enumerate(elegidas, 1))
