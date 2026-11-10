@@ -127,8 +127,17 @@ def test_dar_vida_genera_el_3d_y_la_hoja(cliente, monkeypatch):
     monkeypatch.setattr(personaje.marco, "_trabajos", {})
     client.post(RUTA, headers=ORIGEN, data={"arriba": "gato", "accion": "dar_vida"})
     nueva = vida(client, c)
-    assert nueva["retrato"] != v["retrato"] and not personaje.archivo(c, v["retrato"]).exists()
-    assert not personaje.archivo(c, v["hoja"]).exists() and len(proveedor.llamadas) == 4
+    assert nueva["retrato"] != v["retrato"] and len(proveedor.llamadas) == 4
+    # La de antes no se borra: queda en «Versiones anteriores» y se puede volver a ella sin generar.
+    assert personaje.archivo(c, v["retrato"]).is_file() and personaje.archivo(c, v["hoja"]).is_file()
+    assert client.portal.call(personaje.de, c)["versiones"] == [v]
+    r = client.get(RUTA)
+    assert "Versiones anteriores" in r.text and f'value="usar:{v["retrato"]}"' in r.text
+    r = client.post(RUTA, headers=ORIGEN, data={"arriba": "gato", "accion": f'usar:{v["retrato"]}'})
+    assert "esa versión vuelve a ser tu personaje" in r.text and len(proveedor.llamadas) == 4
+    guardado = client.portal.call(personaje.de, c)
+    assert guardado["vida"] == v and guardado["versiones"] == [nueva]
+    assert "Esa versión ya no está guardada" in client.post(RUTA, headers=ORIGEN, data={"accion": "usar:" + "x" * 24}).text
 
 
 def test_dar_vida_con_tope_presupuesto_y_fallas(cliente, monkeypatch):
@@ -196,7 +205,8 @@ def test_retocar_el_3d_con_una_instruccion(cliente, monkeypatch):
     assert "Retocando tu personaje" in r.text
     nueva = vida(client, c)
     assert nueva["retrato"] != v["retrato"] and nueva["hoja"] and nueva["firma"] == v["firma"]
-    assert not personaje.archivo(c, v["retrato"]).exists() and personaje.archivo(c, nueva["retrato"]).is_file()
+    assert personaje.archivo(c, v["retrato"]).is_file() and personaje.archivo(c, nueva["retrato"]).is_file()
+    assert client.portal.call(personaje.de, c)["versiones"] == [v]  # el de antes del retoque se conserva
     (p3, f3), (p4, f4) = proveedor.llamadas[2:]
     assert p3.startswith(personaje.RETOQUE + "más sonriente x") and len(p3) == len(personaje.RETOQUE) + 300
     assert len(f3) == 1 and "Character reference sheet" in p4 and len(f4) == 1
@@ -207,3 +217,21 @@ def test_retocar_el_3d_con_una_instruccion(cliente, monkeypatch):
     monkeypatch.setattr(personaje.marco, "_trabajos", {})
     r = client.post(RUTA, headers=ORIGEN, data={"accion": "retocar_vida", "retoque": "otro"})
     assert "Ya retocaste tu personaje 1 veces este mes" in r.text and len(proveedor.llamadas) == 4
+
+
+def test_versiones_con_tope(cliente, monkeypatch):
+    client, c, _, proveedor = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 2)
+    monkeypatch.setattr(personaje.config, "PERSONAJE_VIDAS_MES", 99)
+    monkeypatch.setattr(personaje, "MAX_VERSIONES", 2)
+    hechas = []
+    for _ in range(4):
+        monkeypatch.setattr(personaje.marco, "_trabajos", {})
+        client.post(RUTA, headers=ORIGEN, data={"accion": "dar_vida"})
+        hechas.append(vida(client, c))
+    guardado = client.portal.call(personaje.de, c)
+    assert guardado["vida"] == hechas[3] and guardado["versiones"] == [hechas[2], hechas[1]]
+    # La que ya no cabe se borra del disco; las que quedan, no.
+    assert not personaje.archivo(c, hechas[0]["retrato"]).exists() and not personaje.archivo(c, hechas[0]["hoja"]).exists()
+    assert all(personaje.archivo(c, v["retrato"]).is_file() for v in hechas[1:])
+    assert personaje.usar_version({"vida": hechas[3], "versiones": [{"retrato": "../etc"}]}, "../etc") is None
