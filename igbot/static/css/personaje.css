@@ -53,3 +53,9 @@
 }
 @media(prefers-reduced-motion:reduce){.pj-svg{transition:none}}
 .pj .pie-config .boton{min-height:var(--toque)}
+.pj-vida{margin-top:2rem;padding:var(--caja-pad);border:1px solid var(--linea-clara);border-radius:var(--caja-radio);background:var(--suave,var(--blanco))}
+.pj-vida h3{margin:0 0 var(--tarjeta-titulo-abajo);font-size:var(--t-tarjeta);font-weight:var(--peso-tarjeta)}
+.pj-vida-fotos{display:grid;grid-template-columns:repeat(2,minmax(0,var(--pj-vida-foto)));gap:var(--hueco)}
+.pj-vida-fotos img{display:block;width:100%;aspect-ratio:2/3;object-fit:cover;border-radius:1rem;background:var(--pj-escenario)}
+.pj-vida-nota{margin:.9rem 0 0;color:var(--texto2,#A8A8AE);font-size:var(--t-texto-tarjeta)}
+.pj-vida-boton{margin-top:1rem;min-height:var(--toque)}

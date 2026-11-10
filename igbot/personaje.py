@@ -11,20 +11,28 @@ Sin JavaScript funciona igual: todas las secciones a la vista y «Aplicar» guar
 panel.js solo cambia las piezas al tocar, muestra una sección a la vez y acerca la vista a la parte
 que se edita. «Al azar» lo arma el servidor (sin guardar) con combinaciones que sí quedan bien.
 
-Se guarda en kv "personaje". El siguiente lote («Dar vida») lo usará como referencia para la imagen
-final y la hoja de personaje; las campañas, después.
+«Dar vida» sí usa IA: con lo elegido se escribe la descripción del personaje y GPT Image genera su versión
+en 3D; con esa imagen como referencia (fidelidad alta) se genera la hoja de personaje (poses y expresiones).
+Son dos imágenes; no usan el cupo del plan pero sí su presupuesto de contenido, con tope de veces al mes
+(config.PERSONAJE_VIDAS_MES). Las dos quedan en kv "personaje" → "vida" para usarlas en las campañas.
+
+Todo se guarda en kv "personaje".
 """
+import asyncio
+import hashlib
 import json
 import logging
 import random
+import secrets
+import time
 from html import escape
 
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
-from . import imagenes, marca, marco
-from .contenido import marca_de, sin_plan
-from .cuenta import Cuenta
+from . import config, imagenes, limites, marca, marco
+from .contenido import TOKEN_FOTO, archivo, marca_de, preparar_foto, sin_plan, url_imagen
+from .cuenta import Cuenta, usar
 
 log = logging.getLogger("igbot.personaje")
 
@@ -204,6 +212,120 @@ INICIAL = {"cabeza": "ancha", "arriba": "branquias", "ojos": "grandes", "boca": 
            "colores": dict(zip((k for k, _ in COLORES), PALETAS["durazno"][1:])), "nombre": "", "rasgos": []}
 
 
+# --- «Dar vida»: lo elegido, descrito para el generador de imágenes (texto nuestro, nada del cliente) ---
+
+DESCRIPCION = {
+    "cabeza": {"redonda": "a big round head", "ancha": "a big wide oval head, wider than the body",
+               "ovalada": "a tall oval head", "gota": "a big head shaped like a drop, narrower at the top"},
+    "arriba": {"nada": "nothing on top of the head, no ears",
+               "branquias": "three leaf-shaped external gills on each side of the head like an axolotl "
+                            "(top one {acento}, middle one {acento2}, bottom one {acento})",
+               "oso": "two round bear ears with {claro} inner ear", "gato": "two pointed cat ears with {acento} inner ear",
+               "conejo": "two long upright rabbit ears with {claro} inner ear",
+               "antenas": "two thin antennae ending in a small {acento} ball", "cuernos": "two tiny {claro} horns",
+               "cresta": "a small crest of three round bumps on top of the head ({acento}, {acento2}, {acento})"},
+    "ojos": {"punto": "small black dot eyes set wide apart", "grandes": "big round black eyes with white highlights",
+             "ovalados": "tall oval black eyes with a small highlight", "entrecerrados": "half-closed relaxed eyes",
+             "pestanas": "round black eyes with three small eyelashes each"},
+    "boca": {"amable": "a small gentle smile", "alegre": "a wide open happy smile",
+             "seria": "a small straight serious mouth and slightly lowered brows",
+             "picara": "a mischievous half smile with one raised eyebrow", "sorprendida": "a small round surprised mouth"},
+    "cara": {"directa": "the face sits directly on the {cuerpo} head",
+             "capucha": "the {cuerpo} skin frames the face like a hood, with a {claro} oval face area"},
+    "cuerpo": {"pequeno": "a small pear-shaped body, smaller than the head, with short arms and short legs",
+               "robusto": "a chubby wide body with short arms and short legs",
+               "redondo": "a round ball-like body with short arms and tiny feet",
+               "delgado": "a slim small body with short arms and slightly longer legs"},
+    "material": {"liso": "smooth matte vinyl toy skin", "peludo": "soft fluffy plush fur all over",
+                 "brillante": "glossy smooth vinyl skin with soft highlights"},
+    "patron": {"liso": "plain skin with no markings", "panza": "a {claro} oval belly patch",
+               "pecas": "a few small freckles on the forehead", "manchas": "a few soft darker spots on the head"},
+    "ropa": {"ninguna": "no clothes", "playera": "a plain {acento} t-shirt", "overol": "plain {acento2} overalls"},
+    "accesorio": {"nada": "", "audifono": "a light grey call-center headset with a small {acento} microphone",
+                  "lentes": "round thin-framed glasses", "gorra": "a {acento} baseball cap with a {acento2} visor"},
+    "cuello": {"nada": "", "bufanda": "a {acento2} scarf around the neck", "mono": "a {acento} bow tie"},
+    "extras": {"nada": "no tail", "aleta": "a short tail with an {acento} fin", "bolita": "a small round {claro} tail",
+               "alas": "two tiny {acento2} wings on the back"},
+}
+ESTILO_3D = ("Original 3D animated mascot character in the style of a modern animated film: soft rounded shapes, "
+             "simple friendly design, soft studio lighting, subtle ambient occlusion.")
+SIN_TEXTO = "No text, no letters, no logos, no watermark."
+HOJA = ("Character reference sheet of this exact same character, same colors, same proportions, same material and "
+        "same accessories, on a plain light grey background: full body front view, side view and back view in the top "
+        "row; four head close-ups with different expressions (happy, thinking, surprised, winking) in the bottom row. "
+        "Do not change the design. " + SIN_TEXTO)
+
+
+def descripcion(p: dict) -> str:
+    """El personaje en palabras para el generador: solo textos nuestros y los colores elegidos."""
+    colores = p["colores"]
+    partes = [DESCRIPCION[campo][p[campo]].format(**colores) for campo in DESCRIPCION]
+    if p["mejillas"]:
+        partes.append("soft pink blush on the cheeks")
+    rasgos = f" Personality: {', '.join(p['rasgos']).lower()}." if p["rasgos"] else ""
+    return (f"A small cute creature. Main body and head color {colores['cuerpo']}. It has "
+            + "; ".join(x for x in partes if x) + "." + rasgos)
+
+
+def prompt_retrato(p: dict) -> str:
+    return (f"{ESTILO_3D} {descripcion(p)} Full body, standing, facing the camera, centered, whole character visible "
+            f"with margin around it. Plain soft neutral background. {SIN_TEXTO}")
+
+
+def firma(p: dict) -> str:
+    """Cambia cuando cambia algo que se ve (piezas o colores): para avisar que el 3D ya no es el de la pantalla."""
+    visto = {k: p[k] for k in (*GRUPOS, "mejillas", "colores")}
+    return hashlib.sha256(json.dumps(visto, sort_keys=True).encode()).hexdigest()[:12]
+
+
+async def _guardar_imagen(c: Cuenta, data: bytes) -> str:
+    """La imagen como JPG en la carpeta de la cuenta (nombre al azar), reabierta con Pillow."""
+    token = secrets.token_urlsafe(18)
+    archivo(c, token).parent.mkdir(parents=True, exist_ok=True)
+    archivo(c, token).write_bytes(await asyncio.to_thread(preparar_foto, data))
+    return token
+
+
+async def sin_presupuesto(c: Cuenta) -> bool:
+    with usar(c):
+        return await limites.sin_presupuesto(c.store)
+
+
+def tokens_de(guardado: dict) -> list[str]:
+    """Las imágenes de «Dar vida» que tiene guardadas el personaje (nombres válidos solamente)."""
+    vida = guardado.get("vida") if isinstance(guardado.get("vida"), dict) else {}
+    return [t for t in (vida.get("retrato"), vida.get("hoja")) if isinstance(t, str) and TOKEN_FOTO.match(t)]
+
+
+def vidas_del_mes(guardado: dict, ahora: float | None = None) -> list[int]:
+    """Cuándo se le dio vida en los últimos 30 días (solo las que sí salieron cuentan para el tope)."""
+    desde = (time.time() if ahora is None else ahora) - 30 * config.DIA
+    return [t for t in guardado.get("vidas", []) if isinstance(t, (int, float)) and t >= desde]
+
+
+def dar_vida(c: Cuenta, p: dict):
+    """El trabajo largo: el personaje en 3D y, con él de referencia, su hoja. Si la hoja falla, el 3D se queda."""
+    async def correr():
+        yield "Modelando tu personaje en 3D…"
+        with usar(c):  # el costo se anota en esta cuenta (presupuesto de contenido)
+            retrato = await imagenes.proveedor.generar(prompt_retrato(p))
+        vida = {"retrato": await _guardar_imagen(c, retrato), "hoja": "", "firma": firma(p), "cuando": int(time.time())}
+        yield "Dibujando su hoja de poses y expresiones…"
+        try:
+            with usar(c):
+                hoja = await imagenes.proveedor.generar(HOJA, [retrato], fiel=True)
+            vida["hoja"] = await _guardar_imagen(c, hoja)
+        except imagenes.ErrorImagen as e:
+            log.warning("@%s: la hoja de personaje no salió: %s", c.slug, e)
+        antes = await de(c)
+        for token in tokens_de(antes):  # las de antes ya no se usan: no se acumulan
+            archivo(c, token).unlink(missing_ok=True)
+        await c.store.set("personaje", json.dumps({**antes, "vida": vida, "vidas": [*vidas_del_mes(antes), vida["cuando"]]},
+                                                  ensure_ascii=False))
+        log.info("@%s dio vida a su personaje (hoja: %s)", c.slug, "sí" if vida["hoja"] else "no")
+    return correr
+
+
 # --- datos ---
 
 def limpio(datos: dict) -> dict:
@@ -368,6 +490,26 @@ def seccion_nombre(p: dict) -> str:
             f"{rasgos}</div></fieldset>")
 
 
+def tarjeta_vida(c: Cuenta, p: dict, guardado: dict) -> str:
+    """«Dar vida»: el botón y, si ya se generó, el personaje en 3D con su hoja."""
+    tokens = tokens_de(guardado)
+    vida = guardado.get("vida") or {}
+    fotos = "".join(f'<a href="{url_imagen(c, t)}" target="_blank" rel="noopener"><img src="{url_imagen(c, t)}" '
+                    f'alt="{alt}" loading="lazy"></a>'
+                    for t, alt in zip(tokens, ("Tu personaje en 3D", "Hoja de personaje")))
+    nota = ""
+    if tokens and vida.get("firma") != firma(p):
+        nota = '<p class="pj-vida-nota">Cambiaste el personaje después de darle vida. Genéralo otra vez para actualizarlo.</p>'
+    elif tokens and len(tokens) < 2:
+        nota = '<p class="pj-vida-nota">La hoja de poses no salió esta vez. Vuelve a generar para obtenerla.</p>'
+    boton = "Volver a generar en 3D" if tokens else "Dar vida en 3D"
+    return ('<section class="pj-vida"><h3>Tu personaje en 3D</h3>'
+            + (f'<div class="pj-vida-fotos">{fotos}</div>{nota}' if tokens else
+               '<p class="pj-vida-nota">Cuando te guste cómo quedó, generamos su versión en 3D y su hoja de poses.'
+               " Tarda cerca de dos minutos.</p>")
+            + f'<button class="boton secundario pj-vida-boton" name="accion" value="dar_vida">{boton}</button></section>')
+
+
 async def pagina(c: Cuenta, p: dict | None = None, aviso: str = ""):
     m = await marca_de(c)
     guardado = await de(c)
@@ -390,7 +532,7 @@ async def pagina(c: Cuenta, p: dict | None = None, aviso: str = ""):
         f'<div class="pj-dos"><div class="pj-lado"><nav class="pj-nav" aria-label="Secciones">{nav}</nav>{secciones}</div>'
         f'<div class="pj-esc"><div class="pj-marco">{dibujo(p)}</div>'
         f'<p class="pj-nom">{escape(p["nombre"]) or "Sin nombre"}</p></div></div>'
-        f"{pie}</form>")
+        f"{tarjeta_vida(c, p, guardado)}{pie}</form>")
     falta = await marco.pendiente(c, "marca")
     cuerpo = (f'<div class="wiz mrc">{marca.menu_pasos("personaje", marca.hechos(m), bool(guardado))}'
               f'<div class="wiz-main">{falta}{contenido}</div></div>')
@@ -418,8 +560,26 @@ async def guardar_personaje(request: Request, c: marco.Formulario):
     if accion in ("azar", "azar_colores"):  # se muestra sin guardar: lo ajusta y guarda si le gusta
         return await pagina(c, al_azar(p, colores=accion == "azar_colores"),
                             "Este salió al azar. Cambia lo que quieras y guárdalo, o prueba otra vez.")
+    antes = await de(c)
+    for k in ("vida", "vidas"):  # las imágenes de «Dar vida» no vienen en el formulario: se conservan
+        if antes.get(k):
+            p[k] = antes[k]
     await c.store.set("personaje", json.dumps(p, ensure_ascii=False))
     log.info("@%s guardó su personaje", await marco.usuario(c))
+    if accion == "dar_vida":
+        if marco.en_curso(c, "personaje"):  # doble clic o recarga: el mismo trabajo, sin gastar otro intento
+            pass
+        elif not c.slug:  # la cuenta principal (@skandar.online) genera aunque se pase: decisión del dueño
+            pass
+        elif await sin_presupuesto(c):
+            return await pagina(c, p, limites.SIN_PRESUPUESTO)
+        elif len(vidas_del_mes(antes)) >= config.PERSONAJE_VIDAS_MES:
+            return await pagina(c, p, f"Ya le diste vida a tu personaje {config.PERSONAJE_VIDAS_MES} veces este mes."
+                                      " Podrás generarlo otra vez más adelante; el que ya tienes sigue aquí.")
+        return await marco.trabajo_largo(
+            c, "personaje", "Dando vida a tu personaje", "Generamos su versión en 3D y su hoja de poses.", BASE,
+            dar_vida(c, p), menu=("cuenta", "marca"), boton="Ver tu personaje", segundos=110,
+            pasos=("Modelando tu personaje en 3D…", "Dibujando su hoja de poses y expresiones…"))
     if accion == "aplicar":  # guarda y se queda (sin JavaScript, además repinta el personaje)
         return await pagina(c, p, "Cambios aplicados.")
     return RedirectResponse(f"{BASE}?guardado=1", status_code=303)
