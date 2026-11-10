@@ -35,6 +35,9 @@ SESSION_SECRET = os.getenv("SESSION_SECRET", "").strip() or APP_SECRET
 # Generaciones de texto con IA (brief, plan, posts, opciones) por cuenta y hora desde el panel: frena el gasto si
 # alguien pulsa Generar sin parar. 0 = sin tope.
 GENERACIONES_HORA = int(os.getenv("GENERACIONES_HORA", "20"))
+# Tu marca › Personaje: cuántas veces al mes puede una cuenta «Dar vida» a su personaje (cada vez son dos
+# imágenes de GPT Image: el personaje en 3D y su hoja de poses). No usa el cupo de imágenes del plan.
+PERSONAJE_VIDAS_MES = int(os.getenv("PERSONAJE_VIDAS_MES", "3"))
 API_VERSION = os.getenv("IG_API_VERSION", "v23.0")
 # Cuentas de clientes que atiende este mismo proceso, además de la suya:
 # nombres de carpetas de clientes/ con su .env (p. ej. CUENTAS=cafelunar,barberia).
