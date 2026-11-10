@@ -297,6 +297,26 @@ def tokens_de(guardado: dict) -> list[str]:
     return [t for t in (vida.get("retrato"), vida.get("hoja")) if isinstance(t, str) and TOKEN_FOTO.match(t)]
 
 
+MAX_VERSIONES = 5  # versiones anteriores del 3D que se conservan (además de la actual)
+
+
+def versiones_de(guardado: dict) -> list[dict]:
+    """Las versiones anteriores del 3D (la más reciente primero), solo las que tienen una imagen válida."""
+    lista = guardado.get("versiones") if isinstance(guardado.get("versiones"), list) else []
+    return [v for v in lista if isinstance(v, dict) and tokens_de({"vida": v})]
+
+
+def usar_version(guardado: dict, retrato: str) -> dict | None:
+    """El personaje con esa versión anterior como la actual (la actual pasa a las anteriores); None si no existe."""
+    versiones = versiones_de(guardado)
+    elegida = next((v for v in versiones if v.get("retrato") == retrato), None)
+    if not elegida:
+        return None
+    resto = [v for v in versiones if v is not elegida]
+    return {**guardado, "vida": elegida,
+            "versiones": (([guardado["vida"]] if tokens_de(guardado) else []) + resto)[:MAX_VERSIONES]}
+
+
 def del_mes(guardado: dict, que: str = "vidas", ahora: float | None = None) -> list[int]:
     """Cuándo se le dio vida (o se retocó, con `que`="retoques") en los últimos 30 días: solo cuentan las que sí
     salieron."""
@@ -311,8 +331,8 @@ RETOQUE = ("Edit this character exactly as the instruction says and change nothi
 
 
 async def _con_hoja(c: Cuenta, retrato: bytes, vida: dict, cuenta_en: str) -> None:
-    """Guarda el 3D, genera su hoja con él de referencia (si falla, el 3D se queda), borra las imágenes de antes y
-    anota el intento en `cuenta_en` ("vidas" o "retoques") para el tope del mes."""
+    """Guarda el 3D, genera su hoja con él de referencia (si falla, el 3D se queda), pasa el de antes a las
+    versiones anteriores y anota el intento en `cuenta_en` ("vidas" o "retoques") para el tope del mes."""
     vida = {**vida, "retrato": await _guardar_imagen(c, retrato), "hoja": "", "cuando": int(time.time())}
     try:
         with usar(c):
@@ -321,10 +341,14 @@ async def _con_hoja(c: Cuenta, retrato: bytes, vida: dict, cuenta_en: str) -> No
     except imagenes.ErrorImagen as e:
         log.warning("@%s: la hoja de personaje no salió: %s", c.slug, e)
     antes = await de(c)
-    for token in tokens_de(antes):  # las de antes ya no se usan: no se acumulan
-        archivo(c, token).unlink(missing_ok=True)
+    # La de antes pasa a «Versiones anteriores» (para volver a ella); solo se borran las que ya no caben.
+    versiones = ([antes["vida"]] if tokens_de(antes) else []) + versiones_de(antes)
+    for vieja in versiones[MAX_VERSIONES:]:
+        for token in tokens_de({"vida": vieja}):
+            archivo(c, token).unlink(missing_ok=True)
     await c.store.set("personaje", json.dumps(
-        {**antes, "vida": vida, cuenta_en: [*del_mes(antes, cuenta_en), vida["cuando"]]}, ensure_ascii=False))
+        {**antes, "vida": vida, "versiones": versiones[:MAX_VERSIONES],
+         cuenta_en: [*del_mes(antes, cuenta_en), vida["cuando"]]}, ensure_ascii=False))
     log.info("@%s: personaje en 3D (%s, hoja: %s)", c.slug, cuenta_en, "sí" if vida["hoja"] else "no")
 
 
@@ -538,6 +562,13 @@ def tarjeta_vida(c: Cuenta, p: dict, guardado: dict) -> str:
                    f'<textarea id="pj-retoque" name="retoque" rows="3" maxlength="{MAX_RETOQUE}" '
                    'placeholder="Ejemplo: más sonriente y sin lentes"></textarea>'
                    '<button class="boton pj-vida-boton" name="accion" value="retocar_vida">Retocar</button></div>')
+    anteriores = "".join(
+        f'<div class="pj-version"><a href="{url_imagen(c, v["retrato"])}" target="_blank" rel="noopener">'
+        f'<img src="{url_imagen(c, v["retrato"])}" alt="Versión anterior" loading="lazy"></a>'
+        f'<button class="boton secundario" name="accion" value="usar:{v["retrato"]}" formnovalidate>Usar esta</button></div>'
+        for v in versiones_de(guardado) if TOKEN_FOTO.match(str(v.get("retrato", ""))))
+    if anteriores:
+        retoque += f'<div class="pj-anteriores"><h4 class="pj-grupo">Versiones anteriores</h4><div class="pj-versiones">{anteriores}</div></div>'
     return ('<section class="pj-vida"><h3>Tu personaje en 3D</h3>'
             + (f'<div class="pj-vida-fotos">{fotos}</div>{nota}' if tokens else
                '<p class="pj-vida-nota">Cuando te guste cómo quedó, generamos su versión en 3D y su hoja de poses.'
@@ -597,9 +628,14 @@ async def guardar_personaje(request: Request, c: marco.Formulario):
         return await pagina(c, al_azar(p, colores=accion == "azar_colores"),
                             "Este salió al azar. Cambia lo que quieras y guárdalo, o prueba otra vez.")
     antes = await de(c)
-    for k in ("vida", "vidas", "retoques"):  # lo de «Dar vida» no viene en el formulario: se conserva
+    for k in ("vida", "versiones", "vidas", "retoques"):  # lo de «Dar vida» no viene en el formulario: se conserva
         if antes.get(k):
             p[k] = antes[k]
+    if accion.startswith("usar:"):  # volver a una versión anterior del 3D: no genera ni cuesta
+        if not (con_ella := usar_version(p, accion[5:])):
+            return await pagina(c, p, "Esa versión ya no está guardada.")
+        await c.store.set("personaje", json.dumps(con_ella, ensure_ascii=False))
+        return await pagina(c, con_ella, "Listo: esa versión vuelve a ser tu personaje en 3D.")
     await c.store.set("personaje", json.dumps(p, ensure_ascii=False))
     log.info("@%s guardó su personaje", await marco.usuario(c))
     if accion in ("dar_vida", "retocar_vida"):

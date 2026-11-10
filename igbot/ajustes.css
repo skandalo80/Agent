@@ -112,6 +112,7 @@
   --pj-opcion: 6.5rem;         /* ancho mínimo de cada opción con miniatura */
   --pj-movimiento: .45s;       /* lo que tarda la vista en acercarse o alejarse */
   --pj-vida-foto: 16rem;       /* ancho máximo de cada imagen de «Dar vida» (el 3D y la hoja) */
+  --pj-version: 7.5rem;        /* ancho mínimo de cada versión anterior del 3D */
   --pj-trazo: 7px;             /* grosor de boca, cejas y lentes */
 }
 @media (max-width: 900px) {
