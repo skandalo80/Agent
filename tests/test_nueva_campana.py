@@ -1879,3 +1879,45 @@ def test_ninguna_imagen_de_contenido_lleva_fondo_liso():
     assert "nunca un fondo liso" in contenido.IMAGEN
     pieza = imagenes.prompt_infografia("Una idea", imagenes.Texto("Titular"))
     assert imagenes.FONDO_DISENO in pieza and "never a flat, empty single color" in pieza
+    # Los anuncios también: su prompt y sus composiciones de respaldo ya no piden estudio ni superficie lisa.
+    anuncio = imagenes.prompt_anuncio("Una idea", imagenes.Texto("Titular"))
+    assert imagenes.FONDO_ANUNCIO in anuncio and "vale también en los anuncios" in campanas.SISTEMA_PROMPTS
+    assert not any("studio" in a or "plain surface" in a for a in campanas.ANGULOS_ANUNCIO)
+
+
+def test_el_personaje_tambien_sale_en_los_anuncios(cliente, monkeypatch):
+    """Promocionar un producto: «Aparece tu personaje» también se ofrece; en cada versión, la foto del producto va
+    primero y el 3D del personaje al final, con la aclaración de que esa referencia no es el producto."""
+    from igbot import personaje
+    client, c, _, proveedor = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 10)
+    import app as bot
+    de_claude = []
+    monkeypatch.setattr(bot.agent, "run_claude", claude_de_campana(de_claude))
+    listo(client, c)
+    foto_prod, retrato = "f" * 24, "pj" + "z" * 22
+    os.makedirs(c.media_dir, exist_ok=True)
+    contenido.archivo(c, foto_prod).write_bytes(foto_bytes((200, 120, 40)))
+    contenido.archivo(c, retrato).write_bytes(foto_bytes((250, 140, 60)))
+    client.portal.call(c.store.set, "productos", json.dumps([{**PRODUCTO, "imagenes": [foto_prod]}]))
+    client.portal.call(c.store.set, "personaje", json.dumps({"nombre": "Nube", "vida": {"retrato": retrato}}))
+    T, P, O = nueva_campana.TIPO, nueva_campana.PRODUCTO, nueva_campana.OFERTA
+    paso(client, T, ir=P, tipo="producto")
+    paso(client, P, ir=O, producto="p1")
+    paso(client, O, ir=6, accion="conocer", versiones="2")
+    assert "Aparece tu personaje" in client.get(f"{URL}?paso=6").text
+    paso(client, 6, ir=7, variedad="coherencia", personaje="todos")
+    paso(client, 7, ir=8, nombre="", inicio="2099-01-05", semanas="1", dias=["0", "2"], horarios=["manana"])
+    assert "Tu personaje: en todos los posts" in client.get(f"{URL}?paso=8").text
+    generar(client)
+    camp = leer(client, c)
+    assert camp["personaje"] == "todos" and all(p["formato"] == "anuncio" and p["personaje"] for p in camp["posts"])
+    plan = next(p for p, s in de_claude if "director creativo" in s)
+    assert "papel: acompaña" in plan and "personaje: sí" in plan
+    antes = len(proveedor.llamadas)
+    client.post(campanas.url_de(camp), headers=ORIGEN, data={"accion": "generar", "k": str(camp["posts"][0]["k"])})
+    nuevas = proveedor.llamadas[antes:]
+    assert nuevas and proveedor.fiel
+    for prompt, refs in (x[:2] for x in nuevas):  # cada versión del anuncio
+        assert refs[0] == contenido.archivo(c, foto_prod).read_bytes()
+        assert refs[-1] == contenido.archivo(c, retrato).read_bytes() and personaje.REFERENCIA_ANUNCIO in prompt
