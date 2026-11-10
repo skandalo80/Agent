@@ -407,6 +407,7 @@ async def a_campana_producto(c: Cuenta, b: dict) -> dict:
             "producto": texto_producto(b, prod), "producto_id": prod["id"] if prod else "", "visual": "",
             "estilo": f"Anuncios limpios. Variedad visual: {VARIEDAD[b['variedad']][0]} ({VARIEDAD[b['variedad']][1]})",
             "fotos_propias": True, "modo_img": "libre", "regla": False, "ves": [], "variedad": b["variedad"],
+            "personaje": b.get("personaje", ""),  # en cuántas versiones sale el personaje de la marca
             "referencias": b.get("referencias", []),
             "adn_visual": (b.get("adn") or {}).get("texto", "") if (b.get("adn") or {}).get("fotos") == b.get(
                 "referencias") else "",
@@ -754,9 +755,15 @@ async def candidatos_ref(c: Cuenta, b: dict) -> list[str]:
     return [t for t in dict.fromkeys(tokens) if TOKEN_FOTO.match(t) and archivo(c, t).is_file()][:MAX_CANDIDATOS_REF]
 
 
+def con_personaje(b: dict) -> str:
+    """Para el resumen: en cuántos posts sale el personaje, si la campaña lo pidió."""
+    return (f" · Tu personaje: {personaje.EN_CAMPANA[b['personaje']].lower()}"
+            if b.get("personaje") in ("algunos", "todos") else "")
+
+
 def bloque_personaje(b: dict, retrato: str) -> str:
-    """«Aparece tu personaje» (solo campañas de contenido de una cuenta que ya le dio vida): no, en algunos o en todos."""
-    if not retrato or de_producto(b):
+    """«Aparece tu personaje» (solo si la cuenta ya le dio vida): no, en algunos posts o anuncios, o en todos."""
+    if not retrato:
         return ""
     return ('<h3 class="wiz-sub">Aparece tu personaje</h3><div class="wiz-personaje">'
             f'<img src="{escape(retrato)}" alt="Tu personaje" loading="lazy"><div class="wiz-chips">'
@@ -844,7 +851,7 @@ async def resumen(c: Cuenta, b: dict, objetivos: list[dict], mensajes: list[dict
     bloques = [
         ("Tipo de campaña", TIPOS["producto"][0], TIPO, False), ("Producto", producto, PRODUCTO, True),
         ("Versiones del anuncio", f"{b['versiones']} versiones" + (f" · «{b['texto']}»" if b["texto"] else ""),
-         OFERTA, False), ("Estilo", VARIEDAD[b["variedad"]][0], 6, False), ("Fechas", fechas_txt, 7, True),
+         OFERTA, False), ("Estilo", VARIEDAD[b["variedad"]][0] + con_personaje(b), 6, False), ("Fechas", fechas_txt, 7, True),
     ] if de_producto(b) else [
         ("Tipo de campaña", TIPOS["contenido"][0], TIPO, True),
         ("Objetivo", obj + (" · Repetir lo que funcionó" if b.get("funciona") else ""), 1, False),
@@ -853,9 +860,7 @@ async def resumen(c: Cuenta, b: dict, objetivos: list[dict], mensajes: list[dict
         ("Producto", producto, 2, True), ("Enfoque del contenido", enfoques, 3, False),
         ("Formatos", " · ".join(FORMATOS[k][0] for k in b["formatos"] if k in FORMATOS)
          + (f" ({', '.join(TEXTO[k][0].lower() for k in textos(b))})" if "titular" in b["formatos"] else ""), 4, False),
-        ("Estilo y variedad", VARIEDAD[b["variedad"]][0] + (
-            f" · Tu personaje: {personaje.EN_CAMPANA[b['personaje']].lower()}" if b.get("personaje") in ("algunos", "todos")
-            else ""), 6, False),
+        ("Estilo y variedad", VARIEDAD[b["variedad"]][0] + con_personaje(b), 6, False),
         ("Cantidad y fechas_txt", fechas_txt, 7, True)]
     tarjetas = "".join(
         f'<div class="wiz-res{" ancho" if ancho else ""}">'

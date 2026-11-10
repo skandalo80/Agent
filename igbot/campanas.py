@@ -878,7 +878,7 @@ async def escribir_desde_brief(c: Cuenta, camp: dict, fichas: list[dict], ya: st
     return nuevos
 
 
-SIN_PERSONAJE = ("texto", "anuncio")  # formatos donde no sale: el diseño de solo texto y el anuncio de producto
+SIN_PERSONAJE = ("texto",)  # formatos donde no sale: el diseño de solo texto
 
 
 def apto_personaje(p: dict) -> bool:
@@ -1345,22 +1345,26 @@ async def pieza_con_ia(c: Cuenta, camp: dict, p: dict, marca: dict, pieza_: dict
     if anuncio and camp.get("producto_id"):  # el anuncio: el producto real va primero y manda
         tokens = await fotos_producto(c, camp)
         producto = [archivo(c, t).read_bytes() for t in tokens[:2] if archivo(c, t).is_file()]
-        estilo = estilo[:MAX_REFS_PIEZA - len(producto)]
+        figura = await foto_personaje(c, p)  # el personaje de la marca, si sale en este anuncio: la última referencia
+        estilo = estilo[:MAX_REFS_PIEZA - len(producto) - len(figura)]
         cola = ""  # las notas sobre las referencias, iguales en todas las versiones
         if producto:
             cola += (f"\nThe first {len(producto)} reference image{'s show' if len(producto) > 1 else ' shows'} the real"
                      " product: keep the product itself exactly as it is (shape, colors, label, screen) and take nothing"
                      " else from those photos: not their background, lighting, surfaces, props or composition. The scene"
-                     " comes only from the art direction." + (f" The other {len(estilo)} are the visual style to follow"
+                     " comes only from the art direction." + (f" The next {len(estilo)} are the visual style to follow"
                                                               " (light, palette, mood), not their content." if estilo else ""))
+        if figura:
+            cola += f"\n{personaje.REFERENCIA_ANUNCIO if producto else personaje.REFERENCIA}"
         if ancla and len(estilo) >= 1:
             cola += f"\n{ANCLA}"
         if (clave := (estilos_de(marca) or [ESTILO_INICIAL])[0]) in ESTILOS and not camp.get("adn_visual"):
             cola += f"\nBrand visual style: {ESTILOS[clave][2]}"
         t = texto_imagen(pieza_, usuario)
         return await opciones_anuncio(c, p, [t.titulo, t.subtitulo], lambda prompt: imagenes.crear_pieza(
-            c.store, PANEL, prompt, imagenes.LIBRE, t, producto + estilo, permitir_extra=extra, marca=k,
-            historia=es_historia(p), anuncio=True, con_producto=bool(producto)), versiones_de(p, idea, cola))
+            c.store, PANEL, prompt, imagenes.LIBRE, t, producto + estilo + figura, permitir_extra=extra, marca=k,
+            historia=es_historia(p), anuncio=True, con_producto=bool(producto), fiel=bool(figura)),
+            versiones_de(p, idea, cola))
     if p.get("ve") == "productos" or (not p.get("ve") and camp.get("producto_id")):
         tokens = (await fotos_producto(c, camp))[:2] or (
             marca.get("fotos", []) if camp.get("variedad") == "reconocible" and not estilo else [])
@@ -1397,12 +1401,14 @@ async def pieza_con_ia(c: Cuenta, camp: dict, p: dict, marca: dict, pieza_: dict
 # Las versiones de un anuncio (config.OPCIONES_ANUNCIO): el mismo prompt con una composición distinta cada una, para
 # que el cliente elija entre opciones de verdad diferentes y no tres casi iguales.
 ANGULOS_ANUNCIO = (
-    "Composition of this version: the product centered on a clean studio surface, front view, nothing else around it.",
+    "Composition of this version: the product centered, front view, on a real surface in a real place softly out of"
+    " focus behind it, nothing else competing with it.",
     "Composition of this version: the product in its real context of use, slightly off-center, a wider shot with"
     " a few real objects of that place.",
     "Composition of this version: a close-up of the product's most distinctive detail, shallow depth of field,"
     " the rest softly out of focus.",
-    "Composition of this version: the product seen from above (flat lay) on a plain surface, aligned to a grid.",
+    "Composition of this version: the product seen from above (flat lay) on a real textured surface (wood, stone,"
+    " fabric or tiles), aligned to a grid.",
 )
 ANCLA = ("The very first reference image is another post of this same campaign: match its light, color palette,"
          " treatment, framing and mood so closely that the two read as one set, without repeating its subject or text.")
@@ -1560,9 +1566,9 @@ Reglas:
 - Si la "pieza" es un diseño estilo infografía, el prompt describe la pieza gráfica terminada: la jerarquía, dónde va cada uno de sus "textos del diseño" (cítalos tal cual, en español y entre comillas, sin agregar otros), los íconos o gráficos simples que los acompañan, los bloques de color de la marca y la foto o ilustración que la completa. Si es una imagen sin texto, ni una letra, número o logo dentro. Fotografía realista y creíble salvo que el formato o el plan pidan ilustración o gráfico.
 - Si la "pieza" es un anuncio, ese <post> lleva además "versiones": __VERSIONES__ prompts completos y distintos (el primero se repite en "prompt"). Cada versión es un CONCEPTO creativo diferente que prueba lo que dice el texto que se publica, como lo haría un director de arte: una metáfora visual, un antes y después, una exageración, una escena real con el producto, un recurso de diseño (marco, viñeta, sello, etiqueta, personaje) si el "estilo" lo admite. Nunca tres encuadres de la misma escena ni el producto solo sobre una mesa. Si el <post> trae "recetas", las __VERSIONES__ versiones siguen su receta en ese orden (la 1 la primera, que también es "prompt"; la 2 la segunda...), ninguna traduce el plan visual tal cual: la receta dice la escena, la composición, el tratamiento del texto y el recurso visual; el producto, los textos y los datos son los reales del post. Si no trae recetas, inventa tú el concepto. Cada versión, de 60 a 110 palabras, en este orden: el concepto en una frase; la escena con el producto real de "producto" tal cual es (o su resultado si es un servicio; si es software, la pantalla real de sus fotos, nunca una interfaz inventada); una sola perspectiva; la luz; los objetos concretos, pocos; sus "textos del diseño" (tal cual, entre comillas) y cómo van tratados (el titular grande y con carácter; la línea chica puede ir en una píldora, un sello o una etiqueta si el estilo lo pide); los colores de la marca con intención; lo que se evita, solo lo que venga del plan visual o del brief. El "estilo" manda sobre los recursos visuales: con Pop gráfico, Retro moderno o Claymorfismo caben formas, marcos, stickers, texturas y personajes; con Lujo sobrio o Minimalista, aire y pocas cosas. Prohibidas las frases genéricas ("limpio y premium", "elegante y moderno") y las listas de adjetivos.
 - Elementos clave: si el plan visual trae "Elementos clave", el prompt empieza por ellos, explícitos (qué son, cuántos, cómo se ven y dónde van); nunca se omiten, se simplifican ni se cambian por otra cosa.
-- Fondo: ninguna imagen lleva un fondo liso, neutro, de estudio o genérico. En una foto, el fondo es el lugar real del plan visual, con profundidad y detalle (interior o exterior), y llena el encuadre; si el plan trae un fondo neutro o no dice lugar, pon un lugar cotidiano acorde al giro y a la zona de <empresa>, sin nombres, letreros ni marcas de negocios, distinto del de los demás posts. En un diseño con texto, el fondo es una fotografía o escena que ocupa buena parte de la pieza, o un fondo diseñado (patrón, formas grandes, textura, ilustración) con los colores de la marca, con el texto siempre legible encima. Si una "receta" pide fondo plano, neutro o de un solo color y el post no es un anuncio, cámbialo por una de esas dos opciones y conserva lo demás de la receta. Describe el fondo en concreto: qué lugar o qué diseño es.
+- Fondo: ninguna imagen lleva un fondo liso, neutro, de estudio o genérico. En una foto, el fondo es el lugar real del plan visual, con profundidad y detalle (interior o exterior), y llena el encuadre; si el plan trae un fondo neutro o no dice lugar, pon un lugar cotidiano acorde al giro y a la zona de <empresa>, sin nombres, letreros ni marcas de negocios, distinto del de los demás posts. En un diseño con texto, el fondo es una fotografía o escena que ocupa buena parte de la pieza, o un fondo diseñado (patrón, formas grandes, textura, ilustración) con los colores de la marca, con el texto siempre legible encima. Si una "receta" pide fondo plano, neutro o de un solo color, cámbialo por una de esas dos opciones y conserva lo demás de la receta; vale también en los anuncios y en cada una de sus "versiones", donde el fondo no le quita el foco al producto ni al titular (una escena real desenfocada o un fondo diseñado con los colores de la marca). Describe el fondo en concreto: qué lugar o qué diseño es.
 - Personas: si el plan visual no pide personas (en protagonista, acción o escenario), el prompt dice claramente "sin personas, sin caras ni manos".
-- Si el post trae "personaje de la marca", ese personaje sale en la imagen aunque el plan visual no lo mencione (su dueño lo activó en ese post). Con papel "protagonista", él es el sujeto principal: vive la escena y hace la acción del plan en lugar de una persona, con un gesto y una postura concretos acordes a su personalidad, en un momento cotidiano y creíble, no posando como en un anuncio. Con papel "acompaña", el producto real sigue al centro y el personaje lo presenta o lo usa. Escríbelo siempre como "el personaje de la marca", sin describir su aspecto, sus colores ni su ropa (su imagen le llega al generador como referencia), y di que conserva su acabado 3D integrado a la luz de la escena. Con el personaje, el escenario es siempre un lugar real con profundidad y detalle, interior o exterior, con luz natural, y llena todo el encuadre: si el plan visual trae un fondo neutro, liso o de estudio, cámbialo por un lugar cotidiano acorde al giro y a la zona de <empresa> (sin nombres, letreros ni marcas de negocios), distinto del de los demás posts. En un diseño con texto, el personaje va dentro de esa escena fotográfica, que ocupa buena parte de la pieza, y no sobre un color plano. La regla de "sin personas" sigue valiendo para personas reales. Sin esa línea en el post, el personaje no sale.
+- Si el post trae "personaje de la marca", ese personaje sale en la imagen aunque el plan visual no lo mencione (su dueño lo activó en ese post). Con papel "protagonista", él es el sujeto principal: vive la escena y hace la acción del plan en lugar de una persona, con un gesto y una postura concretos acordes a su personalidad, en un momento cotidiano y creíble, no posando como en un anuncio. Con papel "acompaña", el producto real sigue al centro y el personaje lo presenta o lo usa. Escríbelo siempre como "el personaje de la marca", sin describir su aspecto, sus colores ni su ropa (su imagen le llega al generador como referencia), y di que conserva su acabado 3D integrado a la luz de la escena. Con el personaje, el escenario es siempre un lugar real con profundidad y detalle, interior o exterior, con luz natural, y llena todo el encuadre: si el plan visual trae un fondo neutro, liso o de estudio, cámbialo por un lugar cotidiano acorde al giro y a la zona de <empresa> (sin nombres, letreros ni marcas de negocios), distinto del de los demás posts. En un diseño con texto, el personaje va dentro de esa escena fotográfica, que ocupa buena parte de la pieza, y no sobre un color plano. En un anuncio, el personaje sale en todas sus "versiones", cada una con un gesto distinto, y nunca tapa el producto ni el titular. La regla de "sin personas" sigue valiendo para personas reales. Sin esa línea en el post, el personaje no sale.
 - Revisión final: cada <post> trae su "texto que se publica". La imagen cuenta lo mismo que ese texto y se entiende sin leerlo. Si el plan visual no lo prueba, ajusta protagonista y acción para que lo prueben, conservando los elementos clave, el encuadre, la luz y el estilo.
 - Si la "pieza" es "imagen sin texto", no reserves espacio para un titular: la escena llena la imagen.
 - Si la "pieza" es un diseño gráfico de texto sin fotografía, no hay foto ni objetos fotografiados (ni producto, ni personas, ni escenas): la frase manda, acompañada a lo más de íconos o formas planas simples sobre un fondo diseñado con los colores de la marca (un patrón, formas grandes, una textura marcada o una ilustración plana), nunca un color plano solo.

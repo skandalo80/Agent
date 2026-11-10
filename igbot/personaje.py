@@ -316,6 +316,13 @@ REFERENCIA = ("The last reference image is the brand character: draw this exact 
               " the character, never a flat, empty or studio background.")
 
 
+# En un anuncio con fotos del producto: aclara que esta referencia no es el producto (su prompt habla de "las fotos
+# de referencia" como el producto).
+REFERENCIA_ANUNCIO = ("Exception to the product rule: the last reference image is not the product. " + REFERENCIA
+                      + " The product stays the hero, exactly as in its own photos; the character presents it or uses"
+                      " it and never covers it or the headline.")
+
+
 def para_campana(guardado: dict) -> dict | None:
     """Lo que una campaña necesita del personaje (nombre, personalidad y su imagen en 3D), o None mientras la
     cuenta no le haya dado vida."""

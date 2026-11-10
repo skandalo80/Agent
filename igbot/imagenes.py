@@ -284,6 +284,13 @@ def prompt_infografia(idea: str, texto: "Texto", marca: "Marca | None" = None, h
     )
 
 
+# Los anuncios tampoco van sobre un color plano (decisión del dueño 2026-11-10): escena real o fondo diseñado.
+FONDO_ANUNCIO = ("Background: never a flat, empty single color or a bare studio backdrop. Use a real place or scene"
+                 " (softly out of focus when the product or the headline needs the attention), or a designed background"
+                 " (pattern, large shapes, texture or illustration) built from the brand colors. It must not compete with"
+                 " the product or the headline, and every text stays perfectly legible.")
+
+
 def prompt_anuncio(idea: str, texto: "Texto", marca: "Marca | None" = None, historia: bool = False,
                    con_producto: bool = False) -> str:
     """Campañas de producto: un anuncio con una idea creativa (la dirección de arte manda, incluidos los recursos
@@ -312,6 +319,7 @@ def prompt_anuncio(idea: str, texto: "Texto", marca: "Marca | None" = None, hist
         f"Typography: a headline with character in the spirit of the {m.fuente} typeface, strong size contrast"
         " between the headline and the small line.\n"
         f"Brand colors, used with intent: main {m.principal}, accent {m.acento}, background {m.fondo}.\n"
+        f"{FONDO_ANUNCIO}\n"
         "No logos, watermarks or fake buttons." + _esquina(m)
     )
 
