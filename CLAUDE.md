@@ -74,7 +74,12 @@ no se ignora en silencio.
 - Contenido solo con datos de la plataforma: Perfil de empresa, Tu marca, brief, fotos de referencia, Shopify,
   métricas. Los prompts de sistema describen el método; nunca inventan negocios, personas, lugares, precios ni
   listas propias de "evitar". La imagen debe probar el ángulo del post; el protagonista es el producto o su
-  resultado. Las recetas de anuncio (`igbot/recetas.py`, decisión del dueño 2026-11-03) son método: composición,
+  resultado. Excepción (decisión del dueño 2026-11-10): si la cuenta tiene Personaje de marca en 3D y la campaña lo
+  pide ("Aparece tu personaje": en algunos o en todos, con casilla por post), el personaje acompaña al producto
+  cuando hay uno que enseñar y es el protagonista en servicios, software y locales (`personaje.papel`): escenas
+  cotidianas del servicio, con lugares y tareas del Perfil de empresa y del brief. Su 3D va al generador como
+  última referencia, con fidelidad alta; nunca se describe su aspecto en el prompt. Las recetas de anuncio
+  (`igbot/recetas.py`, decisión del dueño 2026-11-03) son método: composición,
   tratamiento del texto y recurso visual, escritas por nosotros, elegidas por tipo de producto y, según la
   Variedad visual de la campaña (Consistente: del estilo de Tu marca; Equilibrado: 2 de 3; Diverso: 1 de 3;
   Creativo: de todo el banco), cuando el cliente no sube referencias; una por versión en los anuncios y una por

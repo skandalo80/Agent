@@ -1799,3 +1799,72 @@ def test_sin_presupuesto_de_contenido_no_se_crea_el_brief(cliente, monkeypatch):
     r = client.post(URL, headers=ORIGEN, data={"paso": "8", "accion": "brief"})
     assert "Ya usaste el presupuesto de contenido" in r.text and not llamadas
     assert client.portal.call(contenido.falta_cupo, c, False) == "extra"  # una imagen más solo pagándola
+
+
+def test_el_personaje_de_la_marca_sale_en_los_posts_de_la_campana(cliente, monkeypatch):
+    """«Aparece tu personaje» (Estilo y variedad): solo con un personaje en 3D; llega al plan con su papel, a las
+    fichas que le tocan, al prompt de la imagen y, al generar, su 3D va como última referencia con fidelidad alta.
+    En Diseño de texto no sale, y cada post lo puede quitar con su casilla."""
+    from igbot import personaje
+    client, c, _, proveedor = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 10)
+    import app as bot
+    de_claude = []
+    monkeypatch.setattr(bot.agent, "run_claude", claude_de_campana(de_claude))
+    listo(client, c)
+    client.portal.call(c.store.set, "productos", json.dumps([PRODUCTO]))
+    llenar(client)
+    assert "Aparece tu personaje" not in client.get(f"{URL}?paso=6").text  # aún no le da vida
+    retrato = "pj" + "z" * 22
+    contenido.archivo(c, retrato).parent.mkdir(parents=True, exist_ok=True)
+    contenido.archivo(c, retrato).write_bytes(foto_bytes((250, 140, 60)))
+    client.portal.call(c.store.set, "personaje", json.dumps({
+        "nombre": "Nube <b>", "rasgos": ["Amable", "Curioso"], "vida": {"retrato": retrato, "hoja": retrato}}))
+    r = client.get(f"{URL}?paso=6").text
+    assert "Aparece tu personaje" in r and r.count('name="personaje"') == 3 and f"{retrato}.jpg" in r
+    paso(client, 6, variedad="coherencia", personaje="todos")
+    assert "Tu personaje: en todos los posts" in client.get(f"{URL}?paso=8").text
+    generar(client)
+    camp = leer(client, c)
+    assert camp["personaje"] == "todos"
+    plan = next(p for p, s in de_claude if "director creativo" in s)
+    # Un producto físico: acompaña. El nombre que escribió el cliente va escapado.
+    assert "<personaje_de_marca>nombre: Nube &lt;b&gt;. personalidad: amable, curioso. papel: acompaña" in plan
+    assert "personaje: sí" in plan
+    con, sin = [p for p in camp["posts"] if p.get("personaje")], [p for p in camp["posts"] if not p.get("personaje")]
+    assert con and all(p["formato"] != "texto" for p in con) and all(p["formato"] == "texto" for p in sin)
+    with usar(c):
+        marca = client.portal.call(contenido.marca_de, c)
+    assert "personaje de la marca: nombre: Nube" in campanas.bloque_imagen(
+        camp, marca, con[0], pj="nombre: Nube. papel: acompaña")
+    assert "personaje de la marca" not in campanas.bloque_imagen(camp, marca, sin[0], pj="x")
+    sin_prompt = {k: v for k, v in con[0].items() if k != "prompt"}  # su prompt se escribe: el director de arte lo sabe
+    client.portal.call(campanas.prompts_de, c, camp, [sin_prompt], marca)
+    assert any("personaje de la marca: nombre: Nube &lt;b&gt;. personalidad: amable, curioso. papel: acompaña" in p
+               for p, s in de_claude if "director de arte" in s)
+    # Al generar: el 3D es la última referencia, con su instrucción y fidelidad alta.
+    u = campanas.url_de(camp)
+    assert "Aparece tu personaje</label>" in client.get(f"{u}?post={con[0]['k']}").text
+    assert "Aparece tu personaje</label>" not in client.get(f"{u}?post={sin[0]['k']}").text
+    client.post(u, headers=ORIGEN, data={"accion": "generar", "k": str(con[0]["k"])})
+    prompt, refs = proveedor.llamadas[-1][:2]
+    assert refs[-1] == contenido.archivo(c, retrato).read_bytes() and personaje.REFERENCIA in prompt and proveedor.fiel
+    # Sin la casilla en otro post: ya no sale, y su prompt se escribe de nuevo.
+    otro = con[1]
+    client.post(u, headers=ORIGEN, data={"accion": "guardar", "k": str(otro["k"]), "titulo": otro["titulo"],
+                                         "caption": otro["caption"], "idea": otro["idea"], "dia": otro["dia"],
+                                         "hora": otro["hora"], "personaje_en_form": "1"})
+    otro = next(p for p in leer(client, c)["posts"] if p["k"] == otro["k"])
+    assert otro["personaje"] is False and "prompt" not in otro
+    client.post(u, headers=ORIGEN, data={"accion": "generar", "k": str(otro["k"])})
+    assert personaje.REFERENCIA not in proveedor.llamadas[-1][0]
+
+
+def test_el_personaje_es_protagonista_en_servicios_y_se_reparte():
+    from igbot import personaje
+    assert personaje.papel("servicio", False) == personaje.papel("software", True) == "protagonista"
+    assert personaje.papel("fisico", True) == "acompaña" and personaje.papel("fisico", False) == "protagonista"
+    assert personaje.repartir(4, "todos") == [True] * 4 and personaje.repartir(4, "") == [False] * 4
+    assert personaje.repartir(7, "algunos") == [True, False, False, True, False, False, True]
+    assert personaje.repartir(3, "algunos", semilla=1) == [False, False, True]
+    assert personaje.para_campana({}) is None and personaje.para_campana({"vida": {"retrato": "../x"}}) is None

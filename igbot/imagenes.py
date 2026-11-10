@@ -727,11 +727,13 @@ def _post_completo(data: bytes) -> bytes:
 async def crear_pieza(store: Store, user_id: str, idea: str, plantilla: str, texto: Texto,
                       fotos: list[bytes] = (), permitir_extra: bool = False, marca: Marca | None = None,
                       historia: bool = False, infografia: bool = False, puntos: list[str] = (),
-                      anuncio: bool = False, con_producto: bool = False, titular: bool = True) -> dict:
+                      anuncio: bool = False, con_producto: bool = False, titular: bool = True,
+                      fiel: bool = False) -> dict:
     """Genera la imagen, la rotula y la deja en la tabla media (lista para publicar). Con `historia`, en 9:16.
     Con `infografia` (y plantilla LIBRE), la IA diseña la pieza con su texto y sus `puntos` dentro; con `anuncio`,
     un anuncio limpio con su titular, y si `con_producto`, las fotos del producto real se respetan al máximo.
-    Sin `titular` (una pieza que no lleva texto ni lo llevará) no se pide espacio libre para él."""
+    Sin `titular` (una pieza que no lleva texto ni lo llevará) no se pide espacio libre para él. Con `fiel`, las
+    fotos se respetan al máximo aunque no haya producto (el personaje de la marca)."""
     if plantilla not in PLANTILLAS and plantilla != LIBRE:
         raise ErrorImagen(f"Plantilla desconocida: {plantilla}")
     tipo = await reservar(store, permitir_extra)
@@ -742,8 +744,8 @@ async def crear_pieza(store: Store, user_id: str, idea: str, plantilla: str, tex
                       else prompt_infografia(idea, texto, marca, historia, puntos) if plantilla == LIBRE and infografia
                       else prompt_libre(idea, texto, marca, historia) if plantilla == LIBRE
                       else prompt_final(idea, plantilla, historia, titular))
-            fiel = {"fiel": True} if con_producto and fotos else {}  # el producto real se respeta al máximo
-            crudo = await proveedor.generar(prompt, list(fotos), **fiel)
+            fidelidad = {"fiel": True} if (con_producto or fiel) and fotos else {}  # el producto real se respeta al máximo
+            crudo = await proveedor.generar(prompt, list(fotos), **fidelidad)
         async with _turno:
             # Un diseño con el texto dentro se ve completo: en una historia, con franjas arriba y abajo (recortar
             # los lados cortaba sus textos); en un post, con franjas a los lados si su fondo es liso (recortar a 4:5

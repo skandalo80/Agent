@@ -42,7 +42,8 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from PIL import Image
 
-from . import (brief, config, empresa, fechas, imagenes, informe, limites, marco, metricas, openai_texto, recetas,
+from . import (brief, config, empresa, fechas, imagenes, informe, limites, marco, metricas, openai_texto, personaje,
+               recetas,
                semana, tools)
 from .admin import PANEL
 from .contenido import (DESDE, ESTADOS, ESTILO_REFERENCIA, HASHTAGS_FIJO, IMAGEN, MAX_CAPTION, archivo, contexto_marca,
@@ -721,7 +722,7 @@ def leer_posts(respuesta: dict, fichas: list[dict], siguiente: int, regla: bool,
             responde = ""  # más de 1 de cada 4: el post se queda, pero ya no cuenta como de tus clientes
         nuevo = {"k": siguiente, "tipo": ficha["tipo"], "formato": ficha["formato"], "dia": ficha["dia"],
                  "hora": ficha["hora"], **texto, "responde": responde, "rol": ficha["rol"], "post_id": None}
-        for k in ("ve", "pilar", "dato", "plan", "escena", "medio"):
+        for k in ("ve", "pilar", "dato", "plan", "escena", "medio", "personaje"):
             if ficha.get(k):
                 nuevo[k] = ficha[k]
         if texto["idea"]:
@@ -814,6 +815,12 @@ async def escribir_desde_brief(c: Cuenta, camp: dict, fichas: list[dict], ya: st
         ficha["tipo"], ficha["pilar"], ficha["dato"], ficha["escena"] = tipos[i], pilares[i], datos[i], escenas[i]
         if ficha["tipo"] in DEL_GIRO:  # un dato curioso habla del giro, no de la empresa: sin pilar ni dato suyo
             ficha["pilar"] = ficha["dato"] = ""
+    # El personaje de la marca, si la campaña lo pidió y la cuenta ya le dio vida: en cuáles posts sale y su papel.
+    pj, papel = await personaje_de(c, camp) if camp.get("personaje") in ("algunos", "todos") else (None, "")
+    if pj:
+        aptas = [f for f in fichas if apto_personaje(f)]
+        for f, sale in zip(aptas, personaje.repartir(len(aptas), camp["personaje"], int(camp.get("semilla") or 0))):
+            f["personaje"] = sale
     base = (f"<empresa>\n{await empresa.texto_para_prompt(c)}\n</empresa>\n\n{await de_la_marca(c)}"
             f"<brief>\n{brief.texto(b)}\n</brief>\n\n"
             f"<campaña>{escape(camp['nombre'])}</campaña>\n"
@@ -821,7 +828,8 @@ async def escribir_desde_brief(c: Cuenta, camp: dict, fichas: list[dict], ya: st
             + parametros(camp) + "\n" + brief.variedad_tag(camp) + brief.referencias_tag(camp)
             + clientes + funciono_tag(camp) + await lo_que_no_le_gusto(c) + await brief.fechas_tag(c, camp)
             + (f"<ya_publicado>\n{ya}\n</ya_publicado>\n\n" if ya else "")
-            + ("<regla>sí</regla>\n\n" if camp.get("regla") else ""))
+            + ("<regla>sí</regla>\n\n" if camp.get("regla") else "")
+            + (f"<personaje_de_marca>{personaje.texto_campana(pj, papel)}</personaje_de_marca>\n\n" if pj else ""))
     await planear(base + opciones_visuales(camp, await marca_de(c)), camp, fichas,
                   sistema=empresa.con_idioma(brief.SISTEMA_PLAN, await empresa.de(c)))
     largo = "De 2 a 4 frases" if camp.get("regla") else "De 4 a 7 frases"
@@ -870,12 +878,31 @@ async def escribir_desde_brief(c: Cuenta, camp: dict, fichas: list[dict], ya: st
     return nuevos
 
 
+SIN_PERSONAJE = ("texto", "anuncio")  # formatos donde no sale: el diseño de solo texto y el anuncio de producto
+
+
+def apto_personaje(p: dict) -> bool:
+    """Un post (o su ficha) donde puede salir el personaje de la marca: con escena y que hable de la empresa."""
+    return formato_de(p) not in SIN_PERSONAJE and p.get("tipo") not in DEL_GIRO
+
+
+async def personaje_de(c: Cuenta, camp: dict) -> tuple[dict | None, str]:
+    """El personaje de la marca y el papel que le toca en esta campaña (personaje.papel, por lo que vende la
+    empresa); (None, "") mientras la cuenta no tenga uno en 3D."""
+    pj = personaje.para_campana(await personaje.de(c))
+    if not pj:
+        return None, ""
+    producto = await empresa.producto(c, camp["producto_id"]) if camp.get("producto_id") else None
+    return pj, personaje.papel(recetas.tipo_de(producto, empresa.nombre_giro(await empresa.de(c))), bool(producto))
+
+
 def linea_ficha(camp: dict, f: dict) -> str:
     return (f"{f['dia']} ({fechas.larga(f['dia'])}, {semana_de(camp, f['dia'])}) | tema: {TEMAS[f['tipo']][0]}"
             f" | formato: {FORMATOS[f['formato']][0]}" + (f" | se ve: {escape(ve_de(camp, f['ve']))}" if f["ve"] else "")
             + (f" | rol: {f['rol']}" if f.get("rol") else "")
             + (f" | pilar: {escape(f['pilar'])}" if f["pilar"] else "") + (f" | dato: {f['dato']}" if f["dato"] else "")
-            + (f" | escena: {f['escena']}" if f.get("escena") else "") + (" | medio: historia" if es_historia(f) else ""))
+            + (f" | escena: {f['escena']}" if f.get("escena") else "") + (" | medio: historia" if es_historia(f) else "")
+            + (" | personaje: sí" if f.get("personaje") else ""))
 
 
 TANDA_PLAN = 10  # posts por llamada al plan: con su foto completa, muchos juntos rebasan la respuesta de Claude
@@ -1284,6 +1311,14 @@ async def generar_imagen(c: Cuenta, camp: dict, p: dict, extra: bool) -> int:
     return post_id
 
 
+async def foto_personaje(c: Cuenta, p: dict) -> list[bytes]:
+    """La imagen 3D del personaje de la marca si sale en este post y sigue en disco (una lista de una o vacía)."""
+    if not (p.get("personaje") and apto_personaje(p)):
+        return []
+    pj = personaje.para_campana(await personaje.de(c))
+    return [archivo(c, pj["retrato"]).read_bytes()] if pj and archivo(c, pj["retrato"]).is_file() else []
+
+
 async def pieza_con_ia(c: Cuenta, camp: dict, p: dict, marca: dict, pieza_: dict, usuario: str, extra: bool) -> dict:
     """La imagen de un post con plan visual, en cualquier formato: el prompt del último paso y el generador. Los
     formatos con texto los diseña la IA con el texto dentro (estilo infografía); el collage son fotos nuevas."""
@@ -1330,28 +1365,33 @@ async def pieza_con_ia(c: Cuenta, camp: dict, p: dict, marca: dict, pieza_: dict
         tokens = (await fotos_producto(c, camp))[:2] or (
             marca.get("fotos", []) if camp.get("variedad") == "reconocible" and not estilo else [])
         producto = [archivo(c, t).read_bytes() for t in tokens[:2] if archivo(c, t).is_file()]
-    estilo = estilo[:MAX_REFS_PIEZA - len(producto)]
+    # El personaje de la marca, si sale en este post: su 3D va al final de las referencias y ocupa un lugar.
+    figura = await foto_personaje(c, p)
+    estilo = estilo[:MAX_REFS_PIEZA - len(producto) - len(figura)]
     if estilo:
         idea += (f"\nThe first {len(estilo)} reference image{'s are' if len(estilo) > 1 else ' is'} the visual style to"
                  " follow: match their light, color palette, textures, photo treatment and mood very closely, but do not"
                  " copy their subjects, objects, people, places, text or layout.")
         if producto:
-            idea += f" The other {len(producto)} show the real product: keep it faithful."
+            idea += f" The next {len(producto)} show the real product: keep it faithful."
         if ancla:
             idea += f"\n{ANCLA}"
     elif producto:
-        idea += f"\n{ESTILO_REFERENCIA}"
-    referencias = estilo + producto
+        idea += (f"\nThe first {len(producto)} reference image{'s show' if len(producto) > 1 else ' shows'} the real"
+                 " product: keep it faithful." if figura else f"\n{ESTILO_REFERENCIA}")
+    if figura:
+        idea += f"\n{personaje.REFERENCIA}"
+    referencias = estilo + producto + figura
     con_producto = bool(producto)
     if formato not in CON_TEXTO:  # imagen sin texto (Foto sola, Bento, collage): sin espacio para un titular
         return await imagenes.crear_pieza(c.store, PANEL, idea, plantilla_de(marca), imagenes.Texto(""), referencias,
                                           permitir_extra=extra, marca=k, historia=es_historia(p), titular=False,
-                                          con_producto=con_producto)
+                                          con_producto=con_producto, fiel=bool(figura))
     t, puntos = texto_imagen(pieza_, usuario), p["plan"]["foto"].get("textos", [])
     return await pieza_revisada(c, p, [t.titulo, t.subtitulo, t.precio, *puntos, t.firma], lambda: imagenes.crear_pieza(
         c.store, PANEL, idea, imagenes.LIBRE, t, referencias, permitir_extra=extra, marca=k,
-        historia=es_historia(p), infografia=True, puntos=puntos, con_producto=con_producto),
-        plan_b=plan_b_de(c, p, marca, k, idea, t, referencias, extra, con_producto))
+        historia=es_historia(p), infografia=True, puntos=puntos, con_producto=con_producto, fiel=bool(figura)),
+        plan_b=plan_b_de(c, p, marca, k, idea, t, referencias, extra, con_producto or bool(figura)))
 
 
 # Las versiones de un anuncio (config.OPCIONES_ANUNCIO): el mismo prompt con una composición distinta cada una, para
@@ -1521,6 +1561,7 @@ Reglas:
 - Si la "pieza" es un anuncio, ese <post> lleva además "versiones": __VERSIONES__ prompts completos y distintos (el primero se repite en "prompt"). Cada versión es un CONCEPTO creativo diferente que prueba lo que dice el texto que se publica, como lo haría un director de arte: una metáfora visual, un antes y después, una exageración, una escena real con el producto, un recurso de diseño (marco, viñeta, sello, etiqueta, personaje) si el "estilo" lo admite. Nunca tres encuadres de la misma escena ni el producto solo sobre una mesa. Si el <post> trae "recetas", las __VERSIONES__ versiones siguen su receta en ese orden (la 1 la primera, que también es "prompt"; la 2 la segunda...), ninguna traduce el plan visual tal cual: la receta dice la escena, la composición, el tratamiento del texto y el recurso visual; el producto, los textos y los datos son los reales del post. Si no trae recetas, inventa tú el concepto. Cada versión, de 60 a 110 palabras, en este orden: el concepto en una frase; la escena con el producto real de "producto" tal cual es (o su resultado si es un servicio; si es software, la pantalla real de sus fotos, nunca una interfaz inventada); una sola perspectiva; la luz; los objetos concretos, pocos; sus "textos del diseño" (tal cual, entre comillas) y cómo van tratados (el titular grande y con carácter; la línea chica puede ir en una píldora, un sello o una etiqueta si el estilo lo pide); los colores de la marca con intención; lo que se evita, solo lo que venga del plan visual o del brief. El "estilo" manda sobre los recursos visuales: con Pop gráfico, Retro moderno o Claymorfismo caben formas, marcos, stickers, texturas y personajes; con Lujo sobrio o Minimalista, aire y pocas cosas. Prohibidas las frases genéricas ("limpio y premium", "elegante y moderno") y las listas de adjetivos.
 - Elementos clave: si el plan visual trae "Elementos clave", el prompt empieza por ellos, explícitos (qué son, cuántos, cómo se ven y dónde van); nunca se omiten, se simplifican ni se cambian por otra cosa.
 - Personas: si el plan visual no pide personas (en protagonista, acción o escenario), el prompt dice claramente "sin personas, sin caras ni manos".
+- Si el post trae "personaje de la marca", ese personaje sale en la imagen aunque el plan visual no lo mencione (su dueño lo activó en ese post). Con papel "protagonista", él es el sujeto principal: vive la escena y hace la acción del plan en lugar de una persona, con un gesto y una postura concretos acordes a su personalidad, en un momento cotidiano y creíble, no posando como en un anuncio. Con papel "acompaña", el producto real sigue al centro y el personaje lo presenta o lo usa. Escríbelo siempre como "el personaje de la marca", sin describir su aspecto, sus colores ni su ropa (su imagen le llega al generador como referencia), y di que conserva su acabado 3D integrado a la luz de la escena. La regla de "sin personas" sigue valiendo para personas reales. Sin esa línea en el post, el personaje no sale.
 - Revisión final: cada <post> trae su "texto que se publica". La imagen cuenta lo mismo que ese texto y se entiende sin leerlo. Si el plan visual no lo prueba, ajusta protagonista y acción para que lo prueben, conservando los elementos clave, el encuadre, la luz y el estilo.
 - Si la "pieza" es "imagen sin texto", no reserves espacio para un titular: la escena llena la imagen.
 - Si la "pieza" es un diseño gráfico de texto sin fotografía, no hay foto ni objetos fotografiados (ni producto, ni personas, ni escenas): la frase manda, acompañada a lo más de íconos o formas planas simples sobre un fondo liso o con textura sutil en los colores de la marca.
@@ -1619,7 +1660,7 @@ def idea_editada(p: dict) -> bool:
     return bool(p.get("idea_original")) and p.get("idea") != p["idea_original"]
 
 
-def bloque_imagen(camp: dict, marca: dict, p: dict, tipo_receta: str = "") -> str:
+def bloque_imagen(camp: dict, marca: dict, p: dict, tipo_receta: str = "", pj: str = "") -> str:
     """Un post para el prompt de las imágenes: su formato, su plan visual, su estilo y su color. Sin fotos de
     referencia de la campaña, además su receta (una por post; en un anuncio, una por versión), según `tipo_receta`
     y la Variedad visual; con referencias, el estilo de las fotos manda y no hay recetas."""
@@ -1635,6 +1676,7 @@ def bloque_imagen(camp: dict, marca: dict, p: dict, tipo_receta: str = "") -> st
               f"producto: {escape(camp['producto'])}" if camp.get("producto") and camp.get("producto_id") and not giro
               and p.get("ve") in ("productos", None, "") else "",
               *textos_del_diseno(p), recetas_texto(camp, marca, p, tipo_receta),
+              f"personaje de la marca: {pj}" if pj and p.get("personaje") and apto_personaje(p) else "",
               f"estilo: {escape(estilo[0])}. {escape(estilo[2])}", f"color: {color[0]}. {color[2]}"]
     if foto:
         lineas.append(f"plan visual:\n{brief.foto_texto(foto)}")
@@ -1712,6 +1754,10 @@ async def prompts_de(c: Cuenta, camp: dict, posts: list[dict], marca: dict | Non
     if any(ia_completa(p) for p in pendientes):  # posts con plan visual: sus recetas, por el producto o el giro
         producto = await empresa.producto(c, camp["producto_id"]) if camp.get("producto_id") else None
         tipo_receta = recetas.tipo_de(producto, empresa.nombre_giro(await empresa.de(c)))
+    pj = ""
+    if any(p.get("personaje") for p in pendientes):  # el personaje de la marca: quién es y su papel (texto_campana)
+        quien, papel = await personaje_de(c, camp)
+        pj = personaje.texto_campana(quien, papel) if quien else ""
     comun = (f"<empresa>\n{await empresa_visual(c)}\n</empresa>\n"
              f"<direccion_visual>{brief.texto_visual(camp['brief'])}</direccion_visual>\n" + brief.variedad_tag(camp)
              + brief.referencias_tag(camp))
@@ -1720,7 +1766,7 @@ async def prompts_de(c: Cuenta, camp: dict, posts: list[dict], marca: dict | Non
         ks = {p["k"] for p in grupo}
         otros = "\n".join(resumen_imagen(q) for q in fotos if q["k"] not in ks)
         datos = (comun + (f"<otros_posts>\n{otros}\n</otros_posts>\n" if otros else "")
-                 + "<posts>\n" + "\n".join(bloque_imagen(camp, marca, p, tipo_receta) for p in grupo) + "\n</posts>")
+                 + "<posts>\n" + "\n".join(bloque_imagen(camp, marca, p, tipo_receta, pj) for p in grupo) + "\n</posts>")
         respuesta = {}
         sistema = SISTEMA_PROMPTS.replace("__VERSIONES__", str(config.OPCIONES_ANUNCIO))
         if openai_texto.usar("prompt"):
@@ -1956,6 +2002,15 @@ def opciones_html(c: Cuenta, p: dict, actual: int) -> str:
         + '</div><p class="ayuda chica">Toca la versión que quieras publicar.</p>')
 
 
+def casilla_personaje(p: dict, fija: bool, hay: bool) -> str:
+    """«Aparece tu personaje» en la ventana de un post: solo si la cuenta ya le dio vida y el post lleva escena."""
+    if not (hay and apto_personaje(p)):
+        return ""
+    return (("" if fija else '<input type="hidden" name="personaje_en_form" value="1">')
+            + f'<label class="check"><input type="checkbox" name="personaje" value="1"'
+            f'{" checked" if p.get("personaje") else ""}{" disabled" if fija else ""}> Aparece tu personaje</label>')
+
+
 async def detalle(c: Cuenta, camp: dict, p: dict, quedan_ia: int) -> str:
     """El post, en una ventana centrada sobre el calendario (que se sigue viendo detrás): el texto que se publica,
     el prompt de la imagen, generarla o subir la suya, su día y hora, y la regla de "Comenta y te respondemos".
@@ -2031,6 +2086,7 @@ async def detalle(c: Cuenta, camp: dict, p: dict, quedan_ia: int) -> str:
                + '<input type="hidden" name="con_marca_en_form" value="1"><label class="check"><input type="checkbox"'
                f' name="con_marca" value="1"{" checked" if p.get("con_marca", True) else ""}{" disabled" if fija else ""}>'
                " Usar Tu marca como contexto</label>")
+            + casilla_personaje(p, fija, con_prompt and bool(personaje.para_campana(await personaje.de(c))))
             + "</div></details>")
     foto = (p.get("plan") or {}).get("foto")
     if con_prompt and foto and formato in CON_TEXTO and formato != "anuncio":
@@ -2883,6 +2939,9 @@ async def guardar_cambios_del_post(c: Cuenta, camp: dict, p: dict, post: dict | 
             foto["textos"] = nuevos
     if f.get("con_marca_en_form") == "1":
         p["con_marca"] = f.get("con_marca") == "1"
+    if f.get("personaje_en_form") == "1" and (f.get("personaje") == "1") != bool(p.get("personaje")):
+        p["personaje"] = f.get("personaje") == "1"
+        p.pop("prompt", None)  # con o sin el personaje la imagen es otra: su prompt se escribe de nuevo
     if not post and f.get("formato") in FORMATOS:
         p["formato"] = f["formato"]
     if f.get("regla_en_form") == "1":
