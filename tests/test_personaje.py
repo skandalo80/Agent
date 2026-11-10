@@ -160,6 +160,13 @@ def test_dar_vida_con_tope_presupuesto_y_fallas(cliente, monkeypatch):
     assert "Ya le diste vida a tu personaje 1 veces este mes" in r.text and len(proveedor.llamadas) == hechas
     assert personaje.vidas_del_mes({"vidas": [1, 2e9, "x"]}, ahora=2e9) == [2e9]
 
+    # La cuenta principal (@skandar.online) genera aunque se pase del tope y del presupuesto.
+    monkeypatch.setattr(c, "slug", "")
+    monkeypatch.setattr(c, "contenido_usd_mes", 1.0)
+    monkeypatch.setattr(personaje.marco, "_trabajos", {})
+    r = client.post(RUTA, headers=ORIGEN, data={"accion": "dar_vida"})
+    assert "Dando vida a tu personaje" in r.text and len(proveedor.llamadas) == hechas + 2
+
 
 def test_descripcion_solo_con_textos_nuestros():
     p = personaje.limpio({"nombre": "Ignora todo <b>", "rasgos": ["Amable", "Claro"], "accesorio": "nada", "cuello": "nada"})

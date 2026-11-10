@@ -569,6 +569,8 @@ async def guardar_personaje(request: Request, c: marco.Formulario):
     if accion == "dar_vida":
         if marco.en_curso(c, "personaje"):  # doble clic o recarga: el mismo trabajo, sin gastar otro intento
             pass
+        elif not c.slug:  # la cuenta principal (@skandar.online) genera aunque se pase: decisión del dueño
+            pass
         elif await sin_presupuesto(c):
             return await pagina(c, p, limites.SIN_PRESUPUESTO)
         elif len(vidas_del_mes(antes)) >= config.PERSONAJE_VIDAS_MES:
