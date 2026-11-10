@@ -26,7 +26,7 @@ from html import escape
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
-from . import brief, campanas, config, empresa, fechas, limites, marco, tienda_shopify, tools
+from . import brief, campanas, config, empresa, fechas, limites, marco, personaje, tienda_shopify, tools
 from .contenido import TOKEN_FOTO, archivo, guardar_fotos, marca_de, modo_de, sin_plan, url_imagen
 from .cuenta import Cuenta, usar
 
@@ -331,6 +331,7 @@ async def a_campana(c: Cuenta, b: dict) -> dict:
             "fotos_propias": "propias" in b["visual"], "modo_img": b["armado"], "regla": base == "interaccion",
             "ves": [[k, f"{VISUAL[k][0]}: {VISUAL[k][1]}"] for k in ves],
             "variedad": b["variedad"],
+            "personaje": b.get("personaje", ""),  # en cuántos posts sale el personaje de la marca (personaje.EN_CAMPANA)
             "referencias": b.get("referencias", []),
             "adn_visual": (b.get("adn") or {}).get("texto", "") if (b.get("adn") or {}).get("fotos") == b.get(
                 "referencias") else "",
@@ -480,6 +481,8 @@ def del_form(f, paso: int, b: dict, objetivos: list[dict], mensajes: list[dict],
         return "" if b["visual"] else "Elige al menos una cosa que se vea."
     if paso == 6:
         b["variedad"] = g("variedad") if g("variedad") in VARIEDAD else b["variedad"]
+        if "personaje" in f:
+            b["personaje"] = g("personaje") if g("personaje") in personaje.EN_CAMPANA else ""
         return ""
     if paso == 7:
         b["nombre"] = g("nombre")[:campanas.MAX_NOMBRE]
@@ -751,14 +754,25 @@ async def candidatos_ref(c: Cuenta, b: dict) -> list[str]:
     return [t for t in dict.fromkeys(tokens) if TOKEN_FOTO.match(t) and archivo(c, t).is_file()][:MAX_CANDIDATOS_REF]
 
 
-def paso_6(b: dict, candidatos: list[tuple[str, str]] = ()) -> str:
+def bloque_personaje(b: dict, retrato: str) -> str:
+    """«Aparece tu personaje» (solo campañas de contenido de una cuenta que ya le dio vida): no, en algunos o en todos."""
+    if not retrato or de_producto(b):
+        return ""
+    return ('<h3 class="wiz-sub">Aparece tu personaje</h3><div class="wiz-personaje">'
+            f'<img src="{escape(retrato)}" alt="Tu personaje" loading="lazy"><div class="wiz-chips">'
+            + "".join(chip("personaje", k, t, b.get("personaje", "") == k) for k, t in personaje.EN_CAMPANA.items())
+            + "</div></div>")
+
+
+def paso_6(b: dict, candidatos: list[tuple[str, str]] = (), retrato: str = "") -> str:
     variedad = "".join(op("variedad", k, t, d, marcada=b["variedad"] == k, imagen=img("variedad", k, color, t, alta=True),
                           em="Recomendado" if k == "coherencia" else "")
                        for k, (t, d, color) in VARIEDAD.items())
     return (cab(b, 6, "¿Cómo quieres que se vean tus anuncios?" if de_producto(b) else "¿Cómo quieres que se vea esta campaña?")
             + '<h3 class="wiz-sub">Variedad visual</h3><p class="ayuda">Qué tan distintas se ven las fotos entre'
             ' sí: el lugar, el encuadre y la luz.</p>'
-            f'<div class="wiz-ops dos ops-variedad">{variedad}</div>' + referencias(b, candidatos) + pie(b, 6))
+            f'<div class="wiz-ops dos ops-variedad">{variedad}</div>' + bloque_personaje(b, retrato)
+            + referencias(b, candidatos) + pie(b, 6))
 
 
 def referencias(b: dict, candidatos: list[tuple[str, str]]) -> str:
@@ -839,7 +853,9 @@ async def resumen(c: Cuenta, b: dict, objetivos: list[dict], mensajes: list[dict
         ("Producto", producto, 2, True), ("Enfoque del contenido", enfoques, 3, False),
         ("Formatos", " · ".join(FORMATOS[k][0] for k in b["formatos"] if k in FORMATOS)
          + (f" ({', '.join(TEXTO[k][0].lower() for k in textos(b))})" if "titular" in b["formatos"] else ""), 4, False),
-        ("Estilo y variedad", VARIEDAD[b["variedad"]][0], 6, False),
+        ("Estilo y variedad", VARIEDAD[b["variedad"]][0] + (
+            f" · Tu personaje: {personaje.EN_CAMPANA[b['personaje']].lower()}" if b.get("personaje") in ("algunos", "todos")
+            else ""), 6, False),
         ("Cantidad y fechas_txt", fechas_txt, 7, True)]
     tarjetas = "".join(
         f'<div class="wiz-res{" ancho" if ancho else ""}">'
@@ -1027,7 +1043,9 @@ async def pagina(c: Cuenta, paso: int, aviso: str = "", b: dict | None = None):
         elif paso == 5:
             contenido = paso_5(b)
         elif paso == 6:
-            contenido = paso_6(b, [(t, url_imagen(c, t)) for t in await candidatos_ref(c, b)])
+            pj = personaje.para_campana(await personaje.de(c))
+            contenido = paso_6(b, [(t, url_imagen(c, t)) for t in await candidatos_ref(c, b)],
+                               url_imagen(c, pj["retrato"]) if pj else "")
         elif paso == 7:
             contenido = paso_7(b)
         elif paso == BRIEF:

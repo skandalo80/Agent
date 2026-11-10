@@ -297,6 +297,54 @@ def tokens_de(guardado: dict) -> list[str]:
     return [t for t in (vida.get("retrato"), vida.get("hoja")) if isinstance(t, str) and TOKEN_FOTO.match(t)]
 
 
+# --- el personaje en las campañas ---
+
+# Camp["personaje"]: en cuántos posts de la campaña sale (clave: cómo se le dice al cliente).
+EN_CAMPANA = {"": "No", "algunos": "En algunos posts", "todos": "En todos los posts"}
+CADA = 3  # con "En algunos posts", uno de cada tantos
+# El papel que le toca según lo que vende la empresa (se le dice al plan y al prompt de la imagen).
+PAPELES = {
+    "protagonista": "protagonista: él vive la escena del servicio o de su resultado, en lugar de una persona",
+    "acompaña": "acompaña: el producto real sigue al centro y el personaje lo presenta o lo usa",
+}
+# Lo que va al generador junto con su imagen 3D (siempre la última de las referencias).
+REFERENCIA = ("The last reference image is the brand character: draw this exact same character, same shape, colors,"
+              " proportions, material, face and accessories, with its 3D animated finish, lit by the light of the"
+              " scene; do not redesign it and do not add other characters like it. Take only the character from"
+              " that image: not its background, its pose or its framing.")
+
+
+def para_campana(guardado: dict) -> dict | None:
+    """Lo que una campaña necesita del personaje (nombre, personalidad y su imagen en 3D), o None mientras la
+    cuenta no le haya dado vida."""
+    vida = guardado.get("vida") if isinstance(guardado.get("vida"), dict) else {}
+    retrato = vida.get("retrato")
+    if not (isinstance(retrato, str) and TOKEN_FOTO.match(retrato)):
+        return None
+    p = limpio(guardado)
+    return {"nombre": p["nombre"], "rasgos": p["rasgos"], "retrato": retrato}
+
+
+def papel(tipo_receta: str, con_producto: bool) -> str:
+    """Con un producto que se puede enseñar, acompaña; en servicios, software y locales, es el protagonista."""
+    return "acompaña" if con_producto and tipo_receta in ("fisico", "comida") else "protagonista"
+
+
+def texto_campana(pj: dict, papel_: str) -> str:
+    """El personaje para el plan y para el prompt de la imagen: quién es y qué papel juega, sin su aspecto (ese
+    llega al generador como imagen). El nombre lo escribió el cliente: va escapado."""
+    return ((f"nombre: {escape(pj['nombre'])}. " if pj["nombre"] else "")
+            + (f"personalidad: {', '.join(pj['rasgos']).lower()}. " if pj["rasgos"] else "")
+            + f"papel: {PAPELES[papel_]}")
+
+
+def repartir(n: int, modo: str, semilla: int = 0) -> list[bool]:
+    """En cuáles de n posts sale: en todos, o en uno de cada CADA (empezando en uno distinto según la semilla)."""
+    if modo == "todos":
+        return [True] * n
+    return [modo == "algunos" and (i + semilla) % CADA == 0 for i in range(n)]
+
+
 MAX_VERSIONES = 5  # versiones anteriores del 3D que se conservan (además de la actual)
 
 
