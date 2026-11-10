@@ -251,6 +251,12 @@ def prompt_libre(idea: str, texto: "Texto", marca: "Marca | None" = None, histor
     )
 
 
+# Los diseños con texto no van sobre un color plano (decisión del dueño 2026-11-10): foto, escena o fondo diseñado.
+FONDO_DISENO = ("Background: never a flat, empty single color. Use the photograph or scene from the brief filling a large"
+                " part of the piece, or, if the brief has no photo, a designed background (pattern, large shapes, texture"
+                " or flat illustration) built from the brand colors. Keep every text perfectly legible on top of it.")
+
+
 def prompt_infografia(idea: str, texto: "Texto", marca: "Marca | None" = None, historia: bool = False,
                       puntos: list[str] = ()) -> str:
     """Campañas: la IA diseña la pieza completa, estilo infografía, con el texto dentro (sin plantilla)."""
@@ -273,6 +279,7 @@ def prompt_infografia(idea: str, texto: "Texto", marca: "Marca | None" = None, h
         " punctuation mark), and no other words, letters or numbers:\n" + "\n".join(lineas) + "\n\n"
         f"Typography: in the spirit of the {m.fuente} typeface, readable on a phone, generous margins.\n"
         f"Brand colors: main {m.principal}, accent {m.acento}, background {m.fondo}.\n"
+        f"{FONDO_DISENO}\n"
         "No logos, watermarks or fake buttons." + _esquina(m)
     )
 

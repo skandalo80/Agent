@@ -78,7 +78,11 @@ no se ignora en silencio.
   pide ("Aparece tu personaje": en algunos o en todos, con casilla por post), el personaje acompaña al producto
   cuando hay uno que enseñar y es el protagonista en servicios, software y locales (`personaje.papel`): escenas
   cotidianas del servicio, con lugares y tareas del Perfil de empresa y del brief. Su 3D va al generador como
-  última referencia, con fidelidad alta; nunca se describe su aspecto en el prompt. Las recetas de anuncio
+  última referencia, con fidelidad alta; nunca se describe su aspecto en el prompt. Fondos (decisión del dueño
+  2026-11-10): ninguna imagen de contenido lleva fondo liso, neutro o genérico; una foto sucede en un lugar real con
+  profundidad (el de la empresa o, si no lo dice, uno cotidiano acorde a su giro y su zona, sin nombres ni
+  letreros) y un diseño con texto va sobre una foto o un fondo diseñado (`imagenes.FONDO_DISENO`); los anuncios
+  siguen su receta. Las recetas de anuncio
   (`igbot/recetas.py`, decisión del dueño 2026-11-03) son método: composición,
   tratamiento del texto y recurso visual, escritas por nosotros, elegidas por tipo de producto y, según la
   Variedad visual de la campaña (Consistente: del estilo de Tu marca; Equilibrado: 2 de 3; Diverso: 1 de 3;
