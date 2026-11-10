@@ -585,3 +585,56 @@ document.querySelectorAll(".res-vista").forEach((riel) => {
   const r = riel.getBoundingClientRect(), o = on.getBoundingClientRect();
   if (o.right > r.right) riel.scrollLeft += o.right - r.right + (r.width - o.width) / 2;
 });
+
+// Tu marca › Personaje: al tocar una opción cambia la pieza al momento, se ve una sección a la vez y la
+// vista se acerca a la parte que se edita. Sin esto, la página muestra todo y «Aplicar» repinta.
+document.querySelectorAll("form[data-personaje]").forEach((form) => {
+  const dibujo = form.querySelector(".pj-svg");
+  const secciones = [...form.querySelectorAll(".pj-sec")];
+  const pestanas = [...form.querySelectorAll(".pj-nav a")];
+  const anterior = form.querySelector(".pj-ant");
+  const siguiente = form.querySelector(".pj-sig");
+  const nombre = form.querySelector(".pj-nom");
+  const luz = (hex) => (0.299 * parseInt(hex.slice(1, 3), 16) + 0.587 * parseInt(hex.slice(3, 5), 16)
+                        + 0.114 * parseInt(hex.slice(5, 7), 16)) / 255;
+  const pintar = () => {
+    const datos = new FormData(form);
+    dibujo.querySelectorAll("[data-pieza]").forEach((pieza) => {
+      const [campo, valor] = pieza.dataset.pieza.split(":");
+      pieza.toggleAttribute("hidden", (datos.get(campo) || "") !== valor);
+    });
+    dibujo.dataset.material = datos.get("material");
+    ["cuerpo", "claro", "acento", "acento2"].forEach((k) => form.style.setProperty("--pj-" + k, datos.get("c_" + k)));
+    const cara = datos.get(datos.get("cara") === "capucha" ? "c_claro" : "c_cuerpo");
+    form.style.setProperty("--pj-tinta", luz(cara) < 0.4 ? "#F5F5F4" : "#1B1B22");
+    if (nombre) nombre.textContent = (datos.get("nombre") || "").trim() || "Sin nombre";
+  };
+  let actual = 0;
+  const mostrar = (i, acercar = true) => {
+    actual = Math.max(0, Math.min(secciones.length - 1, i));
+    secciones.forEach((s, n) => s.classList.toggle("on", n === actual));
+    pestanas.forEach((p, n) => p.classList.toggle("on", n === actual));
+    // Al abrir (o después de «Al azar») se ve el personaje entero; la vista se acerca al cambiar de sección.
+    if (acercar) dibujo.dataset.zoom = secciones[actual].dataset.zoom || "todo";
+    anterior.hidden = actual === 0;
+    siguiente.hidden = actual === secciones.length - 1;
+    if (acercar) pestanas[actual].scrollIntoView({ block: "nearest", inline: "center" });
+  };
+  pestanas.forEach((p, n) => p.addEventListener("click", (e) => { e.preventDefault(); mostrar(n); }));
+  anterior.addEventListener("click", () => mostrar(actual - 1));
+  siguiente.addEventListener("click", () => mostrar(actual + 1));
+  form.addEventListener("change", (e) => {
+    const t = e.target;
+    if (t.name === "paleta") {  // una paleta llena los cuatro colores
+      t.dataset.colores.split(",").forEach((c, n) => { form.querySelectorAll('input[type="color"]')[n].value = c; });
+    } else if (t.type === "color") {  // un color a mano: ya no es ninguna paleta
+      form.querySelectorAll('input[name="paleta"]').forEach((r) => { r.checked = false; });
+    } else if (t.name === "rasgos") {  // hasta data-max rasgos
+      const caja = t.closest("[data-max]");
+      if (caja.querySelectorAll("input:checked").length > +caja.dataset.max) t.checked = false;
+    }
+    pintar();
+  });
+  form.addEventListener("input", (e) => { if (e.target.type === "color" || e.target.name === "nombre") pintar(); });
+  mostrar(0, false);
+});

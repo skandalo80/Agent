@@ -164,7 +164,10 @@ def etiquetas(lista_: tuple[str, ...]) -> str:
     return "".join(f"<em>{escape(e)}</em> " for e in lista_)
 
 
-def menu_pasos(actual: str, hechos_: set[str]) -> str:
+PERSONAJE = "personaje"  # igbot/personaje.py: opcional, no cuenta en el avance
+
+
+def menu_pasos(actual: str, hechos_: set[str], con_personaje: bool = False) -> str:
     items = ""
     for i, (k, nombre, *_) in enumerate(PASOS, 1):  # sin subtítulo en la barra de pasos
         clase = "actual" if k == actual else "hecho" if k in hechos_ else ""
@@ -174,6 +177,9 @@ def menu_pasos(actual: str, hechos_: set[str]) -> str:
     clase = "actual" if actual == RESUMEN else ""
     items += (f'<a href="{BASE}?paso={RESUMEN}" class="{clase}"><b>★</b>'
               "<span>Resumen</span></a>")
+    clase = "actual" if actual == PERSONAJE else "hecho" if con_personaje else ""
+    items += (f'<a href="/panel/contenido/personaje" class="{clase}"><b>{"✓" if clase == "hecho" else "+"}</b>'
+              "<span>Personaje</span></a>")
     avance = len(hechos_ & set(CLAVES)) * 100 // len(CLAVES)
     return ('<details class="wiz-pasos" open><summary><span class="hamb"><i></i><i></i><i></i></span>Tu marca</summary>'
             f'<nav>{items}</nav>{marco.avance(avance)}<div class="mrc-tip"><b>Tú eliges, la IA diseña</b>Entra a cualquier paso cuando'
@@ -404,7 +410,9 @@ async def pagina_marca(c: Cuenta, paso: str, marca: dict | None = None, aviso: s
                      + pie(i) + "</form>")
     # El aviso de lo que falta va dentro del paso, para que los pasos queden a la altura de las demás páginas.
     falta = await marco.pendiente(c, "marca")
-    cuerpo = f'<div class="wiz mrc">{menu_pasos(actual, hechos_)}<div class="wiz-main">{falta}{contenido}</div></div>'
+    con_personaje = bool(await c.store.get(PERSONAJE))  # el kv de igbot/personaje.py: solo para la palomita
+    cuerpo = (f'<div class="wiz mrc">{menu_pasos(actual, hechos_, con_personaje)}'
+              f'<div class="wiz-main">{falta}{contenido}</div></div>')
     # Tu marca es de la cuenta (Configuración, abajo en el menú), no una sección de Contenido.
     return marco.pagina(
         await marco.menu_de(c, "cuenta", sub="marca")

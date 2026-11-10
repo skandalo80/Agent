@@ -224,7 +224,8 @@ VERSION_JS = hashlib.sha256((STATIC / "panel.js").read_bytes()).hexdigest()[:10]
 VERSION_MENU = hashlib.sha256((STATIC / "menu.js").read_bytes()).hexdigest()[:10]
 # Toda la hoja del panel en un archivo con su versión en la dirección: el navegador la guarda y cada página pesa
 # 60 KB menos. Las fuentes (@font-face) van inline porque salen de estilos.FUENTES.
-HOJA = ESTILO + (CSS_DIR / "conversaciones.css").read_text(encoding="utf-8") + (CSS_DIR / "skandi.css").read_text(encoding="utf-8") + COMUN
+HOJA = (ESTILO + (CSS_DIR / "conversaciones.css").read_text(encoding="utf-8")
+        + (CSS_DIR / "skandi.css").read_text(encoding="utf-8") + (CSS_DIR / "personaje.css").read_text(encoding="utf-8") + COMUN)
 VERSION_CSS = hashlib.sha256(HOJA.encode()).hexdigest()[:10]
 PRINCIPIO = (
     '<!doctype html><html lang="es"><head><meta charset="utf-8">'

@@ -32,7 +32,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from igbot import (acceso, adjuntos, admin, agenda_google, agent, ajustes, anuncios_meta, asistente, botones, campanas,
                    catalogo_chat, cobros, comentarios, comprimir, conectar, config, contenido, conversaciones, empresa,
                    errores, facebook, historias, inicio, interacciones, lentitud, limites, marca, marco, metricas,
-                   nueva_campana, ocultos, panel, reporte, resultados, salud, seguimiento,
+                   nueva_campana, ocultos, panel, personaje, reporte, resultados, salud, seguimiento,
                    semana, skandi, sugeridos, tienda_shopify, unavez)
 from igbot.cuenta import Cuenta, cargar, cuenta, de_carpeta, usar
 from igbot.dispatcher import Dispatcher
@@ -405,6 +405,7 @@ if not config.CLIENTE:
     app.include_router(contenido.router)
     app.include_router(empresa.router)
     app.include_router(marca.router)
+    app.include_router(personaje.router)
     app.include_router(semana.router)
     app.include_router(nueva_campana.router)  # antes que campanas: /campanas/nueva no es /campanas/{cid}
     app.include_router(campanas.router)
