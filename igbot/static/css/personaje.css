@@ -59,3 +59,6 @@
 .pj-vida-fotos img{display:block;width:100%;aspect-ratio:2/3;object-fit:cover;border-radius:1rem;background:var(--pj-escenario)}
 .pj-vida-nota{margin:.9rem 0 0;color:var(--texto2,#A8A8AE);font-size:var(--t-texto-tarjeta)}
 .pj-vida-boton{margin-top:1rem;min-height:var(--toque)}
+.pj-retoque{margin-top:1.25rem;padding-top:1.25rem;border-top:1px solid var(--linea-clara)}
+.pj-retoque label{display:block;margin:0 0 .35rem;font-weight:600;font-size:.9rem}
+.pj-retoque textarea{display:block;width:100%;max-width:34rem;font:inherit;font-size:1rem;padding:.65rem .8rem;border:1px solid var(--linea-clara);border-radius:.8rem;background:var(--claro);color:var(--negro);resize:vertical}

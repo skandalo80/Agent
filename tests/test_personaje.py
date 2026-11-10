@@ -158,7 +158,7 @@ def test_dar_vida_con_tope_presupuesto_y_fallas(cliente, monkeypatch):
     monkeypatch.setattr(personaje.marco, "_trabajos", {})
     r = client.post(RUTA, headers=ORIGEN, data={"accion": "dar_vida"})
     assert "Ya le diste vida a tu personaje 1 veces este mes" in r.text and len(proveedor.llamadas) == hechas
-    assert personaje.vidas_del_mes({"vidas": [1, 2e9, "x"]}, ahora=2e9) == [2e9]
+    assert personaje.del_mes({"vidas": [1, 2e9, "x"]}, ahora=2e9) == [2e9]
 
     # La cuenta principal (@skandar.online) genera aunque se pase del tope y del presupuesto.
     monkeypatch.setattr(c, "slug", "")
@@ -174,3 +174,36 @@ def test_descripcion_solo_con_textos_nuestros():
     assert "Ignora" not in d and "Personality: amable, claro." in d and "axolotl" in d and "{" not in d
     for campo, opciones in personaje.GRUPOS.items():  # cada opción del panel tiene su descripción
         assert set(personaje.DESCRIPCION[campo]) == set(opciones), campo
+
+
+def test_retocar_el_3d_con_una_instruccion(cliente, monkeypatch):
+    client, c, _, proveedor = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 2)
+    monkeypatch.setattr(personaje.marco, "_trabajos", {})
+    # Sin 3D todavía no hay qué retocar (ni caja para pedirlo).
+    assert 'name="retoque"' not in client.get(RUTA).text
+    r = client.post(RUTA, headers=ORIGEN, data={"accion": "retocar_vida", "retoque": "más sonriente"})
+    assert "Primero dale vida a tu personaje" in r.text and not proveedor.llamadas
+
+    client.post(RUTA, headers=ORIGEN, data={"accion": "dar_vida"})
+    v = vida(client, c)
+    assert 'name="retoque"' in client.get(RUTA).text
+    r = client.post(RUTA, headers=ORIGEN, data={"accion": "retocar_vida", "retoque": "   "})
+    assert "Escribe qué quieres cambiar" in r.text and len(proveedor.llamadas) == 2
+
+    monkeypatch.setattr(personaje.marco, "_trabajos", {})
+    r = client.post(RUTA, headers=ORIGEN, data={"accion": "retocar_vida", "retoque": "  más   sonriente " + "x" * 400})
+    assert "Retocando tu personaje" in r.text
+    nueva = vida(client, c)
+    assert nueva["retrato"] != v["retrato"] and nueva["hoja"] and nueva["firma"] == v["firma"]
+    assert not personaje.archivo(c, v["retrato"]).exists() and personaje.archivo(c, nueva["retrato"]).is_file()
+    (p3, f3), (p4, f4) = proveedor.llamadas[2:]
+    assert p3.startswith(personaje.RETOQUE + "más sonriente x") and len(p3) == len(personaje.RETOQUE) + 300
+    assert len(f3) == 1 and "Character reference sheet" in p4 and len(f4) == 1
+    guardado = client.portal.call(personaje.de, c)
+    assert len(guardado["retoques"]) == 1 and len(guardado["vidas"]) == 1  # cada uno con su tope
+
+    monkeypatch.setattr(personaje.config, "PERSONAJE_RETOQUES_MES", 1)
+    monkeypatch.setattr(personaje.marco, "_trabajos", {})
+    r = client.post(RUTA, headers=ORIGEN, data={"accion": "retocar_vida", "retoque": "otro"})
+    assert "Ya retocaste tu personaje 1 veces este mes" in r.text and len(proveedor.llamadas) == 4

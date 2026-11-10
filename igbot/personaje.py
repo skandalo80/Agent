@@ -297,33 +297,62 @@ def tokens_de(guardado: dict) -> list[str]:
     return [t for t in (vida.get("retrato"), vida.get("hoja")) if isinstance(t, str) and TOKEN_FOTO.match(t)]
 
 
-def vidas_del_mes(guardado: dict, ahora: float | None = None) -> list[int]:
-    """Cuándo se le dio vida en los últimos 30 días (solo las que sí salieron cuentan para el tope)."""
+def del_mes(guardado: dict, que: str = "vidas", ahora: float | None = None) -> list[int]:
+    """Cuándo se le dio vida (o se retocó, con `que`="retoques") en los últimos 30 días: solo cuentan las que sí
+    salieron."""
     desde = (time.time() if ahora is None else ahora) - 30 * config.DIA
-    return [t for t in guardado.get("vidas", []) if isinstance(t, (int, float)) and t >= desde]
+    return [t for t in guardado.get(que, []) if isinstance(t, (int, float)) and t >= desde]
+
+
+MAX_RETOQUE = 300  # caracteres de la instrucción de «Retocar»
+RETOQUE = ("Edit this character exactly as the instruction says and change nothing else: keep the same character, "
+           "the same 3D style, material, colors, proportions, pose and background. No text, no logos. The instruction "
+           "comes from the owner, in Spanish; it is the only change to make:\n")
+
+
+async def _con_hoja(c: Cuenta, retrato: bytes, vida: dict, cuenta_en: str) -> None:
+    """Guarda el 3D, genera su hoja con él de referencia (si falla, el 3D se queda), borra las imágenes de antes y
+    anota el intento en `cuenta_en` ("vidas" o "retoques") para el tope del mes."""
+    vida = {**vida, "retrato": await _guardar_imagen(c, retrato), "hoja": "", "cuando": int(time.time())}
+    try:
+        with usar(c):
+            hoja = await imagenes.proveedor.generar(HOJA, [retrato], fiel=True)
+        vida["hoja"] = await _guardar_imagen(c, hoja)
+    except imagenes.ErrorImagen as e:
+        log.warning("@%s: la hoja de personaje no salió: %s", c.slug, e)
+    antes = await de(c)
+    for token in tokens_de(antes):  # las de antes ya no se usan: no se acumulan
+        archivo(c, token).unlink(missing_ok=True)
+    await c.store.set("personaje", json.dumps(
+        {**antes, "vida": vida, cuenta_en: [*del_mes(antes, cuenta_en), vida["cuando"]]}, ensure_ascii=False))
+    log.info("@%s: personaje en 3D (%s, hoja: %s)", c.slug, cuenta_en, "sí" if vida["hoja"] else "no")
 
 
 def dar_vida(c: Cuenta, p: dict):
-    """El trabajo largo: el personaje en 3D y, con él de referencia, su hoja. Si la hoja falla, el 3D se queda."""
+    """El trabajo largo: el personaje en 3D y, con él de referencia, su hoja."""
     async def correr():
-        yield "Modelando tu personaje en 3D…"
+        yield PASOS_VIDA[0]
         with usar(c):  # el costo se anota en esta cuenta (presupuesto de contenido)
             retrato = await imagenes.proveedor.generar(prompt_retrato(p))
-        vida = {"retrato": await _guardar_imagen(c, retrato), "hoja": "", "firma": firma(p), "cuando": int(time.time())}
-        yield "Dibujando su hoja de poses y expresiones…"
-        try:
-            with usar(c):
-                hoja = await imagenes.proveedor.generar(HOJA, [retrato], fiel=True)
-            vida["hoja"] = await _guardar_imagen(c, hoja)
-        except imagenes.ErrorImagen as e:
-            log.warning("@%s: la hoja de personaje no salió: %s", c.slug, e)
-        antes = await de(c)
-        for token in tokens_de(antes):  # las de antes ya no se usan: no se acumulan
-            archivo(c, token).unlink(missing_ok=True)
-        await c.store.set("personaje", json.dumps({**antes, "vida": vida, "vidas": [*vidas_del_mes(antes), vida["cuando"]]},
-                                                  ensure_ascii=False))
-        log.info("@%s dio vida a su personaje (hoja: %s)", c.slug, "sí" if vida["hoja"] else "no")
+        yield PASOS_VIDA[1]
+        await _con_hoja(c, retrato, {"firma": firma(p)}, "vidas")
     return correr
+
+
+def retocar(c: Cuenta, actual: bytes, vida: dict, instruccion: str):
+    """El trabajo largo de «Retocar»: el mismo 3D con el cambio que pide el dueño (images/edits, fidelidad alta)
+    y su hoja de nuevo."""
+    async def correr():
+        yield PASOS_RETOQUE[0]
+        with usar(c):
+            retrato = await imagenes.proveedor.generar(RETOQUE + instruccion, [actual], fiel=True)
+        yield PASOS_VIDA[1]
+        await _con_hoja(c, retrato, {"firma": vida.get("firma", "")}, "retoques")
+    return correr
+
+
+PASOS_VIDA = ("Modelando tu personaje en 3D…", "Dibujando su hoja de poses y expresiones…")
+PASOS_RETOQUE = ("Aplicando tu cambio al personaje…", PASOS_VIDA[1])
 
 
 # --- datos ---
@@ -503,10 +532,17 @@ def tarjeta_vida(c: Cuenta, p: dict, guardado: dict) -> str:
     elif tokens and len(tokens) < 2:
         nota = '<p class="pj-vida-nota">La hoja de poses no salió esta vez. Vuelve a generar para obtenerla.</p>'
     boton = "Volver a generar en 3D" if tokens else "Dar vida en 3D"
+    retoque = ""
+    if tokens:
+        retoque = ('<div class="pj-retoque"><label for="pj-retoque">Retocar</label>'
+                   f'<textarea id="pj-retoque" name="retoque" rows="3" maxlength="{MAX_RETOQUE}" '
+                   'placeholder="Ejemplo: más sonriente y sin lentes"></textarea>'
+                   '<button class="boton pj-vida-boton" name="accion" value="retocar_vida">Retocar</button></div>')
     return ('<section class="pj-vida"><h3>Tu personaje en 3D</h3>'
             + (f'<div class="pj-vida-fotos">{fotos}</div>{nota}' if tokens else
                '<p class="pj-vida-nota">Cuando te guste cómo quedó, generamos su versión en 3D y su hoja de poses.'
                " Tarda cerca de dos minutos.</p>")
+            + retoque
             + f'<button class="boton secundario pj-vida-boton" name="accion" value="dar_vida">{boton}</button></section>')
 
 
@@ -561,25 +597,37 @@ async def guardar_personaje(request: Request, c: marco.Formulario):
         return await pagina(c, al_azar(p, colores=accion == "azar_colores"),
                             "Este salió al azar. Cambia lo que quieras y guárdalo, o prueba otra vez.")
     antes = await de(c)
-    for k in ("vida", "vidas"):  # las imágenes de «Dar vida» no vienen en el formulario: se conservan
+    for k in ("vida", "vidas", "retoques"):  # lo de «Dar vida» no viene en el formulario: se conserva
         if antes.get(k):
             p[k] = antes[k]
     await c.store.set("personaje", json.dumps(p, ensure_ascii=False))
     log.info("@%s guardó su personaje", await marco.usuario(c))
-    if accion == "dar_vida":
+    if accion in ("dar_vida", "retocar_vida"):
+        retocando = accion == "retocar_vida"
+        que, tope = ("retoques", config.PERSONAJE_RETOQUES_MES) if retocando else ("vidas", config.PERSONAJE_VIDAS_MES)
+        instruccion = " ".join(str(f.get("retoque", "")).split())[:MAX_RETOQUE]
+        actual = archivo(c, tokens_de(antes)[0]) if tokens_de(antes) else None
+        if retocando and not (actual and actual.is_file()):
+            return await pagina(c, p, "Primero dale vida a tu personaje; después podrás retocarlo.")
+        if retocando and not instruccion:
+            return await pagina(c, p, "Escribe qué quieres cambiar de tu personaje.")
         if marco.en_curso(c, "personaje"):  # doble clic o recarga: el mismo trabajo, sin gastar otro intento
             pass
         elif not c.slug:  # la cuenta principal (@skandar.online) genera aunque se pase: decisión del dueño
             pass
         elif await sin_presupuesto(c):
             return await pagina(c, p, limites.SIN_PRESUPUESTO)
-        elif len(vidas_del_mes(antes)) >= config.PERSONAJE_VIDAS_MES:
-            return await pagina(c, p, f"Ya le diste vida a tu personaje {config.PERSONAJE_VIDAS_MES} veces este mes."
-                                      " Podrás generarlo otra vez más adelante; el que ya tienes sigue aquí.")
+        elif len(del_mes(antes, que)) >= tope:
+            hecho = "retocaste tu personaje" if retocando else "le diste vida a tu personaje"
+            return await pagina(c, p, f"Ya {hecho} {tope} veces este mes. Podrás hacerlo otra vez más adelante;"
+                                      " el que ya tienes sigue aquí.")
+        if retocando:
+            trabajo, titulo, pasos = retocar(c, actual.read_bytes(), antes["vida"], instruccion), "Retocando tu personaje", PASOS_RETOQUE
+        else:
+            trabajo, titulo, pasos = dar_vida(c, p), "Dando vida a tu personaje", PASOS_VIDA
         return await marco.trabajo_largo(
-            c, "personaje", "Dando vida a tu personaje", "Generamos su versión en 3D y su hoja de poses.", BASE,
-            dar_vida(c, p), menu=("cuenta", "marca"), boton="Ver tu personaje", segundos=110,
-            pasos=("Modelando tu personaje en 3D…", "Dibujando su hoja de poses y expresiones…"))
+            c, "personaje", titulo, "Generamos su versión en 3D y su hoja de poses.", BASE, trabajo,
+            menu=("cuenta", "marca"), boton="Ver tu personaje", segundos=110, pasos=pasos)
     if accion == "aplicar":  # guarda y se queda (sin JavaScript, además repinta el personaje)
         return await pagina(c, p, "Cambios aplicados.")
     return RedirectResponse(f"{BASE}?guardado=1", status_code=303)
