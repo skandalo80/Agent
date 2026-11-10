@@ -372,8 +372,8 @@ def sugerida() -> float:
 # prompt completo y ordenado (qué se ve, dónde, cómo se encuadra, la luz, la paleta y el ambiente) que
 # una idea de dos frases con bloques genéricos pegados al final: ~150 palabras es lo que funciona.
 IMAGEN = ("Escríbelo en este orden: 1) el sujeto principal, concreto y propio de esta empresa (su producto, su"
-          " servicio, su espacio o su cliente ideal; nunca algo genérico del ramo); 2) la escena y el entorno, con"
-          " materiales, utilería y detalles reales; 3) el encuadre y la composición (plano, ángulo, lente, dónde va"
+          " servicio, su espacio o su cliente ideal; nunca algo genérico del ramo); 2) la escena y el entorno: un lugar real con"
+          " profundidad, materiales, utilería y detalles reales, nunca un fondo liso, neutro, de estudio o genérico; 3) el encuadre y la composición (plano, ángulo, lente, dónde va"
           " el sujeto y dónde queda espacio libre); 4) la luz (fuente, dirección, hora, contraste); 5) la paleta,"
           " usando los colores de la marca con sutileza; 6) el ambiente y la emoción que sirven al objetivo del post"
           " y al tono de la marca. Sigue el estilo visual de la marca. Fotografía realista y creíble (salvo que se pida una"

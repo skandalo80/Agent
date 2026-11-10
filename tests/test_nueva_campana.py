@@ -1868,3 +1868,14 @@ def test_el_personaje_es_protagonista_en_servicios_y_se_reparte():
     assert personaje.repartir(7, "algunos") == [True, False, False, True, False, False, True]
     assert personaje.repartir(3, "algunos", semilla=1) == [False, False, True]
     assert personaje.para_campana({}) is None and personaje.para_campana({"vida": {"retrato": "../x"}}) is None
+
+
+def test_ninguna_imagen_de_contenido_lleva_fondo_liso():
+    """Decisión del dueño (2026-11-10): el plan, el prompt y el generador piden un lugar real o un fondo diseñado."""
+    assert "un fondo neutro que no compita" not in brief.SISTEMA_PLAN
+    assert "nunca un fondo liso, neutro, de estudio o genérico" in brief.SISTEMA_PLAN
+    assert "- Fondo: ninguna imagen lleva un fondo liso" in campanas.SISTEMA_PROMPTS
+    assert "sobre un fondo liso" not in campanas.SISTEMA_PROMPTS
+    assert "nunca un fondo liso" in contenido.IMAGEN
+    pieza = imagenes.prompt_infografia("Una idea", imagenes.Texto("Titular"))
+    assert imagenes.FONDO_DISENO in pieza and "never a flat, empty single color" in pieza

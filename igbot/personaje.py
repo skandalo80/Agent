@@ -311,7 +311,9 @@ PAPELES = {
 REFERENCIA = ("The last reference image is the brand character: draw this exact same character, same shape, colors,"
               " proportions, material, face and accessories, with its 3D animated finish, lit by the light of the"
               " scene; do not redesign it and do not add other characters like it. Take only the character from"
-              " that image: not its background, its pose or its framing.")
+              " that image: not its background, its pose or its framing. Its plain backdrop is not part of this"
+              " picture: the place described above fills the whole frame, with real depth and detail behind and around"
+              " the character, never a flat, empty or studio background.")
 
 
 def para_campana(guardado: dict) -> dict | None:
