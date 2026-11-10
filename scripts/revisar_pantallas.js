@@ -33,7 +33,7 @@ const PROBLEMAS = `(${function (esCelular) {
       if (visible(el) && parseFloat(getComputedStyle(el).fontSize) < 16) fallas.push(`campo de ${getComputedStyle(el).fontSize} (menos de 16 px): ${de(el)}`);
     }
     for (const el of document.querySelectorAll('button,a.boton,a.btn,input[type=submit],[role=button]')) {
-      if (visible(el) && el.getBoundingClientRect().height < 44 && !el.closest('.paso,.wiz-pasos,.as-pasos,.riel,.tabs,.res-vista,nav,.lateral,.menu')) fallas.push(`botón de ${Math.round(el.getBoundingClientRect().height)} px de alto (menos de 44): ${de(el)}`);
+      if (visible(el) && !el.classList.contains('oculto') && el.getBoundingClientRect().height < 44 && !el.closest('.paso,.wiz-pasos,.as-pasos,.riel,.tabs,.res-vista,nav,.lateral,.menu')) fallas.push(`botón de ${Math.round(el.getBoundingClientRect().height)} px de alto (menos de 44): ${de(el)}`);
     }
   }
   for (const el of esCelular ? [] : document.querySelectorAll('.caso,.casos-intro,#planes,#como-funciona')) {

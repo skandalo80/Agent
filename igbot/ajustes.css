@@ -104,6 +104,14 @@
   /* Conversaciones: etapa de cada contacto */
   --toque: 2.75rem;            /* alto mínimo de lo que se toca en el celular (44 px) */
   --etapa-caja: 19rem;         /* ancho de la ventanita de Etapa y Marcar venta */
+
+  /* Tu marca › Personaje (el personalizador) */
+  --pj-escenario: #3A3B42;     /* fondo detrás del personaje: más claro que la tarjeta para que se vea un cuerpo oscuro */
+  --pj-alto: 30rem;            /* alto del escenario en computadora */
+  --pj-alto-cel: 38vh;         /* alto del escenario en celular (queda fijo arriba mientras eliges) */
+  --pj-opcion: 6.5rem;         /* ancho mínimo de cada opción con miniatura */
+  --pj-movimiento: .45s;       /* lo que tarda la vista en acercarse o alejarse */
+  --pj-trazo: 7px;             /* grosor de boca, cejas y lentes */
 }
 @media (max-width: 900px) {
   :root { --pers-columnas: 2; }
