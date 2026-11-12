@@ -215,7 +215,8 @@ def es_shopify(html: str, encabezados: dict) -> bool:
 
 
 async def recorrer(url: str) -> dict:
-    """{"url", "paginas": [{url, titulo, texto}], "shopify"} del sitio. ErrorSitio si no se pudo leer el inicio."""
+    """{"url", "paginas": [{url, titulo, texto}], "shopify", "html" (el del inicio)} del sitio. ErrorSitio si no
+    se pudo leer el inicio."""
     async with cliente() as http:
         try:
             final, html, encabezados = await bajar(http, url)
@@ -236,7 +237,7 @@ async def recorrer(url: str) -> dict:
             paginas.append(_pagina(u, leer(h)))
     if not any(p["texto"] for p in paginas):
         raise ErrorSitio("Tu sitio no deja leer su texto (pasa con algunos sitios hechos con mucho JavaScript).")
-    return {"url": final, "paginas": paginas, "shopify": shopify}
+    return {"url": final, "paginas": paginas, "shopify": shopify, "html": html}
 
 
 def _pagina(url: str, lector: _Lector) -> dict:
@@ -317,17 +318,23 @@ async def extraer(c: Cuenta, sitio: dict, giros: list[str]) -> dict:
     with usar(c):
         respuesta = await agent.run_claude(f"<sitio>\n{para_prompt(sitio)}\n</sitio>", sistema(giros),
                                            max_turns=1, model=config.COMMENTS_MODEL)
-    m = re.search(r"\{.*\}", respuesta, re.S)
+    return limpiar(leer_json(respuesta), giros)
+
+
+def leer_json(texto: str) -> dict:
+    """El objeto JSON de la respuesta del modelo; {} si no trae uno."""
+    m = re.search(r"\{.*\}", texto, re.S)
     try:
-        return limpiar(json.loads(m.group(0)) if m else {}, giros)
+        datos = json.loads(m.group(0)) if m else {}
     except ValueError:
         return {}
+    return datos if isinstance(datos, dict) else {}
 
 
 # --- lo que ve Tu empresa ---
 
 async def sugerencias(c: Cuenta) -> dict:
-    """La última lectura: {"url", "fecha", "campos", "paginas", "shopify"} o {"error"}; {} si no hay."""
+    """La última lectura: {"url", "fecha", "campos", "paginas", "shopify", "marca"?} o {"error"}; {} si no hay."""
     return json.loads(await c.store.get(CLAVE) or "{}")
 
 
@@ -347,18 +354,27 @@ async def _contar(c: Cuenta) -> None:
     await c.store.set(CLAVE_USOS, json.dumps({"dia": dia, "n": n}))
 
 
-async def llenar(c: Cuenta, url: str, giros: list[str]) -> dict:
-    """Lee el sitio y guarda lo que encontró como sugerencias (o el error, para la página)."""
+async def llenar(c: Cuenta, url: str, giros: list[str], visual=None) -> dict:
+    """Lee el sitio y guarda lo que encontró como sugerencias (o el error, para la página). `visual(c, sitio)`
+    agrega lo de Tu marca (sitio_marca.sugerir) cuando el plan lo incluye; si falla, lo demás se conserva."""
     try:
         if await quedan(c) <= 0:
             raise ErrorSitio(f"Ya leíste tu sitio {USOS_POR_DIA} veces hoy. Intenta de nuevo mañana.")
         sitio = await recorrer(url)
         await _contar(c)
         campos = await extraer(c, sitio, giros)
-        if not campos:
+        marca = {}
+        if visual:
+            try:
+                marca = await visual(c, sitio)
+            except Exception:
+                log.exception("No se pudo leer el aspecto del sitio de %s", c.slug or "la principal")
+        if not campos and not marca:
             raise ErrorSitio("Leímos tu sitio, pero no encontramos datos de tu empresa para sugerirte.")
         datos = {"url": sitio["url"], "fecha": int(time.time()), "campos": campos, "shopify": sitio["shopify"],
                  "paginas": [p["url"] for p in sitio["paginas"]]}
+        if marca:
+            datos["marca"] = marca
         log.info("Sitio de %s leído: %d páginas, %d campos", c.slug or "la principal", len(sitio["paginas"]),
                  len(campos))
     except ErrorSitio as e:
