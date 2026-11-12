@@ -32,7 +32,8 @@ from html import escape
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from . import config, contenido, marco, panel, posicionamiento, shopify, sitio
+from . import config, contenido, imagenes, marco, panel, posicionamiento, shopify, sitio, sitio_marca
+from .estilos import COLORES, ESTILOS, LETRAS
 from .cuenta import Cuenta, usar
 
 log = logging.getLogger("igbot.empresa")
@@ -739,6 +740,11 @@ main.emp{color:var(--claro);padding-bottom:4rem}
 .shop>input{accent-color:var(--acento);width:1.1rem;height:1.1rem;margin:0}
 .shop label{font-weight:600}.shop small{grid-column:2;color:var(--gris);font-size:.8rem}
 .shop .precio{font-weight:600;white-space:nowrap}.shop.ya{opacity:.55}
+.sug-colores{display:flex;flex-wrap:wrap;gap:.6rem 1rem}
+.sug-color{display:flex;align-items:center;gap:.5rem;font-size:.88rem;color:var(--gris)}.sug-color label{margin:0}
+.sug-color input{width:var(--toque);height:var(--toque);padding:0;border:1px solid #3A3C42;border-radius:.6rem;background:none;cursor:pointer}
+.sug-dato{margin:0;font-weight:600}
+.sug-logo{max-width:9rem;max-height:6rem;border-radius:.6rem;background:#fff;padding:.4rem;object-fit:contain}
 .leidas{font-size:.8rem;color:var(--gris);margin:1rem 0 0;word-break:break-all}
 """
 
@@ -1219,7 +1225,8 @@ async def llenar_web(c: Cuenta, e: dict) -> HTMLResponse:
     url = e["sitio_web"]
 
     async def correr():
-        await sitio.llenar(c, url, GIROS)
+        sitio_marca.quitar_logo(c, (await sitio.sugerencias(c)).get("marca", {}).get("logo", ""))  # el de la vez anterior
+        await sitio.llenar(c, url, GIROS, visual=sitio_marca.sugerir if c.imagenes_mes > 0 else None)
         yield "/panel/empresa/sitio"
 
     return await marco.trabajo_largo(c, "sitio_web", "Leyendo tu sitio web",
@@ -1244,8 +1251,70 @@ def _sugerencia(k: str, etiqueta: str, valor: str, ahora: str) -> str:
             f'<label for="u-{k}" class="t">{escape(etiqueta)}</label><div class="dato">{campo}{ahora_}</div></div>')
 
 
-def pagina_sugerencias(e: dict, datos: dict) -> str:
-    campos = datos["campos"]
+def _fila_marca(k: str, etiqueta: str, dato: str, ya: bool) -> str:
+    """Una fila de Tu marca: marcada si aún no la tiene."""
+    return (f'<div class="sug"><input type="checkbox" id="um-{k}" name="usar_marca" value="{k}"{"" if ya else " checked"}>'
+            f'<label for="um-{k}" class="t">{etiqueta}</label><div class="dato">{dato}'
+            + ('<p class="ahora">Ya tienes esto en Tu marca; márcalo para cambiarlo.</p>' if ya else "") + "</div></div>")
+
+
+def caja_marca(c: Cuenta, marca: dict, sug: dict) -> str:
+    """Lo que el sitio dice de su aspecto (sitio_marca): colores, tipografía, estilo sugerido y logotipo."""
+    filas = ""
+    if colores := sug.get("colores"):
+        nombres = {k: nombre for k, nombre, _ in COLORES}
+        muestras = "".join(
+            f'<span class="sug-color"><input type="color" id="m-{k}" name="m_{k}" value="{escape(v)}">'
+            f'<label for="m-{k}">{nombres[k]}</label></span>'
+            for k, v in colores.items() if k in nombres and imagenes.HEX.match(str(v)))
+        filas += _fila_marca("colores", "Tus colores", f'<div class="sug-colores">{muestras}</div>',
+                             bool(imagenes.HEX.match(str(marca.get("principal", "")))))
+    if (fuente := sug.get("fuente")) in LETRAS:
+        de = f'<p class="ahora">La más parecida a la de tu sitio ({escape(str(sug.get("fuente_sitio", "")))}).</p>'
+        igual = str(sug.get("fuente_sitio", "")).lower() == fuente.lower()
+        filas += _fila_marca("fuente", "Tu tipografía", f'<p class="sug-dato">{escape(fuente)} · {LETRAS[fuente][1]}</p>'
+                             + ("" if igual or not sug.get("fuente_sitio") else de), bool(marca.get("fuente")))
+    if estilos := [k for k in sug.get("estilos", []) if k in ESTILOS]:
+        filas += _fila_marca("estilos", "Tu estilo visual",
+                             f'<p class="sug-dato">{" · ".join(ESTILOS[k][0] for k in estilos)}</p>'
+                             '<p class="ahora">Es nuestra sugerencia a partir de tu sitio.</p>',
+                             bool(contenido.estilos_de(marca)))
+    if (logo := sug.get("logo")) and contenido.archivo(c, logo).is_file():
+        filas += _fila_marca("logo", "Tu logotipo",
+                             f'<img class="sug-logo" src="{contenido.url_imagen(c, logo)}" alt="El logotipo de tu sitio">',
+                             bool(marca.get("logo")))
+    return f'<div class="caja-o"><h3>Tu marca</h3>{filas}</div>' if filas else ""
+
+
+async def usar_marca(c: Cuenta, f, sug: dict) -> bool:
+    """Pasa a Tu marca lo marcado; el logo sugerido que no se usa se borra. True si cambió algo."""
+    marcados = set(f.getlist("usar_marca"))
+    antes = await contenido.marca_de(c)
+    marca = dict(antes)
+    if "colores" in marcados:
+        for k, v in sug.get("colores", {}).items():
+            if k in {x for x, *_ in COLORES}:
+                elegido = str(f.get(f"m_{k}", "")).strip().upper()
+                marca[k] = elegido if imagenes.HEX.match(elegido) else v
+    if "fuente" in marcados and (fuente := sug.get("fuente")) in LETRAS:
+        marca["fuente"], marca["peso"] = fuente, LETRAS[fuente][0]
+    if "estilos" in marcados and (estilos := [k for k in sug.get("estilos", []) if k in ESTILOS]):
+        marca["estilos"] = estilos
+        marca.pop("estilo", None)
+    logo = sug.get("logo", "")
+    if "logo" in marcados and logo and contenido.archivo(c, logo).is_file():
+        sitio_marca.quitar_logo(c, antes.get("logo", ""))
+        marca["logo"] = logo
+    else:
+        sitio_marca.quitar_logo(c, logo)
+    if marca == antes:
+        return False
+    await c.store.set("marca", json.dumps(marca, ensure_ascii=False))
+    return True
+
+
+def pagina_sugerencias(e: dict, datos: dict, marca: str = "") -> str:
+    campos = datos.get("campos", {})
     cajas = []
     for n in ORDEN:
         filas = "".join(_sugerencia(k, etiqueta, campos[k], nombre_giro(e) if k == "giro" else str(e.get(k, "")))
@@ -1266,7 +1335,7 @@ def pagina_sugerencias(e: dict, datos: dict) -> str:
         '<div class="cab-paso"><p class="antetitulo">Desde tu sitio web</p><h2>Lo que encontramos en tu sitio</h2>'
         "<p>Revisa cada dato, corrígelo si hace falta y marca lo que quieres usar. Lo que ya tenías solo cambia si"
         " lo marcas. Nada se guarda hasta que pulses Usar lo marcado.</p></div>"
-        + "".join(cajas) + f'<p class="leidas">Páginas que leímos: {leidas}</p>'
+        + "".join(cajas) + marca + f'<p class="leidas">Páginas que leímos: {leidas}</p>'
         + '<div class="pie-config"><button class="boton secundario" name="accion" value="descartar">Descartar</button>'
         '<span class="pie-nota"></span><span class="pie-der">'
         '<button class="boton" name="accion" value="usar">Usar lo marcado</button></span></div>'
@@ -1286,7 +1355,8 @@ async def ver_sitio(c: marco.Sesion):
                   '<div class="pie-paso"><span class="der"><a class="boton" href="/panel/empresa?paso=1">'
                   "Volver a tu empresa</a></span></div>")
     else:
-        cuerpo = (f'<form method="post" action="/panel/empresa/sitio">{pagina_sugerencias(e, datos)}</form>')
+        marca = caja_marca(c, await contenido.marca_de(c), datos.get("marca", {})) if c.imagenes_mes > 0 else ""
+        cuerpo = (f'<form method="post" action="/panel/empresa/sitio">{pagina_sugerencias(e, datos, marca)}</form>')
     return marco.pagina(
         f"<style>{ESTILO}</style>"
         + await marco.menu_de(c, "cuenta", sub="empresa")
@@ -1298,14 +1368,16 @@ async def ver_sitio(c: marco.Sesion):
 async def usar_sitio(request: Request, c: marco.Formulario):
     f = await request.form()
     datos = await sitio.sugerencias(c)
-    if f.get("accion") != "usar" or not datos.get("campos"):
+    sug_marca = datos.get("marca", {}) if c.imagenes_mes > 0 else {}
+    if f.get("accion") != "usar" or not (datos.get("campos") or sug_marca):
+        sitio_marca.quitar_logo(c, datos.get("marca", {}).get("logo", ""))
         await sitio.borrar(c)
         return RedirectResponse("/panel/empresa?paso=1", status_code=303)
     antes = await de(c)
     e = dict(antes or await precarga(c))
     usar = set(f.getlist("usar"))
     for k, _, _ in SUGERIBLES:
-        if k in usar and k in datos["campos"]:
+        if k in usar and k in datos.get("campos", {}):
             valor = str(f.get(f"s_{k}", "")).strip()[:MAXIMOS.get(k, 300)]
             if k == "giro":
                 if valor in GIROS:
@@ -1320,6 +1392,8 @@ async def usar_sitio(request: Request, c: marco.Formulario):
             faq.append({"p": p_, "r": r_})
     e["faq"] = faq
     await sitio.borrar(c)
+    if await usar_marca(c, f, sug_marca):
+        log.info("@%s llenó Tu marca con su sitio web", await marco.usuario(c))
     if e != antes:
         await antes_de_guardar(c)
         e["actualizado"] = int(time.time())
