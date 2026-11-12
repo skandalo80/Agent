@@ -188,3 +188,55 @@ def test_el_plan_community_trae_10_dolares_de_contenido():
     assert Cuenta.desde_env("x", env).contenido_usd_mes == 10
     assert Cuenta.desde_env("x", {**env, "CONTENT_BUDGET_USD_MONTH": "25"}).contenido_usd_mes == 25
     assert Cuenta.desde_env("x", {"IG_ACCESS_TOKEN": "t"}).contenido_usd_mes == 0
+
+
+def test_la_principal_no_tiene_topes_de_contenido(monkeypatch):
+    """La cuenta principal (@skandar.online) es la de pruebas del dueño: crea campañas, anuncios e imágenes aunque
+    pase el cupo, el presupuesto del mes y los topes por día u hora. Un cliente con los mismos números se frena."""
+    import dataclasses
+
+    from igbot import campanas, contenido, imagenes
+    from igbot.cuenta import usar
+
+    monkeypatch.setattr(limites.config, "PRINCIPAL_SIN_TOPES", True)
+    monkeypatch.setattr(limites.config, "GENERACIONES_HORA", 1)
+    monkeypatch.setattr(campanas, "IA_POR_DIA", 1)
+
+    async def main():
+        principal = dataclasses.replace(cuenta(), slug="", imagenes_mes=1, contenido_usd_mes=1.0,
+                                        store=await new_store(monkeypatch))
+        cliente = dataclasses.replace(principal, slug="cafe", store=Store(":memory:"))
+        await cliente.store.open()
+        for c in (principal, cliente):
+            with usar(c):
+                await limites.add_cost(2.0)  # ya pasó su presupuesto del mes
+                await imagenes.reservar(c.store, permitir_extra=True)  # y su cupo de imágenes
+                await campanas.usar_ia(c)
+            await limites.cabe_generacion(c.store, ahora=10, c=c)
+        # La principal: sin tope.
+        assert limites.sin_topes(principal) and not limites.sin_topes(cliente)
+        with usar(principal):
+            assert not await limites.sin_presupuesto(principal.store)
+            assert await imagenes.reservar(principal.store) == "incluida"
+        assert not await campanas.sin_presupuesto(principal)
+        assert await campanas.ia_restantes(principal) == campanas.SIN_LIMITE
+        assert await contenido.falta_cupo(principal, False) == ""
+        assert await limites.cabe_generacion(principal.store, ahora=11, c=principal)
+        # El cliente: sus topes siguen igual.
+        with usar(cliente):
+            assert await limites.sin_presupuesto(cliente.store)
+            try:
+                await imagenes.reservar(cliente.store)
+                raise AssertionError("debió frenarse")
+            except imagenes.SinCupo:
+                pass
+        assert await campanas.sin_presupuesto(cliente) and await campanas.ia_restantes(cliente) == 0
+        assert await contenido.falta_cupo(cliente, False) == "extra"
+        assert not await limites.cabe_generacion(cliente.store, ahora=11, c=cliente)
+        # Con PRINCIPAL_SIN_TOPES=0 la principal vuelve a tener topes.
+        monkeypatch.setattr(limites.config, "PRINCIPAL_SIN_TOPES", False)
+        assert not limites.sin_topes(principal) and await campanas.sin_presupuesto(principal)
+        await principal.store.close()
+        await cliente.store.close()
+
+    asyncio.run(main())

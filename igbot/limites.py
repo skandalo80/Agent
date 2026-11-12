@@ -18,7 +18,7 @@ import contextvars
 import logging
 
 from . import config, tools
-from .cuenta import cuenta
+from .cuenta import Cuenta, cuenta
 from .store import Store
 
 log = logging.getLogger("igbot.limites")
@@ -92,10 +92,17 @@ async def replies_today(db: Store, user_id: str) -> int:
     return await db.bot_replies_since(user_id, today_start())
 
 
-async def cabe_generacion(store: Store, ahora: float | None = None) -> bool:
-    """True si la cuenta puede pedir otra generación de texto con IA desde el panel esta hora (y la anota)."""
+def sin_topes(c: Cuenta | None = None) -> bool:
+    """True para la cuenta principal (@skandar.online, slug vacío): genera contenido aunque pase cupos, presupuesto y
+    topes por día u hora (decisión del dueño 2026-11-10; config.PRINCIPAL_SIN_TOPES). Sin `c`, la cuenta actual."""
+    return config.PRINCIPAL_SIN_TOPES and not (c or cuenta()).slug
+
+
+async def cabe_generacion(store: Store, ahora: float | None = None, c: Cuenta | None = None) -> bool:
+    """True si la cuenta puede pedir otra generación de texto con IA desde el panel esta hora (y la anota).
+    Las rutas la llaman fuera de `usar(c)`: pasan su cuenta para saber si es la principal."""
     from . import config, unavez
-    if config.GENERACIONES_HORA <= 0:
+    if config.GENERACIONES_HORA <= 0 or (c is not None and sin_topes(c)):
         return True
     return await unavez.cabe(store, "generaciones", config.GENERACIONES_HORA, config.HORA, ahora)
 
@@ -145,9 +152,10 @@ async def gasto_contenido_mes(store: Store) -> float:
 
 
 async def presupuesto_restante(store: Store) -> float | None:
-    """US$ que le quedan a la cuenta este mes para crear contenido; None si su plan no tiene tope."""
+    """US$ que le quedan a la cuenta este mes para crear contenido; None si su plan no tiene tope (o es la
+    principal: sin_topes)."""
     tope = cuenta().contenido_usd_mes
-    if tope <= 0:
+    if tope <= 0 or sin_topes():
         return None
     return max(0.0, tope - await gasto_contenido_mes(store))
 

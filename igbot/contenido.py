@@ -503,6 +503,8 @@ async def escribir(c: Cuenta, objetivo: str, tema: str, n_fotos: int, con_precio
 
 async def falta_cupo(c: Cuenta, extra: bool) -> str:
     """'' si se puede generar; 'plan' si su plan no tiene contenido; 'extra' si hay que confirmar el cobro."""
+    if limites.sin_topes(c):  # la principal genera aunque pase el cupo y el presupuesto
+        return ""
     if c.imagenes_mes <= 0:
         return "plan"
     with usar(c):  # el mes es el de la zona horaria de la cuenta

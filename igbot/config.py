@@ -35,6 +35,10 @@ SESSION_SECRET = os.getenv("SESSION_SECRET", "").strip() or APP_SECRET
 # Generaciones de texto con IA (brief, plan, posts, opciones) por cuenta y hora desde el panel: frena el gasto si
 # alguien pulsa Generar sin parar. 0 = sin tope.
 GENERACIONES_HORA = int(os.getenv("GENERACIONES_HORA", "20"))
+# La cuenta principal (@skandar.online) es la de pruebas del dueño: crea campañas, anuncios e imágenes aunque pase
+# el cupo de imágenes, el presupuesto de contenido y los topes por día u hora (limites.sin_topes). Los clientes
+# siguen con los topes de su plan. 0 = la principal tiene topes como cualquier cliente (así corren las pruebas).
+PRINCIPAL_SIN_TOPES = os.getenv("PRINCIPAL_SIN_TOPES", "1").strip() not in ("", "0")
 # Tu marca › Personaje: cuántas veces al mes puede una cuenta «Dar vida» a su personaje (cada vez son dos
 # imágenes de GPT Image: el personaje en 3D y su hoja de poses). No usa el cupo de imágenes del plan.
 PERSONAJE_VIDAS_MES = int(os.getenv("PERSONAJE_VIDAS_MES", "3"))

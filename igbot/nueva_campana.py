@@ -1308,7 +1308,7 @@ async def crear_rapida(request: Request, c: marco.Formulario):
         anteriores = await campanas.informe.todas(c, todas)
         fotos = len(campanas.fotos_marca(c, await marca_de(c)))
     camp = {**datos, "id": int(time.time() * 1000), "posts": [], "creada": time.time()}
-    if not await limites.cabe_generacion(c.store):
+    if not await limites.cabe_generacion(c.store, c=c):
         return await pagina_rapida(c, limites.TOPE_GENERACIONES, b)
 
     async def trabajo():
