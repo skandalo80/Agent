@@ -25,7 +25,13 @@
 .cfg-pie{display:flex;gap:.6rem;justify-content:flex-end;flex-wrap:wrap}
 .cfg-pie.fin{justify-content:flex-start}
 .cfg-pie .boton,.cfg-camino .boton,.cfg-sitio .boton{min-height:var(--toque);display:inline-flex;align-items:center;justify-content:center}
-.cfg-otro{margin:0;font-size:.88rem}.cfg-otro a{color:var(--gris);display:inline-flex;align-items:center;min-height:var(--toque)}
+.cfg-otro{margin:0;font-size:.88rem;display:flex;flex-wrap:wrap;gap:0 1.5rem}
+.cfg-otro a,.cfg-otro button{color:var(--gris);display:inline-flex;align-items:center;min-height:var(--toque)}
+.cfg-otro button{background:none;border:0;padding:0;font:inherit;text-decoration:underline;cursor:pointer}
+.cfg-caminos+.cfg-otro{margin-top:.5rem}
+.cfg-campana{display:flex;flex-wrap:wrap;align-items:center;gap:.8rem var(--cfg-hueco);margin:0 0 var(--cfg-hueco);padding:1rem 1.25rem;border-radius:1.25rem;background:var(--claro)}
+.cfg-campana p{margin:0;flex:1 1 16rem}.cfg-campana a:not(.boton){color:inherit}
+.cfg-campana .boton{min-height:var(--toque);display:inline-flex;align-items:center}
 .despues button{min-height:var(--toque)}
 .oculto-a11y{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
 @media(max-width:700px){.cfg-caminos{grid-template-columns:1fr}.cfg-sitio>div{flex-direction:column}.cfg-pie .boton{flex:1}}

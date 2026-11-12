@@ -23,7 +23,8 @@ from PIL import Image
 from . import config, sitio
 from .contenido import archivo, png_logo, preparar_foto, preparar_logo
 from .cuenta import Cuenta, usar
-from .estilos import COLORES, ESTILOS, LETRAS, MAX_ESTILOS
+from .estilos import (COLORES, ESTILOS, LETRAS, MAX_ESTILOS, PALETA_INICIAL, PALETAS, RECOMENDADOS,
+                      RECOMENDADOS_INICIAL)
 
 log = logging.getLogger("igbot.sitio_marca")
 
@@ -305,8 +306,24 @@ def limpiar(datos: dict, visual: dict) -> dict:
     return out
 
 
-async def sugerir(c: Cuenta, sitio_: dict) -> dict:
-    """{"colores": {...}, "fuente", "fuente_sitio", "estilos": [...], "logo": token}: lo que haya salido."""
+def completar(out: dict, campos: dict) -> dict:
+    """Lo mínimo de Tu marca para crear una campaña solo con la página leída: si el sitio no dio estilo o
+    colores, se proponen los recomendados para su giro y la paleta inicial, marcados como propuesta nuestra
+    (`estilos_por`, `colores_por`) para que la página lo diga. Sin datos de la empresa no se propone nada."""
+    if not campos:
+        return out
+    if not out.get("estilos"):
+        out["estilos"] = list(RECOMENDADOS.get(campos.get("giro"), RECOMENDADOS_INICIAL))[:MAX_ESTILOS]
+        out["estilos_por"] = "giro" if campos.get("giro") in RECOMENDADOS else "inicial"
+    if not out.get("colores"):
+        out["colores"] = dict(zip(CLAVES_COLOR, PALETAS[PALETA_INICIAL][2]))
+        out["colores_por"] = "paleta"
+    return out
+
+
+async def sugerir(c: Cuenta, sitio_: dict, campos: dict | None = None) -> dict:
+    """{"colores": {...}, "fuente", "fuente_sitio", "estilos": [...], "logo": token}: lo que haya salido.
+    `campos` es lo que se leyó de la empresa: con ellos, lo que falte para una campaña se propone (completar)."""
     visual = await leer(sitio_)
     out = {}
     if visual["colores"] or visual["fuentes"]:
@@ -318,5 +335,6 @@ async def sugerir(c: Cuenta, sitio_: dict) -> dict:
         out = limpiar(sitio.leer_json(respuesta), visual)
     if logo := await guardar_logo(c, visual["logos"]):
         out["logo"] = logo
+    out = completar(out, campos or {})
     log.info("ADN visual del sitio de %s: %s", c.slug or "la principal", ", ".join(out) or "nada")
     return out

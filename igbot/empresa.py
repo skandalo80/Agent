@@ -1302,7 +1302,9 @@ def caja_marca(c: Cuenta, marca: dict, sug: dict) -> str:
             f'<span class="sug-color"><input type="color" id="m-{k}" name="m_{k}" value="{escape(v)}">'
             f'<label for="m-{k}">{nombres[k]}</label></span>'
             for k, v in colores.items() if k in nombres and imagenes.HEX.match(str(v)))
-        filas += _fila_marca("colores", "Tus colores", f'<div class="sug-colores">{muestras}</div>',
+        nota = ('<p class="ahora">No encontramos colores claros en tu sitio. Te proponemos esta paleta para empezar;'
+                " cámbiala aquí o después en Tu marca.</p>" if sug.get("colores_por") else "")
+        filas += _fila_marca("colores", "Tus colores", f'<div class="sug-colores">{muestras}</div>{nota}',
                              bool(imagenes.HEX.match(str(marca.get("principal", "")))))
     if (fuente := sug.get("fuente")) in LETRAS:
         de = f'<p class="ahora">La más parecida a la de tu sitio ({escape(str(sug.get("fuente_sitio", "")))}).</p>'
@@ -1312,7 +1314,9 @@ def caja_marca(c: Cuenta, marca: dict, sug: dict) -> str:
     if estilos := [k for k in sug.get("estilos", []) if k in ESTILOS]:
         filas += _fila_marca("estilos", "Tu estilo visual",
                              f'<p class="sug-dato">{" · ".join(ESTILOS[k][0] for k in estilos)}</p>'
-                             '<p class="ahora">Es nuestra sugerencia a partir de tu sitio.</p>',
+                             + ('<p class="ahora">Es nuestra sugerencia para tu giro; cámbiala después en Tu marca.</p>'
+                                if sug.get("estilos_por") else
+                                '<p class="ahora">Es nuestra sugerencia a partir de tu sitio.</p>'),
                              bool(contenido.estilos_de(marca)))
     if (logo := sug.get("logo")) and contenido.archivo(c, logo).is_file():
         filas += _fila_marca("logo", "Tu logotipo",
@@ -1426,6 +1430,14 @@ async def usar_sitio(request: Request, c: marco.Formulario):
             ya.add(p_.lower())
             faq.append({"p": p_, "r": r_})
     e["faq"] = faq
+    # Con solo la página leída ya se puede crear una campaña: si aprobó nombre y descripción pero el sitio no dejó
+    # claro el giro, queda en "Otro" (lo escribe después), y el perfil cuenta como terminado para que se preparen
+    # sus opciones de campaña. Lo demás lo llena cuando quiera.
+    if not e.get("giro") and all(str(e.get(k, "")).strip() for k in ("nombre", "descripcion")):
+        e["giro"] = OTRO
+    recien = lista(e) and not e.get("terminado")
+    if recien:
+        e["terminado"] = True
     await sitio.borrar(c)
     if await usar_marca(c, f, sug_marca):
         log.info("@%s llenó Tu marca con su sitio web", await marco.usuario(c))
@@ -1433,7 +1445,7 @@ async def usar_sitio(request: Request, c: marco.Formulario):
         await antes_de_guardar(c)
         e["actualizado"] = int(time.time())
         await c.store.set(CLAVE, json.dumps(e, ensure_ascii=False))
-        programar_revision(c)
+        programar_revision(c, ya=recien)
         log.info("@%s llenó su perfil de empresa con su sitio web", await marco.usuario(c))
     # Con lo aprobado guardado, elige cómo llenar lo que falta: por chat o con el cuestionario (configurar.py).
     return RedirectResponse("/panel/configurar?aviso=web", status_code=303)

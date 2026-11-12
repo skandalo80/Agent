@@ -25,7 +25,7 @@ from html import escape
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
-from . import config, empresa, marco, sitio, unavez
+from . import config, empresa, marco, nueva_campana, sitio, unavez
 from .cuenta import Cuenta, usar
 
 log = logging.getLogger("igbot.configurar")
@@ -86,7 +86,9 @@ def faltan(e: dict, saltados=()) -> list[str]:
 
 def tenemos(e: dict) -> list[str]:
     """Los nombres de lo que ya está lleno, sin repetir (el giro escrito cuenta como giro)."""
-    return list(dict.fromkeys(NOMBRES[k] for k, *_ in PREGUNTAS if e.get(k) and aplica(k, e)))
+    sin_giro = e.get("giro") == empresa.OTRO and not e.get("giro_otro")  # "Otro" sin escribir cuál: todavía falta
+    return list(dict.fromkeys(NOMBRES[k] for k, *_ in PREGUNTAS
+                              if e.get(k) and aplica(k, e) and not (k == "giro" and sin_giro)))
 
 
 async def estado(c: Cuenta) -> dict:
@@ -221,9 +223,28 @@ async def pagina_chat(c: Cuenta) -> str:
                     '<a class="boton" href="/panel/empresa?paso=6">Revisar mi perfil</a>')
         pie = ('<div class="cfg-pie fin"><a class="boton secundario" href="/panel/empresa?paso=3">Agregar productos</a>'
                f'<a class="boton secundario" href="/panel/empresa?paso=5">Agregar preguntas frecuentes</a>{terminar}</div>')
-    otro = '<p class="cfg-otro"><a href="/panel/empresa">Seguir en el cuestionario</a></p>' if pendientes else ""
+    otro = ('<form method="post" action="/panel/configurar/despues" class="cfg-otro">'
+            f'<a href="/panel/empresa">Seguir en el cuestionario</a>{DESPUES}</form>' if pendientes else "")
     return (f'<div class="chat cfg-chat">{avance(e, datos["saltados"])}<div class="cfg-mensajes">{burbujas}</div>'
             f'<div id="fin">{pie}</div>{otro}</div>')
+
+
+DESPUES = '<button name="accion" value="despues">Llenar más tarde</button>'
+
+
+async def para_campana(c: Cuenta) -> str:
+    """Si con lo que ya hay se puede crear una campaña (nueva_campana.lista_para_empezar) o qué le falta. Solo
+    en planes con contenido."""
+    if c.imagenes_mes <= 0:
+        return ""
+    hay_empresa, hay_marca = await nueva_campana.lista_para_empezar(c)
+    if hay_empresa and hay_marca:
+        return ('<div class="cfg-campana"><p>Con lo que ya tenemos puedes crear tu primera campaña. Lo demás lo'
+                " llenas cuando quieras.</p>"
+                f'<a class="boton" href="{nueva_campana.URL}">Crear campaña</a></div>')
+    falta = ([] if hay_empresa else ["el nombre, el giro y la descripción de tu empresa"]) + (
+        [] if hay_marca else ['un estilo y tus colores en <a href="/panel/contenido/marca">Tu marca</a>'])
+    return f'<div class="cfg-campana"><p>Para crear una campaña falta {" y ".join(falta)}.</p></div>'
 
 
 def _lista(nombres: list[str]) -> str:
@@ -247,7 +268,8 @@ async def pagina_elegir(c: Cuenta, aviso: str = "") -> str:
             '<a class="boton" href="/panel/configurar/chat#fin">Llenar por chat</a></div>'
             '<div class="cfg-camino"><h3>Con el cuestionario</h3>'
             "<p>Ves todos los campos por pasos y llenas los que quieras.</p>"
-            '<a class="boton secundario" href="/panel/empresa">Ir al cuestionario</a></div></div>')
+            '<a class="boton secundario" href="/panel/empresa">Ir al cuestionario</a></div></div>'
+            f'<form method="post" action="/panel/configurar/despues" class="cfg-otro">{DESPUES}</form>')
     listas = ""
     if ya:
         listas += f'<div class="cfg-lista"><h3>Ya tenemos</h3><ul class="cfg-ya">{_lista(ya)}</ul></div>'
@@ -261,7 +283,7 @@ async def pagina_elegir(c: Cuenta, aviso: str = "") -> str:
         '<button class="boton secundario">Leer mi página</button></div></form>')
     return ((f'<div class="aviso">{escape(aviso)}</div>' if aviso else "")
             + f'<div class="tarjeta cfg"><div class="cab-paso"><p class="antetitulo">Tu empresa</p><h2>{titulo}</h2></div>'
-            f'{sin_sitio}<div class="cfg-listas">{listas}</div>{cuerpo}</div>')
+            f'{sin_sitio}<div class="cfg-listas">{listas}</div>{await para_campana(c)}{cuerpo}</div>')
 
 
 async def _pagina(c: Cuenta, cuerpo: str):
@@ -287,6 +309,13 @@ async def leer_sitio(request: Request, c: marco.Formulario):
         return RedirectResponse("/panel/configurar?aviso=sitio", status_code=303)
     e = await empresa.guardar_campos(c, {"sitio_web": url})
     return await empresa.llenar_web(c, e)
+
+
+@router.post("/despues")
+async def llenar_despues(c: marco.Formulario):
+    """"Llenar más tarde": lo guardado se queda y la bienvenida ya no le pide su perfil; lo retoma desde Tu empresa."""
+    await c.store.set("bienvenida_empresa", "omitida")
+    return RedirectResponse("/panel", status_code=303)
 
 
 @router.get("/chat")

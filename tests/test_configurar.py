@@ -2,7 +2,7 @@
 import json
 
 import app as bot  # noqa: E402
-from igbot import configurar, empresa  # noqa: E402
+from igbot import configurar, empresa, nueva_campana  # noqa: E402
 import test_contenido  # noqa: E402
 from test_contenido import ORIGEN  # noqa: E402
 from test_panel import campos_con_nombre  # noqa: E402
@@ -16,6 +16,7 @@ def test_sin_sesion_y_sin_origen(cliente):
     client, *_ = cliente
     assert client.post(CHAT, data={"texto": "x"}).status_code == 403  # sin Origin
     assert client.post("/panel/configurar/sitio", data={"sitio_web": "cafelunar.mx"}).status_code == 403
+    assert client.post("/panel/configurar/despues").status_code == 403
     client.cookies.clear()
     for ruta in ("/panel/configurar", CHAT):
         r = client.get(ruta, follow_redirects=False)
@@ -146,3 +147,50 @@ def test_al_terminar_lleva_a_las_pantallas(cliente, monkeypatch):
     assert 'name="accion" value="terminar"' in r.text and "<textarea" not in r.text
     assert "Tu perfil ya tiene lo esencial" in client.get("/panel/configurar").text
     client.portal.call(empresa.esperar_revision, c)
+
+
+def test_con_solo_la_pagina_se_puede_crear_una_campana(cliente, web, monkeypatch):
+    """El sitio no dice el giro ni deja ver colores: se proponen y, al aprobar, ya puede crear su campaña."""
+    client, c, *_ = cliente
+    monkeypatch.setattr(c, "imagenes_mes", 40)
+
+    async def fake_claude(prompt, system, mcp=None, allowed=(), max_turns=5, model=None):
+        return json.dumps({"nombre": "Café Lunar", "descripcion": "Tostamos nuestro café cada semana."})
+
+    monkeypatch.setattr(bot.agent, "run_claude", fake_claude)
+    assert client.portal.call(nueva_campana.lista_para_empezar, c) == (False, False)
+    r = client.get("/panel/configurar")
+    assert "Para crear una campaña falta" in r.text and "Crear campaña</a>" not in r.text
+    client.post("/panel/configurar/sitio", headers=ORIGEN, data={"sitio_web": "cafelunar.mx"})
+    r = client.get("/panel/empresa/sitio")
+    assert "Te proponemos esta paleta" in r.text and "nuestra sugerencia para tu giro" in r.text
+    campos_con_nombre(r.text)
+    client.post("/panel/empresa/sitio", headers=ORIGEN, follow_redirects=False,
+                data={"accion": "usar", "usar": ["nombre", "descripcion"], "s_nombre": "Café Lunar",
+                      "s_descripcion": "Tostamos nuestro café cada semana.", "usar_marca": ["colores", "estilos"]})
+    e = client.portal.call(empresa.de, c)
+    assert e["giro"] == empresa.OTRO and e["terminado"] is True
+    assert client.portal.call(nueva_campana.lista_para_empezar, c) == (True, True)
+    r = client.get("/panel/configurar")
+    assert "puedes crear tu primera campaña" in r.text and f'href="{nueva_campana.URL}"' in r.text
+    assert "Llenar más tarde" in r.text and r.text.count("<li>Giro</li>") == 1  # "Otro" sin escribir: aún falta
+    client.portal.call(empresa.esperar_revision, c)
+
+
+def test_llenar_mas_tarde(cliente, monkeypatch):
+    client, c, *_ = cliente
+    assert "Llenar más tarde" in client.get(CHAT).text
+    r = client.post("/panel/configurar/despues", headers=ORIGEN, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/panel"
+    assert client.portal.call(c.store.get, "bienvenida_empresa") == "omitida"
+    r = client.get("/panel", follow_redirects=False)  # la bienvenida ya no le pide su perfil
+    assert r.status_code in (200, 303) and "configurar" not in r.headers.get("location", "")
+
+
+def test_sin_datos_de_la_empresa_no_se_propone_marca():
+    from igbot import sitio_marca
+    assert sitio_marca.completar({}, {}) == {}
+    out = sitio_marca.completar({}, {"nombre": "Café", "giro": "Restaurante o cafetería"})
+    assert out["estilos"] and out["estilos_por"] == "giro" and out["colores_por"] == "paleta"
+    propio = sitio_marca.completar({"estilos": ["editorial"], "colores": {"principal": "#111111"}}, {"nombre": "x"})
+    assert "estilos_por" not in propio and "colores_por" not in propio
