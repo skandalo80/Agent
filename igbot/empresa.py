@@ -114,7 +114,6 @@ AVISOS = {
     "sin_nombre": "Ponle nombre a tu producto para agregarlo.",
     "listo": "Guardado. En unos segundos tu asistente y tus campañas usan tu perfil.",
     "aplicado": "Cambios aplicados.",
-    "web": "Listo: agregamos lo que elegiste de tu sitio. Revísalo en cada paso.",
     "shopify": "Listo: agregamos a tu catálogo los productos que elegiste de tu tienda.",
 }
 
@@ -349,6 +348,42 @@ def del_form(f, paso: int, antes: dict) -> dict:
             n = 0
         e["faq"] = [{"p": str(f.get(f"faq_p_{i}", "")).strip()[:300], "r": str(f.get(f"faq_r_{i}", "")).strip()[:1000]}
                     for i in range(n)]
+    return e
+
+
+def validar_campo(k: str, valor):
+    """El valor de un campo del perfil, limpio y recortado como lo deja el cuestionario; None si esa clave no
+    se puede llenar así o el valor no es de sus opciones. Lo usa lo que guarda dato por dato (configurar.py)."""
+    for clave, validas, n in (x for lista_ in LISTAS.values() for x in lista_):
+        if k == clave:
+            elegidas = valor if isinstance(valor, (list, tuple)) else [valor]
+            return [v for v in validas if v in elegidas][:n]
+    maximo = next((n for campos in CAMPOS.values() for clave, n in campos if clave == k), 0)
+    if not maximo or k == "pais" or not isinstance(valor, str):
+        return None
+    valor = valor.strip()[:maximo]
+    if k == "giro":
+        return valor if valor in GIROS + [OTRO] else None
+    if k == "clientes_tipo":
+        return valor if valor in dict(CLIENTES) else None
+    if k == "sitio_web":
+        return url_limpia(valor)
+    return valor
+
+
+async def guardar_campos(c: Cuenta, cambios: dict) -> dict:
+    """Guarda esos campos (los que pasan validar_campo) y manda el perfil a su revisión, como al guardar un paso.
+    Devuelve el perfil como quedó."""
+    antes = await de(c)
+    e = dict(antes or await precarga(c))
+    for k, valor in cambios.items():
+        if (limpio := validar_campo(k, valor)) is not None:
+            e[k] = limpio
+    if e != antes:
+        await antes_de_guardar(c)
+        e["actualizado"] = int(time.time())
+        await c.store.set(CLAVE, json.dumps(e, ensure_ascii=False))
+        programar_revision(c)
     return e
 
 
@@ -1400,7 +1435,8 @@ async def usar_sitio(request: Request, c: marco.Formulario):
         await c.store.set(CLAVE, json.dumps(e, ensure_ascii=False))
         programar_revision(c)
         log.info("@%s llenó su perfil de empresa con su sitio web", await marco.usuario(c))
-    return RedirectResponse("/panel/empresa?paso=1&aviso=web", status_code=303)
+    # Con lo aprobado guardado, elige cómo llenar lo que falta: por chat o con el cuestionario (configurar.py).
+    return RedirectResponse("/panel/configurar?aviso=web", status_code=303)
 
 
 # --- importar de Shopify (shopify.py) ---

@@ -1,0 +1,31 @@
+/* Configurar por chat (igbot/configurar.py): elegir cómo llenar lo que falta y la conversación. */
+.cfg-listas{display:grid;grid-template-columns:repeat(auto-fit,minmax(14rem,1fr));gap:var(--cfg-hueco);margin:0 0 var(--cfg-hueco)}
+.cfg-lista h3{margin:0 0 .5rem;font-size:.95rem}
+.cfg-lista ul{margin:0;padding:0;list-style:none;display:flex;flex-wrap:wrap;gap:.4rem}
+.cfg-lista li{padding:.3rem .8rem;border-radius:99px;border:1px solid var(--linea-clara);font-size:.88rem;color:var(--gris)}
+.cfg-lista .cfg-ya li{color:var(--negro)}
+.cfg-lista .cfg-ya li::before{content:"✓";color:var(--acento);font-weight:700;margin-right:.4rem}
+.cfg-caminos{display:grid;grid-template-columns:1fr 1fr;gap:var(--cfg-hueco)}
+.cfg-camino{border:1px solid var(--linea-clara);border-radius:1.25rem;padding:1.25rem;display:flex;flex-direction:column;gap:.5rem}
+.cfg-camino.sugerido{border-color:var(--acento)}
+.cfg-camino h3{margin:0}.cfg-camino p{margin:0 0 .5rem;color:var(--gris);flex:1}
+.cfg-camino .boton{align-self:flex-start}
+.cfg-sitio{margin:0 0 var(--cfg-hueco)}
+.cfg-sitio>div{display:flex;gap:.6rem;margin-top:.4rem}.cfg-sitio .boton{white-space:nowrap}
+.cfg-chat{display:flex;flex-direction:column;gap:var(--cfg-hueco)}
+.cfg-avance{display:flex;align-items:center;gap:.8rem;font-size:.88rem;color:var(--gris)}
+.cfg-barra{flex:1;height:.4rem;border-radius:99px;background:var(--claro);overflow:hidden}
+.cfg-barra i{display:block;height:100%;border-radius:99px;background:var(--neon)}
+.cfg-form{display:grid;gap:.8rem}
+.cfg-ops{display:flex;flex-wrap:wrap;gap:.5rem}
+.cfg-op{position:relative;margin:0;display:inline-flex;align-items:center;min-height:var(--toque);padding:.4rem 1rem;border-radius:99px;border:1px solid var(--linea-clara);background:transparent;color:var(--negro);font:inherit;font-size:.92rem;font-weight:500;cursor:pointer}
+.cfg-op:hover,.cfg-op:has(input:checked){border-color:var(--acento);background:rgba(255,138,61,.12)}
+.cfg-op input{position:absolute;opacity:0;pointer-events:none}
+.cfg-op:has(input:focus-visible){outline:2px solid var(--acento)}
+.cfg-pie{display:flex;gap:.6rem;justify-content:flex-end;flex-wrap:wrap}
+.cfg-pie.fin{justify-content:flex-start}
+.cfg-pie .boton,.cfg-camino .boton,.cfg-sitio .boton{min-height:var(--toque);display:inline-flex;align-items:center;justify-content:center}
+.cfg-otro{margin:0;font-size:.88rem}.cfg-otro a{color:var(--gris);display:inline-flex;align-items:center;min-height:var(--toque)}
+.despues button{min-height:var(--toque)}
+.oculto-a11y{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+@media(max-width:700px){.cfg-caminos{grid-template-columns:1fr}.cfg-sitio>div{flex-direction:column}.cfg-pie .boton{flex:1}}

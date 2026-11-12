@@ -103,6 +103,7 @@
 
   /* Conversaciones: etapa de cada contacto */
   --toque: 2.75rem;            /* alto mínimo de lo que se toca en el celular (44 px) */
+  --cfg-hueco: 1.25rem;        /* separación entre los bloques de Configurar por chat */
   --etapa-caja: 19rem;         /* ancho de la ventanita de Etapa y Marcar venta */
 
   /* Tu marca › Personaje (el personalizador) */

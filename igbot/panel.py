@@ -271,12 +271,19 @@ async def bienvenida(c: Cuenta) -> HTMLResponse:
     """Paso 1: su Perfil de empresa. Paso 2, con contenido (Community Manager): Tu asistente o Tu marca;
     Asistente virtual: solo su asistente. En los dos, "Seguir explorando" entra al panel."""
     if await paso_empresa(c):
-        cuerpo = ('<div class="sola">' + camino(
-            f"Hola, @{escape(await marco.usuario(c))}", "Perfil de empresa",
-            "Antes de configurar tu asistente o tus posts, cuéntanos de tu empresa: lo que tu asistente responde y"
-            " lo que dicen tus posts sale de aquí. Lo llenas una vez, sirve para todo y puedes guardar y seguir después.",
-            PASOS_EMPRESA, "≈ 8 min", "Llenar mi perfil de empresa", "/panel/empresa", True)
-            + '<form class="despues" method="post" action="/panel/bienvenida">'
+        # Primero su página web: de ahí sale casi todo. Sin página, elige cómo llenar su perfil (configurar.py).
+        cuerpo = (
+            f'<div class="sola"><div class="camino sugerido"><span class="num">Hola, @{escape(await marco.usuario(c))}</span>'
+            '<h2>Perfil de empresa</h2><p class="ayuda">Lo que tu asistente responde y lo que dicen tus posts sale de'
+            " aquí. Si tienes página web, la leemos y te mostramos lo que encontramos para que lo apruebes; después"
+            " llenas solo lo que falte.</p>"
+            '<form method="post" action="/panel/configurar/sitio" class="cfg-sitio">'
+            '<label for="bienv-sitio">¿Tienes página web?</label>'
+            '<div><input type="text" id="bienv-sitio" name="sitio_web" inputmode="url" autocapitalize="off"'
+            ' placeholder="tusitio.com" maxlength="200" required><button class="boton">Leer mi página</button></div></form>'
+            '<div class="acciones"><a class="boton secundario" href="/panel/configurar">No tengo página web</a>'
+            '<a class="boton secundario" href="/panel/empresa">Ir al cuestionario</a></div></div>'
+            '<form class="despues" method="post" action="/panel/bienvenida">'
             '<button name="accion" value="omitir">Omitir por ahora, lo lleno después</button></form></div>')
         paso, empresa = 1, False
     else:
