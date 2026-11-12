@@ -7,7 +7,10 @@ import pytest
 # en toda la corrida, sin importar qué módulo importe `app` primero (config lee el entorno al importarse).
 os.environ.setdefault("DEBOUNCE_SECONDS", "0.2")
 # El entorno mínimo para importar `app` y `igbot.config` en cualquier prueba (antes cada archivo lo repetía).
-for _k, _v in dict(IG_VERIFY_TOKEN="vt", IG_APP_SECRET="secreto", IG_ACCESS_TOKEN="tok", DB_PATH=":memory:").items():
+# La principal tiene topes como cualquier cliente: casi todas las pruebas de cupos la usan (cuenta_de_prueba); las
+# que prueban que la principal no los tiene prenden config.PRINCIPAL_SIN_TOPES.
+for _k, _v in dict(IG_VERIFY_TOKEN="vt", IG_APP_SECRET="secreto", IG_ACCESS_TOKEN="tok", DB_PATH=":memory:",
+                   PRINCIPAL_SIN_TOPES="0").items():
     os.environ.setdefault(_k, _v)
 
 

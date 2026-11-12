@@ -504,7 +504,7 @@ def universo(fotos: int, gano: dict) -> dict:
 async def ia_restantes(c: Cuenta) -> int:
     with usar(c):
         clave = f"campana_ia:{tools.now():%Y-%m-%d}"
-    if IA_POR_DIA <= 0:
+    if IA_POR_DIA <= 0 or limites.sin_topes(c):
         return SIN_LIMITE
     return max(0, IA_POR_DIA - int(await c.store.get(clave) or 0))
 
@@ -2763,7 +2763,7 @@ async def armar(c: Cuenta, datos: dict, camp: dict, borrador: bool = False):
 
     if falta := falta_en(datos):
         return await de_vuelta(falta, datos)
-    if not await limites.cabe_generacion(c.store):
+    if not await limites.cabe_generacion(c.store, c=c):
         return await de_vuelta(limites.TOPE_GENERACIONES, datos)
     with usar(c):
         anteriores = await informe.todas(c, await todas_las(c))
@@ -2879,7 +2879,8 @@ async def _generar_todas(c: Cuenta, camp: dict, f: dict):
     extra = f.get("extra") == "1"
     with usar(c):
         incluidas, _ = await imagenes.usadas(c.store)
-    if (incluidas + sum(costo(p) for p in pendientes) > c.imagenes_mes or await sin_presupuesto(c)) and not extra:
+    sin_cupo = incluidas + sum(costo(p) for p in pendientes) > c.imagenes_mes and not limites.sin_topes(c)
+    if (sin_cupo or await sin_presupuesto(c)) and not extra:
         return await pagina_campana(c, camp, confirmar="generar_todas")
 
     async def todas():

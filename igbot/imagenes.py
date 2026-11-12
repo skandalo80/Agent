@@ -642,6 +642,9 @@ async def reservar(store: Store, permitir_extra: bool = False) -> str:
     """Aparta una imagen del mes: 'incluida' o 'extra' (si el cliente aceptó pagarla, o si ya no le queda
     presupuesto de contenido)."""
     cupo = cuenta().imagenes_mes
+    if limites.sin_topes():  # la principal: cuenta como incluida aunque pase el cupo (se ve en Inicio)
+        await _sumar(store, f"imagenes:{_mes()}", 1)
+        return "incluida"
     if cupo <= 0:
         raise SinCupo("Tu plan no incluye generación de contenido.")
     # Con el presupuesto de contenido del mes agotado solo sale una imagen extra, que el cliente paga aparte.

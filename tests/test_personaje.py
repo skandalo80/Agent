@@ -171,6 +171,7 @@ def test_dar_vida_con_tope_presupuesto_y_fallas(cliente, monkeypatch):
 
     # La cuenta principal (@skandar.online) genera aunque se pase del tope y del presupuesto.
     monkeypatch.setattr(c, "slug", "")
+    monkeypatch.setattr(personaje.config, "PRINCIPAL_SIN_TOPES", True)
     monkeypatch.setattr(c, "contenido_usd_mes", 1.0)
     monkeypatch.setattr(personaje.marco, "_trabajos", {})
     r = client.post(RUTA, headers=ORIGEN, data={"accion": "dar_vida"})
