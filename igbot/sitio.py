@@ -355,7 +355,7 @@ async def _contar(c: Cuenta) -> None:
 
 
 async def llenar(c: Cuenta, url: str, giros: list[str], visual=None) -> dict:
-    """Lee el sitio y guarda lo que encontró como sugerencias (o el error, para la página). `visual(c, sitio)`
+    """Lee el sitio y guarda lo que encontró como sugerencias (o el error, para la página). `visual(c, sitio, campos)`
     agrega lo de Tu marca (sitio_marca.sugerir) cuando el plan lo incluye; si falla, lo demás se conserva."""
     try:
         if await quedan(c) <= 0:
@@ -366,7 +366,7 @@ async def llenar(c: Cuenta, url: str, giros: list[str], visual=None) -> dict:
         marca = {}
         if visual:
             try:
-                marca = await visual(c, sitio)
+                marca = await visual(c, sitio, campos)
             except Exception:
                 log.exception("No se pudo leer el aspecto del sitio de %s", c.slug or "la principal")
         if not campos and not marca:

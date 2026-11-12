@@ -111,13 +111,13 @@ def test_sugiere_y_solo_guarda_lo_marcado(cliente, web, monkeypatch):
         "accion": "usar", "usar": ["horarios", "direccion", "inventado"], "s_horarios": "L a V de 8 a 20",
         "s_direccion": "Av. Juárez 10", "s_nombre": "Otro nombre", "s_inventado": "x",
         "usar_faq": ["0"], "faq_p_0": "¿Tienen wifi?", "faq_r_0": "Sí, gratis."})
-    assert r.headers["location"] == "/panel/empresa?paso=1&aviso=web"
+    assert r.headers["location"] == "/panel/configurar?aviso=web"  # a elegir cómo llenar lo que falta
     e = client.portal.call(empresa.de, c)
     assert e["horarios"] == "L a V de 8 a 20" and e["direccion"] == "Av. Juárez 10"  # con lo que corrigió
     assert e["nombre"] == "Café Lunar" and "inventado" not in e
     assert e["faq"] == [{"p": "¿Tienen wifi?", "r": "Sí, gratis."}]
     assert client.portal.call(sitio.sugerencias, c) == {}
-    assert "agregamos lo que elegiste" in client.get(r.headers["location"]).text
+    assert "Guardamos lo que aprobaste" in client.get(r.headers["location"]).text
     client.portal.call(empresa.esperar_revision, c)
 
 

@@ -52,6 +52,10 @@ no se ignora en silencio.
 - Funciones chicas con un trabajo: una acción de campaña es una entrada en `ACCIONES_CAMPANA` o
   `ACCIONES_POST`, no una rama más en una función de 200 líneas. Validaciones de formulario levantan
   `campanas.Rechazo` (o equivalente) con el mensaje al usuario; la ruta solo lo muestra.
+- El Perfil de empresa se llena por cuestionario (`empresa.py`) o por chat (`configurar.py`); una cuenta nueva
+  empieza por su página web (se lee, aprueba lo encontrado y después llena solo lo que falta). Los dos caminos
+  guardan lo mismo y el chat valida con `empresa.guardar_campos`: sus preguntas son fijas y el modelo solo
+  acomoda lo que el cliente dijo en los campos. Un modo nuevo (voz, video) entra por esa misma función.
 - Configuración por `.env` leída en `igbot/config.py` con valor por defecto sensato; los topes por plan
   (`imagenes_mes`, mensajes, posts) se consultan siempre desde ahí, nunca números sueltos en rutas.
 - Registro: cada línea de una cuenta lleva `[slug]` (filtro en `app.py`); se anota la ruta, nunca la query ni
