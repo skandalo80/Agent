@@ -103,7 +103,10 @@ no se ignora en silencio.
 - Cada llamada que cuesta dinero pasa por un tope: presupuesto diario separado para atención y contenido
   (`limites`), presupuesto mensual de contenido por plan (`contenido_usd_mes`, Community US$10: Claude y OpenAI
   juntos, cada imagen con su costo real del `usage`), `GENERACIONES_HORA` por cuenta, cupos del plan. Lo nuevo
-  que genere contenido revisa `limites.sin_presupuesto` antes de llamar. Si el bot no puede contestar, se avisa
+  que genere contenido revisa `limites.sin_presupuesto` antes de llamar. La cuenta principal (@skandar.online, `c.slug == ""`) es
+  la de pruebas del dueño y no tiene esos topes de contenido (decisión del dueño 2026-11-10, ampliada 2026-11-12):
+  todo tope nuevo pregunta `limites.sin_topes(c)`, nunca `not c.slug` suelto; `PRINCIPAL_SIN_TOPES=0` se los
+  devuelve (así corren las pruebas). Si el bot no puede contestar, se avisa
   al dueño y se retoma (`retomar`), nunca silencio.
 - Memoria por persona: datos guardados + resumen + últimos `HISTORY_WINDOW` mensajes. El costo por respuesta
   no debe crecer con el largo de la conversación.
